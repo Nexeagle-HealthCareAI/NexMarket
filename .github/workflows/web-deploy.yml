@@ -21,9 +21,10 @@
 #
 #   OPTIONAL repo VARIABLES (Settings → Variables):
 #     DEV_WEB_PORT        default 3010
-#     DEV_API_PUBLIC_URL  default http://151.185.45.77:5010  (must match
-#                         DEV_API_PORT in api-deploy.yml — browser-reachable,
-#                         not the container's internal address)
+#     DEV_API_PUBLIC_URL  default https://nexmarket-api.nexeagle.com  (must be
+#                         browser-reachable over HTTPS — the UI is served over
+#                         HTTPS via nexmarket.nexeagle.com, so a plain-HTTP API
+#                         URL gets blocked as mixed content)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 name: NexMarket Web — CI/CD
@@ -111,7 +112,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            NEXT_PUBLIC_API_URL=${{ vars.DEV_API_PUBLIC_URL || 'http://151.185.45.77:5010' }}
+            NEXT_PUBLIC_API_URL=${{ vars.DEV_API_PUBLIC_URL || 'https://nexmarket-api.nexeagle.com' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
