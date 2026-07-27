@@ -1,9 +1,12 @@
 using System;
+using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -15,15 +18,39 @@ namespace SeemanchalOutreach.Api.Controllers
 {
     public class LoginRequestDto
     {
+        [Required]
         public string UserId { get; set; } = string.Empty;   // FieldAgent.AgentId (e.g. "MKT-1001") or phone
+
+        [Required]
         public string Password { get; set; } = string.Empty;
+
         public string? DeviceId { get; set; }                // client-generated, stable per install; echoed back
+    }
+
+    public class RefreshRequestDto
+    {
+        [Required]
+        public string AgentId { get; set; } = string.Empty;
+
+        [Required]
+        public string RefreshToken { get; set; } = string.Empty;
+    }
+
+    public class ChangePasswordRequestDto
+    {
+        [Required]
+        public string CurrentPassword { get; set; } = string.Empty;
+
+        [Required, MinLength(6)]
+        public string NewPassword { get; set; } = string.Empty;
     }
 
     [ApiController]
     [Route("api/v1/[controller]")]
     public class AuthController : ControllerBase
     {
+        private const int RefreshTokenDays = 30;
+
         private readonly IMarketingDbContext _db;
         private readonly IConfiguration _config;
 
@@ -36,13 +63,10 @@ namespace SeemanchalOutreach.Api.Controllers
         [HttpPost("login")]
         public async Task<ActionResult<object>> Login([FromBody] LoginRequestDto request, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(request.UserId) || string.IsNullOrWhiteSpace(request.Password))
-            {
-                return BadRequest("User ID and password are required.");
-            }
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
             var agent = await _db.Agents.FirstOrDefaultAsync(
-                a => a.AgentId == request.UserId || a.Phone == request.UserId,
+                a => a.AgentId == request.UserId || a.Phone == request.UserId || (a.Email != null && a.Email == request.UserId),
                 cancellationToken);
 
             if (agent == null
@@ -57,24 +81,103 @@ namespace SeemanchalOutreach.Api.Controllers
                 return Unauthorized("This account has been deactivated.");
             }
 
-            string token = GenerateJwt(agent);
             string deviceId = string.IsNullOrWhiteSpace(request.DeviceId)
                 ? Guid.NewGuid().ToString()
                 : request.DeviceId;
 
+            string refreshToken = IssueRefreshToken(agent);
+            await _db.SaveChangesAsync(cancellationToken);
+
             return Ok(new
             {
-                token,
-                // No refresh-token flow implemented yet — placeholder kept only so the
-                // existing AuthResponse shape on the client doesn't break.
-                refreshToken = Guid.NewGuid().ToString("N"),
+                token = GenerateJwt(agent),
+                refreshToken,
                 agentId = agent.AgentId,
                 name = agent.Name,
                 role = agent.Role,
                 district = agent.District,
                 block = agent.Block,
                 deviceId,
+                profileCompleted = agent.ProfileCompleted,
+                mustChangePassword = agent.MustChangePassword,
             });
+        }
+
+        [HttpPost("refresh")]
+        public async Task<ActionResult<object>> Refresh([FromBody] RefreshRequestDto request, CancellationToken cancellationToken)
+        {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            var agent = await _db.Agents.FirstOrDefaultAsync(a => a.AgentId == request.AgentId, cancellationToken);
+
+            if (agent == null
+                || !agent.IsActive
+                || agent.RefreshTokenHash == null
+                || agent.RefreshTokenExpiresAt == null
+                || agent.RefreshTokenExpiresAt < DateTime.UtcNow
+                || agent.RefreshTokenHash != HashToken(request.RefreshToken))
+            {
+                return Unauthorized("Refresh token is invalid or expired — sign in again.");
+            }
+
+            string refreshToken = IssueRefreshToken(agent); // rotate — the old token can't be reused
+            await _db.SaveChangesAsync(cancellationToken);
+
+            return Ok(new
+            {
+                token = GenerateJwt(agent),
+                refreshToken,
+                agentId = agent.AgentId,
+                name = agent.Name,
+                role = agent.Role,
+                district = agent.District,
+                block = agent.Block,
+                profileCompleted = agent.ProfileCompleted,
+                mustChangePassword = agent.MustChangePassword,
+            });
+        }
+
+        [HttpPost("change-password")]
+        [Authorize]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequestDto request, CancellationToken cancellationToken)
+        {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            string? agentId = User.FindFirst("agentId")?.Value;
+            if (string.IsNullOrEmpty(agentId)) return Unauthorized();
+
+            var agent = await _db.Agents.FirstOrDefaultAsync(a => a.AgentId == agentId, cancellationToken);
+            if (agent == null) return Unauthorized();
+
+            if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, agent.PasswordHash))
+            {
+                return BadRequest("Current password is incorrect.");
+            }
+            if (BCrypt.Net.BCrypt.Verify(request.NewPassword, agent.PasswordHash))
+            {
+                return BadRequest("New password must be different from the current password.");
+            }
+
+            agent.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            agent.MustChangePassword = false;
+            await _db.SaveChangesAsync(cancellationToken);
+
+            return Ok(new { message = "Password updated." });
+        }
+
+        private string IssueRefreshToken(FieldAgent agent)
+        {
+            string token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+                .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+            agent.RefreshTokenHash = HashToken(token);
+            agent.RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(RefreshTokenDays);
+            return token;
+        }
+
+        private static string HashToken(string token)
+        {
+            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+            return Convert.ToHexString(bytes);
         }
 
         private string GenerateJwt(FieldAgent agent)

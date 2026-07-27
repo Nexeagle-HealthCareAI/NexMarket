@@ -19,16 +19,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
 
-  // Forgot Password & OTP State
-  const [authMode, setAuthMode] = useState<'login' | 'forgot-request' | 'forgot-verify'>('login');
-  const [resetEmail, setResetEmail] = useState('');
-  const [resetOtp, setResetOtp] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [resetSuccessMsg, setResetSuccessMsg] = useState('');
-  const [demoOtp, setDemoOtp] = useState('123456');
-
-  async function performLogin(targetId: string, targetPass: string, overrideName?: string) {
+  async function performLogin(targetId: string, targetPass: string) {
     setError('');
     setIsLoading(true);
     setIsInitializing(true);
@@ -36,9 +27,6 @@ export default function LoginPage() {
     try {
       const deviceId = await getOrCreateDeviceId();
       const auth = await loginWithPassword(targetId, targetPass, deviceId);
-      if (overrideName) {
-        auth.name = overrideName;
-      }
 
       // Persist to Dexie syncState for sync engine
       await setSyncStateValue('agentId', auth.agentId);
@@ -54,6 +42,7 @@ export default function LoginPage() {
         role: auth.role,
         jwtToken: auth.token,
         refreshToken: auth.refreshToken,
+        profileCompleted: auth.profileCompleted,
       });
 
       // Seed panchayat list if empty
@@ -93,72 +82,19 @@ export default function LoginPage() {
             );
           }
         } catch (pullErr) {
-          console.log('Offline recovery check completed with mock data fallback:', pullErr);
+          console.warn('Reinstall recovery pull failed — continuing with an empty local DB:', pullErr);
         }
       }
 
-      if (auth.role === 'Admin' || targetId.startsWith('ADM') || auth.role?.toLowerCase() === 'admin') {
+      if (auth.mustChangePassword) {
+        router.push('/change-password');
+      } else if (auth.role?.toLowerCase() === 'admin') {
         router.push('/admin/agents');
       } else {
         router.push('/home');
       }
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      if (errMsg.includes('Failed to fetch') || errMsg.includes('Network') || errMsg.includes('API') || errMsg.includes('fetch')) {
-        console.log('Backend unreachable, falling back to local offline session...');
-        await handleDemoLogin(
-          targetId.startsWith('ADM') ? 'Admin' : (targetId.startsWith('REG') || targetId.startsWith('HSP')) ? 'Regional Representative' : targetId.startsWith('FLD') ? 'Field Officer' : 'Marketing Executive',
-          targetId,
-          overrideName || (targetId.startsWith('ADM') ? 'Admin Officer' : 'Field Executive')
-        );
-        return;
-      }
-      setError(errMsg);
-      setIsInitializing(false);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleDemoLogin(role: string, targetId: string, overrideName: string) {
-    setError('');
-    setIsLoading(true);
-    setIsInitializing(true);
-
-    try {
-      const deviceId = await getOrCreateDeviceId();
-      const auth = {
-        agentId: targetId,
-        deviceId,
-        name: overrideName,
-        role: role,
-        token: `demo-jwt-${targetId}`,
-        refreshToken: `demo-refresh-${targetId}`,
-      };
-
-      await setSyncStateValue('agentId', auth.agentId);
-      await setSyncStateValue('deviceId', auth.deviceId);
-      await setSyncStateValue('jwtToken', auth.token);
-      await setSyncStateValue('refreshToken', auth.refreshToken);
-
-      setAuth({
-        agentId: auth.agentId,
-        deviceId: auth.deviceId,
-        name: auth.name,
-        role: auth.role,
-        jwtToken: auth.token,
-        refreshToken: auth.refreshToken,
-      });
-
-      await seedPanchayatsIfEmpty(auth.token);
-
-      if (role === 'Admin' || targetId.startsWith('ADM')) {
-        router.push('/admin/agents');
-      } else {
-        router.push('/home');
-      }
-    } catch (err: unknown) {
-      setError('Demo login failed. Please retry.');
+      setError(err instanceof Error ? err.message : 'Invalid User ID or Password. Please try again.');
       setIsInitializing(false);
     } finally {
       setIsLoading(false);
@@ -172,49 +108,6 @@ export default function LoginPage() {
       return;
     }
     await performLogin(userId.trim(), password);
-  }
-
-  function handleRequestOtp(e: React.FormEvent) {
-    e.preventDefault();
-    if (!resetEmail.trim() && !userId.trim()) {
-      setError('Please enter your Employee Code, Registered Email, or Mobile Number.');
-      return;
-    }
-    setError('');
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      const generated = Math.floor(100000 + Math.random() * 900000).toString();
-      setDemoOtp(generated);
-      setAuthMode('forgot-verify');
-    }, 700);
-  }
-
-  function handleVerifyReset(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    if (resetOtp.trim() !== demoOtp && resetOtp.trim() !== '123456') {
-      setError(`Invalid verification code. Please check your email (Demo OTP: ${demoOtp})`);
-      return;
-    }
-    if (newPassword.length < 6) {
-      setError('New password must be at least 6 characters long.');
-      return;
-    }
-    if (newPassword !== confirmNewPassword) {
-      setError('New passwords do not match.');
-      return;
-    }
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      setResetSuccessMsg('Password reset successfully! You can now sign in with your new credentials.');
-      setPassword(newPassword);
-      setAuthMode('login');
-      setResetOtp('');
-      setNewPassword('');
-      setConfirmNewPassword('');
-    }, 700);
   }
 
   return (
@@ -300,10 +193,15 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* RIGHT 1/3rd PANEL: Officer Login Form (Separated Off-White Panel) */}
+      {/* RIGHT 1/3rd PANEL / NATIVE MOBILE LAYOUT */}
       <div className="login-form-panel slide-up">
-        {/* Title Section */}
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        {/* Native App Top/Hero Section (Mobile Only) */}
+        <div className="login-mobile-hero slide-up">
+          <h1 style={{ fontSize: '2.25rem', fontWeight: 900, letterSpacing: '-0.03em', marginBottom: '0.25rem' }}>NexMarket</h1>
+        </div>
+
+        {/* Desktop Title (Desktop Only) */}
+        <div className="login-desktop-title">
           <h1
             style={{
               fontSize: '2.4rem',
@@ -317,37 +215,17 @@ export default function LoginPage() {
           >
             NexMarket
           </h1>
-          <p
-            style={{
-              color: 'var(--color-primary-600)',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-            }}
-          >
-            Officer Access Portal
-          </p>
         </div>
 
-        {/* Crisp Off-White / White Login Card */}
-        <div
-          className="card"
-          style={{
-            padding: '2.5rem 2.25rem',
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(99, 102, 241, 0.15)',
-            borderRadius: 'var(--radius-xl)',
-          }}
-        >
+        {/* Bottom Sheet Style Card (Mobile) / Form Card (Desktop) */}
+        <div className="login-card-container slide-up">
           {isInitializing ? (
-            <div style={{ textAlign: 'center', padding: '2.5rem 0' }}>
+            <div style={{ textAlign: 'center', padding: '1rem 0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div
                 style={{
                   width: 48,
                   height: 48,
-                  border: '3px solid #e2e8f0',
+                  border: '3px solid #f1f5f9',
                   borderTopColor: 'var(--color-primary-600)',
                   borderRadius: '50%',
                   margin: '0 auto 1.5rem',
@@ -355,293 +233,103 @@ export default function LoginPage() {
                 className="spin"
               />
               <h3 style={{ color: '#0f172a', marginBottom: '0.5rem', fontSize: '1.15rem', fontWeight: 800 }}>
-                Authenticating Officer…
+                Authenticating…
               </h3>
               <p style={{ color: '#64748b', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                Loading assigned territory & village councils for offline sync
+                Syncing territory data...
               </p>
             </div>
-          ) : authMode === 'forgot-request' ? (
-            <form onSubmit={handleRequestOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1.4rem' }}>
-              <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '1rem', marginBottom: '0.2rem' }}>
-                <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.25rem' }}>
-                  Reset Your Password
-                </h2>
-                <p style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                  Enter your registered Employee Code, Email Address, or Mobile Number to receive an OTP on your mapped email.
-                </p>
-              </div>
-
-              <div className="field-group" style={{ margin: 0 }}>
-                <label
-                  className="field-label"
-                  htmlFor="reset-email-input"
-                  style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}
-                >
-                  Employee Code / Email / Mobile Number
-                </label>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <span style={{ position: 'absolute', left: '0.9rem', color: '#64748b', pointerEvents: 'none' }}>
-                    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                  </span>
-                  <input
-                    id="reset-email-input"
-                    className="field-input"
-                    type="text"
-                    placeholder="e.g. MKT-1001, 9876543210, or email"
-                    value={resetEmail || userId}
-                    onChange={(e) => { setResetEmail(e.target.value); setUserId(e.target.value); }}
-                    required
-                    style={{
-                      paddingLeft: '2.75rem',
-                      background: '#f8fafc',
-                      border: '1px solid #cbd5e1',
-                      fontWeight: 600,
-                      color: '#0f172a',
-                    }}
-                  />
-                </div>
-              </div>
-
-              {error && (
-                <div style={{ padding: '0.85rem', borderRadius: 'var(--radius-md)', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem', fontWeight: 600 }}>
-                  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ flexShrink: 0 }}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                className="btn btn-primary btn-full btn-lg"
-                disabled={isLoading || (!resetEmail.trim() && !userId.trim())}
-                style={{
-                  marginTop: '0.5rem',
-                  height: '50px',
-                  fontSize: '1rem',
-                  fontWeight: 800,
-                  background: 'linear-gradient(135deg, var(--color-primary-600), var(--color-primary-500))',
-                  boxShadow: '0 4px 15px rgba(79, 70, 229, 0.35)',
-                }}
-              >
-                {isLoading ? 'Sending OTP to Email…' : 'Send Reset OTP to Email'}
-              </button>
-
-              <div style={{ textAlign: 'center', marginTop: '0.2rem' }}>
-                <button
-                  type="button"
-                  onClick={() => { setAuthMode('login'); setError(''); }}
-                  style={{ background: 'none', border: 'none', color: '#475569', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
-                >
-                  ← Back to Sign In
-                </button>
-              </div>
-            </form>
-          ) : authMode === 'forgot-verify' ? (
-            <form onSubmit={handleVerifyReset} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-              <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '0.85rem', marginBottom: '0.1rem' }}>
-                <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.25rem' }}>
-                  Verify Email OTP
-                </h2>
-                <p style={{ fontSize: '0.82rem', color: '#64748b' }}>
-                  An OTP has been sent to your mapped email address.
-                </p>
-                <div style={{ marginTop: '0.6rem', padding: '0.6rem 0.85rem', background: '#e0e7ff', border: '1px solid #c7d2fe', borderRadius: 'var(--radius-sm)', color: '#3730a3', fontSize: '0.8rem', fontWeight: 700 }}>
-                  ✉️ OTP sent to email mapped for ({resetEmail || userId}): <span style={{ fontFamily: 'monospace', fontSize: '0.9rem', background: '#ffffff', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>{demoOtp}</span>
-                </div>
-              </div>
-
-              <div className="field-group" style={{ margin: 0 }}>
-                <label className="field-label" style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                  6-Digit OTP Code
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 123456"
-                  maxLength={6}
-                  value={resetOtp}
-                  onChange={(e) => setResetOtp(e.target.value)}
-                  required
-                  style={{ padding: '0.75rem', background: '#f8fafc', border: '1px solid #cbd5e1', fontWeight: 700, fontSize: '1.1rem', letterSpacing: '0.2em', textAlign: 'center', color: '#0f172a', borderRadius: 'var(--radius-md)' }}
-                />
-              </div>
-
-              <div className="field-group" style={{ margin: 0 }}>
-                <label className="field-label" style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                  New Password
-                </label>
-                <input
-                  type="password"
-                  placeholder="At least 6 characters"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                  style={{ padding: '0.75rem 1rem', background: '#f8fafc', border: '1px solid #cbd5e1', fontWeight: 600, color: '#0f172a', borderRadius: 'var(--radius-md)' }}
-                />
-              </div>
-
-              <div className="field-group" style={{ margin: 0 }}>
-                <label className="field-label" style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-                  Confirm New Password
-                </label>
-                <input
-                  type="password"
-                  placeholder="Confirm password"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                  required
-                  style={{ padding: '0.75rem 1rem', background: '#f8fafc', border: '1px solid #cbd5e1', fontWeight: 600, color: '#0f172a', borderRadius: 'var(--radius-md)' }}
-                />
-              </div>
-
-              {error && (
-                <div style={{ padding: '0.85rem', borderRadius: 'var(--radius-md)', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem', fontWeight: 600 }}>
-                  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ flexShrink: 0 }}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                className="btn btn-primary btn-full btn-lg"
-                disabled={isLoading || !resetOtp.trim() || !newPassword || !confirmNewPassword}
-                style={{
-                  height: '48px',
-                  fontSize: '1rem',
-                  fontWeight: 800,
-                  background: 'linear-gradient(135deg, var(--color-primary-600), var(--color-primary-500))',
-                  boxShadow: '0 4px 15px rgba(79, 70, 229, 0.35)',
-                }}
-              >
-                {isLoading ? 'Resetting Password…' : 'Reset Password & Sign In'}
-              </button>
-
-              <div style={{ textAlign: 'center' }}>
-                <button
-                  type="button"
-                  onClick={() => { setAuthMode('forgot-request'); setError(''); }}
-                  style={{ background: 'none', border: 'none', color: '#475569', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}
-                >
-                  ← Resend / Change Email
-                </button>
-              </div>
-            </form>
           ) : (
-            <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.4rem' }}>
-              <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '1rem', marginBottom: '0.2rem' }}>
-                <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.25rem' }}>
-                  Sign In to Your Session
+            <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
+              <div style={{ marginBottom: '0.25rem' }}>
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.25rem' }}>
+                  Welcome Back
                 </h2>
                 <p style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                  Enter your employee code and secure credentials
+                  Please sign in to continue
                 </p>
               </div>
 
-              {resetSuccessMsg && (
-                <div style={{ padding: '0.85rem', borderRadius: 'var(--radius-md)', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#16a34a', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem', fontWeight: 700 }}>
-                  <span>✓ {resetSuccessMsg}</span>
-                </div>
-              )}
-
-              <div className="field-group" style={{ margin: 0 }}>
-                <label
-                  className="field-label"
-                  htmlFor="userid-input"
-                  style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}
-                >
-                  User ID / Employee Code
-                </label>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <span style={{ position: 'absolute', left: '0.9rem', color: '#64748b', pointerEvents: 'none' }}>
-                    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                  </span>
+              {/* Minimal Native Inputs */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'absolute', top: '50%', left: '1rem', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }}>
+                    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                  </div>
                   <input
                     id="userid-input"
-                    className="field-input"
                     type="text"
-                    placeholder="e.g. MKT-1001"
+                    placeholder="Contact No. or Email"
                     value={userId}
                     onChange={(e) => setUserId(e.target.value)}
                     autoComplete="username"
                     required
+                    minLength={3}
                     style={{
-                      paddingLeft: '2.75rem',
+                      width: '100%',
+                      padding: '1.1rem 1rem 1.1rem 3rem',
                       background: '#f8fafc',
-                      border: '1px solid #cbd5e1',
+                      border: 'none',
+                      borderRadius: '16px',
+                      fontSize: '1rem',
                       fontWeight: 600,
                       color: '#0f172a',
-                      transition: 'border-color 150ms ease, box-shadow 150ms ease',
+                      outline: 'none',
+                      transition: 'all 0.2s',
                     }}
+                    onFocus={(e) => { e.target.style.background = '#eef2ff'; e.target.style.boxShadow = 'inset 0 0 0 1px #818cf8'; }}
+                    onBlur={(e) => { e.target.style.background = '#f8fafc'; e.target.style.boxShadow = 'none'; }}
                   />
                 </div>
-              </div>
 
-              <div className="field-group" style={{ margin: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                  <label
-                    className="field-label"
-                    htmlFor="password-input"
-                    style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}
-                  >
-                    Password
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => { setAuthMode('forgot-request'); setError(''); setResetSuccessMsg(''); }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--color-primary-600)',
-                      fontSize: '0.78rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Forgot Password?
-                  </button>
-                </div>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <span style={{ position: 'absolute', left: '0.9rem', color: '#64748b', pointerEvents: 'none' }}>
-                    <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                  </span>
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'absolute', top: '50%', left: '1rem', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }}>
+                    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  </div>
                   <input
                     id="password-input"
-                    className="field-input"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
+                    placeholder="Password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="current-password"
                     required
+                    minLength={6}
                     style={{
-                      paddingLeft: '2.75rem',
-                      paddingRight: '2.75rem',
+                      width: '100%',
+                      padding: '1.1rem 3rem 1.1rem 3rem',
                       background: '#f8fafc',
-                      border: '1px solid #cbd5e1',
-                      color: '#0f172a',
+                      border: 'none',
+                      borderRadius: '16px',
+                      fontSize: '1rem',
                       fontWeight: 600,
+                      color: '#0f172a',
+                      outline: 'none',
+                      transition: 'all 0.2s',
                     }}
+                    onFocus={(e) => { e.target.style.background = '#eef2ff'; e.target.style.boxShadow = 'inset 0 0 0 1px #818cf8'; }}
+                    onBlur={(e) => { e.target.style.background = '#f8fafc'; e.target.style.boxShadow = 'none'; }}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     style={{
                       position: 'absolute',
+                      top: '50%',
                       right: '0.75rem',
+                      transform: 'translateY(-50%)',
                       background: 'none',
                       border: 'none',
-                      color: '#64748b',
+                      color: '#94a3b8',
                       cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '0.25rem',
+                      padding: '0.5rem',
+                      display: 'flex'
                     }}
-                    title={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? (
-                      <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                      <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
                     ) : (
-                      <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                     )}
                   </button>
                 </div>
@@ -651,15 +339,13 @@ export default function LoginPage() {
                 <div
                   style={{
                     padding: '0.85rem',
-                    borderRadius: 'var(--radius-md)',
+                    borderRadius: '12px',
                     background: '#fef2f2',
-                    border: '1px solid #fecaca',
                     color: '#dc2626',
                     fontSize: '0.85rem',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '0.6rem',
-                    lineHeight: 1.4,
                     fontWeight: 600,
                   }}
                 >
@@ -668,100 +354,37 @@ export default function LoginPage() {
                 </div>
               )}
 
-              <button
-                id="login-btn"
-                type="submit"
-                className="btn btn-primary btn-full btn-lg"
-                disabled={isLoading || !userId.trim() || !password.trim()}
-                style={{
-                  marginTop: '0.5rem',
-                  height: '50px',
-                  fontSize: '1rem',
-                  fontWeight: 800,
-                  letterSpacing: '0.02em',
-                  background: 'linear-gradient(135deg, var(--color-primary-600), var(--color-primary-500))',
-                  boxShadow: '0 4px 15px rgba(79, 70, 229, 0.35)',
-                }}
-              >
-                {isLoading ? 'Signing in…' : 'Sign In'}
-              </button>
+              <div style={{ marginTop: 'auto', paddingTop: '1rem' }}>
+                <button
+                  type="submit"
+                  disabled={isLoading || !userId.trim() || !password.trim()}
+                  style={{
+                    width: '100%',
+                    height: '56px',
+                    borderRadius: '16px',
+                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                    color: 'white',
+                    border: 'none',
+                    fontSize: '1.05rem',
+                    fontWeight: 800,
+                    letterSpacing: '0.02em',
+                    boxShadow: '0 8px 20px rgba(79, 70, 229, 0.3)',
+                    cursor: (isLoading || !userId.trim() || !password.trim()) ? 'not-allowed' : 'pointer',
+                    opacity: (isLoading || !userId.trim() || !password.trim()) ? 0.7 : 1,
+                    transition: 'transform 0.15s, box-shadow 0.15s'
+                  }}
+                  onMouseOver={(e) => !isLoading && (e.currentTarget.style.transform = 'translateY(-1px)', e.currentTarget.style.boxShadow = '0 10px 25px rgba(79, 70, 229, 0.4)')}
+                  onMouseOut={(e) => !isLoading && (e.currentTarget.style.transform = 'none', e.currentTarget.style.boxShadow = '0 8px 20px rgba(79, 70, 229, 0.3)')}
+                >
+                  {isLoading ? 'Signing in…' : 'Sign In'}
+                </button>
+              </div>
 
-              {/* Instant Demo Access / Skip Login */}
-              <div style={{ marginTop: '0.75rem', paddingTop: '1.25rem', borderTop: '1px dashed #cbd5e1' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    ⚡ Instant Demo Access (Skip Login)
-                  </span>
-                  <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', fontSize: '0.68rem', padding: '0.15rem 0.5rem', fontWeight: 700 }}>
-                    No OTP Needed
-                  </span>
-                </div>
-                <p style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.85rem', lineHeight: 1.4 }}>
-                  Select your role below to launch directly into NexMarket:
-                </p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
-                  <button
-                    type="button"
-                    onClick={() => handleDemoLogin('Marketing Executive', 'MKT-1001', 'Rajesh Kumar')}
-                    className="btn btn-ghost"
-                    style={{ padding: '0.6rem 0.4rem', fontSize: '0.8rem', fontWeight: 700, borderColor: '#cbd5e1', background: '#f8fafc', color: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem', transition: 'all 0.2s' }}
-                  >
-                    <span>📈 Marketing Exec</span>
-                    <span style={{ fontSize: '0.68rem', color: 'var(--color-primary-600)', fontWeight: 600 }}>ID: MKT-1001</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDemoLogin('Field Officer', 'FLD-2001', 'Anjali Sharma')}
-                    className="btn btn-ghost"
-                    style={{ padding: '0.6rem 0.4rem', fontSize: '0.8rem', fontWeight: 700, borderColor: '#cbd5e1', background: '#f8fafc', color: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem', transition: 'all 0.2s' }}
-                  >
-                    <span>🚜 Field Officer</span>
-                    <span style={{ fontSize: '0.68rem', color: '#0284c7', fontWeight: 600 }}>ID: FLD-2001</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDemoLogin('Regional Representative', 'REG-3001', 'Vikram Mehta')}
-                    className="btn btn-ghost"
-                    style={{ padding: '0.6rem 0.4rem', fontSize: '0.8rem', fontWeight: 700, borderColor: '#cbd5e1', background: '#f8fafc', color: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem', transition: 'all 0.2s' }}
-                  >
-                    <span>🏢 Regional Rep</span>
-                    <span style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 600 }}>ID: REG-3001</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDemoLogin('Admin', 'ADM-9001', 'Suresh Sinha (Admin)')}
-                    className="btn btn-ghost"
-                    style={{ padding: '0.6rem 0.4rem', fontSize: '0.8rem', fontWeight: 700, borderColor: '#cbd5e1', background: '#fef2f2', color: '#dc2626', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem', transition: 'all 0.2s' }}
-                  >
-                    <span>🛡️ Admin Portal</span>
-                    <span style={{ fontSize: '0.68rem', color: '#dc2626', fontWeight: 600 }}>ID: ADM-9001</span>
-                  </button>
-                </div>
+              <div style={{ textAlign: 'center', marginTop: '1rem', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 500 }}>
+                Protected by NexMarket Security
               </div>
             </form>
           )}
-        </div>
-
-        {/* Security badge footer */}
-        <div
-          style={{
-            marginTop: '1.75rem',
-            padding: '0.75rem 1rem',
-            background: '#f1f5f9',
-            border: '1px solid #e2e8f0',
-            borderRadius: 'var(--radius-lg)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.6rem',
-            color: '#475569',
-            fontSize: '0.78rem',
-            textAlign: 'center',
-            fontWeight: 600,
-          }}
-        >
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-          <span>Offline Protected · Multi-Role RBAC · Local Outbox Storage</span>
         </div>
       </div>
     </div>

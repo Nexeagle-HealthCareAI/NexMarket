@@ -146,6 +146,9 @@ namespace SeemanchalOutreach.Application.Handlers
                     string role = GetString(root, "role", "");
                     bool whatsapp = GetBool(root, "whatsappAdded", false);
                     bool card = GetBool(root, "cardGiven", false);
+                    string status = GetString(root, "status", "Lead");
+                    DateTime? followUpDate = GetOptionalDateTime(root, "followUpDate");
+                    string? comments = root.TryGetProperty("comments", out var cProp) && cProp.ValueKind == JsonValueKind.String ? cProp.GetString() : null;
 
                     if (existing == null)
                     {
@@ -160,6 +163,9 @@ namespace SeemanchalOutreach.Application.Handlers
                             Phone = phone,
                             WhatsappAdded = whatsapp,
                             CardGiven = card,
+                            Status = status,
+                            FollowUpDate = followUpDate,
+                            Comments = comments,
                             CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
                             ServerReceivedAt = syncedAt
                         };
@@ -203,6 +209,13 @@ namespace SeemanchalOutreach.Application.Handlers
                             existing.Role = role;
                             existing.WhatsappAdded = whatsapp;
                             existing.CardGiven = card;
+                            
+                            // Only update these fields if they are provided/changed from the client
+                            // (If Hospital Rep updated it on server, we might need bi-directional sync, 
+                            // but currently agent -> server is master for these in standard sync)
+                            existing.Status = status;
+                            existing.FollowUpDate = followUpDate;
+                            if (comments != null) existing.Comments = comments;
                         }
                         return Result(clientId, deviceId, existing.Id, syncedAt, "already_exists");
                     }
@@ -259,6 +272,29 @@ namespace SeemanchalOutreach.Application.Handlers
                         }
                     }
                     return Result(batchClientId, deviceId, Guid.NewGuid(), syncedAt, "created");
+                }
+
+                case "survey":
+                {
+                    string clientId = GetString(root, "clientId", item.ClientId);
+                    var existing = await _db.SurveyResponses.FirstOrDefaultAsync(s => s.ClientId == clientId && s.DeviceId == deviceId, cancellationToken);
+                    if (existing == null)
+                    {
+                        var survey = new SurveyResponse
+                        {
+                            ClientId = clientId,
+                            DeviceId = deviceId,
+                            AgentId = agentId,
+                            ContactId = GetString(root, "contactId", ""),
+                            PanchayatId = GetString(root, "panchayatId", ""),
+                            AnswersJson = GetString(root, "answersJson", "{}"),
+                            CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
+                            SyncedAt = syncedAt
+                        };
+                        _db.SurveyResponses.Add(survey);
+                        return Result(clientId, deviceId, survey.Id, syncedAt, "created");
+                    }
+                    return Result(clientId, deviceId, existing.Id, syncedAt, "already_exists");
                 }
 
                 default:

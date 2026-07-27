@@ -174,8 +174,14 @@ export async function registerBackgroundSync(): Promise<void> {
 
   try {
     const registration = await navigator.serviceWorker.ready;
-    // @ts-expect-error — SyncManager not in TS lib
-    await registration.sync.register('outbox-sync');
+    // SyncManager (Background Sync API) is Chromium-only and not in the
+    // standard lib.dom types — typed via a local cast instead of a
+    // suppression directive, since different type-checkers in this project's
+    // toolchain disagree on whether `.sync` already resolves.
+    const syncRegistration = registration as ServiceWorkerRegistration & {
+      sync?: { register: (tag: string) => Promise<void> };
+    };
+    await syncRegistration.sync?.register('outbox-sync');
   } catch {
     // Background sync not available — polling fallback handles it
   }

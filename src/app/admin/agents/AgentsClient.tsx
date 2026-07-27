@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { MOCK_AGENTS, addMockAgent, type AdminAgent } from '@/lib/admin/mock-data';
+import { useAgentStore } from '@/store/agent-store';
+import { getAgents, onboardAgent, type AdminAgentDto } from '@/lib/sync/api-client';
 
 export default function AgentsClient() {
-  const [agentsList, setAgentsList] = useState<AdminAgent[]>(MOCK_AGENTS);
+  const token = useAgentStore((s) => s.jwtToken);
+  const [agentsList, setAgentsList] = useState<AdminAgentDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'low-connectivity' | 'offline'>('all');
 
@@ -16,6 +20,8 @@ export default function AgentsClient() {
   const [newDistrict, setNewDistrict] = useState('Purnia');
   const [newBlock, setNewBlock] = useState('Kasba');
   const [newRole, setNewRole] = useState('Marketing Executive');
+  const [onboarding, setOnboarding] = useState(false);
+  const [onboardError, setOnboardError] = useState('');
   const [generatedCreds, setGeneratedCreds] = useState<{
     userId: string;
     pass: string;
@@ -24,6 +30,27 @@ export default function AgentsClient() {
     district: string;
     block: string;
   } | null>(null);
+
+  const loadAgents = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await getAgents(token);
+      setAgentsList(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load agents.');
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void loadAgents();
+    // Live-ish refresh — cheap poll rather than a full presence/WebSocket system.
+    const timer = setInterval(() => void loadAgents(), 30_000);
+    return () => clearInterval(timer);
+  }, [loadAgents]);
 
   const filtered = useMemo(() => {
     return agentsList.filter((a) => {
@@ -47,49 +74,40 @@ export default function AgentsClient() {
     return { total, online, activeShifts, totalContacts };
   }, [agentsList]);
 
-  function handleOnboardSubmit(e: React.FormEvent) {
+  async function handleOnboardSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!newName.trim() || !newPhone.trim()) return;
+    if (!newName.trim() || !newPhone.trim() || !token) return;
 
-    // Generate credentials
-    const nextNum = 1000 + agentsList.length + 1;
-    const genUserId = `MKT-${nextNum}`;
-    const genPass = `NexMarket#2026`;
+    setOnboarding(true);
+    setOnboardError('');
+    try {
+      const created = await onboardAgent(token, {
+        name: newName.trim(),
+        phone: newPhone.trim(),
+        role: newRole,
+        district: newDistrict,
+        block: newBlock.trim() || newDistrict,
+      });
 
-    const newAgent: AdminAgent = {
-      agentId: `agent-${nextNum}`,
-      name: newName.trim(),
-      role: newRole,
-      phone: newPhone.trim(),
-      district: newDistrict,
-      block: newBlock.trim() || newDistrict,
-      status: 'offline',
-      lastSeenLat: 25.7771,
-      lastSeenLng: 87.4753,
-      lastSeenAt: new Date().toISOString(),
-      batteryPct: 100,
-      activeShift: false,
-      todayContacts: 0,
-      todayVisits: 0,
-      todayReferrals: 0,
-    };
-
-    addMockAgent(newAgent);
-    setAgentsList([...MOCK_AGENTS]);
-
-    setGeneratedCreds({
-      userId: genUserId,
-      pass: genPass,
-      name: newAgent.name,
-      role: newRole,
-      district: newAgent.district,
-      block: newAgent.block,
-    });
+      setGeneratedCreds({
+        userId: created.agentId,
+        pass: created.password,
+        name: created.name,
+        role: created.role,
+        district: created.district,
+        block: created.block,
+      });
+      void loadAgents();
+    } catch (err) {
+      setOnboardError(err instanceof Error ? err.message : 'Failed to onboard agent.');
+    } finally {
+      setOnboarding(false);
+    }
   }
 
   function handleCopyCredentials() {
     if (!generatedCreds) return;
-    const text = `🏢 NexMarket — Field Outreach & Marketing Portal\n\nWelcome ${generatedCreds.name} (${generatedCreds.role})!\nYour field territory: ${generatedCreds.district} · ${generatedCreds.block}\n\nHere are your login credentials:\nUser ID: ${generatedCreds.userId}\nPassword: ${generatedCreds.pass}\n\nLogin URL: http://localhost:3001/login`;
+    const text = `🏢 NexMarket — Field Outreach & Marketing Portal\n\nWelcome ${generatedCreds.name} (${generatedCreds.role})!\nYour field territory: ${generatedCreds.district} · ${generatedCreds.block}\n\nHere are your login credentials:\nUser ID: ${generatedCreds.userId}\nPassword: ${generatedCreds.pass}\n\nThis password is shown only once — please save it now.`;
     navigator.clipboard.writeText(text);
     alert('✅ Credentials and welcome message copied to clipboard!');
   }
@@ -101,6 +119,7 @@ export default function AgentsClient() {
     setNewBlock('Kasba');
     setNewRole('Marketing Executive');
     setGeneratedCreds(null);
+    setOnboardError('');
     setShowOnboardModal(false);
   }
 
@@ -127,6 +146,12 @@ export default function AgentsClient() {
           </Link>
         </div>
       </div>
+
+      {error && (
+        <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '4px solid var(--color-danger)', background: 'rgba(239,68,68,0.05)' }}>
+          <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem' }}>{error}</p>
+        </div>
+      )}
 
       {/* Summary Metric Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -191,7 +216,13 @@ export default function AgentsClient() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  Loading field officers…
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                   No field officers match your filters.
@@ -199,7 +230,7 @@ export default function AgentsClient() {
               </tr>
             ) : (
               filtered.map((agent) => (
-                <tr key={agent.agentId} style={{ borderBottom: '1px solid var(--surface-border)', transition: 'background 0.2s' }}>
+                <tr key={agent.agentId} style={{ borderBottom: '1px solid var(--surface-border)' }}>
                   <td style={{ padding: '0.85rem 1rem' }}>
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{agent.name}</div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>+91 {agent.phone}</div>
@@ -209,25 +240,22 @@ export default function AgentsClient() {
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Block: {agent.block}</div>
                   </td>
                   <td style={{ padding: '0.85rem 1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <span
-                        style={{
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '12px',
-                          background: agent.status === 'online' ? 'rgba(16,185,129,0.2)' : agent.status === 'low-connectivity' ? 'rgba(245,158,11,0.2)' : 'rgba(100,116,139,0.2)',
-                          color: agent.status === 'online' ? '#10b981' : agent.status === 'low-connectivity' ? '#f59e0b' : '#94a3b8',
-                          fontSize: '0.72rem',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {agent.status === 'online' ? '🟢 ONLINE' : agent.status === 'low-connectivity' ? '🟡 LOW SIGNAL' : '⚪ OFFLINE'}
-                      </span>
-                      <span style={{ fontSize: '0.78rem', color: agent.batteryPct < 20 ? 'var(--color-danger)' : 'var(--text-muted)' }}>
-                        🔋 {agent.batteryPct}%
-                      </span>
-                    </div>
+                    <span
+                      style={{
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '12px',
+                        background: agent.status === 'online' ? 'rgba(16,185,129,0.2)' : agent.status === 'low-connectivity' ? 'rgba(245,158,11,0.2)' : 'rgba(100,116,139,0.2)',
+                        color: agent.status === 'online' ? '#10b981' : agent.status === 'low-connectivity' ? '#f59e0b' : '#94a3b8',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {agent.status === 'online' ? '🟢 ONLINE' : agent.status === 'low-connectivity' ? '🟡 LOW SIGNAL' : '⚪ OFFLINE'}
+                    </span>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                      Last GPS: {new Date(agent.lastSeenAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      {agent.lastSeenAt
+                        ? `Last GPS: ${new Date(agent.lastSeenAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
+                        : 'No GPS data yet'}
                     </div>
                   </td>
                   <td style={{ padding: '0.85rem 1rem' }}>
@@ -275,88 +303,95 @@ export default function AgentsClient() {
             padding: '1rem',
           }}
         >
-            <div
-              className="card slide-up"
-              style={{
-                width: '100%',
-                maxWidth: 480,
-                padding: '1.75rem',
-                background: 'var(--surface-card)',
-                border: '1px solid var(--color-primary-500)',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.2)',
-              }}
-            >
-              {!generatedCreds ? (
-                <form onSubmit={handleOnboardSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <h2 style={{ fontSize: '1.35rem', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
-                        ➕ Onboard Team Member
-                      </h2>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                        Assign territory & generate instant login credentials
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={resetModal}
-                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.25rem', cursor: 'pointer' }}
-                    >
-                      ✖
-                    </button>
+          <div
+            className="card slide-up"
+            style={{
+              width: '100%',
+              maxWidth: 480,
+              padding: '1.75rem',
+              background: 'var(--surface-card)',
+              border: '1px solid var(--color-primary-500)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.2)',
+            }}
+          >
+            {!generatedCreds ? (
+              <form onSubmit={handleOnboardSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <h2 style={{ fontSize: '1.35rem', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+                      ➕ Onboard Team Member
+                    </h2>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      Assign territory & generate real login credentials
+                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={resetModal}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.25rem', cursor: 'pointer' }}
+                  >
+                    ✖
+                  </button>
+                </div>
 
+                <div className="field-group" style={{ margin: 0 }}>
+                  <label className="field-label">Full Name</label>
+                  <input
+                    type="text"
+                    className="field-input"
+                    placeholder="e.g. Anjali Sharma"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    required
+                    minLength={2}
+                    maxLength={50}
+                    pattern="^[A-Za-z\s]+$"
+                    title="Name must contain only letters and spaces"
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div className="field-group" style={{ margin: 0 }}>
-                    <label className="field-label">Full Name</label>
+                    <label className="field-label">Mobile Number</label>
                     <input
-                      type="text"
+                      type="tel"
                       className="field-input"
-                      placeholder="e.g. Anjali Sharma"
-                      value={newName}
-                      onChange={(e) => setNewName(e.target.value)}
+                      placeholder="9812345678"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value.replace(/\D/g, ''))}
                       required
+                      minLength={10}
+                      maxLength={10}
+                      pattern="^[0-9]{10}$"
+                      title="Mobile number must be exactly 10 digits"
                     />
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <div className="field-group" style={{ margin: 0 }}>
-                      <label className="field-label">Mobile Number</label>
-                      <input
-                        type="tel"
-                        className="field-input"
-                        placeholder="9812345678"
-                        value={newPhone}
-                        onChange={(e) => setNewPhone(e.target.value.replace(/\D/g, ''))}
-                        required
-                        maxLength={10}
-                      />
-                    </div>
-
-                    <div className="field-group" style={{ margin: 0 }}>
-                      <label className="field-label">Assigned Role</label>
-                      <select
-                        className="field-input"
-                        value={newRole}
-                        onChange={(e) => setNewRole(e.target.value)}
-                        style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
-                      >
-                        <option value="Marketing Executive">Marketing Executive</option>
-                        <option value="Field Officer">Field Officer</option>
-                        <option value="Regional Representative">Regional Representative</option>
-                        <option value="Admin">Admin</option>
-                      </select>
-                    </div>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">Assigned Role</label>
+                    <select
+                      className="field-input"
+                      value={newRole}
+                      onChange={(e) => setNewRole(e.target.value)}
+                      style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
+                    >
+                      <option value="Marketing Executive">Marketing Executive</option>
+                      <option value="Field Officer">Field Officer</option>
+                      <option value="Regional Representative">Regional Representative</option>
+                      <option value="Admin">Admin</option>
+                    </select>
                   </div>
+                </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <div className="field-group" style={{ margin: 0 }}>
-                      <label className="field-label">District</label>
-                      <select
-                        className="field-input"
-                        value={newDistrict}
-                        onChange={(e) => setNewDistrict(e.target.value)}
-                        style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
-                      >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">District</label>
+                    <select
+                      className="field-input"
+                      value={newDistrict}
+                      onChange={(e) => setNewDistrict(e.target.value)}
+                      style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
+                    >
                       <option value="Katihar">Katihar</option>
                       <option value="Purnia">Purnia</option>
                       <option value="Araria">Araria</option>
@@ -374,16 +409,21 @@ export default function AgentsClient() {
                       value={newBlock}
                       onChange={(e) => setNewBlock(e.target.value)}
                       required
+                      maxLength={50}
                     />
                   </div>
                 </div>
+
+                {onboardError && (
+                  <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem' }}>{onboardError}</p>
+                )}
 
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
                   <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={resetModal}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary" style={{ flex: 1.5, background: 'var(--color-primary-600)' }}>
-                    ⚡ Generate Credentials
+                  <button type="submit" className="btn btn-primary" style={{ flex: 1.5, background: 'var(--color-primary-600)' }} disabled={onboarding}>
+                    {onboarding ? 'Creating…' : '⚡ Generate Credentials'}
                   </button>
                 </div>
               </form>
@@ -414,7 +454,7 @@ export default function AgentsClient() {
                     </strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Initial Password:</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Password (shown once):</span>
                     <strong style={{ color: '#10b981', fontSize: '1.1rem', letterSpacing: '0.05em' }}>
                       {generatedCreds.pass}
                     </strong>

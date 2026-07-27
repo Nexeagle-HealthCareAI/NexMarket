@@ -45,3 +45,9 @@ backend/**/bin/
 backend/**/obj/
 *.user
 .vs/
+
+# Serwist-generated service worker (built from src/app/sw.ts on every build)
+/public/sw.js
+/public/sw.js.map
+/public/swe-worker-*.js
+/public/swe-worker-*.js.map

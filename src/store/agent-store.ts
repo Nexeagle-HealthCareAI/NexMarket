@@ -17,6 +17,7 @@ interface AgentState {
   refreshToken: string | null;
   activeShiftClientId: string | null;
   activeVisitClientId: string | null;
+  profileCompleted: boolean;
 
   setAuth: (auth: {
     agentId: string;
@@ -25,8 +26,10 @@ interface AgentState {
     role: string;
     jwtToken: string;
     refreshToken: string;
+    profileCompleted?: boolean;
   }) => void;
 
+  setProfileCompleted: (completed: boolean) => void;
   setActiveShift: (clientId: string | null) => void;
   setActiveVisit: (clientId: string | null) => void;
   clearAuth: () => void;
@@ -43,6 +46,7 @@ export const useAgentStore = create<AgentState>()(
       refreshToken: null,
       activeShiftClientId: null,
       activeVisitClientId: null,
+      profileCompleted: false,
 
       setAuth: (auth) =>
         set({
@@ -52,8 +56,10 @@ export const useAgentStore = create<AgentState>()(
           role: auth.role,
           jwtToken: auth.jwtToken,
           refreshToken: auth.refreshToken,
+          profileCompleted: auth.profileCompleted ?? false,
         }),
 
+      setProfileCompleted: (completed) => set({ profileCompleted: completed }),
       setActiveShift: (clientId) => set({ activeShiftClientId: clientId }),
       setActiveVisit: (clientId) => set({ activeVisitClientId: clientId }),
 
@@ -67,6 +73,7 @@ export const useAgentStore = create<AgentState>()(
           refreshToken: null,
           activeShiftClientId: null,
           activeVisitClientId: null,
+          profileCompleted: false,
         }),
     }),
     {

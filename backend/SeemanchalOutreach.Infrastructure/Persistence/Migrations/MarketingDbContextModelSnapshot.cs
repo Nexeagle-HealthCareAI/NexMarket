@@ -45,7 +45,13 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Education")
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("MustChangePassword")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Name")
@@ -56,8 +62,23 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PersonalDetails")
+                        .HasColumnType("text");
+
                     b.Property<string>("Phone")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhotoUrl")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("ProfileCompleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("RefreshTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RefreshTokenHash")
                         .HasColumnType("text");
 
                     b.Property<string>("Role")
@@ -194,12 +215,21 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Comments")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("DeviceId")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("DuplicateReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FollowUpDate")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsMerged")
                         .HasColumnType("boolean");
@@ -228,6 +258,10 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("ServerReceivedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<bool>("WhatsappAdded")
                         .HasColumnType("boolean");
 
@@ -252,7 +286,17 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<double?>("CentroidLat")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("CentroidLng")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("District")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("LgdCode")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -260,10 +304,14 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("Population")
-                        .HasColumnType("integer");
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("PanchayatId");
+
+                    b.HasIndex("LgdCode")
+                        .IsUnique();
 
                     b.HasIndex("District", "Block");
 
@@ -324,6 +372,54 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("referrals", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SurveyResponse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("AnswersJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ContactId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeviceId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PanchayatId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId");
+
+                    b.HasIndex("PanchayatId");
+
+                    b.HasIndex("ClientId", "DeviceId")
+                        .IsUnique();
+
+                    b.ToTable("survey_responses", "marketing");
                 });
 
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.TrajectoryPoint", b =>

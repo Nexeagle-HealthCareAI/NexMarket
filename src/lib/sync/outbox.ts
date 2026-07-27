@@ -32,6 +32,8 @@ export function wireTypeFor(entry: SyncOutboxEntry): string {
       return 'referral_new';
     case 'trajectory_batch':
       return 'trajectory_batch';
+    case 'survey':
+      return 'survey';
   }
 }
 
@@ -118,6 +120,11 @@ export async function markSynced(
         break;
       case 'referral':
         await db.referrals
+          .filter(filter)
+          .modify({ serverId, syncedAt });
+        break;
+      case 'survey':
+        await db.surveyResponses
           .filter(filter)
           .modify({ serverId, syncedAt });
         break;

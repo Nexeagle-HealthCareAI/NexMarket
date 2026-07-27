@@ -1,0 +1,512 @@
+[
+  {
+    "id": "00000001-0000-0000-0000-000000000001",
+    "lgdCode": "251556",
+    "name": "Amdabad",
+    "block": "Amdabad",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.56,
+    "centroidLng": 87.58
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000002",
+    "lgdCode": "251557",
+    "name": "Azamnagar",
+    "block": "Azamnagar",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.32,
+    "centroidLng": 87.67
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000003",
+    "lgdCode": "251558",
+    "name": "Barari",
+    "block": "Barari",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.26,
+    "centroidLng": 87.54
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000004",
+    "lgdCode": "251559",
+    "name": "Barsoi",
+    "block": "Barsoi",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.56,
+    "centroidLng": 87.94
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000005",
+    "lgdCode": "251560",
+    "name": "Balrampur",
+    "block": "Balrampur",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.45,
+    "centroidLng": 87.48
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000006",
+    "lgdCode": "251561",
+    "name": "Dandkhora",
+    "block": "Dandkhora",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.38,
+    "centroidLng": 87.71
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000007",
+    "lgdCode": "251562",
+    "name": "Falka",
+    "block": "Falka",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.71,
+    "centroidLng": 87.78
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000008",
+    "lgdCode": "251563",
+    "name": "Hasanganj",
+    "block": "Hasanganj",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.39,
+    "centroidLng": 87.52
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000009",
+    "lgdCode": "251564",
+    "name": "Kadwa",
+    "block": "Kadwa",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.55,
+    "centroidLng": 87.62
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000010",
+    "lgdCode": "251565",
+    "name": "Katihar",
+    "block": "Katihar",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.53,
+    "centroidLng": 87.57
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000011",
+    "lgdCode": "251566",
+    "name": "Korha",
+    "block": "Korha",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.47,
+    "centroidLng": 87.61
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000012",
+    "lgdCode": "251567",
+    "name": "Manihari",
+    "block": "Manihari",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.33,
+    "centroidLng": 87.62
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000013",
+    "lgdCode": "251568",
+    "name": "Mansahi",
+    "block": "Mansahi",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.63,
+    "centroidLng": 87.81
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000014",
+    "lgdCode": "251569",
+    "name": "Pranpur",
+    "block": "Pranpur",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.49,
+    "centroidLng": 87.73
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000015",
+    "lgdCode": "251570",
+    "name": "Sameli",
+    "block": "Sameli",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.61,
+    "centroidLng": 87.52
+  },
+  {
+    "id": "00000001-0000-0000-0000-000000000016",
+    "lgdCode": "251571",
+    "name": "Sonbarsha",
+    "block": "Sonbarsha",
+    "district": "Katihar",
+    "state": "Bihar",
+    "centroidLat": 25.74,
+    "centroidLng": 87.69
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000001",
+    "lgdCode": "252601",
+    "name": "Amour",
+    "block": "Amour",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 26.08,
+    "centroidLng": 87.55
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000002",
+    "lgdCode": "252602",
+    "name": "Baisa",
+    "block": "Baisa",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 25.78,
+    "centroidLng": 87.44
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000003",
+    "lgdCode": "252603",
+    "name": "Banmankhi",
+    "block": "Banmankhi",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 25.88,
+    "centroidLng": 87.19
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000004",
+    "lgdCode": "252604",
+    "name": "Bhawanipur",
+    "block": "Bhawanipur",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 25.64,
+    "centroidLng": 87.5
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000005",
+    "lgdCode": "252605",
+    "name": "Barhara Kothi",
+    "block": "Barhara Kothi",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 25.74,
+    "centroidLng": 87.51
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000006",
+    "lgdCode": "252606",
+    "name": "Dhamdaha",
+    "block": "Dhamdaha",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 25.75,
+    "centroidLng": 87.3
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000007",
+    "lgdCode": "252607",
+    "name": "Jalalgarh",
+    "block": "Jalalgarh",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 25.96,
+    "centroidLng": 87.36
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000008",
+    "lgdCode": "252608",
+    "name": "Kasba",
+    "block": "Kasba",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 25.72,
+    "centroidLng": 87.42
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000009",
+    "lgdCode": "252609",
+    "name": "Krityanand Nagar",
+    "block": "Krityanand Nagar",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 25.77,
+    "centroidLng": 87.47
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000010",
+    "lgdCode": "252610",
+    "name": "Purnia East",
+    "block": "Purnia East",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 25.78,
+    "centroidLng": 87.48
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000011",
+    "lgdCode": "252611",
+    "name": "Purnia West",
+    "block": "Purnia West",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 25.77,
+    "centroidLng": 87.45
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000012",
+    "lgdCode": "252612",
+    "name": "Rupauli",
+    "block": "Rupauli",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 25.85,
+    "centroidLng": 87.52
+  },
+  {
+    "id": "00000002-0000-0000-0000-000000000013",
+    "lgdCode": "252613",
+    "name": "Srinagar",
+    "block": "Srinagar",
+    "district": "Purnia",
+    "state": "Bihar",
+    "centroidLat": 25.83,
+    "centroidLng": 87.34
+  },
+  {
+    "id": "00000003-0000-0000-0000-000000000001",
+    "lgdCode": "253101",
+    "name": "Araria",
+    "block": "Araria",
+    "district": "Araria",
+    "state": "Bihar",
+    "centroidLat": 26.15,
+    "centroidLng": 87.52
+  },
+  {
+    "id": "00000003-0000-0000-0000-000000000002",
+    "lgdCode": "253102",
+    "name": "Bhargama",
+    "block": "Bhargama",
+    "district": "Araria",
+    "state": "Bihar",
+    "centroidLat": 26.33,
+    "centroidLng": 87.4
+  },
+  {
+    "id": "00000003-0000-0000-0000-000000000003",
+    "lgdCode": "253103",
+    "name": "Forbesganj",
+    "block": "Forbesganj",
+    "district": "Araria",
+    "state": "Bihar",
+    "centroidLat": 26.3,
+    "centroidLng": 87.27
+  },
+  {
+    "id": "00000003-0000-0000-0000-000000000004",
+    "lgdCode": "253104",
+    "name": "Jokihat",
+    "block": "Jokihat",
+    "district": "Araria",
+    "state": "Bihar",
+    "centroidLat": 26.23,
+    "centroidLng": 87.46
+  },
+  {
+    "id": "00000003-0000-0000-0000-000000000005",
+    "lgdCode": "253105",
+    "name": "Kursakanta",
+    "block": "Kursakanta",
+    "district": "Araria",
+    "state": "Bihar",
+    "centroidLat": 26.08,
+    "centroidLng": 87.64
+  },
+  {
+    "id": "00000003-0000-0000-0000-000000000006",
+    "lgdCode": "253106",
+    "name": "Narpatganj",
+    "block": "Narpatganj",
+    "district": "Araria",
+    "state": "Bihar",
+    "centroidLat": 26.2,
+    "centroidLng": 87.33
+  },
+  {
+    "id": "00000003-0000-0000-0000-000000000007",
+    "lgdCode": "253107",
+    "name": "Palasi",
+    "block": "Palasi",
+    "district": "Araria",
+    "state": "Bihar",
+    "centroidLat": 26.09,
+    "centroidLng": 87.43
+  },
+  {
+    "id": "00000003-0000-0000-0000-000000000008",
+    "lgdCode": "253108",
+    "name": "Raniganj",
+    "block": "Raniganj",
+    "district": "Araria",
+    "state": "Bihar",
+    "centroidLat": 26.02,
+    "centroidLng": 87.5
+  },
+  {
+    "id": "00000003-0000-0000-0000-000000000009",
+    "lgdCode": "253109",
+    "name": "Sikti",
+    "block": "Sikti",
+    "district": "Araria",
+    "state": "Bihar",
+    "centroidLat": 26.05,
+    "centroidLng": 87.52
+  },
+  {
+    "id": "00000004-0000-0000-0000-000000000001",
+    "lgdCode": "254201",
+    "name": "Basantpur",
+    "block": "Basantpur",
+    "district": "Supaul",
+    "state": "Bihar",
+    "centroidLat": 26.25,
+    "centroidLng": 86.8
+  },
+  {
+    "id": "00000004-0000-0000-0000-000000000002",
+    "lgdCode": "254202",
+    "name": "Chhatapur",
+    "block": "Chhatapur",
+    "district": "Supaul",
+    "state": "Bihar",
+    "centroidLat": 26.6,
+    "centroidLng": 86.73
+  },
+  {
+    "id": "00000004-0000-0000-0000-000000000003",
+    "lgdCode": "254203",
+    "name": "Kishanpur",
+    "block": "Kishanpur",
+    "district": "Supaul",
+    "state": "Bihar",
+    "centroidLat": 26.51,
+    "centroidLng": 86.68
+  },
+  {
+    "id": "00000004-0000-0000-0000-000000000004",
+    "lgdCode": "254204",
+    "name": "Nirmali",
+    "block": "Nirmali",
+    "district": "Supaul",
+    "state": "Bihar",
+    "centroidLat": 26.31,
+    "centroidLng": 86.6
+  },
+  {
+    "id": "00000004-0000-0000-0000-000000000005",
+    "lgdCode": "254205",
+    "name": "Pipra",
+    "block": "Pipra",
+    "district": "Supaul",
+    "state": "Bihar",
+    "centroidLat": 26.7,
+    "centroidLng": 86.76
+  },
+  {
+    "id": "00000004-0000-0000-0000-000000000006",
+    "lgdCode": "254206",
+    "name": "Pratapganj",
+    "block": "Pratapganj",
+    "district": "Supaul",
+    "state": "Bihar",
+    "centroidLat": 26.38,
+    "centroidLng": 86.67
+  },
+  {
+    "id": "00000004-0000-0000-0000-000000000007",
+    "lgdCode": "254207",
+    "name": "Raghopur",
+    "block": "Raghopur",
+    "district": "Supaul",
+    "state": "Bihar",
+    "centroidLat": 26.19,
+    "centroidLng": 86.73
+  },
+  {
+    "id": "00000004-0000-0000-0000-000000000008",
+    "lgdCode": "254208",
+    "name": "Saraigarh Bhaptiyahi",
+    "block": "Saraigarh Bhaptiyahi",
+    "district": "Supaul",
+    "state": "Bihar",
+    "centroidLat": 26.41,
+    "centroidLng": 86.72
+  },
+  {
+    "id": "00000004-0000-0000-0000-000000000009",
+    "lgdCode": "254209",
+    "name": "Supaul",
+    "block": "Supaul",
+    "district": "Supaul",
+    "state": "Bihar",
+    "centroidLat": 26.12,
+    "centroidLng": 86.61
+  },
+  {
+    "id": "00000004-0000-0000-0000-000000000010",
+    "lgdCode": "254210",
+    "name": "Tribeniganj",
+    "block": "Tribeniganj",
+    "district": "Supaul",
+    "state": "Bihar",
+    "centroidLat": 26.24,
+    "centroidLng": 87.07
+  },
+  {
+    "id": "00000004-0000-0000-0000-000000000011",
+    "lgdCode": "254211",
+    "name": "Marauna",
+    "block": "Marauna",
+    "district": "Supaul",
+    "state": "Bihar",
+    "centroidLat": 26.48,
+    "centroidLng": 86.8
+  },
+  {
+    "id": "wb-utd-001",
+    "lgdCode": "wb-1",
+    "name": "Raiganj",
+    "block": "Raiganj",
+    "district": "Uttar Dinajpur",
+    "state": "West Bengal",
+    "centroidLat": 25.6,
+    "centroidLng": 88.1
+  },
+  {
+    "id": "wb-utd-002",
+    "lgdCode": "wb-2",
+    "name": "Kaliaganj",
+    "block": "Kaliaganj",
+    "district": "Uttar Dinajpur",
+    "state": "West Bengal",
+    "centroidLat": 25.65,
+    "centroidLng": 88.3
+  }
+]

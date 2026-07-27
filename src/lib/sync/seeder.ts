@@ -9,21 +9,18 @@
  */
 
 import { db } from '../db';
-import type { LocalPanchayat } from '../db/schema';
+import { getPanchayats } from './api-client';
 
 export async function seedPanchayatsIfEmpty(token: string): Promise<void> {
   const count = await db.panchayats.count();
   if (count > 0) return; // Already seeded
 
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000'}/api/panchayats`,
-    { headers: { Authorization: `Bearer ${token}` } },
+  const panchayats = await getPanchayats(token);
+  await db.panchayats.bulkPut(
+    panchayats.map((p) => ({
+      ...p,
+      centroidLat: p.centroidLat ?? undefined,
+      centroidLng: p.centroidLng ?? undefined,
+    })),
   );
-
-  if (!response.ok) {
-    throw new Error(`Failed to seed panchayats: ${response.status}`);
-  }
-
-  const panchayats: LocalPanchayat[] = await response.json();
-  await db.panchayats.bulkPut(panchayats);
 }

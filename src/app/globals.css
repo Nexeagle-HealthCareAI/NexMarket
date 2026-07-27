@@ -525,7 +525,7 @@ textarea.field-input { resize: none; min-height: 80px; }
 
 /* ─── Desktop Split Login Layout ─────────────────────────────────────────────── */
 .login-split-container {
-  min-height: 100dvh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -541,11 +541,42 @@ textarea.field-input { resize: none; min-height: 80px; }
 }
 
 .login-form-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+  background: linear-gradient(180deg, #4f46e5 0%, #312e81 30%, #f8fafc 30.1%, #f8fafc 100%);
   width: 100%;
-  max-width: 420px;
+  max-width: 100%;
   position: relative;
   z-index: 1;
-  margin: 0 auto;
+}
+
+.login-mobile-hero {
+  height: 30vh;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  padding: 2rem;
+}
+
+.login-card-container {
+  flex: 1;
+  background: #ffffff;
+  border-top-left-radius: 32px;
+  border-top-right-radius: 32px;
+  padding: 2rem;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.login-desktop-title {
+  display: none;
 }
 
 @media (min-width: 1024px) {
@@ -556,7 +587,7 @@ textarea.field-input { resize: none; min-height: 80px; }
     padding: 0;
     max-width: none;
     margin: 0;
-    min-height: 100dvh;
+    height: 100dvh;
     background: #f8fafc;
   }
 
@@ -574,16 +605,46 @@ textarea.field-input { resize: none; min-height: 80px; }
   }
 
   .login-form-panel {
-    display: flex;
-    flex-direction: column;
     justify-content: center;
     padding: 3.5rem 8%;
-    min-height: 100dvh;
-    max-width: none;
-    width: 100%;
-    margin: 0;
     background: #f8fafc;
-    box-shadow: none;
-    z-index: 10;
   }
+
+  .login-mobile-hero {
+    display: none;
+  }
+
+  .login-desktop-title {
+    display: block;
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  .login-card-container {
+    flex: none;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-xl);
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(99, 102, 241, 0.15);
+    overflow-y: visible;
+  }
+}
+
+/* ─── Live Animation Effects ─────────────────────────────────────────────────── */
+@keyframes rowFlash {
+  0% { background-color: rgba(99, 102, 241, 0.2); }
+  100% { background-color: transparent; }
+}
+.animate-row-flash {
+  animation: rowFlash 2s ease-out forwards;
+}
+
+@keyframes popScale {
+  0% { transform: scale(1); color: inherit; font-weight: inherit; }
+  50% { transform: scale(1.6); color: var(--color-primary-600); font-weight: 800; }
+  100% { transform: scale(1); color: inherit; font-weight: inherit; }
+}
+.animate-pop {
+  animation: popScale 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  display: inline-block;
 }

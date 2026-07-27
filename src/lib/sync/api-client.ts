@@ -14,7 +14,7 @@ export type SyncStatus = 'created' | 'already_exists' | 'conflict' | 'error';
 // Matches OutboxItemDto on the server — Payload is a JSON *string*, and Type
 // must be one of the granular values the handler switches on (shift_start,
 // shift_end, visit_checkin, visit_checkout, contact_new, contact_update,
-// referral_new, trajectory_batch), not the coarse local EntityType.
+// referral_new, trajectory_batch, survey), not the coarse local EntityType.
 export interface SyncItem {
   id: string;
   clientId: string;
@@ -62,15 +62,6 @@ export interface SyncPullResponse {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
-export interface OtpRequestBody {
-  phone: string;
-}
-
-export interface OtpVerifyBody {
-  phone: string;
-  otp: string;
-}
-
 export interface AuthResponse {
   token: string;
   refreshToken: string;
@@ -78,6 +69,116 @@ export interface AuthResponse {
   name: string;
   role: string;
   deviceId: string; // echoed back from the request — the client owns this id, not the server
+  mustChangePassword?: boolean;
+  profileCompleted?: boolean;
+}
+
+// ─── Admin: Agents ─────────────────────────────────────────────────────────────
+
+export interface AdminAgentDto {
+  agentId: string;
+  name: string;
+  phone: string;
+  role: string;
+  district: string;
+  block: string;
+  isActive: boolean;
+  status: 'online' | 'low-connectivity' | 'offline';
+  activeShift: boolean;
+  lastSeenLat: number | null;
+  lastSeenLng: number | null;
+  lastSeenAt: string | null;
+  todayContacts: number;
+  todayVisits: number;
+  todayReferrals: number;
+}
+
+export interface OnboardAgentRequest {
+  name: string;
+  phone: string;
+  role: string;
+  district: string;
+  block: string;
+}
+
+export interface OnboardAgentResponse {
+  agentId: string;
+  name: string;
+  role: string;
+  district: string;
+  block: string;
+  password: string; // shown once
+}
+
+export interface TrajectoryPointDto {
+  lat: number;
+  lng: number;
+  recordedAt: string;
+  accuracyM: number | null;
+}
+
+// ─── Admin: Duplicates ──────────────────────────────────────────────────────────
+
+export interface DuplicateRecordDto {
+  clientId: string;
+  name: string;
+  role: string;
+  phone: string | null;
+  agentId: string;
+  agentName: string;
+  panchayatId: string;
+  panchayatName: string;
+  whatsappAdded: boolean;
+  cardGiven: boolean;
+  createdAt: string;
+}
+
+export interface DuplicatePairDto {
+  id: string;
+  recordA: DuplicateRecordDto;
+  recordB: DuplicateRecordDto;
+  status: 'pending' | 'merged' | 'dismissed';
+}
+
+// ─── Admin: Reports ───────────────────────────────────────────────────────────
+
+export interface BlockReportDto {
+  district: string;
+  block: string;
+  agents: number;
+  asha: number;
+  rmp: number;
+  ward: number;
+  med: number;
+  visits: number;
+  referrals: number;
+  converted: number;
+}
+
+export interface ReportSummaryDto {
+  totalContacts: number;
+  ashaWorkers: number;
+  rmpDoctors: number;
+  wardMembers: number;
+  medicineShops: number;
+  totalVisits: number;
+  totalReferrals: number;
+  convertedReferrals: number;
+  conversionRatePct: number;
+  blocks: BlockReportDto[];
+}
+
+// ─── Panchayats ───────────────────────────────────────────────────────────────
+
+export interface PanchayatDto {
+  id: string;
+  lgdCode: string;
+  name: string;
+  block: string;
+  district: string;
+  state: string;
+  centroidLat: number | null;
+  centroidLng: number | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -154,10 +255,77 @@ export async function syncPull(
   return post<SyncPullRequest, SyncPullResponse>('/api/v1/sync/pull', body, token);
 }
 
-export async function refreshToken(token: string, refresh: string): Promise<AuthResponse> {
-  return post<{ refreshToken: string }, AuthResponse>(
+export async function refreshToken(agentId: string, refresh: string): Promise<AuthResponse> {
+  return post<{ agentId: string; refreshToken: string }, AuthResponse>(
     '/api/v1/auth/refresh',
-    { refreshToken: refresh },
+    { agentId, refreshToken: refresh },
+  );
+}
+
+export async function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ message: string }> {
+  return post<{ currentPassword: string; newPassword: string }, { message: string }>(
+    '/api/v1/auth/change-password',
+    { currentPassword, newPassword },
     token,
   );
+}
+
+export interface CompleteProfileDto {
+  photoUrl?: string;
+  education?: string;
+  personalDetails?: string;
+}
+
+export async function completeProfile(
+  agentId: string,
+  token: string,
+  body: CompleteProfileDto
+): Promise<{ success: boolean; profileCompleted: boolean }> {
+  const res = await fetch(`${API_BASE}/api/v1/agents/${encodeURIComponent(agentId)}/onboarding`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error('Failed to complete profile');
+  return res.json();
+}
+
+// ─── Admin API ────────────────────────────────────────────────────────────────
+
+export function getAgents(token: string): Promise<AdminAgentDto[]> {
+  return get<AdminAgentDto[]>('/api/v1/agents', token);
+}
+
+export function onboardAgent(token: string, body: OnboardAgentRequest): Promise<OnboardAgentResponse> {
+  return post<OnboardAgentRequest, OnboardAgentResponse>('/api/v1/agents', body, token);
+}
+
+export function getAgentTrajectory(token: string, agentId: string, date?: string): Promise<TrajectoryPointDto[]> {
+  const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+  return get<TrajectoryPointDto[]>(`/api/v1/agents/${encodeURIComponent(agentId)}/trajectory${qs}`, token);
+}
+
+export function getDuplicates(token: string): Promise<DuplicatePairDto[]> {
+  return get<DuplicatePairDto[]>('/api/v1/duplicates', token);
+}
+
+export function mergeDuplicate(token: string, clientId: string): Promise<unknown> {
+  return post<Record<string, never>, unknown>(`/api/v1/duplicates/${encodeURIComponent(clientId)}/merge`, {}, token);
+}
+
+export function dismissDuplicate(token: string, clientId: string): Promise<unknown> {
+  return post<Record<string, never>, unknown>(`/api/v1/duplicates/${encodeURIComponent(clientId)}/dismiss`, {}, token);
+}
+
+export function getReportsSummary(token: string, district?: string): Promise<ReportSummaryDto> {
+  const qs = district && district !== 'All' ? `?district=${encodeURIComponent(district)}` : '';
+  return get<ReportSummaryDto>(`/api/v1/reports/summary${qs}`, token);
+}
+
+export function getPanchayats(token: string): Promise<PanchayatDto[]> {
+  return get<PanchayatDto[]>('/api/v1/panchayats', token);
 }

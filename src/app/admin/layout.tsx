@@ -2,12 +2,17 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 const adminNavItems = [
   { href: '/admin/map', label: 'Live Map & Replay', icon: '🗺️' },
+  { href: '/admin/assignments', label: 'Tasks & Assignments', icon: '📋' },
+  { href: '/admin/sync', label: 'Sync Analytics', icon: '📡' },
   { href: '/admin/agents', label: 'Field Agents', icon: '👥' },
   { href: '/admin/duplicates', label: 'Duplicate Review', icon: '⚠️' },
   { href: '/admin/reports', label: 'Reports & Analytics', icon: '📊' },
+  { href: '/admin/surveys', label: 'Surveys', icon: '📋' },
+  { href: '/admin/pipeline', label: 'CRM Pipeline', icon: '🗂️' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -87,6 +92,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               );
             })}
           </nav>
+
+          <div style={{ height: 24, width: 1, background: 'var(--surface-border)' }} />
+
+          <LanguageSwitcher />
 
           <div style={{ height: 24, width: 1, background: 'var(--surface-border)' }} />
 

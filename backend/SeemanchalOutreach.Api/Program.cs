@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
 using SeemanchalOutreach.Api.Hubs;
+using SeemanchalOutreach.Api.SeedData;
 using SeemanchalOutreach.Application;
 using SeemanchalOutreach.Infrastructure;
 using SeemanchalOutreach.Infrastructure.Persistence;
@@ -19,6 +20,11 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Add Controllers & SignalR
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
+
+// Consistent JSON error shape for both validation failures ([ApiController]'s
+// automatic 400s) and unhandled exceptions (via UseExceptionHandler below) —
+// without this, an unhandled exception returns an empty 500 with no body.
+builder.Services.AddProblemDetails();
 
 // JWT auth — issued by AuthController, required by SyncController
 var jwtKey = builder.Configuration["Jwt:Key"]
@@ -76,6 +82,20 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<MarketingDbContext>();
     db.Database.Migrate();
+
+    // Real LGD Bihar panchayat data (not mock) — seeded once, idempotent.
+    await PanchayatSeeder.SeedIfEmptyAsync(db, app.Environment.ContentRootPath);
+
+    // First-run bootstrap: create the one real Admin account so there is always
+    // a way to log in on a fresh database — no demo credentials in the app itself.
+    var seededAdminPassword = await AdminSeeder.SeedIfEmptyAsync(db, app.Configuration);
+    if (seededAdminPassword != null)
+    {
+        app.Logger.LogWarning(
+            "Seeded default Admin account — AgentId: '{AgentId}', Password: '{Password}'. " +
+            "You will be required to change this password on first login.",
+            AdminSeeder.DefaultAgentId, seededAdminPassword);
+    }
 }
 
 if (app.Environment.IsDevelopment())
@@ -84,6 +104,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseExceptionHandler();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();

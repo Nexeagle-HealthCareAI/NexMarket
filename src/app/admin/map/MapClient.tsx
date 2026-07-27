@@ -1,38 +1,82 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { MOCK_AGENTS, MOCK_TRAJECTORIES, type AdminAgent } from '@/lib/admin/mock-data';
-import type { LocalTrajectoryPoint } from '@/lib/db/schema';
+import { useAgentStore } from '@/store/agent-store';
+import { getAgents, getAgentTrajectory, type AdminAgentDto, type TrajectoryPointDto } from '@/lib/sync/api-client';
+
+interface PanchayatGeo {
+  name: string;
+  block: string;
+  district: string;
+  centroidLat: number;
+  centroidLng: number;
+}
 
 export default function MapClient() {
+  const token = useAgentStore((s) => s.jwtToken);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const replayMarkerRef = useRef<maplibregl.Marker | null>(null);
 
-  const [selectedAgentId, setSelectedAgentId] = useState<string>('agent-101');
+  const [agents, setAgents] = useState<AdminAgentDto[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('');
+  const [trajectory, setTrajectory] = useState<TrajectoryPointDto[]>([]);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [replayIdx, setReplayIdx] = useState<number>(0);
   const [speed, setSpeed] = useState<number>(1000); // ms per point
 
   // Territory Mapping States
-  const [panchayats, setPanchayats] = useState<any[]>([]);
+  const [panchayats, setPanchayats] = useState<PanchayatGeo[]>([]);
   const [selectedPanchayatDistrict, setSelectedPanchayatDistrict] = useState<string>('');
   const [selectedPanchayatBlock, setSelectedPanchayatBlock] = useState<string>('');
   const [selectedPanchayat, setSelectedPanchayat] = useState<string>('');
   const panchayatMarkersRef = useRef<maplibregl.Marker[]>([]);
 
-  const selectedAgent = MOCK_AGENTS.find((a) => a.agentId === selectedAgentId);
-  const trajectory: LocalTrajectoryPoint[] = MOCK_TRAJECTORIES[selectedAgentId] || [];
+  const selectedAgent = agents.find((a) => a.agentId === selectedAgentId);
 
-  // Fetch Panchayats
+  // Fetch agents (list + poll — same cadence as the Agents page)
+  const loadAgents = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await getAgents(token);
+      setAgents(data);
+      setSelectedAgentId((current) => current || data[0]?.agentId || '');
+    } catch (err) {
+      console.error('Failed to load agents', err);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void loadAgents();
+    const timer = setInterval(() => void loadAgents(), 30_000);
+    return () => clearInterval(timer);
+  }, [loadAgents]);
+
+  // Fetch trajectory whenever the selected agent changes
+  useEffect(() => {
+    if (!token || !selectedAgentId) {
+      setTrajectory([]);
+      return;
+    }
+    setReplayIdx(0);
+    setIsPlaying(false);
+    getAgentTrajectory(token, selectedAgentId)
+      .then(setTrajectory)
+      .catch((err) => {
+        console.error('Failed to load trajectory', err);
+        setTrajectory([]);
+      });
+  }, [token, selectedAgentId]);
+
+  // Fetch Panchayats (real LGD reference data bundled with the frontend)
   useEffect(() => {
     fetch('/data/panchayats.json')
-      .then(res => res.json())
-      .then(data => setPanchayats(data))
-      .catch(err => console.error(err));
+      .then((res) => res.json())
+      .then((data) => setPanchayats(data))
+      .catch((err) => console.error(err));
   }, []);
 
   // Initialize MapLibre
@@ -136,8 +180,10 @@ export default function MapClient() {
       replayMarkerRef.current = null;
     }
 
-    // Add agent pins
-    MOCK_AGENTS.forEach((agent) => {
+    // Add agent pins — only for agents with at least one recorded GPS fix
+    agents.forEach((agent) => {
+      if (agent.lastSeenLat == null || agent.lastSeenLng == null) return;
+
       const isSelected = agent.agentId === selectedAgentId;
       const el = document.createElement('div');
       el.className = 'custom-map-marker';
@@ -174,7 +220,7 @@ export default function MapClient() {
             <div style="color: #0f172a; padding: 4px;">
               <strong>${agent.name}</strong> (${agent.block})<br/>
               Status: <span style="color: ${agent.status === 'online' ? '#10b981' : '#64748b'}">${agent.status.toUpperCase()}</span><br/>
-              Battery: ${agent.batteryPct}% · Visits today: ${agent.todayVisits}
+              Visits today: ${agent.todayVisits}
             </div>
           `)
         )
@@ -205,7 +251,7 @@ export default function MapClient() {
         });
       }
     }
-  }, [selectedAgentId, trajectory]);
+  }, [selectedAgentId, trajectory, agents]);
 
   // Replay animation loop
   useEffect(() => {
@@ -249,27 +295,27 @@ export default function MapClient() {
     map.panTo([pt.lng, pt.lat], { duration: speed * 0.8 });
   }, [replayIdx, trajectory, speed]);
 
-    const currentPoint = trajectory[replayIdx] || null;
+  const currentPoint = trajectory[replayIdx] || null;
 
   // Panchayat Marker Rendering
   useEffect(() => {
     if (!mapRef.current) return;
-    
+
     // Clear old markers
-    panchayatMarkersRef.current.forEach(m => m.remove());
+    panchayatMarkersRef.current.forEach((m) => m.remove());
     panchayatMarkersRef.current = [];
 
     // Filter
     let filtered = panchayats;
-    if (selectedPanchayatDistrict) filtered = filtered.filter(p => p.district === selectedPanchayatDistrict);
-    if (selectedPanchayatBlock) filtered = filtered.filter(p => p.block === selectedPanchayatBlock);
-    if (selectedPanchayat) filtered = filtered.filter(p => p.name === selectedPanchayat);
+    if (selectedPanchayatDistrict) filtered = filtered.filter((p) => p.district === selectedPanchayatDistrict);
+    if (selectedPanchayatBlock) filtered = filtered.filter((p) => p.block === selectedPanchayatBlock);
+    if (selectedPanchayat) filtered = filtered.filter((p) => p.name === selectedPanchayat);
 
     if (filtered.length === 0) return;
 
     const bounds = new maplibregl.LngLatBounds();
 
-    filtered.forEach(p => {
+    filtered.forEach((p) => {
       const el = document.createElement('div');
       el.style.width = '14px';
       el.style.height = '14px';
@@ -278,7 +324,7 @@ export default function MapClient() {
       el.style.border = '2px solid #fff';
       el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.4)';
       el.style.cursor = 'pointer';
-      
+
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([p.centroidLng, p.centroidLat])
         .setPopup(
@@ -290,7 +336,7 @@ export default function MapClient() {
           )
         )
         .addTo(mapRef.current!);
-        
+
       panchayatMarkersRef.current.push(marker);
       bounds.extend([p.centroidLng, p.centroidLat]);
     });
@@ -298,24 +344,22 @@ export default function MapClient() {
     // Fit map bounds if filters are applied
     if ((selectedPanchayatDistrict || selectedPanchayatBlock || selectedPanchayat) && filtered.length > 0) {
       if (filtered.length === 1) {
-         mapRef.current.flyTo({ center: [filtered[0].centroidLng, filtered[0].centroidLat], zoom: 12 });
+        mapRef.current.flyTo({ center: [filtered[0].centroidLng, filtered[0].centroidLat], zoom: 12 });
       } else {
-         mapRef.current.fitBounds(bounds, { padding: 80, maxZoom: 12 });
+        mapRef.current.fitBounds(bounds, { padding: 80, maxZoom: 12 });
       }
     }
-
   }, [panchayats, selectedPanchayatDistrict, selectedPanchayatBlock, selectedPanchayat]);
 
   // Derived unique lists for dropdowns
-  const uniqueDistricts = Array.from(new Set(panchayats.map(p => p.district))).sort();
-  const availableBlocks = Array.from(new Set(panchayats.filter(p => !selectedPanchayatDistrict || p.district === selectedPanchayatDistrict).map(p => p.block))).sort();
-  const availablePanchayats = Array.from(new Set(panchayats.filter(p => (!selectedPanchayatDistrict || p.district === selectedPanchayatDistrict) && (!selectedPanchayatBlock || p.block === selectedPanchayatBlock)).map(p => p.name))).sort();
+  const uniqueDistricts = Array.from(new Set(panchayats.map((p) => p.district))).sort();
+  const availableBlocks = Array.from(new Set(panchayats.filter((p) => !selectedPanchayatDistrict || p.district === selectedPanchayatDistrict).map((p) => p.block))).sort();
+  const availablePanchayats = Array.from(new Set(panchayats.filter((p) => (!selectedPanchayatDistrict || p.district === selectedPanchayatDistrict) && (!selectedPanchayatBlock || p.block === selectedPanchayatBlock)).map((p) => p.name))).sort();
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '1.5rem', height: 'calc(100vh - 120px)' }}>
       {/* Left Sidebar — Control Panel */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto', paddingRight: '0.5rem' }}>
-        
         {/* Territory Explorer */}
         <div className="card">
           <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
@@ -334,7 +378,7 @@ export default function MapClient() {
                 onChange={(e) => { setSelectedPanchayatDistrict(e.target.value); setSelectedPanchayatBlock(''); setSelectedPanchayat(''); }}
               >
                 <option value="">All Districts</option>
-                {uniqueDistricts.map(d => <option key={d as string} value={d as string}>{d as string}</option>)}
+                {uniqueDistricts.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
             <div className="field-group" style={{ margin: 0 }}>
@@ -346,7 +390,7 @@ export default function MapClient() {
                 disabled={!selectedPanchayatDistrict && availableBlocks.length > 50}
               >
                 <option value="">All Blocks</option>
-                {availableBlocks.map(b => <option key={b as string} value={b as string}>{b as string}</option>)}
+                {availableBlocks.map((b) => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
             <div className="field-group" style={{ margin: 0 }}>
@@ -358,13 +402,13 @@ export default function MapClient() {
                 disabled={!selectedPanchayatBlock}
               >
                 <option value="">All Panchayats</option>
-                {availablePanchayats.map(p => <option key={p as string} value={p as string}>{p as string}</option>)}
+                {availablePanchayats.map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
-            
+
             {(selectedPanchayatDistrict || selectedPanchayatBlock || selectedPanchayat) && (
-              <button 
-                className="btn btn-ghost" 
+              <button
+                className="btn btn-ghost"
                 style={{ alignSelf: 'flex-start', marginTop: '0.25rem' }}
                 onClick={() => { setSelectedPanchayatDistrict(''); setSelectedPanchayatBlock(''); setSelectedPanchayat(''); mapRef.current?.flyTo({ center: [87.5701, 25.5541], zoom: 9.5 }); }}
               >
@@ -379,52 +423,55 @@ export default function MapClient() {
             📍 Active Field Outreach
           </h2>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-            Select an agent to inspect real-time location and replay their historical shift trajectory across Seemanchal blocks.
+            Select an agent to inspect their last known location and replay today&apos;s recorded shift trajectory.
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {MOCK_AGENTS.map((a) => {
-              const isSel = a.agentId === selectedAgentId;
-              return (
-                <div
-                  key={a.agentId}
-                  onClick={() => {
-                    setSelectedAgentId(a.agentId);
-                    setIsPlaying(false);
-                    setReplayIdx(0);
-                  }}
-                  style={{
-                    padding: '0.75rem',
-                    borderRadius: 'var(--radius-sm)',
-                    background: isSel ? 'rgba(99,102,241,0.15)' : 'var(--surface-bg)',
-                    border: `1px solid ${isSel ? 'var(--color-primary-500)' : 'var(--surface-border)'}`,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 600, color: isSel ? 'var(--color-primary-600)' : 'var(--text-primary)', fontSize: '0.9rem' }}>
-                      {a.name}
-                    </span>
-                    <span
-                      className="badge"
-                      style={{
-                        background: a.status === 'online' ? 'rgba(16,185,129,0.2)' : 'rgba(100,116,139,0.2)',
-                        color: a.status === 'online' ? '#10b981' : '#94a3b8',
-                        fontSize: '0.7rem',
-                      }}
-                    >
-                      {a.status === 'online' ? '🟢 ONLINE' : a.status === 'low-connectivity' ? '🟡 LOW SIG' : '⚪ OFFLINE'}
-                    </span>
+          {agents.length === 0 ? (
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>No agents yet.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {agents.map((a) => {
+                const isSel = a.agentId === selectedAgentId;
+                return (
+                  <div
+                    key={a.agentId}
+                    onClick={() => {
+                      setSelectedAgentId(a.agentId);
+                      setIsPlaying(false);
+                      setReplayIdx(0);
+                    }}
+                    style={{
+                      padding: '0.75rem',
+                      borderRadius: 'var(--radius-sm)',
+                      background: isSel ? 'rgba(99,102,241,0.15)' : 'var(--surface-bg)',
+                      border: `1px solid ${isSel ? 'var(--color-primary-500)' : 'var(--surface-border)'}`,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: 600, color: isSel ? 'var(--color-primary-600)' : 'var(--text-primary)', fontSize: '0.9rem' }}>
+                        {a.name}
+                      </span>
+                      <span
+                        className="badge"
+                        style={{
+                          background: a.status === 'online' ? 'rgba(16,185,129,0.2)' : 'rgba(100,116,139,0.2)',
+                          color: a.status === 'online' ? '#10b981' : '#94a3b8',
+                          fontSize: '0.7rem',
+                        }}
+                      >
+                        {a.status === 'online' ? '🟢 ONLINE' : a.status === 'low-connectivity' ? '🟡 LOW SIG' : '⚪ OFFLINE'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                      Block: <strong>{a.block}</strong>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                    <span>Block: <strong>{a.block}</strong></span>
-                    <span>🔋 {a.batteryPct}%</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Trajectory Replay Control Box */}
@@ -432,7 +479,7 @@ export default function MapClient() {
           <div className="card" style={{ borderTop: '3px solid var(--color-primary-500)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
               <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', margin: 0 }}>
-                🔄 Trajectory Replay
+                🔄 Trajectory Replay (today)
               </h3>
               <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-400)', fontWeight: 600 }}>
                 {trajectory.length} waypoints
@@ -440,7 +487,7 @@ export default function MapClient() {
             </div>
 
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              Replaying route for <strong>{selectedAgent.name}</strong> ({selectedAgent.district}).
+              Replaying today&apos;s route for <strong>{selectedAgent.name}</strong> ({selectedAgent.district}).
             </p>
 
             {/* Progress Slider */}

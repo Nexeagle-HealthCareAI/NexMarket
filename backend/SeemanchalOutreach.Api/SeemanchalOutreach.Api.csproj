@@ -22,4 +22,10 @@
     <ProjectReference Include="..\SeemanchalOutreach.Infrastructure\SeemanchalOutreach.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="SeedData\panchayats.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

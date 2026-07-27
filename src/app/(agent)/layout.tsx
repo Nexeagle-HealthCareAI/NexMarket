@@ -6,6 +6,9 @@ import { useEffect } from 'react';
 import { useOutboxCount } from '@/lib/db';
 import { startSyncPolling, registerBackgroundSync } from '@/lib/sync/engine';
 import { useAgentStore } from '@/store/agent-store';
+import PwaInstallPrompt from '@/components/PwaInstallPrompt';
+import NotificationListener from '@/components/NotificationListener';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 const navItems = [
   {
@@ -55,20 +58,38 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const router = useRouter();
   const outboxCount = useOutboxCount();
-  const { agentId, name, role, clearAuth } = useAgentStore((s) => ({
+  const { agentId, name, role, profileCompleted, clearAuth } = useAgentStore((s) => ({
     agentId: s.agentId,
     name: s.name,
     role: s.role,
+    profileCompleted: s.profileCompleted,
     clearAuth: s.clearAuth,
   }));
 
   useEffect(() => {
     if (!agentId && typeof window !== 'undefined') {
       router.replace('/login');
+      return;
     }
+    
+    // Redirect un-onboarded agents to the onboarding page
+    if (agentId && !profileCompleted && !pathname.startsWith('/onboarding') && typeof window !== 'undefined') {
+      router.replace('/onboarding');
+      return;
+    }
+
     startSyncPolling();
     void registerBackgroundSync();
-  }, [agentId, router]);
+  }, [agentId, profileCompleted, pathname, router]);
+
+  // If on the onboarding page, render just children without sidebar navigation
+  if (pathname.startsWith('/onboarding')) {
+    return (
+      <main>
+        {children}
+      </main>
+    );
+  }
 
   return (
     <>
@@ -156,6 +177,10 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Offline Safe</span>
           </div>
 
+          <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'center' }}>
+            <LanguageSwitcher />
+          </div>
+
           <button
             type="button"
             onClick={() => {
@@ -176,6 +201,8 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
 
       {/* ─── Main Content Area ──────────────────────────────────────────────── */}
       <main className="page-container" style={{ paddingTop: '0.5rem' }}>
+        <PwaInstallPrompt />
+        <NotificationListener />
         {children}
       </main>
 

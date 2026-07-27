@@ -27,8 +27,13 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
   const [status, setStatus] = useState<ReferralStatus>('pending');
   const [referralDate, setReferralDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
+  const [refPhone, setRefPhone] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  
+  // CRM Status Editing
+  const [isEditingStatus, setIsEditingStatus] = useState(false);
+  const [newStatus, setNewStatus] = useState<'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected'>('Lead');
 
   const panchayat = useMemo(() => {
     return panchayats?.find((p) => p.id === contact?.panchayatId);
@@ -65,6 +70,17 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
       setError('Failed to save referral outcome. Try again.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleUpdateStatus() {
+    if (!contact) return;
+    try {
+      await db.contacts.update(contact.localId!, { status: newStatus, updatedAt: new Date().toISOString() });
+      await addToOutbox(contact.clientId, deviceId!, 'contact', { ...contact, status: newStatus, updatedAt: new Date().toISOString() });
+      setIsEditingStatus(false);
+    } catch {
+      alert('Failed to update status');
     }
   }
 
@@ -110,9 +126,57 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
               </p>
             )}
           </div>
-          <span className="badge" style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--color-primary-400)', fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}>
+          <span className="badge" style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--color-primary-400)', fontSize: '0.8rem', padding: '0.3rem 0.6rem', alignSelf: 'flex-start' }}>
             {contact.role.replace('_', ' ').toUpperCase()}
           </span>
+        </div>
+
+        {/* CRM DETAILS (Photo, Status, Follow-up) */}
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+          {contact.photoDataUri ? (
+            <img 
+              src={contact.photoDataUri} 
+              alt="Contact Photo" 
+              style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: '8px', border: '2px solid white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} 
+            />
+          ) : (
+            <div style={{ width: 80, height: 80, borderRadius: '8px', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem' }}>
+              👤
+            </div>
+          )}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Status:</div>
+              {isEditingStatus ? (
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <select 
+                    value={newStatus} 
+                    onChange={e => setNewStatus(e.target.value as any)}
+                    style={{ padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                  >
+                    <option value="Lead">Lead</option>
+                    <option value="Contacted">Contacted</option>
+                    <option value="Interested">Interested</option>
+                    <option value="Converted">Converted</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                  <button onClick={handleUpdateStatus} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', padding: '0 0.5rem', cursor: 'pointer' }}>✓</button>
+                  <button onClick={() => setIsEditingStatus(false)} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', padding: '0 0.5rem', cursor: 'pointer' }}>✕</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontWeight: 700, color: '#334155' }}>{contact.status || 'Lead'}</span>
+                  <button onClick={() => { setNewStatus(contact.status || 'Lead'); setIsEditingStatus(true); }} style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5 }}>✏️</button>
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
+              <span>Follow-up:</span>
+              <span style={{ fontWeight: 600, color: contact.followUpDate ? '#0f172a' : '#94a3b8' }}>
+                {contact.followUpDate ? new Date(contact.followUpDate).toLocaleDateString('en-IN') : 'None Scheduled'}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', paddingTop: '0.5rem', borderTop: '1px solid var(--surface-border)' }}>
@@ -197,7 +261,25 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
               rows={2}
               placeholder="e.g. Ramesh Kumar, Cardiology consultation..."
               value={notes}
+              maxLength={200}
               onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          <div className="field-group" style={{ marginBottom: '1rem' }}>
+            <label className="field-label" htmlFor="ref-phone">Client Mobile Number</label>
+            <input
+              id="ref-phone"
+              className="field-input"
+              type="tel"
+              inputMode="numeric"
+              placeholder="10-digit mobile"
+              value={refPhone}
+              minLength={10}
+              maxLength={10}
+              pattern="^[0-9]{10}$"
+              title="Mobile number must be exactly 10 digits"
+              onChange={(e) => setRefPhone(e.target.value.replace(/\D/g, ''))}
             />
           </div>
 

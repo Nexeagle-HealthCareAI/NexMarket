@@ -32,6 +32,9 @@ export default function NewContactPage() {
     whatsappAdded: false,
     cardGiven: false,
     notes: '',
+    status: 'Lead' as 'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected',
+    followUpDate: '',
+    photoDataUri: '',
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -48,6 +51,17 @@ export default function NewContactPage() {
   function update<K extends keyof typeof form>(key: K, value: typeof form[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        update('photoDataUri', reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,6 +87,9 @@ export default function NewContactPage() {
       whatsappAdded: form.whatsappAdded,
       cardGiven: form.cardGiven,
       notes: form.notes.trim() || undefined,
+      status: form.status,
+      followUpDate: form.followUpDate || undefined,
+      photoDataUri: form.photoDataUri || undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -144,6 +161,10 @@ export default function NewContactPage() {
             onChange={(e) => update('name', e.target.value)}
             autoComplete="name"
             required
+            minLength={2}
+            maxLength={50}
+            pattern="^[A-Za-z\s]+$"
+            title="Name must contain only letters and spaces"
           />
         </div>
 
@@ -177,7 +198,10 @@ export default function NewContactPage() {
             type="tel"
             inputMode="numeric"
             placeholder="10-digit number"
+            minLength={10}
             maxLength={10}
+            pattern="^[0-9]{10}$"
+            title="Mobile number must be exactly 10 digits"
             value={form.phone}
             onChange={(e) => update('phone', e.target.value.replace(/\D/g, ''))}
             autoComplete="tel"
@@ -224,6 +248,69 @@ export default function NewContactPage() {
             onChange={(e) => update('notes', e.target.value)}
             rows={3}
           />
+        </div>
+
+        {/* CRM Workflows: Lead Status, Follow-up, Photo */}
+        <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b' }}>CRM Details</h3>
+          
+          <div className="field-group">
+            <label className="field-label" htmlFor="contact-status">Lead Status</label>
+            <select
+              id="contact-status"
+              className="field-input"
+              value={form.status}
+              onChange={(e) => update('status', e.target.value as any)}
+            >
+              <option value="Lead">Lead (Initial)</option>
+              <option value="Contacted">Contacted</option>
+              <option value="Interested">Interested</option>
+              <option value="Converted">Converted</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </div>
+
+          <div className="field-group">
+            <label className="field-label" htmlFor="contact-followup">Follow-up Date (optional)</label>
+            <input
+              id="contact-followup"
+              className="field-input"
+              type="date"
+              value={form.followUpDate}
+              onChange={(e) => update('followUpDate', e.target.value)}
+            />
+          </div>
+
+          <div className="field-group">
+            <label className="field-label" htmlFor="contact-photo">Capture Photo (Offline Sync)</label>
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+              <input
+                id="contact-photo"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePhotoUpload}
+                style={{ display: 'none' }}
+              />
+              <button
+                type="button"
+                onClick={() => document.getElementById('contact-photo')?.click()}
+                style={{
+                  padding: '0.5rem 1rem',
+                  background: 'white',
+                  border: '1px solid var(--color-primary-300)',
+                  color: 'var(--color-primary-600)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.85rem'
+                }}
+              >
+                📸 Take Photo
+              </button>
+              {form.photoDataUri && <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>✓ Photo attached</span>}
+            </div>
+          </div>
         </div>
 
         {error && (

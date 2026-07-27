@@ -18,6 +18,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<OutreachContact> Contacts => Set<OutreachContact>();
         public DbSet<PatientReferral> Referrals => Set<PatientReferral>();
         public DbSet<TrajectoryPoint> TrajectoryPoints => Set<TrajectoryPoint>();
+        public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -44,6 +45,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("panchayats");
                 entity.HasKey(e => e.PanchayatId);
                 entity.HasIndex(e => new { e.District, e.Block });
+                entity.HasIndex(e => e.LgdCode).IsUnique();
             });
 
             // ─── FieldShift (composite unique key for offline idempotency) ──
@@ -90,6 +92,16 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.ClientId, e.DeviceId }).IsUnique();
                 entity.HasIndex(e => new { e.AgentId, e.RecordedAt });
+            });
+
+            // ─── SurveyResponse (composite unique key for offline idempotency)
+            modelBuilder.Entity<SurveyResponse>(entity =>
+            {
+                entity.ToTable("survey_responses");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.ClientId, e.DeviceId }).IsUnique();
+                entity.HasIndex(e => e.AgentId);
+                entity.HasIndex(e => e.PanchayatId);
             });
         }
     }

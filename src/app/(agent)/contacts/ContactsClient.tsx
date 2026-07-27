@@ -20,6 +20,18 @@ const ROLE_CLASSES: Record<ContactRole, string> = {
   medicine_shop: 'role-medicine',
 };
 
+import { motion, AnimatePresence } from 'framer-motion';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.05 } }
+};
+
+const itemVariants = {
+  hidden: { y: 10, opacity: 0 },
+  visible: { y: 0, opacity: 1, transition: { duration: 0.3 } }
+};
+
 export default function ContactsPage() {
   const agentId = useAgentStore((s) => s.agentId);
   const contacts = useContacts(agentId ?? undefined);
@@ -49,18 +61,20 @@ export default function ContactsPage() {
   }, [contacts, roleFilter, searchQuery, panchayatMap]);
 
   return (
-    <div>
-      <div className="page-header">
+    <motion.div initial="hidden" animate="visible" variants={containerVariants}>
+      <motion.div variants={itemVariants} className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1>Contacts</h1>
-          <Link href="/contacts/new" className="btn btn-primary btn-sm" id="add-contact-btn">
-            + Add
-          </Link>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link href="/contacts/new" className="btn btn-primary btn-sm" id="add-contact-btn">
+              + Add
+            </Link>
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Search */}
-      <div className="field-group" style={{ marginBottom: '0.75rem' }}>
+      <motion.div variants={itemVariants} className="field-group" style={{ marginBottom: '0.75rem' }}>
         <input
           id="contact-search"
           className="field-input"
@@ -69,10 +83,10 @@ export default function ContactsPage() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
-      </div>
+      </motion.div>
 
       {/* Role filter chips */}
-      <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
+      <motion.div variants={itemVariants} style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
         {(['all', 'asha_worker', 'rmp_doctor', 'ward_member', 'medicine_shop'] as const).map((role) => (
           <button
             key={role}
@@ -95,72 +109,80 @@ export default function ContactsPage() {
             {role === 'all' ? 'All' : ROLE_LABELS[role]}
           </button>
         ))}
-      </div>
+      </motion.div>
 
       {/* Count */}
-      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+      <motion.p variants={itemVariants} style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
         {filtered.length} contact{filtered.length !== 1 ? 's' : ''}
-      </p>
+      </motion.p>
 
       {/* List */}
-      {filtered.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">👤</div>
-          <h3>No contacts yet</h3>
-          <p style={{ fontSize: '0.85rem' }}>Add contacts from the panchayats you visit</p>
-          <Link href="/contacts/new" className="btn btn-primary btn-sm" style={{ marginTop: '0.5rem' }}>
-            Add First Contact
-          </Link>
-        </div>
-      ) : (
-        <div className="grid-cols-responsive-2">
-          {filtered.map((contact) => (
-            <Link
-              key={contact.clientId}
-              href={`/contacts/${contact.clientId}`}
-              id={`contact-${contact.clientId}`}
-              style={{ textDecoration: 'none' }}
-            >
-              <div className="card">
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                      <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
-                        {contact.name}
-                      </p>
-                      {contact.potentialDuplicateOf?.length ? (
-                        <span className="badge badge-dup">⚠ Dup</span>
-                      ) : null}
-                    </div>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      📍 {panchayatMap.get(contact.panchayatId) ?? 'Unknown panchayat'}
-                    </p>
-                    {contact.phone && (
-                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
-                        📞 {contact.phone}
-                      </p>
-                    )}
-                    <div style={{ display: 'flex', gap: '0.375rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                      {contact.whatsappAdded && (
-                        <span className="badge" style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--color-success)' }}>WhatsApp ✓</span>
-                      )}
-                      {contact.cardGiven && (
-                        <span className="badge" style={{ background: 'rgba(99,102,241,0.1)', color: 'var(--color-primary-600)' }}>Card ✓</span>
-                      )}
-                      {!contact.syncedAt && (
-                        <span className="badge badge-pending">Unsynced</span>
-                      )}
-                    </div>
-                  </div>
-                  <span className={`role-chip ${ROLE_CLASSES[contact.role]}`}>
-                    {ROLE_LABELS[contact.role]}
-                  </span>
-                </div>
-              </div>
+      <AnimatePresence>
+        {filtered.length === 0 ? (
+          <motion.div 
+            key="empty"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            className="empty-state"
+          >
+            <div className="empty-state-icon">👤</div>
+            <h3>No contacts yet</h3>
+            <p style={{ fontSize: '0.85rem' }}>Add contacts from the panchayats you visit</p>
+            <Link href="/contacts/new" className="btn btn-primary btn-sm" style={{ marginTop: '0.5rem' }}>
+              Add First Contact
             </Link>
-          ))}
-        </div>
-      )}
-    </div>
+          </motion.div>
+        ) : (
+          <motion.div key="list" variants={containerVariants} initial="hidden" animate="visible" className="grid-cols-responsive-2">
+            {filtered.map((contact) => (
+              <motion.div variants={itemVariants} key={contact.clientId} layoutId={`contact-${contact.clientId}`}>
+                <Link
+                  href={`/contacts/${contact.clientId}`}
+                  style={{ textDecoration: 'none' }}
+                >
+                  <motion.div whileHover={{ y: -3, boxShadow: '0 6px 16px rgba(0,0,0,0.06)' }} className="card">
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                          <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
+                            {contact.name}
+                          </p>
+                          {contact.potentialDuplicateOf?.length ? (
+                            <span className="badge badge-dup">⚠ Dup</span>
+                          ) : null}
+                        </div>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          📍 {panchayatMap.get(contact.panchayatId) ?? 'Unknown panchayat'}
+                        </p>
+                        {contact.phone && (
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
+                            📞 {contact.phone}
+                          </p>
+                        )}
+                        <div style={{ display: 'flex', gap: '0.375rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                          {contact.whatsappAdded && (
+                            <span className="badge" style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--color-success)' }}>WhatsApp ✓</span>
+                          )}
+                          {contact.cardGiven && (
+                            <span className="badge" style={{ background: 'rgba(99,102,241,0.1)', color: 'var(--color-primary-600)' }}>Card ✓</span>
+                          )}
+                          {!contact.syncedAt && (
+                            <span className="badge badge-pending">Unsynced</span>
+                          )}
+                        </div>
+                      </div>
+                      <span className={`role-chip ${ROLE_CLASSES[contact.role]}`}>
+                        {ROLE_LABELS[contact.role]}
+                      </span>
+                    </div>
+                  </motion.div>
+                </Link>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

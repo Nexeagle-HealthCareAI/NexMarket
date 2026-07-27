@@ -1,0 +1,20 @@
+{
+  "greeting": "नमस्ते",
+  "todayShift": "आज की शिफ्ट",
+  "onShiftSince": "शिफ्ट शुरू हुई",
+  "notStarted": "शुरू नहीं हुई",
+  "startShift": "शिफ्ट शुरू करें",
+  "endShift": "शिफ्ट समाप्त करें",
+  "todayContacts": "आज के संपर्क",
+  "todayVisits": "आज के दौरे",
+  "totalContacts": "कुल संपर्क",
+  "quickActions": "त्वरित क्रियाएं",
+  "activeVisit": "सक्रिय दौरा चल रहा है",
+  "checkInPanchayat": "पंचायत में चेक-इन करें",
+  "addNewContact": "नया संपर्क जोड़ें",
+  "viewAllContacts": "सभी संपर्क देखें",
+  "offlineNote": "💾 सभी डेटा आपके डिवाइस पर सहेजा गया है। इंटरनेट के बिना काम करता है।",
+  "syncing": "सिंक हो रहा है…",
+  "pending": "लंबित",
+  "synced": "सिंक किया गया"
+}

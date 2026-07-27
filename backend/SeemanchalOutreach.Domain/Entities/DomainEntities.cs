@@ -8,22 +8,41 @@ namespace SeemanchalOutreach.Domain.Entities
         public Guid Id { get; set; } = Guid.NewGuid();
         public string AgentId { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
+        public string? Email { get; set; }
         public string Name { get; set; } = string.Empty;
         public string District { get; set; } = string.Empty;
         public string Block { get; set; } = string.Empty;
         public string Role { get; set; } = "field_rep";
         public string PasswordHash { get; set; } = string.Empty;
         public bool IsActive { get; set; } = true;
+
+        // True for the seeded default admin and every onboarded agent (both start
+        // on a system-issued password) — cleared once they successfully change it.
+        public bool MustChangePassword { get; set; } = false;
+
+        public string? PhotoUrl { get; set; }
+        public string? Education { get; set; }
+        public string? PersonalDetails { get; set; }
+        public bool ProfileCompleted { get; set; } = false;
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // Opaque refresh token — stored hashed, rotated on every use, so a stolen
+        // DB row alone can't be replayed as a live session token.
+        public string? RefreshTokenHash { get; set; }
+        public DateTime? RefreshTokenExpiresAt { get; set; }
     }
 
     public class Panchayat
     {
-        public string PanchayatId { get; set; } = string.Empty;
+        public string PanchayatId { get; set; } = string.Empty; // UUID string — matches LocalPanchayat.id on the client
+        public string LgdCode { get; set; } = string.Empty;
         public string Block { get; set; } = string.Empty;
         public string District { get; set; } = string.Empty;
+        public string State { get; set; } = "Bihar";
         public string Name { get; set; } = string.Empty;
-        public int Population { get; set; }
+        public double? CentroidLat { get; set; }
+        public double? CentroidLng { get; set; }
     }
 
     public class FieldShift
@@ -69,13 +88,19 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? Phone { get; set; }
         public bool WhatsappAdded { get; set; }
         public bool CardGiven { get; set; }
+        
+        public string Status { get; set; } = "Lead"; // Lead, Contacted, FollowUp, Converted, Closed
+        public DateTime? FollowUpDate { get; set; }
+        public string? Comments { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public DateTime ServerReceivedAt { get; set; } = DateTime.UtcNow;
 
         // Duplicate resolution properties
-        public string? PotentialDuplicateOf { get; set; } // JSON array or comma separated string of clientIds
+        public string? PotentialDuplicateOf { get; set; } // clientId of the contact this one was flagged against
         public bool IsMerged { get; set; } = false;
         public string? MergedIntoClientId { get; set; }
+        public DateTime? DuplicateReviewedAt { get; set; } // set when dismissed as "not a duplicate"; left null while merged (IsMerged carries that state)
     }
 
     public class PatientReferral

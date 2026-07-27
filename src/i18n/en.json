@@ -1,0 +1,20 @@
+{
+  "greeting": "Namaste",
+  "todayShift": "Today's Shift",
+  "onShiftSince": "On shift since",
+  "notStarted": "Not started",
+  "startShift": "Start Shift",
+  "endShift": "End Shift",
+  "todayContacts": "Today's Contacts",
+  "todayVisits": "Today's Visits",
+  "totalContacts": "Total Contacts",
+  "quickActions": "Quick Actions",
+  "activeVisit": "Active Visit in Progress",
+  "checkInPanchayat": "Check In to Panchayat",
+  "addNewContact": "Add New Contact",
+  "viewAllContacts": "View All Contacts",
+  "offlineNote": "💾 All data is saved on your device. Works without internet.",
+  "syncing": "Syncing…",
+  "pending": "pending",
+  "synced": "Synced"
+}

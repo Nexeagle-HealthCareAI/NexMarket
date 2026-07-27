@@ -10,11 +10,25 @@ import { triggerManualSync } from '@/lib/sync/engine';
 import { useGeolocation } from '@/lib/geo/useGeolocation';
 import type { LocalShift } from '@/lib/db/schema';
 
+import { motion, type Variants } from 'framer-motion';
+import { useTranslations } from '@/i18n/I18nProvider';
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+};
+
+const itemVariants: Variants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: { y: 0, opacity: 1, transition: { duration: 0.4, ease: "easeOut" } }
+};
+
 export default function HomeClient() {
   const agentId = useAgentStore((s) => s.agentId);
   const deviceId = useAgentStore((s) => s.deviceId);
   const name = useAgentStore((s) => s.name);
   const setActiveShift = useAgentStore((s) => s.setActiveShift);
+  const t = useTranslations(); // LOAD TRANSLATIONS
 
   const activeShift = useActiveShift(agentId ?? undefined);
   const activeVisit = useActiveVisit(agentId ?? undefined);
@@ -68,111 +82,141 @@ export default function HomeClient() {
   ).length ?? 0;
 
   return (
-    <div style={{ paddingTop: '1rem' }}>
+    <motion.div 
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      style={{ paddingTop: '1rem' }}
+    >
       {/* Header */}
-      <div style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <motion.div variants={itemVariants} style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 style={{ fontSize: '1.3rem' }}>Namaste, {name?.split(' ')[0] ?? 'Agent'} 🙏</h1>
+          <h1 style={{ fontSize: '1.3rem' }}>{t.greeting}, {name?.split(' ')[0] ?? 'Agent'} 🙏</h1>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
             {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
         </div>
         <div className="sync-indicator">
           {syncing ? (
-            <><svg className="spin" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>Syncing…</>
+            <><svg className="spin" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>{t.syncing}</>
           ) : outboxCount && outboxCount > 0 ? (
             <button id="sync-now-btn" onClick={handleManualSync} style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 'var(--radius-full)', color: 'var(--color-warning)', fontSize: '0.75rem', fontWeight: 600, padding: '0.2rem 0.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
               <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>
-              {outboxCount} pending
+              {outboxCount} {t.pending}
             </button>
           ) : (
-            <span className="badge badge-online">Synced</span>
+            <span className="badge badge-online">{t.synced}</span>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* GPS status */}
-      <div className={`gps-banner ${permission === 'granted' && position ? 'locked' : permission === 'denied' ? 'denied' : 'acquiring'}`} style={{ marginBottom: '1rem' }}>
+      <motion.div variants={itemVariants} className={`gps-banner ${permission === 'granted' && position ? 'locked' : permission === 'denied' ? 'denied' : 'acquiring'}`} style={{ marginBottom: '1rem' }}>
         <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 2a7 7 0 017 7c0 5.25-7 13-7 13S5 14.25 5 9a7 7 0 017-7z" /><circle cx={12} cy={9} r={3} /></svg>
         {permission === 'granted' && position ? `GPS locked · ±${Math.round(position.accuracyM)}m` : permission === 'denied' ? 'GPS denied — enable location in browser settings' : 'Acquiring GPS…'}
-      </div>
+      </motion.div>
 
       {/* Shift banner */}
-      <div className="shift-banner" style={{ marginBottom: '1.25rem' }}>
+      <motion.div variants={itemVariants} className="shift-banner" style={{ marginBottom: '1.25rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Today's Shift</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t.todayShift}</p>
             {isOnShift ? (
               <p style={{ color: 'var(--color-success)', fontWeight: 700, fontSize: '0.95rem', marginTop: '0.125rem' }}>
-                🟢 On shift since {new Date(activeShift!.startAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                🟢 {t.onShiftSince} {new Date(activeShift!.startAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
               </p>
             ) : (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.125rem' }}>Not started</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.125rem' }}>{t.notStarted}</p>
             )}
           </div>
-          <button id={isOnShift ? 'end-shift-btn' : 'start-shift-btn'} className={`btn btn-sm ${isOnShift ? 'btn-danger' : 'btn-primary'}`} onClick={isOnShift ? handleEndShift : handleStartShift} disabled={shiftLoading || permission === 'denied'}>
-            {shiftLoading ? '…' : isOnShift ? 'End Shift' : 'Start Shift'}
-          </button>
+          <motion.button 
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            id={isOnShift ? 'end-shift-btn' : 'start-shift-btn'} 
+            className={`btn btn-sm ${isOnShift ? 'btn-danger' : 'btn-primary'}`} 
+            onClick={isOnShift ? handleEndShift : handleStartShift} 
+            disabled={shiftLoading || permission === 'denied'}
+          >
+            {shiftLoading ? '…' : isOnShift ? t.endShift : t.startShift}
+          </motion.button>
         </div>
-      </div>
+      </motion.div>
 
       {/* Quick stats */}
-      <div className="grid-cols-responsive-3" style={{ marginBottom: '1.75rem' }}>
-        <div className="card" style={{ textAlign: 'center' }}>
+      <motion.div variants={itemVariants} className="grid-cols-responsive-3" style={{ marginBottom: '1.75rem' }}>
+        <motion.div whileHover={{ y: -5 }} className="card" style={{ textAlign: 'center' }}>
           <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--color-primary-600)' }}>{todayContacts}</p>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Today's Contacts</p>
-        </div>
-        <div className="card" style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t.todayContacts}</p>
+        </motion.div>
+        <motion.div whileHover={{ y: -5 }} className="card" style={{ textAlign: 'center' }}>
           <p style={{ fontSize: '2rem', fontWeight: 800, color: '#d97706' }}>{todayVisits}</p>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Today's Visits</p>
-        </div>
-        <div className="card" style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t.todayVisits}</p>
+        </motion.div>
+        <motion.div whileHover={{ y: -5 }} className="card" style={{ textAlign: 'center' }}>
           <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--color-success)' }}>{contacts?.length ?? 0}</p>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total Contacts</p>
-        </div>
-      </div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t.totalContacts}</p>
+        </motion.div>
+      </motion.div>
 
       {/* Quick actions */}
-      <h3 style={{ marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>Quick Actions</h3>
-      <div className="grid-cols-responsive-2">
+      <motion.h3 variants={itemVariants} style={{ marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>{t.quickActions}</motion.h3>
+      <motion.div variants={itemVariants} className="grid-cols-responsive-2">
         {activeVisit ? (
-          <Link href={`/visit/${activeVisit.clientId}`} className="card" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ fontSize: '1.5rem' }}>📍</span>
-            <div>
-              <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Active Visit in Progress</p>
-              <p style={{ fontSize: '0.8rem', color: 'var(--color-warning)' }}>Started {new Date(activeVisit.checkInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · Tap to check out</p>
-            </div>
+          <Link href={`/visit/${activeVisit.clientId}`} style={{ textDecoration: 'none' }}>
+            <motion.div whileHover={{ scale: 1.02 }} className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '1.5rem' }}>📍</span>
+              <div>
+                <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{t.activeVisit}</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--color-warning)' }}>Started {new Date(activeVisit.checkInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · Tap to check out</p>
+              </div>
+            </motion.div>
           </Link>
         ) : (
-          <Link href="/visit" className="card" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: isOnShift ? 1 : 0.5, pointerEvents: isOnShift ? 'auto' : 'none' }}>
-            <span style={{ fontSize: '1.5rem' }}>📍</span>
-            <div>
-              <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Check In to Panchayat</p>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{isOnShift ? 'Record your current location' : 'Start a shift first'}</p>
-            </div>
+          <Link href="/visit" style={{ textDecoration: 'none', opacity: isOnShift ? 1 : 0.5, pointerEvents: isOnShift ? 'auto' : 'none' }}>
+            <motion.div whileHover={{ scale: isOnShift ? 1.02 : 1 }} className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '1.5rem' }}>📍</span>
+              <div>
+                <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{t.checkInPanchayat}</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{isOnShift ? 'Record your current location' : 'Start a shift first'}</p>
+              </div>
+            </motion.div>
           </Link>
         )}
 
-        <Link href="/contacts/new" className="card" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span style={{ fontSize: '1.5rem' }}>👤</span>
-          <div>
-            <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Add New Contact</p>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Channel Partner · Key Account · Local Rep</p>
-          </div>
+        <Link href="/contacts/new" style={{ textDecoration: 'none' }}>
+          <motion.div whileHover={{ scale: 1.02 }} className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{ fontSize: '1.5rem' }}>👤</span>
+            <div>
+              <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{t.addNewContact}</p>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Channel Partner · Key Account · Local Rep</p>
+            </div>
+          </motion.div>
         </Link>
 
-        <Link href="/contacts" className="card" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span style={{ fontSize: '1.5rem' }}>📋</span>
-          <div>
-            <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>View All Contacts</p>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{contacts?.length ?? 0} contacts saved locally</p>
-          </div>
+        <Link href="/contacts" style={{ textDecoration: 'none' }}>
+          <motion.div whileHover={{ scale: 1.02 }} className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{ fontSize: '1.5rem' }}>📋</span>
+            <div>
+              <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{t.viewAllContacts}</p>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{contacts?.length ?? 0} contacts saved locally</p>
+            </div>
+          </motion.div>
         </Link>
-      </div>
 
-      <div style={{ marginTop: '1.5rem', padding: '0.75rem', background: 'var(--surface-input)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-        💾 All data is saved on your device. Works without internet.
-      </div>
-    </div>
+        <Link href="/survey" style={{ textDecoration: 'none', gridColumn: '1 / -1' }}>
+          <motion.div whileHover={{ scale: 1.02 }} className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', color: 'white', border: 'none' }}>
+            <span style={{ fontSize: '2rem' }}>🎮</span>
+            <div>
+              <p style={{ color: 'white', fontWeight: 800, fontSize: '1.2rem' }}>Health Survey</p>
+              <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)' }}>Take the 3-minute gamified survey while talking to contacts</p>
+            </div>
+          </motion.div>
+        </Link>
+      </motion.div>
+
+      <motion.div variants={itemVariants} style={{ marginTop: '1.5rem', padding: '0.75rem', background: 'var(--surface-input)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+        {t.offlineNote}
+      </motion.div>
+    </motion.div>
   );
 }

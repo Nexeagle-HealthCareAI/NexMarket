@@ -17,7 +17,7 @@ export interface LocalPanchayat {
   lgdCode: string;      // LGD official code
   name: string;
   block: string;
-  district: 'Katihar' | 'Purnia' | 'Araria' | 'Supaul' | 'Uttar Dinajpur';
+  district: string; // real LGD data spans more districts than any fixed union stays in sync with
   state: string;
   centroidLat?: number;
   centroidLng?: number;
@@ -63,6 +63,9 @@ export interface LocalContact {
   whatsappAdded: boolean;
   cardGiven: boolean;
   notes?: string;
+  status: 'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected'; // Added in v2
+  followUpDate?: string; // YYYY-MM-DD
+  photoDataUri?: string; // Base64 offline photo storage
   potentialDuplicateOf?: string[];  // server-flagged duplicate serverIds
   createdAt: string;    // ISO string — client clock
   updatedAt: string;
@@ -124,6 +127,21 @@ export interface LocalReferral {
   syncedAt?: string;
 }
 
+// ─── Survey Response ──────────────────────────────────────────────────────────
+
+export interface LocalSurveyResponse {
+  localId?: number;
+  clientId: string;
+  deviceId: string;
+  serverId?: string;
+  agentId: string;
+  contactId?: string;
+  panchayatId?: string;
+  answersJson: string; // The gamified Q&A
+  createdAt: string;
+  syncedAt?: string;
+}
+
 // ─── Sync Outbox ──────────────────────────────────────────────────────────────
 
 export type EntityType =
@@ -131,7 +149,8 @@ export type EntityType =
   | 'contact'
   | 'visit'
   | 'trajectory_batch'
-  | 'referral';
+  | 'referral'
+  | 'survey';
 
 export interface SyncOutboxEntry {
   localId?: number;
@@ -161,6 +180,7 @@ export class NexMarketDB extends Dexie {
   visits!: EntityTable<LocalVisit, 'localId'>;
   trajectoryPoints!: EntityTable<LocalTrajectoryPoint, 'localId'>;
   referrals!: EntityTable<LocalReferral, 'localId'>;
+  surveyResponses!: EntityTable<LocalSurveyResponse, 'localId'>;
   syncOutbox!: EntityTable<SyncOutboxEntry, 'localId'>;
   syncState!: EntityTable<SyncState, 'key'>;
 
@@ -177,6 +197,18 @@ export class NexMarketDB extends Dexie {
       referrals: '++localId, [clientId+deviceId], serverId, contactId, visitId, syncedAt',
       syncOutbox: '++localId, [clientId+deviceId], entityType, attemptCount',
       syncState: 'key',
+    });
+
+    this.version(2).stores({
+      contacts: '++localId, [clientId+deviceId], serverId, panchayatId, agentId, phone, status, followUpDate, syncedAt',
+    }).upgrade(tx => {
+      return tx.table('contacts').toCollection().modify(contact => {
+        if (!contact.status) contact.status = 'Lead';
+      });
+    });
+
+    this.version(3).stores({
+      surveyResponses: '++localId, [clientId+deviceId], serverId, agentId, contactId, panchayatId, syncedAt',
     });
   }
 }
