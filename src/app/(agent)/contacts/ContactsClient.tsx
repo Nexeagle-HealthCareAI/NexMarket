@@ -7,10 +7,10 @@ import { useContacts, usePanchayats } from '@/lib/db';
 import type { ContactRole } from '@/lib/db/schema';
 
 const ROLE_LABELS: Record<ContactRole, string> = {
-  asha_worker: 'ASHA',
-  rmp_doctor: 'RMP Doctor',
-  ward_member: 'Ward Member',
-  medicine_shop: 'Medicine Shop',
+  asha_worker: 'Channel Partner',
+  rmp_doctor: 'Key Account',
+  ward_member: 'Local Rep',
+  medicine_shop: 'Retail Outlet',
 };
 
 const ROLE_CLASSES: Record<ContactRole, string> = {

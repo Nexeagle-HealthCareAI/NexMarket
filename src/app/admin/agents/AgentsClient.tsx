@@ -54,7 +54,7 @@ export default function AgentsClient() {
     // Generate credentials
     const nextNum = 1000 + agentsList.length + 1;
     const genUserId = `MKT-${nextNum}`;
-    const genPass = `Glisan#2026`;
+    const genPass = `NexMarket#2026`;
 
     const newAgent: AdminAgent = {
       agentId: `agent-${nextNum}`,
@@ -89,7 +89,7 @@ export default function AgentsClient() {
 
   function handleCopyCredentials() {
     if (!generatedCreds) return;
-    const text = `🏥 NexMarket — Healthcare Outreach Portal\n\nWelcome ${generatedCreds.name} (${generatedCreds.role})!\nYour field territory: ${generatedCreds.district} · ${generatedCreds.block}\n\nHere are your login credentials:\nUser ID: ${generatedCreds.userId}\nPassword: ${generatedCreds.pass}\n\nLogin URL: http://localhost:3001/login`;
+    const text = `🏢 NexMarket — Field Outreach & Marketing Portal\n\nWelcome ${generatedCreds.name} (${generatedCreds.role})!\nYour field territory: ${generatedCreds.district} · ${generatedCreds.block}\n\nHere are your login credentials:\nUser ID: ${generatedCreds.userId}\nPassword: ${generatedCreds.pass}\n\nLogin URL: http://localhost:3001/login`;
     navigator.clipboard.writeText(text);
     alert('✅ Credentials and welcome message copied to clipboard!');
   }
@@ -108,9 +108,9 @@ export default function AgentsClient() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', color: '#f8fafc', marginBottom: '0.2rem' }}>👥 NexMarket Field Directory</h1>
+          <h1 style={{ fontSize: '1.5rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>👥 NexMarket Field Directory</h1>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Manage marketing executives, field officers, hospital representatives, and admins across all territories.
+            Manage marketing executives, field officers, regional representatives, and admins across all territories.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -342,7 +342,7 @@ export default function AgentsClient() {
                       >
                         <option value="Marketing Executive">Marketing Executive</option>
                         <option value="Field Officer">Field Officer</option>
-                        <option value="Hospital Representative">Hospital Representative</option>
+                        <option value="Regional Representative">Regional Representative</option>
                         <option value="Admin">Admin</option>
                       </select>
                     </div>
@@ -361,6 +361,7 @@ export default function AgentsClient() {
                       <option value="Purnia">Purnia</option>
                       <option value="Araria">Araria</option>
                       <option value="Supaul">Supaul</option>
+                      <option value="Uttar Dinajpur">Uttar Dinajpur</option>
                     </select>
                   </div>
 

@@ -10,8 +10,8 @@ import type { ReferralStatus, LocalReferral } from '@/lib/db/schema';
 
 const STATUS_LABELS: Record<ReferralStatus, { label: string; badgeClass: string; icon: string }> = {
   pending: { label: 'Pending Review', badgeClass: 'badge-pending', icon: '⏳' },
-  converted: { label: 'Converted (Admitted/Treated)', badgeClass: 'badge-online', icon: '✅' },
-  lost: { label: 'Lost to Follow-up / Other Hospital', badgeClass: 'badge-dup', icon: '❌' },
+  converted: { label: 'Converted (Active Client Onboarded)', badgeClass: 'badge-online', icon: '✅' },
+  lost: { label: 'Lost to Competitor / Inactive', badgeClass: 'badge-dup', icon: '❌' },
 };
 
 export default function ContactDetailClient({ clientId }: { clientId: string }) {
@@ -120,7 +120,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
             {contact.whatsappAdded ? '🟢 WhatsApp Added' : '⚪ Not in WhatsApp Group'}
           </span>
           <span className={`badge ${contact.cardGiven ? 'badge-online' : 'badge-pending'}`}>
-            {contact.cardGiven ? '🟢 Card Given' : '⚪ No Hospital Card'}
+            {contact.cardGiven ? '🟢 Partner Card Given' : '⚪ No Partner Card'}
           </span>
           {contact.potentialDuplicateOf && contact.potentialDuplicateOf.length > 0 && (
             <span className="badge badge-dup">⚠️ Potential Duplicate</span>
@@ -136,7 +136,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
 
       {/* Referrals Header & Button */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-        <h3 style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Patient Referrals ({referrals?.length ?? 0})</h3>
+        <h3 style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Client Referrals ({referrals?.length ?? 0})</h3>
         {!showReferralForm && (
           <button
             className="btn btn-primary btn-sm"
@@ -152,7 +152,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
       {showReferralForm && (
         <form onSubmit={handleAddReferral} className="card" style={{ marginBottom: '1.25rem', borderColor: 'var(--color-primary-500)', background: 'rgba(99,102,241,0.04)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <h4 style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>Log New Patient Referral</h4>
+            <h4 style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>Log New Client Referral</h4>
             <button
               type="button"
               onClick={() => setShowReferralForm(false)}
@@ -171,9 +171,9 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
               onChange={(e) => setStatus(e.target.value as ReferralStatus)}
               required
             >
-              <option value="pending">⏳ Pending Review (Patient referred, not yet arrived)</option>
-              <option value="converted">✅ Converted (Admitted / Treated at Glisan Akbari)</option>
-              <option value="lost">❌ Lost (Went elsewhere / Declined)</option>
+              <option value="pending">⏳ Pending Review (Client referred, not yet arrived)</option>
+              <option value="converted">✅ Converted (Active Client Onboarded)</option>
+              <option value="lost">❌ Lost (Declined / Inactive)</option>
             </select>
           </div>
 
@@ -190,7 +190,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
           </div>
 
           <div className="field-group" style={{ marginBottom: '1rem' }}>
-            <label className="field-label" htmlFor="ref-notes">Patient Name / Department / Notes</label>
+            <label className="field-label" htmlFor="ref-notes">Client Name / Area / Notes</label>
             <textarea
               id="ref-notes"
               className="field-input"
@@ -217,8 +217,8 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
       {/* Referrals List */}
       {!referrals || referrals.length === 0 ? (
         <div className="empty-state" style={{ padding: '2rem 1rem' }}>
-          <div className="empty-state-icon" style={{ fontSize: '2rem' }}>🏥</div>
-          <p style={{ fontSize: '0.85rem' }}>No patient referrals logged from this contact yet.</p>
+          <div className="empty-state-icon" style={{ fontSize: '2rem' }}>🏢</div>
+          <p style={{ fontSize: '0.85rem' }}>No client referrals logged from this contact yet.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>

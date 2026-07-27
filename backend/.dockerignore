@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+**/*.user
+.vs/
+
+# Secret-free image: dev secrets never enter the build context.
+# Real config is injected at deploy time via --env-file (see .github/workflows/api-deploy.yml).
+**/appsettings.Development.json

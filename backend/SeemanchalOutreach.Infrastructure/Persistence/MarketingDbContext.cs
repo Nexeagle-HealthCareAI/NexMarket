@@ -26,7 +26,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
             // Enable PostGIS extension
             modelBuilder.HasPostgresExtension("postgis");
 
-            // Set default schema to 'marketing' as specified in hospital architecture spec
+            // Set default schema to 'marketing' as specified in system architecture spec
             modelBuilder.HasDefaultSchema("marketing");
 
             // ─── FieldAgent ──────────────────────────────────────────

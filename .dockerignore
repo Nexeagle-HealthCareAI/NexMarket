@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.gitignore
+backend
+.env
+.env.*
+!.env.example
+*.md
+.vscode
+coverage

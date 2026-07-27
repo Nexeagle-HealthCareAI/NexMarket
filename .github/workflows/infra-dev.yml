@@ -1,0 +1,98 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEXMARKET — Dev Infra Provisioning (Postgres/PostGIS + Redis)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Manual-trigger only. This stands up (or updates) the STATEFUL services on the
+# Dev VM via docker-compose — separate from the app deploy workflows so an
+# ordinary code push can never touch the database container. Safe to re-run:
+# always `docker compose up -d`, never `down -v` — existing data volumes are
+# left alone.
+#
+# Run this once before the first api-deploy/web-deploy run, and again only if
+# docker-compose.yml or init.sql change.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# SECRETS (repo Settings → Secrets and variables → Actions)
+# ─────────────────────────────────────────────────────────────────────────────
+#   DEV_SSH_HOST       151.185.45.77
+#   DEV_SSH_USER        Dev VM SSH username
+#   DEV_SSH_PASSWORD    Dev VM SSH password
+#   DEV_PG_PASSWORD     Postgres password for the seemanchal DB on this VM
+#                       (do NOT reuse the "postgres"/"postgres" local-dev default)
+#
+# OPTIONAL repo VARIABLES — override only if these ports collide with something
+# else already running on the shared Dev VM:
+#   DEV_PG_PORT     default 5433
+#   DEV_REDIS_PORT  default 6380
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: NexMarket — Dev Infra (Postgres + Redis)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: nexmarket-infra-dev
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    name: Provision Dev DB + Redis
+    runs-on: ubuntu-latest
+    environment: development
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy compose files to Dev VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
+          source: 'docker-compose.yml,init.sql'
+          target: '/opt/nexmarket-infra'
+          strip_components: 0
+
+      - name: docker compose up -d
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          PG_PASSWORD: ${{ secrets.DEV_PG_PASSWORD }}
+          PG_PORT: ${{ vars.DEV_PG_PORT || '5433' }}
+          REDIS_PORT: ${{ vars.DEV_REDIS_PORT || '6380' }}
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
+          port: 22
+          command_timeout: 10m
+          envs: PG_PASSWORD,PG_PORT,REDIS_PORT
+          script: |
+            set -e
+            : "${PG_PASSWORD:?DEV_PG_PASSWORD is empty — refusing to run Postgres with the default password on a reachable VM}"
+
+            cd /opt/nexmarket-infra
+            cat > .env <<EOF
+            POSTGRES_USER=postgres
+            POSTGRES_PASSWORD=${PG_PASSWORD}
+            POSTGRES_DB=seemanchal
+            POSTGRES_PORT=${PG_PORT}
+            REDIS_PORT=${REDIS_PORT}
+            EOF
+
+            if docker compose version >/dev/null 2>&1; then
+              docker compose up -d
+            else
+              docker-compose up -d
+            fi
+
+            echo "Waiting for Postgres to accept connections..."
+            for i in $(seq 1 15); do
+              if docker exec seemanchal_db pg_isready -U postgres >/dev/null 2>&1; then
+                echo "✅ Postgres is ready on port ${PG_PORT}"
+                break
+              fi
+              sleep 2
+            done
+
+            docker ps --filter "name=seemanchal_db" --filter "name=seemanchal_redis"

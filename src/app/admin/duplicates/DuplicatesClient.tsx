@@ -23,7 +23,7 @@ export default function DuplicatesClient() {
         <div>
           <h1 style={{ fontSize: '1.5rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>⚠️ Duplicate Contact Resolution</h1>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Review potential duplicate ASHA workers, RMP doctors, and ward members flagged across agents and panchayats.
+            Review potential duplicate channel partners, key accounts, and local reps flagged across agents and panchayats.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>

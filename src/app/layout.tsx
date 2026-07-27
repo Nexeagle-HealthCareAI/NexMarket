@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'NexMarket | Healthcare Field Outreach',
+  title: 'NexMarket | Field Outreach & Marketing Portal',
   description:
     'NexMarket field representative and marketing officer platform — contact logging, visit tracking, and referral management.',
   manifest: '/manifest.json',

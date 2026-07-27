@@ -107,7 +107,7 @@ export default function LoginPage() {
       if (errMsg.includes('Failed to fetch') || errMsg.includes('Network') || errMsg.includes('API') || errMsg.includes('fetch')) {
         console.log('Backend unreachable, falling back to local offline session...');
         await handleDemoLogin(
-          targetId.startsWith('ADM') ? 'Admin' : targetId.startsWith('HSP') ? 'Hospital Representative' : targetId.startsWith('FLD') ? 'Field Officer' : 'Marketing Executive',
+          targetId.startsWith('ADM') ? 'Admin' : (targetId.startsWith('REG') || targetId.startsWith('HSP')) ? 'Regional Representative' : targetId.startsWith('FLD') ? 'Field Officer' : 'Marketing Executive',
           targetId,
           overrideName || (targetId.startsWith('ADM') ? 'Admin Officer' : 'Field Executive')
         );
@@ -247,7 +247,7 @@ export default function LoginPage() {
             Welcome to <span style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #0284c7 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>NexMarket</span>
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '1.15rem', maxWidth: '580px', lineHeight: 1.6, fontWeight: 400 }}>
-            Empowering field officers, hospital representatives, and executives with instant territory intelligence, offline synchronization, and standardized RBAC access.
+            Empowering field officers, regional representatives, and executives with instant territory intelligence, offline synchronization, and standardized RBAC access.
           </p>
         </div>
 
@@ -260,8 +260,8 @@ export default function LoginPage() {
           </div>
           <div style={{ padding: '1.25rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 'var(--radius-lg)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
             <div style={{ color: '#0284c7', fontWeight: 800, fontSize: '1.5rem', marginBottom: '0.25rem' }}>8,500+</div>
-            <div style={{ color: '#0f172a', fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>Healthcare Partners</div>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Active doctors, clinics, and rural influencers</div>
+            <div style={{ color: '#0f172a', fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>Regional Partners</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Active merchants, distributors, and local influencers</div>
           </div>
           <div style={{ padding: '1.25rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 'var(--radius-lg)', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
             <div style={{ color: '#059669', fontWeight: 800, fontSize: '1.5rem', marginBottom: '0.25rem' }}>Zero-Network</div>
@@ -291,7 +291,7 @@ export default function LoginPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <span className="badge-online" style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }} />
             <span style={{ color: '#0f172a', fontSize: '0.85rem', fontWeight: 600 }}>
-              Glisan Akbari Outreach Network · Live Outbox Engine Active
+              NexMarket Outreach Network · Live Outbox Engine Active
             </span>
           </div>
           <span style={{ color: 'var(--color-primary-600)', fontSize: '0.8rem', fontWeight: 700 }}>
@@ -720,12 +720,12 @@ export default function LoginPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDemoLogin('Hospital Representative', 'HSP-3001', 'Dr. Vikram Mehta')}
+                    onClick={() => handleDemoLogin('Regional Representative', 'REG-3001', 'Vikram Mehta')}
                     className="btn btn-ghost"
                     style={{ padding: '0.6rem 0.4rem', fontSize: '0.8rem', fontWeight: 700, borderColor: '#cbd5e1', background: '#f8fafc', color: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem', transition: 'all 0.2s' }}
                   >
-                    <span>🏥 Hospital Rep</span>
-                    <span style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 600 }}>ID: HSP-3001</span>
+                    <span>🏢 Regional Rep</span>
+                    <span style={{ fontSize: '0.68rem', color: '#059669', fontWeight: 600 }}>ID: REG-3001</span>
                   </button>
                   <button
                     type="button"

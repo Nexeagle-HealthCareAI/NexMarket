@@ -157,7 +157,7 @@ export default function HomeClient() {
           <span style={{ fontSize: '1.5rem' }}>👤</span>
           <div>
             <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Add New Contact</p>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>ASHA · RMP · Ward · Medicine Shop</p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Channel Partner · Key Account · Local Rep</p>
           </div>
         </Link>
 

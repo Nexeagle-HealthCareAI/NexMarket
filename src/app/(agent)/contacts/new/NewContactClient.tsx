@@ -9,10 +9,10 @@ import { addToOutbox } from '@/lib/sync/outbox';
 import type { ContactRole, LocalContact } from '@/lib/db/schema';
 
 const ROLES: { value: ContactRole; label: string; emoji: string; desc: string }[] = [
-  { value: 'asha_worker',    label: 'ASHA Worker',    emoji: '🏥', desc: 'Accredited Social Health Activist' },
-  { value: 'rmp_doctor',     label: 'RMP Doctor',     emoji: '👨‍⚕️', desc: 'Rural Medical Practitioner' },
-  { value: 'ward_member',    label: 'Ward Member',    emoji: '🏛️', desc: 'Panchayat ward representative' },
-  { value: 'medicine_shop',  label: 'Medicine Shop',  emoji: '💊', desc: 'Local pharmacy / chemist' },
+  { value: 'asha_worker',    label: 'Channel Partner', emoji: '🤝', desc: 'Local channel & distribution partner' },
+  { value: 'rmp_doctor',     label: 'Key Account',     emoji: '🏢', desc: 'Verified retail business or merchant' },
+  { value: 'ward_member',    label: 'Local Rep',       emoji: '🏛️', desc: 'Local community representative' },
+  { value: 'medicine_shop',  label: 'Retail Outlet',   emoji: '🏪', desc: 'Local business store / outlet' },
 ];
 
 export default function NewContactPage() {
@@ -208,7 +208,7 @@ export default function NewContactPage() {
             onKeyDown={(e) => e.key === 'Enter' && update('cardGiven', !form.cardGiven)}
             id="card-toggle"
           >
-            <span className="toggle-label">Hospital Card Given</span>
+            <span className="toggle-label">Partner Card Given</span>
             <div className={`toggle-switch${form.cardGiven ? ' on' : ''}`} />
           </div>
         </div>

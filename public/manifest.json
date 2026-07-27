@@ -1,7 +1,7 @@
 {
-  "name": "NexMarket — Healthcare Field Outreach",
+  "name": "NexMarket — Field Outreach & Marketing",
   "short_name": "NexMarket",
-  "description": "Healthcare field tracking and outreach platform for marketing officers and representatives",
+  "description": "Field tracking and outreach platform for marketing officers and representatives",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
@@ -21,6 +21,6 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["health", "productivity"],
+  "categories": ["business", "productivity"],
   "lang": "en-IN"
 }

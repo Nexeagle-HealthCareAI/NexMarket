@@ -17,8 +17,23 @@ export default function MapClient() {
   const [replayIdx, setReplayIdx] = useState<number>(0);
   const [speed, setSpeed] = useState<number>(1000); // ms per point
 
+  // Territory Mapping States
+  const [panchayats, setPanchayats] = useState<any[]>([]);
+  const [selectedPanchayatDistrict, setSelectedPanchayatDistrict] = useState<string>('');
+  const [selectedPanchayatBlock, setSelectedPanchayatBlock] = useState<string>('');
+  const [selectedPanchayat, setSelectedPanchayat] = useState<string>('');
+  const panchayatMarkersRef = useRef<maplibregl.Marker[]>([]);
+
   const selectedAgent = MOCK_AGENTS.find((a) => a.agentId === selectedAgentId);
   const trajectory: LocalTrajectoryPoint[] = MOCK_TRAJECTORIES[selectedAgentId] || [];
+
+  // Fetch Panchayats
+  useEffect(() => {
+    fetch('/data/panchayats.json')
+      .then(res => res.json())
+      .then(data => setPanchayats(data))
+      .catch(err => console.error(err));
+  }, []);
 
   // Initialize MapLibre
   useEffect(() => {
@@ -234,12 +249,131 @@ export default function MapClient() {
     map.panTo([pt.lng, pt.lat], { duration: speed * 0.8 });
   }, [replayIdx, trajectory, speed]);
 
-  const currentPoint = trajectory[replayIdx] || null;
+    const currentPoint = trajectory[replayIdx] || null;
+
+  // Panchayat Marker Rendering
+  useEffect(() => {
+    if (!mapRef.current) return;
+    
+    // Clear old markers
+    panchayatMarkersRef.current.forEach(m => m.remove());
+    panchayatMarkersRef.current = [];
+
+    // Filter
+    let filtered = panchayats;
+    if (selectedPanchayatDistrict) filtered = filtered.filter(p => p.district === selectedPanchayatDistrict);
+    if (selectedPanchayatBlock) filtered = filtered.filter(p => p.block === selectedPanchayatBlock);
+    if (selectedPanchayat) filtered = filtered.filter(p => p.name === selectedPanchayat);
+
+    if (filtered.length === 0) return;
+
+    const bounds = new maplibregl.LngLatBounds();
+
+    filtered.forEach(p => {
+      const el = document.createElement('div');
+      el.style.width = '14px';
+      el.style.height = '14px';
+      el.style.borderRadius = '50%';
+      el.style.background = '#f59e0b';
+      el.style.border = '2px solid #fff';
+      el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.4)';
+      el.style.cursor = 'pointer';
+      
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([p.centroidLng, p.centroidLat])
+        .setPopup(
+          new maplibregl.Popup({ offset: 15, closeButton: false }).setHTML(
+            `<div style="padding:6px;font-family:inherit;">
+              <strong style="color:var(--text-primary);font-size:0.9rem">${p.name}</strong><br/>
+              <span style="color:var(--text-muted);font-size:0.75rem">${p.block}, ${p.district}</span>
+            </div>`
+          )
+        )
+        .addTo(mapRef.current!);
+        
+      panchayatMarkersRef.current.push(marker);
+      bounds.extend([p.centroidLng, p.centroidLat]);
+    });
+
+    // Fit map bounds if filters are applied
+    if ((selectedPanchayatDistrict || selectedPanchayatBlock || selectedPanchayat) && filtered.length > 0) {
+      if (filtered.length === 1) {
+         mapRef.current.flyTo({ center: [filtered[0].centroidLng, filtered[0].centroidLat], zoom: 12 });
+      } else {
+         mapRef.current.fitBounds(bounds, { padding: 80, maxZoom: 12 });
+      }
+    }
+
+  }, [panchayats, selectedPanchayatDistrict, selectedPanchayatBlock, selectedPanchayat]);
+
+  // Derived unique lists for dropdowns
+  const uniqueDistricts = Array.from(new Set(panchayats.map(p => p.district))).sort();
+  const availableBlocks = Array.from(new Set(panchayats.filter(p => !selectedPanchayatDistrict || p.district === selectedPanchayatDistrict).map(p => p.block))).sort();
+  const availablePanchayats = Array.from(new Set(panchayats.filter(p => (!selectedPanchayatDistrict || p.district === selectedPanchayatDistrict) && (!selectedPanchayatBlock || p.block === selectedPanchayatBlock)).map(p => p.name))).sort();
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '1.5rem', height: 'calc(100vh - 120px)' }}>
       {/* Left Sidebar — Control Panel */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto', paddingRight: '0.5rem' }}>
+        
+        {/* Territory Explorer */}
+        <div className="card">
+          <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
+            🗺️ Territory Explorer
+          </h2>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+            Filter and plot specific panchayats on the map.
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="field-group" style={{ margin: 0 }}>
+              <label className="field-label">District</label>
+              <select
+                className="field-input"
+                value={selectedPanchayatDistrict}
+                onChange={(e) => { setSelectedPanchayatDistrict(e.target.value); setSelectedPanchayatBlock(''); setSelectedPanchayat(''); }}
+              >
+                <option value="">All Districts</option>
+                {uniqueDistricts.map(d => <option key={d as string} value={d as string}>{d as string}</option>)}
+              </select>
+            </div>
+            <div className="field-group" style={{ margin: 0 }}>
+              <label className="field-label">Block / Council</label>
+              <select
+                className="field-input"
+                value={selectedPanchayatBlock}
+                onChange={(e) => { setSelectedPanchayatBlock(e.target.value); setSelectedPanchayat(''); }}
+                disabled={!selectedPanchayatDistrict && availableBlocks.length > 50}
+              >
+                <option value="">All Blocks</option>
+                {availableBlocks.map(b => <option key={b as string} value={b as string}>{b as string}</option>)}
+              </select>
+            </div>
+            <div className="field-group" style={{ margin: 0 }}>
+              <label className="field-label">Panchayat / Village</label>
+              <select
+                className="field-input"
+                value={selectedPanchayat}
+                onChange={(e) => setSelectedPanchayat(e.target.value)}
+                disabled={!selectedPanchayatBlock}
+              >
+                <option value="">All Panchayats</option>
+                {availablePanchayats.map(p => <option key={p as string} value={p as string}>{p as string}</option>)}
+              </select>
+            </div>
+            
+            {(selectedPanchayatDistrict || selectedPanchayatBlock || selectedPanchayat) && (
+              <button 
+                className="btn btn-ghost" 
+                style={{ alignSelf: 'flex-start', marginTop: '0.25rem' }}
+                onClick={() => { setSelectedPanchayatDistrict(''); setSelectedPanchayatBlock(''); setSelectedPanchayat(''); mapRef.current?.flyTo({ center: [87.5701, 25.5541], zoom: 9.5 }); }}
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="card">
           <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
             📍 Active Field Outreach
@@ -404,8 +538,8 @@ export default function MapClient() {
 
         {/* Map Overlay Badge */}
         <div style={{ position: 'absolute', top: 16, left: 16, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--surface-border)', zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>Seemanchal District Boundaries</div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--color-primary-600)' }}>Showing Katihar · Purnia · Araria · Supaul</div>
+          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>Seemanchal & Outreach Territories</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--color-primary-600)' }}>Showing Katihar · Purnia · Araria · Supaul · Uttar Dinajpur</div>
         </div>
       </div>
     </div>

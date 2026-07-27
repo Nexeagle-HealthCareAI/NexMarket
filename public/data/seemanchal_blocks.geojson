@@ -3,42 +3,212 @@
   "features": [
     {
       "type": "Feature",
-      "properties": { "district": "Purnia", "block": "Kasba", "code": "BR-PUR-KAS" },
+      "properties": {
+        "district": "Purnia",
+        "block": "Kasba",
+        "code": "BR-PUR-KAS"
+      },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[87.45, 25.80], [87.58, 25.80], [87.58, 25.92], [87.45, 25.92], [87.45, 25.80]]]
+        "coordinates": [
+          [
+            [
+              87.45,
+              25.8
+            ],
+            [
+              87.58,
+              25.8
+            ],
+            [
+              87.58,
+              25.92
+            ],
+            [
+              87.45,
+              25.92
+            ],
+            [
+              87.45,
+              25.8
+            ]
+          ]
+        ]
       }
     },
     {
       "type": "Feature",
-      "properties": { "district": "Purnia", "block": "Dhamdaha", "code": "BR-PUR-DHA" },
+      "properties": {
+        "district": "Purnia",
+        "block": "Dhamdaha",
+        "code": "BR-PUR-DHA"
+      },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[87.25, 25.75], [87.42, 25.75], [87.42, 25.88], [87.25, 25.88], [87.25, 25.75]]]
+        "coordinates": [
+          [
+            [
+              87.25,
+              25.75
+            ],
+            [
+              87.42,
+              25.75
+            ],
+            [
+              87.42,
+              25.88
+            ],
+            [
+              87.25,
+              25.88
+            ],
+            [
+              87.25,
+              25.75
+            ]
+          ]
+        ]
       }
     },
     {
       "type": "Feature",
-      "properties": { "district": "Katihar", "block": "Manihari", "code": "BR-KAT-MAN" },
+      "properties": {
+        "district": "Katihar",
+        "block": "Manihari",
+        "code": "BR-KAT-MAN"
+      },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[87.55, 25.32], [87.68, 25.32], [87.68, 25.45], [87.55, 25.45], [87.55, 25.32]]]
+        "coordinates": [
+          [
+            [
+              87.55,
+              25.32
+            ],
+            [
+              87.68,
+              25.32
+            ],
+            [
+              87.68,
+              25.45
+            ],
+            [
+              87.55,
+              25.45
+            ],
+            [
+              87.55,
+              25.32
+            ]
+          ]
+        ]
       }
     },
     {
       "type": "Feature",
-      "properties": { "district": "Araria", "block": "Forbesganj", "code": "BR-ARA-FOR" },
+      "properties": {
+        "district": "Araria",
+        "block": "Forbesganj",
+        "code": "BR-ARA-FOR"
+      },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[87.20, 26.25], [87.35, 26.25], [87.35, 26.38], [87.20, 26.38], [87.20, 26.25]]]
+        "coordinates": [
+          [
+            [
+              87.2,
+              26.25
+            ],
+            [
+              87.35,
+              26.25
+            ],
+            [
+              87.35,
+              26.38
+            ],
+            [
+              87.2,
+              26.38
+            ],
+            [
+              87.2,
+              26.25
+            ]
+          ]
+        ]
       }
     },
     {
       "type": "Feature",
-      "properties": { "district": "Supaul", "block": "Birpur", "code": "BR-SUP-BIR" },
+      "properties": {
+        "district": "Supaul",
+        "block": "Birpur",
+        "code": "BR-SUP-BIR"
+      },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[86.95, 26.45], [87.10, 26.45], [87.10, 26.58], [86.95, 26.58], [86.95, 26.45]]]
+        "coordinates": [
+          [
+            [
+              86.95,
+              26.45
+            ],
+            [
+              87.1,
+              26.45
+            ],
+            [
+              87.1,
+              26.58
+            ],
+            [
+              86.95,
+              26.58
+            ],
+            [
+              86.95,
+              26.45
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district": "Uttar Dinajpur",
+        "block": "Raiganj",
+        "code": "WB-UTD-RAI"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              88,
+              25.5
+            ],
+            [
+              88.2,
+              25.5
+            ],
+            [
+              88.2,
+              25.7
+            ],
+            [
+              88,
+              25.7
+            ],
+            [
+              88,
+              25.5
+            ]
+          ]
+        ]
       }
     }
   ]

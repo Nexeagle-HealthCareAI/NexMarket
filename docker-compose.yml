@@ -1,16 +1,22 @@
 version: '3.9'
 
+# All ports/credentials are overridable via a .env file next to this compose
+# file (docker compose reads it automatically) — local dev works with zero
+# setup via the defaults below; the shared Dev VM supplies its own values
+# (distinct ports + a real password) so this doesn't collide with other
+# stacks already running there. See .github/workflows/infra-dev.yml.
+
 services:
   db:
     image: postgis/postgis:16-3.4
     container_name: seemanchal_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: seemanchal
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-seemanchal}
     ports:
-      - '5432:5432'
+      - '${POSTGRES_PORT:-5432}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -20,7 +26,7 @@ services:
     container_name: seemanchal_redis
     restart: unless-stopped
     ports:
-      - '6379:6379'
+      - '${REDIS_PORT:-6379}:6379'
 
 volumes:
   pgdata:

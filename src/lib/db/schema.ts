@@ -17,7 +17,7 @@ export interface LocalPanchayat {
   lgdCode: string;      // LGD official code
   name: string;
   block: string;
-  district: 'Katihar' | 'Purnia' | 'Araria' | 'Supaul';
+  district: 'Katihar' | 'Purnia' | 'Araria' | 'Supaul' | 'Uttar Dinajpur';
   state: string;
   centroidLat?: number;
   centroidLng?: number;
@@ -29,7 +29,7 @@ export interface LocalAgent {
   id: string;           // server UUID
   name: string;
   phone: string;
-  role: 'Marketing Executive' | 'Field Officer' | 'Hospital Representative' | 'Admin' | string;
+  role: 'Marketing Executive' | 'Field Officer' | 'Regional Representative' | 'Admin' | string;
   deviceId: string;     // stable device UUID stored in syncState
 }
 

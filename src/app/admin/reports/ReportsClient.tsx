@@ -56,7 +56,7 @@ export default function ReportsClient() {
         <div>
           <h1 style={{ fontSize: '1.5rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>📊 Seemanchal Field Analytics & Reports</h1>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Comprehensive block-wise telemetry on contact collection, visit coverage, and patient referral conversions.
+            Comprehensive block-wise telemetry on contact collection, visit coverage, and client referral conversions.
           </p>
         </div>
 
@@ -84,24 +84,24 @@ export default function ReportsClient() {
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Across {filteredBlocks.length} blocks</div>
         </div>
         <div className="card" style={{ padding: '1rem', background: 'rgba(16,185,129,0.08)', borderColor: 'rgba(16,185,129,0.2)' }}>
-          <div style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700 }}>ASHA WORKERS</div>
+          <div style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700 }}>CHANNEL PARTNERS</div>
           <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem' }}>{summary.ashaWorkers}</div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Primary grassroots network</div>
         </div>
         <div className="card" style={{ padding: '1rem', background: 'rgba(56,189,248,0.08)', borderColor: 'rgba(56,189,248,0.2)' }}>
-          <div style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 700 }}>RMP DOCTORS</div>
+          <div style={{ fontSize: '0.72rem', color: '#0284c7', fontWeight: 700 }}>KEY ACCOUNTS</div>
           <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem' }}>{summary.rmpDoctors}</div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Rural medical practitioners</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Verified retail merchants</div>
         </div>
         <div className="card" style={{ padding: '1rem', background: 'rgba(168,85,247,0.08)', borderColor: 'rgba(168,85,247,0.2)' }}>
-          <div style={{ fontSize: '0.72rem', color: '#9333ea', fontWeight: 700 }}>PATIENT REFERRALS</div>
+          <div style={{ fontSize: '0.72rem', color: '#9333ea', fontWeight: 700 }}>CLIENT REFERRALS</div>
           <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem' }}>{summary.totalReferrals}</div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Referred to hospital</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Referred to regional office</div>
         </div>
         <div className="card" style={{ padding: '1rem', background: 'rgba(245,158,11,0.08)', borderColor: 'rgba(245,158,11,0.2)' }}>
-          <div style={{ fontSize: '0.72rem', color: '#d97706', fontWeight: 700 }}>HOSPITAL CONVERSION RATE</div>
+          <div style={{ fontSize: '0.72rem', color: '#d97706', fontWeight: 700 }}>CLIENT CONVERSION RATE</div>
           <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem' }}>{summary.conversionRatePct}%</div>
-          <div style={{ fontSize: '0.72rem', color: '#10b981', marginTop: '0.2rem' }}>✅ {summary.convertedReferrals} admitted / treated</div>
+          <div style={{ fontSize: '0.72rem', color: '#10b981', marginTop: '0.2rem' }}>✅ {summary.convertedReferrals} actively onboarded</div>
         </div>
       </div>
 
@@ -115,10 +115,10 @@ export default function ReportsClient() {
           <div style={{ width: `${(summary.medicineShops / summary.totalContacts) * 100}%`, background: '#f59e0b' }} title="Medicine Shops" />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-          <span>🟢 ASHA Workers: <strong>{summary.ashaWorkers}</strong> ({Math.round((summary.ashaWorkers / summary.totalContacts) * 100)}%)</span>
-          <span>🔵 RMP Doctors: <strong>{summary.rmpDoctors}</strong> ({Math.round((summary.rmpDoctors / summary.totalContacts) * 100)}%)</span>
-          <span>🟣 Ward Members: <strong>{summary.wardMembers}</strong> ({Math.round((summary.wardMembers / summary.totalContacts) * 100)}%)</span>
-          <span>🟡 Medicine Shops: <strong>{summary.medicineShops}</strong> ({Math.round((summary.medicineShops / summary.totalContacts) * 100)}%)</span>
+          <span>🟢 Channel Partners: <strong>{summary.ashaWorkers}</strong> ({Math.round((summary.ashaWorkers / summary.totalContacts) * 100)}%)</span>
+          <span>🔵 Key Accounts: <strong>{summary.rmpDoctors}</strong> ({Math.round((summary.rmpDoctors / summary.totalContacts) * 100)}%)</span>
+          <span>🟣 Local Reps: <strong>{summary.wardMembers}</strong> ({Math.round((summary.wardMembers / summary.totalContacts) * 100)}%)</span>
+          <span>🟡 Retail Outlets: <strong>{summary.medicineShops}</strong> ({Math.round((summary.medicineShops / summary.totalContacts) * 100)}%)</span>
         </div>
       </div>
 
@@ -132,10 +132,10 @@ export default function ReportsClient() {
             <tr style={{ background: 'var(--surface-card-hover)', borderBottom: '1px solid var(--surface-border)', color: 'var(--text-secondary)', fontSize: '0.78rem', textTransform: 'uppercase' }}>
               <th style={{ padding: '0.85rem 1rem' }}>District & Block</th>
               <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Agents</th>
-              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>ASHA</th>
-              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>RMP</th>
-              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Ward</th>
-              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Med Shop</th>
+              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Partners</th>
+              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Key Acct</th>
+              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Loc Rep</th>
+              <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Retail</th>
               <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Visits</th>
               <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Referrals</th>
               <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Conversion Rate</th>

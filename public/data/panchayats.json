@@ -197,7 +197,7 @@
     "district": "Purnia",
     "state": "Bihar",
     "centroidLat": 25.64,
-    "centroidLng": 87.50
+    "centroidLng": 87.5
   },
   {
     "id": "00000002-0000-0000-0000-000000000005",
@@ -217,7 +217,7 @@
     "district": "Purnia",
     "state": "Bihar",
     "centroidLat": 25.75,
-    "centroidLng": 87.30
+    "centroidLng": 87.3
   },
   {
     "id": "00000002-0000-0000-0000-000000000007",
@@ -307,7 +307,7 @@
     "district": "Araria",
     "state": "Bihar",
     "centroidLat": 26.33,
-    "centroidLng": 87.40
+    "centroidLng": 87.4
   },
   {
     "id": "00000003-0000-0000-0000-000000000003",
@@ -316,7 +316,7 @@
     "block": "Forbesganj",
     "district": "Araria",
     "state": "Bihar",
-    "centroidLat": 26.30,
+    "centroidLat": 26.3,
     "centroidLng": 87.27
   },
   {
@@ -346,7 +346,7 @@
     "block": "Narpatganj",
     "district": "Araria",
     "state": "Bihar",
-    "centroidLat": 26.20,
+    "centroidLat": 26.2,
     "centroidLng": 87.33
   },
   {
@@ -367,7 +367,7 @@
     "district": "Araria",
     "state": "Bihar",
     "centroidLat": 26.02,
-    "centroidLng": 87.50
+    "centroidLng": 87.5
   },
   {
     "id": "00000003-0000-0000-0000-000000000009",
@@ -387,7 +387,7 @@
     "district": "Supaul",
     "state": "Bihar",
     "centroidLat": 26.25,
-    "centroidLng": 86.80
+    "centroidLng": 86.8
   },
   {
     "id": "00000004-0000-0000-0000-000000000002",
@@ -396,7 +396,7 @@
     "block": "Chhatapur",
     "district": "Supaul",
     "state": "Bihar",
-    "centroidLat": 26.60,
+    "centroidLat": 26.6,
     "centroidLng": 86.73
   },
   {
@@ -417,7 +417,7 @@
     "district": "Supaul",
     "state": "Bihar",
     "centroidLat": 26.31,
-    "centroidLng": 86.60
+    "centroidLng": 86.6
   },
   {
     "id": "00000004-0000-0000-0000-000000000005",
@@ -426,7 +426,7 @@
     "block": "Pipra",
     "district": "Supaul",
     "state": "Bihar",
-    "centroidLat": 26.70,
+    "centroidLat": 26.7,
     "centroidLng": 86.76
   },
   {
@@ -487,6 +487,26 @@
     "district": "Supaul",
     "state": "Bihar",
     "centroidLat": 26.48,
-    "centroidLng": 86.80
+    "centroidLng": 86.8
+  },
+  {
+    "id": "wb-utd-001",
+    "lgdCode": "wb-1",
+    "name": "Raiganj",
+    "block": "Raiganj",
+    "district": "Uttar Dinajpur",
+    "state": "West Bengal",
+    "centroidLat": 25.6,
+    "centroidLng": 88.1
+  },
+  {
+    "id": "wb-utd-002",
+    "lgdCode": "wb-2",
+    "name": "Kaliaganj",
+    "block": "Kaliaganj",
+    "district": "Uttar Dinajpur",
+    "state": "West Bengal",
+    "centroidLat": 25.65,
+    "centroidLng": 88.3
   }
 ]
