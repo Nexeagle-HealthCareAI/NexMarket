@@ -1,0 +1,6 @@
+@SeemanchalOutreach.Api_HostAddress = http://localhost:5078
+
+GET {{SeemanchalOutreach.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

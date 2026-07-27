@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="SeemanchalOutreach.Api/SeemanchalOutreach.Api.csproj" />
+  <Project Path="SeemanchalOutreach.Application/SeemanchalOutreach.Application.csproj" />
+  <Project Path="SeemanchalOutreach.Domain/SeemanchalOutreach.Domain.csproj" />
+  <Project Path="SeemanchalOutreach.Infrastructure/SeemanchalOutreach.Infrastructure.csproj" />
+</Solution>
