@@ -4,9 +4,9 @@
 #
 # Manual-trigger only. This stands up (or updates) the STATEFUL services on the
 # Dev VM via docker-compose — separate from the app deploy workflows so an
-# ordinary code push can never touch the database container. Safe to re-run:
-# always `docker compose up -d`, never `down -v` — existing data volumes are
-# left alone.
+# ordinary code push can never touch the database container. Default behavior
+# is safe to re-run (`docker compose up -d`, existing volumes untouched); pass
+# wipe=true only to intentionally destroy and recreate the data volumes.
 #
 # Run this once before the first api-deploy/web-deploy run, and again only if
 # docker-compose.yml or init.sql change.
@@ -30,6 +30,11 @@ name: NexMarket — Dev Infra (Postgres + Redis)
 
 on:
   workflow_dispatch:
+    inputs:
+      wipe:
+        description: 'DESTROYS the current seemanchal_db/redis data volumes before recreating. Only for fixing a broken/inconsistent schema — never on a VM with real data.'
+        type: boolean
+        default: false
 
 concurrency:
   group: nexmarket-infra-dev
@@ -60,13 +65,14 @@ jobs:
           PG_PASSWORD: ${{ secrets.DEV_PG_PASSWORD }}
           PG_PORT: ${{ vars.DEV_PG_PORT || '5433' }}
           REDIS_PORT: ${{ vars.DEV_REDIS_PORT || '6380' }}
+          WIPE: ${{ inputs.wipe }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: PG_PASSWORD,PG_PORT,REDIS_PORT
+          envs: PG_PASSWORD,PG_PORT,REDIS_PORT,WIPE
           script: |
             set -e
             : "${PG_PASSWORD:?DEV_PG_PASSWORD is empty — refusing to run Postgres with the default password on a reachable VM}"
@@ -81,10 +87,17 @@ jobs:
             EOF
 
             if docker compose version >/dev/null 2>&1; then
-              docker compose up -d
+              COMPOSE="docker compose"
             else
-              docker-compose up -d
+              COMPOSE="docker-compose"
             fi
+
+            if [ "$WIPE" = "true" ]; then
+              echo "⚠️  WIPE requested — destroying existing data volumes"
+              $COMPOSE down -v
+            fi
+
+            $COMPOSE up -d
 
             echo "Waiting for Postgres to accept connections..."
             for i in $(seq 1 15); do

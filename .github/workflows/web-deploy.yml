@@ -163,7 +163,7 @@ jobs:
           sleep 10
           PORT="${{ vars.DEV_WEB_PORT || '3010' }}"
           for i in 1 2 3 4 5; do
-            S=$(curl -s -o /dev/null -w '%{http_code}' \
+            S=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 8 \
                 http://${{ secrets.DEV_SSH_HOST }}:${PORT}/api/health 2>/dev/null || echo 000)
             echo "Attempt $i — HTTP $S"
             [ "$S" = "200" ] && echo "✅ NexMarket Web is up" && exit 0
