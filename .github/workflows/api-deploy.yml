@@ -29,9 +29,10 @@
 #   override a default:
 #     DEV_API_PORT     default 5010
 #     DEV_PG_PORT      default 5433  (must match infra-dev.yml)
-#     DEV_CORS_ORIGIN  default https://nexmarket.nexeagle.com,http://151.185.45.77:3010
-#                      (comma-separated; the deployed UI's real origins — the
-#                      domain browsers actually use, plus the raw IP for direct testing)
+#     DEV_CORS_ORIGIN  default https://nexmarket.nexeagle.com,http://151.185.45.77:3010,http://localhost:3000,http://localhost:3001
+#                      (comma-separated; the deployed UI's real origins plus
+#                      local dev server origins, for hitting this Dev API
+#                      from `npm run dev` on your own machine)
 #     DEV_JWT_ISSUER   default nexmarket-api
 #     DEV_JWT_AUDIENCE default nexmarket-app
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -142,7 +143,7 @@ jobs:
           JWT_KEY: ${{ secrets.DEV_JWT_KEY }}
           JWT_ISSUER: ${{ vars.DEV_JWT_ISSUER || 'nexmarket-api' }}
           JWT_AUDIENCE: ${{ vars.DEV_JWT_AUDIENCE || 'nexmarket-app' }}
-          CORS_ORIGIN: ${{ vars.DEV_CORS_ORIGIN || 'https://nexmarket.nexeagle.com,http://151.185.45.77:3010' }}
+          CORS_ORIGIN: ${{ vars.DEV_CORS_ORIGIN || 'https://nexmarket.nexeagle.com,http://151.185.45.77:3010,http://localhost:3000,http://localhost:3001' }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
