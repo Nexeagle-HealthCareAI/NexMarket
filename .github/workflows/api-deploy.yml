@@ -158,7 +158,7 @@ jobs:
             {
               printf 'ASPNETCORE_ENVIRONMENT=%s\n' 'Development'
               printf 'ASPNETCORE_URLS=http://+:%s\n' "$API_PORT"
-              printf 'ConnectionStrings__DefaultConnection=%s\n' "Host=localhost;Port=${PG_PORT};Database=seemanchal;Username=postgres;Password=${PG_PASSWORD}"
+              printf 'ConnectionStrings__DefaultConnection=%s\n' "Host=localhost;Port=${PG_PORT};Database=nexmarket;Username=postgres;Password=${PG_PASSWORD}"
               printf 'Jwt__Key=%s\n' "$JWT_KEY"
               printf 'Jwt__Issuer=%s\n' "$JWT_ISSUER"
               printf 'Jwt__Audience=%s\n' "$JWT_AUDIENCE"

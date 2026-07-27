@@ -17,7 +17,7 @@
 #   DEV_SSH_HOST       151.185.45.77
 #   DEV_SSH_USER        Dev VM SSH username
 #   DEV_SSH_PASSWORD    Dev VM SSH password
-#   DEV_PG_PASSWORD     Postgres password for the seemanchal DB on this VM
+#   DEV_PG_PASSWORD     Postgres password for the nexmarket DB on this VM
 #                       (do NOT reuse the "postgres"/"postgres" local-dev default)
 #
 # OPTIONAL repo VARIABLES — override only if these ports collide with something
@@ -81,7 +81,7 @@ jobs:
             cat > .env <<EOF
             POSTGRES_USER=postgres
             POSTGRES_PASSWORD=${PG_PASSWORD}
-            POSTGRES_DB=seemanchal
+            POSTGRES_DB=nexmarket
             POSTGRES_PORT=${PG_PORT}
             REDIS_PORT=${REDIS_PORT}
             EOF
