@@ -154,8 +154,12 @@ jobs:
             fi
 
             docker rm -f nexmarket-web-dev 2>/dev/null || true
+            # HOSTNAME must be forced to 0.0.0.0: Next.js's standalone server.js binds
+            # to `process.env.HOSTNAME || '0.0.0.0'`, and under --network host the
+            # container inherits the VM's real hostname — which Next then binds to
+            # exclusively, refusing connections on both localhost and the public IP.
             docker run -d --name nexmarket-web-dev --restart unless-stopped \
-              --network host -e PORT="$WEB_PORT" "$IMAGE_LC"
+              --network host -e PORT="$WEB_PORT" -e HOSTNAME="0.0.0.0" "$IMAGE_LC"
             docker image prune -f || true
 
       - name: Health check
