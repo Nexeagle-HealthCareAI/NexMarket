@@ -186,7 +186,12 @@ jobs:
           script: |
             echo "── docker ps -a ──"
             docker ps -a --filter "name=nexmarket-web-dev"
-            echo "── last 80 log lines ──"
-            docker logs --tail 80 nexmarket-web-dev 2>&1 || true
-            echo "── curl from inside the VM ──"
-            curl -s -o /dev/null -w 'localhost:%{http_code}\n' --connect-timeout 3 --max-time 8 "http://localhost:${WEB_PORT}/api/health" || true
+            echo "── restart count / exit code / OOM ──"
+            docker inspect nexmarket-web-dev --format 'RestartCount={{.RestartCount}} Status={{.State.Status}} ExitCode={{.State.ExitCode}} OOMKilled={{.State.OOMKilled}} Error={{.State.Error}} StartedAt={{.State.StartedAt}} FinishedAt={{.State.FinishedAt}}'
+            echo "── all log lines (no truncation) ──"
+            docker logs nexmarket-web-dev 2>&1 || true
+            echo "── retry curl from inside the VM (a few times, container may still be cycling) ──"
+            for i in 1 2 3; do
+              curl -s -o /dev/null -w "attempt $i localhost:%{http_code}\n" --connect-timeout 3 --max-time 8 "http://localhost:${WEB_PORT}/api/health" || true
+              sleep 3
+            done
