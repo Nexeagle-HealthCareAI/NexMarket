@@ -200,3 +200,22 @@ jobs:
           done
           echo "⚠️ Health check inconclusive — check: docker logs nexmarket-api-dev"
           exit 0
+
+      - name: Diagnose on the VM (container state + local curl, bypasses any external firewall)
+        if: always()
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          API_PORT: ${{ vars.DEV_API_PORT || '5010' }}
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
+          port: 22
+          envs: API_PORT
+          script: |
+            echo "── docker ps -a ──"
+            docker ps -a --filter "name=nexmarket-api-dev"
+            echo "── last 80 log lines ──"
+            docker logs --tail 80 nexmarket-api-dev 2>&1 || true
+            echo "── curl from inside the VM ──"
+            curl -s -o /dev/null -w 'localhost:%{http_code}\n' --connect-timeout 3 --max-time 8 "http://localhost:${API_PORT}/health" || true
