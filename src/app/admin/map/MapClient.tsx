@@ -18,6 +18,7 @@ export default function MapClient() {
   const token = useAgentStore((s) => s.jwtToken);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const replayMarkerRef = useRef<maplibregl.Marker | null>(null);
 
@@ -159,6 +160,9 @@ export default function MapClient() {
           'line-width': 3,
         },
       });
+
+      setMapLoaded(true);
+      setTimeout(() => map.resize(), 100);
     });
 
     return () => {
@@ -170,7 +174,7 @@ export default function MapClient() {
   // Update markers & trajectory line on agent selection
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !mapLoaded) return;
 
     // Clear old markers
     markersRef.current.forEach((m) => m.remove());
@@ -251,7 +255,7 @@ export default function MapClient() {
         });
       }
     }
-  }, [selectedAgentId, trajectory, agents]);
+  }, [selectedAgentId, trajectory, agents, mapLoaded]);
 
   // Replay animation loop
   useEffect(() => {
@@ -299,7 +303,7 @@ export default function MapClient() {
 
   // Panchayat Marker Rendering
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !mapLoaded) return;
 
     // Clear old markers
     panchayatMarkersRef.current.forEach((m) => m.remove());
@@ -349,7 +353,7 @@ export default function MapClient() {
         mapRef.current.fitBounds(bounds, { padding: 80, maxZoom: 12 });
       }
     }
-  }, [panchayats, selectedPanchayatDistrict, selectedPanchayatBlock, selectedPanchayat]);
+  }, [panchayats, selectedPanchayatDistrict, selectedPanchayatBlock, selectedPanchayat, mapLoaded]);
 
   // Derived unique lists for dropdowns
   const uniqueDistricts = Array.from(new Set(panchayats.map((p) => p.district))).sort();
@@ -580,7 +584,7 @@ export default function MapClient() {
       </div>
 
       {/* Right Map Canvas Area */}
-      <div style={{ position: 'relative', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-lg)' }}>
+      <div style={{ position: 'relative', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-lg)', minHeight: '500px' }}>
         <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
 
         {/* Map Overlay Badge */}

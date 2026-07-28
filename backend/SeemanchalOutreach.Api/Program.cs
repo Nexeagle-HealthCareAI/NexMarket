@@ -83,8 +83,10 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<MarketingDbContext>();
     db.Database.Migrate();
 
-    // Real LGD Bihar panchayat data (not mock) — seeded once, idempotent.
-    await PanchayatSeeder.SeedIfEmptyAsync(db, app.Environment.ContentRootPath);
+    // Real LGD panchayat data (Bihar + bordering Uttar Dinajpur) — synced from
+    // SeedData/panchayats.json on every startup so updates to the file (new/
+    // corrected panchayats) reach the DB without a manual migration.
+    await PanchayatSeeder.SyncAsync(db, app.Environment.ContentRootPath);
 
     // First-run bootstrap: create the one real Admin account so there is always
     // a way to log in on a fresh database — no demo credentials in the app itself.
