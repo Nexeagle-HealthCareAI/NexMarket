@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAgentStore } from '@/store/agent-store';
 import { completeProfile, uploadPhoto } from '@/lib/sync/api-client';
+import { useTranslations } from '@/i18n/I18nProvider';
 
 export default function OnboardingPage() {
   const router = useRouter();
   const { agentId, jwtToken, profileCompleted, setProfileCompleted } = useAgentStore();
+  const t = useTranslations();
 
   const [step, setStep] = useState(1);
   const [personalDetails, setPersonalDetails] = useState('');
@@ -42,11 +44,11 @@ export default function OnboardingPage() {
 
   const handleNext = () => {
     if (step === 1 && !personalDetails.trim()) {
-      setError('Please provide your personal details to continue.');
+      setError(t.errPersonalDetails);
       return;
     }
     if (step === 2 && !education.trim()) {
-      setError('Please provide your education details to continue.');
+      setError(t.errEducationDetails);
       return;
     }
     setError('');
@@ -55,7 +57,7 @@ export default function OnboardingPage() {
 
   const handleSubmit = async () => {
     if (!photoFile) {
-      setError('A profile photo is required to complete onboarding.');
+      setError(t.errPhotoRequired);
       return;
     }
     if (!agentId || !jwtToken) return;
@@ -76,7 +78,7 @@ export default function OnboardingPage() {
       router.push('/home');
 
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'An error occurred during onboarding.');
+      setError(e instanceof Error ? e.message : t.errOnboarding);
       setLoading(false);
     }
   };
@@ -125,9 +127,9 @@ export default function OnboardingPage() {
           
           <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
             <h1 style={{ fontSize: '2.25rem', fontWeight: 800, marginBottom: '0.5rem', background: 'linear-gradient(to right, #fff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.02em' }}>
-              Welcome to NexMarket
+              {t.welcomeTitle}
             </h1>
-            <p style={{ color: '#94a3b8', fontSize: '1.05rem', fontWeight: 400 }}>Set up your professional profile to begin.</p>
+            <p style={{ color: '#94a3b8', fontSize: '1.05rem', fontWeight: 400 }}>{t.welcomeDesc}</p>
           </div>
 
           {renderStepIndicator()}
@@ -142,15 +144,15 @@ export default function OnboardingPage() {
                 style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}
               >
                 <div>
-                  <h2 style={{ fontSize: '1.35rem', fontWeight: 600, color: '#f8fafc', marginBottom: '0.5rem' }}>Personal Information</h2>
-                  <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Please provide your current address and a short bio about yourself.</p>
+                  <h2 style={{ fontSize: '1.35rem', fontWeight: 600, color: '#f8fafc', marginBottom: '0.5rem' }}>{t.personalInfoTitle}</h2>
+                  <p style={{ color: '#64748b', fontSize: '0.9rem' }}>{t.personalInfoDesc}</p>
                 </div>
                 
                 <textarea 
                   rows={4}
                   value={personalDetails}
                   onChange={e => setPersonalDetails(e.target.value)}
-                  placeholder="e.g. Based in Purnea, working in public health..."
+                  placeholder={t.personalInfoPlaceholder}
                   style={{ width: '100%', padding: '1.25rem', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '1rem', outline: 'none', resize: 'vertical', transition: 'border-color 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)' }}
                   onFocus={(e) => e.target.style.borderColor = '#6366f1'}
                   onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
@@ -167,15 +169,15 @@ export default function OnboardingPage() {
                 style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}
               >
                 <div>
-                  <h2 style={{ fontSize: '1.35rem', fontWeight: 600, color: '#f8fafc', marginBottom: '0.5rem' }}>Education Details</h2>
-                  <p style={{ color: '#64748b', fontSize: '0.9rem' }}>What is your highest level of education?</p>
+                  <h2 style={{ fontSize: '1.35rem', fontWeight: 600, color: '#f8fafc', marginBottom: '0.5rem' }}>{t.educationTitle}</h2>
+                  <p style={{ color: '#64748b', fontSize: '0.9rem' }}>{t.educationDesc}</p>
                 </div>
                 
                 <input 
                   type="text"
                   value={education}
                   onChange={e => setEducation(e.target.value)}
-                  placeholder="e.g. Bachelor of Science in Nursing"
+                  placeholder={t.educationPlaceholder}
                   style={{ width: '100%', padding: '1.25rem', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '1rem', outline: 'none', transition: 'border-color 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)' }}
                   onFocus={(e) => e.target.style.borderColor = '#6366f1'}
                   onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
@@ -192,8 +194,8 @@ export default function OnboardingPage() {
                 style={{ display: 'flex', flexDirection: 'column', gap: '2rem', alignItems: 'center' }}
               >
                 <div style={{ textAlign: 'center' }}>
-                  <h2 style={{ fontSize: '1.35rem', fontWeight: 600, color: '#f8fafc', marginBottom: '0.5rem' }}>Professional Photo</h2>
-                  <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Upload a clear, well-lit photo of your face.</p>
+                  <h2 style={{ fontSize: '1.35rem', fontWeight: 600, color: '#f8fafc', marginBottom: '0.5rem' }}>{t.photoTitle}</h2>
+                  <p style={{ color: '#64748b', fontSize: '0.9rem' }}>{t.photoDesc}</p>
                 </div>
                 
                 <motion.div 
@@ -212,7 +214,7 @@ export default function OnboardingPage() {
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#6366f1' }}>
                       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 600, marginTop: '0.5rem' }}>Upload Image</span>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, marginTop: '0.5rem' }}>{t.uploadImage}</span>
                     </div>
                   )}
                 </motion.div>
@@ -251,7 +253,7 @@ export default function OnboardingPage() {
                 onMouseOver={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
                 onMouseOut={(e) => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent'; }}
               >
-                Go Back
+                {t.goBack}
               </button>
             ) : <div />}
 
@@ -265,13 +267,13 @@ export default function OnboardingPage() {
               {loading ? (
                 <>
                   <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                  Processing...
+                  {t.processing}
                 </>
               ) : step === 3 ? (
-                'Complete Profile'
+                t.completeProfileBtn
               ) : (
                 <>
-                  Continue
+                  {t.continueBtn}
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </>
               )}
