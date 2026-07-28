@@ -24,6 +24,12 @@
 #   DEV_PG_PASSWORD     Same Postgres password set in infra-dev.yml
 #   DEV_JWT_KEY         >= 32 chars; signs/validates JWTs (distinct from the
 #                       dev-only placeholder in appsettings.Development.json)
+#   DEV_S3_SERVICE_URL  E2E Networks Object Storage endpoint for the agent-photos
+#                       bucket, e.g. https://objectstore.e2enetworks.net or the
+#                       bucket-specific virtual-hosted URL — either works, the
+#                       app auto-detects which style the endpoint uses.
+#   DEV_S3_ACCESS_KEY   E2E Networks Object Storage access key
+#   DEV_S3_SECRET_KEY   E2E Networks Object Storage secret key
 #
 #   OPTIONAL repo VARIABLES (Settings → Variables) — only needed if you want to
 #   override a default:
@@ -35,6 +41,7 @@
 #                      from `npm run dev` on your own machine)
 #     DEV_JWT_ISSUER   default nexmarket-api
 #     DEV_JWT_AUDIENCE default nexmarket-app
+#     DEV_S3_BUCKET    default nexmarket-dev  (the E2E bucket name — non-secret)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 name: NexMarket API — CI/CD
@@ -144,13 +151,17 @@ jobs:
           JWT_ISSUER: ${{ vars.DEV_JWT_ISSUER || 'nexmarket-api' }}
           JWT_AUDIENCE: ${{ vars.DEV_JWT_AUDIENCE || 'nexmarket-app' }}
           CORS_ORIGIN: ${{ vars.DEV_CORS_ORIGIN || 'https://nexmarket.nexeagle.com,http://151.185.45.77:3010,http://localhost:3000,http://localhost:3001' }}
+          S3_SERVICE_URL: ${{ secrets.DEV_S3_SERVICE_URL }}
+          S3_ACCESS_KEY: ${{ secrets.DEV_S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.DEV_S3_SECRET_KEY }}
+          S3_BUCKET: ${{ vars.DEV_S3_BUCKET || 'nexmarket-dev' }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,API_PORT,PG_PORT,PG_PASSWORD,JWT_KEY,JWT_ISSUER,JWT_AUDIENCE,CORS_ORIGIN
+          envs: IMAGE,GHCR_TOKEN,ACTOR,API_PORT,PG_PORT,PG_PASSWORD,JWT_KEY,JWT_ISSUER,JWT_AUDIENCE,CORS_ORIGIN,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET
           script: |
             set -e
             : "${PG_PASSWORD:?DEV_PG_PASSWORD is empty}"
@@ -167,6 +178,10 @@ jobs:
               printf 'Jwt__Audience=%s\n' "$JWT_AUDIENCE"
               printf 'Jwt__ExpiryHours=%s\n' '12'
               printf 'Cors__AllowedOrigins=%s\n' "$CORS_ORIGIN"
+              printf 'S3__ServiceUrl=%s\n' "$S3_SERVICE_URL"
+              printf 'S3__AccessKey=%s\n' "$S3_ACCESS_KEY"
+              printf 'S3__SecretKey=%s\n' "$S3_SECRET_KEY"
+              printf 'S3__BucketName=%s\n' "$S3_BUCKET"
             } > "$ENVFILE"
 
             IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')

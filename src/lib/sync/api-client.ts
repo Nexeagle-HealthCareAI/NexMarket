@@ -280,6 +280,18 @@ export interface CompleteProfileDto {
   personalDetails?: string;
 }
 
+export async function uploadPhoto(token: string, file: File): Promise<{ url: string; fileName: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API_BASE}/api/v1/sync/photo`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData
+  });
+  if (!res.ok) throw new Error('Failed to upload photo');
+  return res.json();
+}
+
 export async function completeProfile(
   agentId: string,
   token: string,

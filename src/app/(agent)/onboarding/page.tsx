@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAgentStore } from '@/store/agent-store';
-import { completeProfile } from '@/lib/sync/api-client';
+import { completeProfile, uploadPhoto } from '@/lib/sync/api-client';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -64,17 +64,7 @@ export default function OnboardingPage() {
     setError('');
     
     try {
-      const formData = new FormData();
-      formData.append('file', photoFile);
-
-      const photoRes = await fetch('http://localhost:5000/api/v1/sync/photo', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${jwtToken}` },
-        body: formData
-      });
-
-      if (!photoRes.ok) throw new Error('Failed to upload photo');
-      const { url: photoUrl } = await photoRes.json();
+      const { url: photoUrl } = await uploadPhoto(jwtToken, photoFile);
 
       await completeProfile(agentId, jwtToken, {
         personalDetails,
@@ -85,8 +75,8 @@ export default function OnboardingPage() {
       setProfileCompleted(true);
       router.push('/home');
 
-    } catch (e: any) {
-      setError(e.message || 'An error occurred during onboarding.');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'An error occurred during onboarding.');
       setLoading(false);
     }
   };
