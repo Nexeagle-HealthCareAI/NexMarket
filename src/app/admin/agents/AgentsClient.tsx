@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentStore } from '@/store/agent-store';
 import { getAgents, onboardAgent, uploadPhoto, type AdminAgentDto } from '@/lib/sync/api-client';
 
@@ -20,8 +21,10 @@ export default function AgentsClient() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'low-connectivity' | 'offline'>('all');
 
-  // Onboarding Modal State
+  // Onboarding Drawer State
   const [showOnboardModal, setShowOnboardModal] = useState(false);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [stepError, setStepError] = useState('');
   const [newFirstName, setNewFirstName] = useState('');
   const [newMiddleName, setNewMiddleName] = useState('');
   const [newLastName, setNewLastName] = useState('');
@@ -102,6 +105,27 @@ export default function AgentsClient() {
     setNewPhotoPreview(URL.createObjectURL(file));
   }
 
+  function handleNextStep() {
+    if (!newFirstName.trim() || !newLastName.trim()) {
+      setStepError('First and last name are required.');
+      return;
+    }
+    if (!/^[0-9]{10}$/.test(newPhone.trim())) {
+      setStepError('Mobile number must be exactly 10 digits.');
+      return;
+    }
+    if (newPassword.trim().length < 8) {
+      setStepError('Password must be at least 8 characters.');
+      return;
+    }
+    if (!newBlock.trim()) {
+      setStepError('Assigned block is required.');
+      return;
+    }
+    setStepError('');
+    setStep(2);
+  }
+
   async function handleOnboardSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!newFirstName.trim() || !newLastName.trim() || !newPhone.trim() || !newPassword.trim() || !token) return;
@@ -160,6 +184,8 @@ export default function AgentsClient() {
   }
 
   function resetModal() {
+    setStep(1);
+    setStepError('');
     setNewFirstName('');
     setNewMiddleName('');
     setNewLastName('');
@@ -354,34 +380,43 @@ export default function AgentsClient() {
         </table>
       </div>
 
-      {/* Onboard Marketing Officer Modal */}
-      {showOnboardModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: '1rem',
-          }}
-        >
-          <div
-            className="card slide-up"
-            style={{
-              width: '100%',
-              maxWidth: 640,
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              padding: '1.75rem',
-              background: 'var(--surface-card)',
-              border: '1px solid var(--color-primary-500)',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.2)',
-            }}
-          >
+      {/* Onboard Marketing Officer Drawer */}
+      <AnimatePresence>
+        {showOnboardModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={resetModal}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0, 0, 0, 0.6)',
+                backdropFilter: 'blur(2px)',
+                zIndex: 9998,
+              }}
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'tween', duration: 0.25, ease: 'easeOut' }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: '100%',
+                maxWidth: 520,
+                overflowY: 'auto',
+                padding: '1.75rem',
+                background: 'var(--surface-card)',
+                borderLeft: '1px solid var(--surface-border)',
+                boxShadow: '-8px 0 32px rgba(0, 0, 0, 0.25)',
+                zIndex: 9999,
+              }}
+            >
             {!generatedCreds ? (
               <form onSubmit={handleOnboardSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -390,7 +425,7 @@ export default function AgentsClient() {
                       ➕ Onboard Team Member
                     </h2>
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                      Assign territory & generate real login credentials
+                      {step === 1 ? 'Step 1 of 2 — Account setup' : 'Step 2 of 2 — Additional details'}
                     </p>
                   </div>
                   <button
@@ -402,6 +437,14 @@ export default function AgentsClient() {
                   </button>
                 </div>
 
+                {/* Step indicator */}
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'var(--color-primary-600)' }} />
+                  <div style={{ flex: 1, height: 4, borderRadius: 2, background: step === 2 ? 'var(--color-primary-600)' : 'var(--surface-border)' }} />
+                </div>
+
+                {step === 1 && (
+                <>
                 {/* Photo */}
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                   <label style={{ cursor: 'pointer', textAlign: 'center' }}>
@@ -557,6 +600,24 @@ export default function AgentsClient() {
                     <input type="text" className="field-input" value={newPincode} onChange={(e) => setNewPincode(e.target.value.replace(/\D/g, ''))} maxLength={10} />
                   </div>
                 </div>
+
+                {stepError && (
+                  <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem' }}>{stepError}</p>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={resetModal}>
+                    Cancel
+                  </button>
+                  <button type="button" className="btn btn-primary" style={{ flex: 1.5, background: 'var(--color-primary-600)' }} onClick={handleNextStep}>
+                    Next: Additional Details →
+                  </button>
+                </div>
+                </>
+                )}
+
+                {step === 2 && (
+                <>
                 <div className="field-group" style={{ margin: 0 }}>
                   <label className="field-label">Address</label>
                   <textarea className="field-input" rows={2} value={newAddress} onChange={(e) => setNewAddress(e.target.value)} />
@@ -593,13 +654,15 @@ export default function AgentsClient() {
                 )}
 
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
-                  <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={resetModal}>
-                    Cancel
+                  <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setStep(1)}>
+                    ← Back
                   </button>
                   <button type="submit" className="btn btn-primary" style={{ flex: 1.5, background: 'var(--color-primary-600)' }} disabled={onboarding}>
                     {onboarding ? 'Creating…' : '⚡ Generate Credentials'}
                   </button>
                 </div>
+                </>
+                )}
               </form>
             ) : (
               <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
@@ -660,9 +723,10 @@ export default function AgentsClient() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
