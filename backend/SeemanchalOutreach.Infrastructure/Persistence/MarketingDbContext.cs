@@ -16,6 +16,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<FieldShift> Shifts => Set<FieldShift>();
         public DbSet<FieldVisit> Visits => Set<FieldVisit>();
         public DbSet<OutreachContact> Contacts => Set<OutreachContact>();
+        public DbSet<ContactHistoryEntry> ContactHistory => Set<ContactHistoryEntry>();
         public DbSet<PatientReferral> Referrals => Set<PatientReferral>();
         public DbSet<TrajectoryPoint> TrajectoryPoints => Set<TrajectoryPoint>();
         public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
@@ -74,6 +75,14 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => new { e.ClientId, e.DeviceId }).IsUnique();
                 entity.HasIndex(e => new { e.PanchayatId, e.Phone });
                 entity.HasIndex(e => new { e.PanchayatId, e.Name });
+            });
+
+            // ─── ContactHistoryEntry ─────────────────────────────────
+            modelBuilder.Entity<ContactHistoryEntry>(entity =>
+            {
+                entity.ToTable("contact_history");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.ContactClientId, e.Timestamp });
             });
 
             // ─── PatientReferral (composite unique key for offline idempotency)

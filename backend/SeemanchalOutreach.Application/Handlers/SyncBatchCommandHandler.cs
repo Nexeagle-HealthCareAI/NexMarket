@@ -198,24 +198,49 @@ namespace SeemanchalOutreach.Application.Handlers
                         }
 
                         _db.Contacts.Add(contact);
+                        _db.ContactHistory.Add(new ContactHistoryEntry
+                        {
+                            ContactClientId = clientId,
+                            UpdatedBy = agentId,
+                            PreviousStatus = "None",
+                            NewStatus = contact.Status,
+                            Comments = contact.Comments
+                        });
                         return Result(clientId, deviceId, contact.Id, syncedAt, "created");
                     }
                     else
                     {
                         if (item.Type == "contact_update")
                         {
+                            var previousStatus = existing.Status;
+                            var previousComments = existing.Comments;
+
                             existing.Name = name;
                             existing.Phone = phone;
                             existing.Role = role;
                             existing.WhatsappAdded = whatsapp;
                             existing.CardGiven = card;
-                            
+
                             // Only update these fields if they are provided/changed from the client
-                            // (If Hospital Rep updated it on server, we might need bi-directional sync, 
+                            // (If Hospital Rep updated it on server, we might need bi-directional sync,
                             // but currently agent -> server is master for these in standard sync)
                             existing.Status = status;
                             existing.FollowUpDate = followUpDate;
                             if (comments != null) existing.Comments = comments;
+
+                            // Guard against outbox retries re-sending the same unchanged item and
+                            // spamming the audit trail with no-op entries.
+                            if (previousStatus != existing.Status || previousComments != existing.Comments)
+                            {
+                                _db.ContactHistory.Add(new ContactHistoryEntry
+                                {
+                                    ContactClientId = clientId,
+                                    UpdatedBy = agentId,
+                                    PreviousStatus = previousStatus,
+                                    NewStatus = existing.Status,
+                                    Comments = existing.Comments
+                                });
+                            }
                         }
                         return Result(clientId, deviceId, existing.Id, syncedAt, "already_exists");
                     }

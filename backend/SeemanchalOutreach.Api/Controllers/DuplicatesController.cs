@@ -34,7 +34,7 @@ namespace SeemanchalOutreach.Api.Controllers
     }
 
     [ApiController]
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     [Route("api/v1/[controller]")]
     public class DuplicatesController : ControllerBase
     {

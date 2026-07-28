@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SeemanchalOutreach.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using SeemanchalOutreach.Infrastructure.Persistence;
 namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MarketingDbContext))]
-    partial class MarketingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260728092854_AddContactHistory")]
+    partial class AddContactHistory
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -256,12 +259,6 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("Comments")
                         .HasColumnType("text");
 
-                    b.Property<string>("Complaints")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Conflicts")
-                        .HasColumnType("text");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -293,9 +290,6 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("PotentialDuplicateOf")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Relation")
                         .HasColumnType("text");
 
                     b.Property<string>("Role")

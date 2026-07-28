@@ -93,6 +93,11 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime? FollowUpDate { get; set; }
         public string? Comments { get; set; }
 
+        // Admin CRM engagement tracking (set from the contact profile page, not mobile sync)
+        public string? Relation { get; set; } // Unknown, Supporter, Neutral, Opponent, Core Member
+        public string? Complaints { get; set; }
+        public string? Conflicts { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public DateTime ServerReceivedAt { get; set; } = DateTime.UtcNow;
 
@@ -101,6 +106,21 @@ namespace SeemanchalOutreach.Domain.Entities
         public bool IsMerged { get; set; } = false;
         public string? MergedIntoClientId { get; set; }
         public DateTime? DuplicateReviewedAt { get; set; } // set when dismissed as "not a duplicate"; left null while merged (IsMerged carries that state)
+    }
+
+    // Audit trail for OutreachContact.Status/Comments changes — written on every
+    // create/update, from both the admin CRM pipeline and the field agent's mobile
+    // sync. Referenced by OutreachContact.ClientId (not Id), matching how the rest
+    // of the sync layer identifies contacts.
+    public class ContactHistoryEntry
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string ContactClientId { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+        public string UpdatedBy { get; set; } = string.Empty;
+        public string PreviousStatus { get; set; } = string.Empty;
+        public string NewStatus { get; set; } = string.Empty;
+        public string? Comments { get; set; }
     }
 
     public class PatientReferral

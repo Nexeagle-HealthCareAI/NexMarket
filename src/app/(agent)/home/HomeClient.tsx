@@ -8,6 +8,7 @@ import { useActiveShift, useActiveVisit, useContacts, useVisits, useOutboxCount,
 import { addToOutbox } from '@/lib/sync/outbox';
 import { triggerManualSync } from '@/lib/sync/engine';
 import { useGeolocation } from '@/lib/geo/useGeolocation';
+import { CurrentLocationBanner } from '@/components/CurrentLocationBanner';
 import type { LocalShift } from '@/lib/db/schema';
 
 import { motion, type Variants } from 'framer-motion';
@@ -144,12 +145,12 @@ export default function HomeClient() {
           <div>
             <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600, textTransform: 'uppercase' }}>Shift Status</p>
             {isOnShift ? (
-              <p style={{ fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <p style={{ color: 'white', fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <span style={{ width: 8, height: 8, background: '#4ade80', borderRadius: '50%', boxShadow: '0 0 8px #4ade80' }} />
                 Active since {new Date(activeShift!.startAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
               </p>
             ) : (
-              <p style={{ fontWeight: 600, fontSize: '0.95rem' }}>Not Started</p>
+              <p style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem' }}>Not Started</p>
             )}
           </div>
           <button 
@@ -166,6 +167,9 @@ export default function HomeClient() {
             {shiftLoading ? '…' : isOnShift ? t.endShift : t.startShift}
           </button>
         </div>
+
+        {/* Current Location Banner embedded in Hero */}
+        <CurrentLocationBanner position={position} variant="hero" />
       </motion.div>
 
       {/* GPS Warning if needed */}

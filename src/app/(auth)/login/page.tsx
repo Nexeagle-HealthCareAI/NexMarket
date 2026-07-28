@@ -7,6 +7,8 @@ import { setSyncStateValue, isLocalDatabaseEmpty, getOrCreateDeviceId, db } from
 import { seedPanchayatsIfEmpty } from '@/lib/sync/seeder';
 import { useAgentStore } from '@/store/agent-store';
 import type { LocalContact, LocalVisit, LocalShift, LocalReferral, LocalPanchayat } from '@/lib/db/schema';
+import { motion } from 'framer-motion';
+import PwaInstallPrompt from '@/components/PwaInstallPrompt';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -113,7 +115,10 @@ export default function LoginPage() {
   return (
     <div className="login-split-container">
       {/* Background glow accents for premium feel */}
-      <div
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1.5 }}
         style={{
           position: 'absolute',
           top: '-15%',
@@ -127,7 +132,12 @@ export default function LoginPage() {
       />
 
       {/* LEFT 2/3rd PANEL: Widescreen Feature Showcase & Telemetry */}
-      <div className="login-showcase-panel slide-up">
+      <motion.div 
+        className="login-showcase-panel"
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.6, ease: 'easeOut' }}
+      >
         {/* Top Header & Tagline */}
         <div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', padding: '0.4rem 0.85rem', borderRadius: 'var(--radius-full)', marginBottom: '1.25rem' }}>
@@ -191,12 +201,17 @@ export default function LoginPage() {
             v2.4 LTS
           </span>
         </div>
-      </div>
+      </motion.div>
 
       {/* RIGHT 1/3rd PANEL / NATIVE MOBILE LAYOUT */}
-      <div className="login-form-panel slide-up">
+      <motion.div 
+        className="login-form-panel"
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.6, ease: 'easeOut', delay: 0.2 }}
+      >
         {/* Native App Top/Hero Section (Mobile Only) */}
-        <div className="login-mobile-hero slide-up">
+        <div className="login-mobile-hero">
           <h1 style={{ fontSize: '2.25rem', fontWeight: 900, letterSpacing: '-0.03em', marginBottom: '0.25rem' }}>NexMarket</h1>
         </div>
 
@@ -218,7 +233,9 @@ export default function LoginPage() {
         </div>
 
         {/* Bottom Sheet Style Card (Mobile) / Form Card (Desktop) */}
-        <div className="login-card-container slide-up">
+        <div className="login-card-container">
+          <PwaInstallPrompt />
+          
           {isInitializing ? (
             <div style={{ textAlign: 'center', padding: '1rem 0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div
@@ -373,10 +390,17 @@ export default function LoginPage() {
                     opacity: (isLoading || !userId.trim() || !password.trim()) ? 0.7 : 1,
                     transition: 'transform 0.15s, box-shadow 0.15s'
                   }}
-                  onMouseOver={(e) => !isLoading && (e.currentTarget.style.transform = 'translateY(-1px)', e.currentTarget.style.boxShadow = '0 10px 25px rgba(79, 70, 229, 0.4)')}
+                  onMouseOver={(e) => !isLoading && (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = '0 12px 28px rgba(79, 70, 229, 0.45)')}
                   onMouseOut={(e) => !isLoading && (e.currentTarget.style.transform = 'none', e.currentTarget.style.boxShadow = '0 8px 20px rgba(79, 70, 229, 0.3)')}
+                  onMouseDown={(e) => !isLoading && (e.currentTarget.style.transform = 'translateY(1px)', e.currentTarget.style.boxShadow = '0 4px 12px rgba(79, 70, 229, 0.2)')}
+                  onMouseUp={(e) => !isLoading && (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = '0 12px 28px rgba(79, 70, 229, 0.45)')}
                 >
-                  {isLoading ? 'Signing in…' : 'Sign In'}
+                  {isLoading ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                      <svg className="spin" width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                      Signing in…
+                    </div>
+                  ) : 'Sign In'}
                 </button>
               </div>
 
@@ -386,7 +410,7 @@ export default function LoginPage() {
             </form>
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

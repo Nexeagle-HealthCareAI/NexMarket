@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { useAgentStore } from '@/store/agent-store';
 
 const adminNavItems = [
   { href: '/admin/map', label: 'Live Map', icon: '🗺️' },
@@ -22,6 +23,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const agentId = useAgentStore((s) => s.agentId);
+  const role = useAgentStore((s) => s.role);
 
   const handleLogout = () => {
     localStorage.removeItem('admin_token');
@@ -35,6 +38,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // The API now rejects non-Admin roles on every admin endpoint (403) — redirect
+  // here too so a non-admin agent sees a clean bounce instead of a page full of
+  // permission-error banners.
+  useEffect(() => {
+    if (agentId && role && role.toLowerCase() !== 'admin') {
+      router.replace('/home');
+    }
+  }, [agentId, role, router]);
 
   const sidebarWidth = isCollapsed ? 80 : 260;
 

@@ -10,6 +10,8 @@ import { useAgentStore } from '@/store/agent-store';
 import PwaInstallPrompt from '@/components/PwaInstallPrompt';
 import NotificationListener from '@/components/NotificationListener';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { AnimatePresence, motion } from 'framer-motion';
+import MobileBottomNav from '@/components/layout/MobileBottomNav';
 
 const navItems = [
   {
@@ -198,81 +200,38 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
     <>
       {/* ─── Mobile Top Nav (Visible on < 768px) ───────────────────────────── */}
       <div className="mobile-top-nav">
-        <button
-          type="button"
-          className="mobile-menu-btn"
-          onClick={() => setIsDrawerOpen(true)}
-          aria-label="Open menu"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-        
-        <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#0f172a', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <div style={{
-            width: 24, height: 24,
-            background: 'linear-gradient(135deg, var(--color-primary-600), var(--color-primary-400))',
-            borderRadius: '6px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white', fontWeight: 900, fontSize: '0.9rem',
-          }}>
-            N
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ fontWeight: 900, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
+            NexMarket
           </div>
-          NexMarket
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', fontWeight: 700, letterSpacing: '0.02em' }}>
+            Namaste, {name?.split(' ')[0] ?? 'Agent'} 👋
+          </div>
         </div>
         
-        {/* Placeholder spacer for centering title */}
-        <div style={{ width: 40 }} />
-      </div>
-
-      {/* ─── Mobile Drawer Overlay ───────────────────────────────────────────── */}
-      <div 
-        className={`mobile-drawer-overlay ${isDrawerOpen ? 'open' : ''}`}
-        onClick={() => setIsDrawerOpen(false)}
-        aria-hidden={!isDrawerOpen}
-      />
-
-      {/* ─── Mobile Drawer ───────────────────────────────────────────────────── */}
-      <aside className={`mobile-drawer ${isDrawerOpen ? 'open' : ''}`} aria-label="Mobile navigation">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
-          <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.02em' }}>
-            Menu
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <LanguageSwitcher />
+          
           <button
-            onClick={() => setIsDrawerOpen(false)}
-            style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '0.5rem', margin: '-0.5rem' }}
+            type="button"
+            onClick={() => {
+              clearAuth();
+              router.replace('/login');
+            }}
+            style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-full)', color: '#ef4444', cursor: 'pointer', padding: '0.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background var(--transition-fast)' }}
+            aria-label="Sign Out"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
           </button>
         </div>
-        
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          {renderUserInfo()}
-          {renderNavLinks()}
-        </div>
-        
-        <div style={{ marginTop: 'auto', paddingTop: '1.5rem' }}>
-          {renderFooterInfo()}
-        </div>
-      </aside>
+      </div>
 
       {/* ─── Desktop Left Sidebar (Visible on >= 768px) ────────────────────── */}
       <aside className="desktop-sidebar" aria-label="Desktop navigation">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem', padding: '0 0.5rem' }}>
-            <div style={{
-              width: 40, height: 40,
-              background: 'linear-gradient(135deg, var(--color-primary-600), var(--color-primary-400))',
-              borderRadius: 'var(--radius-lg)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontWeight: 900, fontSize: '1.4rem',
-              boxShadow: '0 4px 12px rgba(99,102,241,0.3)'
-            }}>
-              N
-            </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.02em' }}>NexMarket</div>
               <div style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', fontWeight: 600 }}>Outreach Portal</div>
@@ -294,6 +253,8 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
         <NotificationListener />
         {children}
       </main>
+
+      <MobileBottomNav />
     </>
   );
 }

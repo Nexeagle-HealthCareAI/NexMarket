@@ -221,6 +221,25 @@ async function get<TResponse>(path: string, token: string): Promise<TResponse> {
   return res.json() as Promise<TResponse>;
 }
 
+async function put<TBody, TResponse>(
+  path: string,
+  body: TBody,
+  token: string,
+): Promise<TResponse> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`API ${path} → ${res.status}: ${text}`);
+  }
+
+  return res.json() as Promise<TResponse>;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export interface LoginRequestBody {
@@ -340,4 +359,86 @@ export function getReportsSummary(token: string, district?: string): Promise<Rep
 
 export function getPanchayats(token: string): Promise<PanchayatDto[]> {
   return get<PanchayatDto[]>('/api/v1/panchayats', token);
+}
+
+export interface AdminContactDto {
+  clientId: string;
+  name: string;
+  phone: string | null;
+  role: string;
+  panchayatId: string;
+  agentId: string;
+  status: string;
+  followUpDate: string | null;
+  comments: string | null;
+  relation: string | null;
+  complaints: string | null;
+  conflicts: string | null;
+  createdAt: string;
+  lastUpdatedAt?: string | null;
+  lastUpdatedBy?: string | null;
+}
+
+export interface ContactUpdateRequest {
+  status?: string;
+  followUpDate?: string | null;
+  comments?: string;
+  relation?: string;
+  complaints?: string;
+  conflicts?: string;
+}
+
+export interface AdminContactsQuery {
+  page?: number;
+  pageSize?: number;
+  districts?: string[];
+  blocks?: string[];
+  panchayats?: string[];
+}
+
+export interface PaginatedContactsResponse {
+  items: AdminContactDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export function getAdminContacts(token: string, query: AdminContactsQuery = {}): Promise<PaginatedContactsResponse> {
+  const params = new URLSearchParams();
+  if (query.page) params.set('page', String(query.page));
+  if (query.pageSize) params.set('pageSize', String(query.pageSize));
+  if (query.districts?.length) params.set('districts', query.districts.join(','));
+  if (query.blocks?.length) params.set('blocks', query.blocks.join(','));
+  if (query.panchayats?.length) params.set('panchayats', query.panchayats.join(','));
+  const qs = params.toString();
+  return get<PaginatedContactsResponse>(`/api/v1/admin/contacts${qs ? `?${qs}` : ''}`, token);
+}
+
+export function getAdminContact(token: string, clientId: string): Promise<AdminContactDto> {
+  return get<AdminContactDto>(`/api/v1/admin/contacts/${encodeURIComponent(clientId)}`, token);
+}
+
+export interface ContactHistoryEntryDto {
+  id: string;
+  timestamp: string;
+  updatedBy: string;
+  previousStatus: string;
+  newStatus: string;
+  comments: string | null;
+}
+
+export function getContactHistory(token: string, clientId: string): Promise<ContactHistoryEntryDto[]> {
+  return get<ContactHistoryEntryDto[]>(`/api/v1/admin/contacts/${encodeURIComponent(clientId)}/history`, token);
+}
+
+export function updateAdminContact(
+  token: string,
+  clientId: string,
+  body: ContactUpdateRequest
+): Promise<AdminContactDto> {
+  return put<ContactUpdateRequest, AdminContactDto>(
+    `/api/v1/admin/contacts/${encodeURIComponent(clientId)}`,
+    body,
+    token
+  );
 }

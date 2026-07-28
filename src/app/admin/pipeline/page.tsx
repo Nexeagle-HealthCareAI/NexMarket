@@ -2,135 +2,83 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
+import { useAgentStore } from '@/store/agent-store';
+import { getAdminContacts, updateAdminContact, getContactHistory, getPanchayats, type AdminContactDto, type ContactHistoryEntryDto, type PanchayatDto } from '@/lib/sync/api-client';
 
 // The columns for our statuses
 const STATUSES = ['Lead', 'Contacted', 'FollowUp', 'Converted', 'Closed'];
+const PAGE_SIZE = 50;
+// Matches the server-side cap in ContactsController.GetAllContacts — large enough
+// to act as "everything matching these filters" for CSV export.
+const EXPORT_PAGE_SIZE = 2000;
 
-interface FollowUpHistory {
-  id: string;
-  timestamp: string; // ISO string
-  updatedBy: string;
-  previousStage: string;
-  newStage: string;
-  comments: string;
-}
-
-interface Contact {
-  clientId: string;
-  name: string;
-  phone: string | null;
-  role: string;
-  panchayatId: string;
-  agentId: string;
-  status: string;
-  followUpDate: string | null;
-  comments: string | null;
-  createdAt: string;
-  history?: FollowUpHistory[]; // Mocked history
-}
+type Contact = AdminContactDto;
 
 export default function PipelinePage() {
+  const token = useAgentStore((s) => s.jwtToken);
+  const name = useAgentStore((s) => s.name);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [exporting, setExporting] = useState(false);
   const [historyModalContact, setHistoryModalContact] = useState<Contact | null>(null);
 
   // Filter States
-  const [panchayatsData, setPanchayatsData] = useState<any[]>([]);
+  const [panchayatsData, setPanchayatsData] = useState<PanchayatDto[]>([]);
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [selectedBlocks, setSelectedBlocks] = useState<string[]>([]);
   const [selectedPanchayats, setSelectedPanchayats] = useState<string[]>([]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (token) getPanchayats(token).then(setPanchayatsData).catch(() => {});
+  }, [token]);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      // Fetch panchayats for location mapping
-      const panchayatRes = await fetch('/data/panchayats.json');
-      if (panchayatRes.ok) {
-        const pData = await panchayatRes.json();
-        setPanchayatsData(pData);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const res = await getAdminContacts(token, {
+          page,
+          pageSize: PAGE_SIZE,
+          districts: selectedCities,
+          blocks: selectedBlocks,
+          panchayats: selectedPanchayats,
+        });
+        if (cancelled) return;
+        setContacts(res.items);
+        setTotalCount(res.totalCount);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load pipeline data.');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
+    })();
 
-      // Fetch contacts
-      const token = localStorage.getItem('admin_token');
-      const res = await fetch('http://localhost:5000/api/v1/admin/contacts', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const enriched = data.map((c: any) => ({ ...c, history: generateMockHistory(c) }));
-        setContacts(enriched);
-      } else {
-        setContacts(getFallbackMockData());
-      }
-    } catch (e) {
-      console.error(e);
-      setContacts(getFallbackMockData());
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const generateMockHistory = (contact: any): FollowUpHistory[] => {
-    return [
-      {
-        id: Math.random().toString(),
-        timestamp: new Date(Date.now() - 86400000 * 2).toISOString(),
-        updatedBy: 'System',
-        previousStage: 'None',
-        newStage: 'Lead',
-        comments: 'Imported from spreadsheet'
-      },
-      {
-        id: Math.random().toString(),
-        timestamp: new Date(Date.now() - 86400000).toISOString(),
-        updatedBy: 'Jane Agent',
-        previousStage: 'Lead',
-        newStage: contact.status || 'Contacted',
-        comments: contact.comments || 'Initial call made.'
-      }
-    ];
-  };
-
-  const getFallbackMockData = (): Contact[] => [
-    { clientId: '1', name: 'Rahul Sharma', phone: '+91 9876543210', role: 'mukhiya', panchayatId: '00000001-0000-0000-0000-000000000001', agentId: 'A1', status: 'FollowUp', followUpDate: new Date(Date.now() + 86400000).toISOString(), comments: 'Call back tomorrow', createdAt: new Date().toISOString(), history: generateMockHistory({status: 'FollowUp'}) },
-    { clientId: '2', name: 'Priya Singh', phone: '+91 9876543211', role: 'ward_member', panchayatId: '00000002-0000-0000-0000-000000000001', agentId: 'A1', status: 'Converted', followUpDate: null, comments: 'Agreed to partnership', createdAt: new Date().toISOString(), history: generateMockHistory({status: 'Converted'}) },
-    { clientId: '3', name: 'Amit Kumar', phone: '+91 9876543212', role: 'sarpanch', panchayatId: '00000003-0000-0000-0000-000000000001', agentId: 'A2', status: 'Lead', followUpDate: null, comments: '', createdAt: new Date().toISOString(), history: generateMockHistory({status: 'Lead'}) },
-  ];
+    return () => { cancelled = true; };
+  }, [token, page, selectedCities, selectedBlocks, selectedPanchayats]);
 
   const handleSaveContact = async (updatedContact: Contact) => {
-    const newLog: FollowUpHistory = {
-      id: Math.random().toString(),
-      timestamp: new Date().toISOString(),
-      updatedBy: 'Admin User',
-      previousStage: contacts.find(c => c.clientId === updatedContact.clientId)?.status || '',
-      newStage: updatedContact.status,
-      comments: updatedContact.comments || ''
-    };
-
-    const finalContact = {
-      ...updatedContact,
-      history: [...(updatedContact.history || []), newLog]
-    };
-
-    setContacts(prev => prev.map(c => c.clientId === finalContact.clientId ? finalContact : c));
+    if (!token) return;
 
     try {
-      const token = localStorage.getItem('admin_token');
-      await fetch(`http://localhost:5000/api/v1/admin/contacts/${updatedContact.clientId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({
-          status: updatedContact.status,
-          followUpDate: updatedContact.followUpDate,
-          comments: updatedContact.comments
-        })
+      const saved = await updateAdminContact(token, updatedContact.clientId, {
+        status: updatedContact.status,
+        followUpDate: updatedContact.followUpDate,
+        comments: updatedContact.comments ?? undefined
       });
+
+      setContacts(prev => prev.map(c => c.clientId === updatedContact.clientId
+        ? { ...c, ...saved, lastUpdatedAt: new Date().toISOString(), lastUpdatedBy: name || 'Admin' }
+        : c));
     } catch (e) {
-      console.error('Failed to save to backend', e);
+      setError(e instanceof Error ? e.message : 'Failed to save changes.');
     }
   };
 
@@ -141,50 +89,59 @@ export default function PipelinePage() {
     .map(p => p.block)
   )).filter(Boolean).sort();
   const uniquePanchayats = Array.from(new Set(panchayatsData
-    .filter(p => (selectedCities.length === 0 || selectedCities.includes(p.district)) && 
+    .filter(p => (selectedCities.length === 0 || selectedCities.includes(p.district)) &&
                  (selectedBlocks.length === 0 || selectedBlocks.includes(p.block)))
     .map(p => p.name)
   )).filter(Boolean).sort();
 
-  // Filter contacts based on selected location
-  const filteredContacts = contacts.filter(contact => {
-    if (selectedCities.length === 0 && selectedBlocks.length === 0 && selectedPanchayats.length === 0) return true;
-    
-    const pInfo = panchayatsData.find(p => p.id === contact.panchayatId);
-    if (!pInfo) return false;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
-    if (selectedCities.length > 0 && !selectedCities.includes(pInfo.district)) return false;
-    if (selectedBlocks.length > 0 && !selectedBlocks.includes(pInfo.block)) return false;
-    if (selectedPanchayats.length > 0 && !selectedPanchayats.includes(pInfo.name)) return false;
+  const exportToCsv = async () => {
+    if (!token) return;
+    setExporting(true);
+    setError('');
+    try {
+      const res = await getAdminContacts(token, {
+        page: 1,
+        pageSize: EXPORT_PAGE_SIZE,
+        districts: selectedCities,
+        blocks: selectedBlocks,
+        panchayats: selectedPanchayats,
+      });
+      if (res.totalCount > EXPORT_PAGE_SIZE) {
+        setError(`Export is capped at ${EXPORT_PAGE_SIZE} rows — narrow the filters to export everything matching (${res.totalCount} total).`);
+      }
 
-    return true;
-  });
-
-  const exportToCsv = () => {
-    const headers = ['Name', 'Phone', 'Role', 'Status', 'Follow-Up Date', 'Comments', 'City', 'Block', 'Panchayat'];
-    const rows = filteredContacts.map(c => {
-      const pInfo = panchayatsData.find(p => p.id === c.panchayatId) || { district: '', block: '', name: '' };
-      return [
-        `"${c.name.replace(/"/g, '""')}"`,
-        `"${c.phone || ''}"`,
-        `"${c.role}"`,
-        `"${c.status}"`,
-        `"${c.followUpDate ? new Date(c.followUpDate).toLocaleDateString() : ''}"`,
-        `"${(c.comments || '').replace(/"/g, '""')}"`,
-        `"${pInfo.district}"`,
-        `"${pInfo.block}"`,
-        `"${pInfo.name}"`
-      ];
-    });
-    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Pipeline_Export_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const headers = ['Name', 'Phone', 'Role', 'Status', 'Follow-Up Date', 'Comments', 'City', 'Block', 'Panchayat'];
+      const rows = res.items.map(c => {
+        const pInfo = panchayatsData.find(p => p.id === c.panchayatId) || { district: '', block: '', name: '' };
+        return [
+          `"${c.name.replace(/"/g, '""')}"`,
+          `"${c.phone || ''}"`,
+          `"${c.role}"`,
+          `"${c.status}"`,
+          `"${c.followUpDate ? new Date(c.followUpDate).toLocaleDateString() : ''}"`,
+          `"${(c.comments || '').replace(/"/g, '""')}"`,
+          `"${pInfo.district}"`,
+          `"${pInfo.block}"`,
+          `"${pInfo.name}"`
+        ];
+      });
+      const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Pipeline_Export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to export CSV.');
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -194,18 +151,20 @@ export default function PipelinePage() {
           <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>CRM Pipeline</h1>
           <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Tabular view of all outreach contacts</p>
         </div>
-        <motion.button 
+        <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={exportToCsv}
-          style={{ 
-            display: 'flex', gap: '0.5rem', alignItems: 'center', 
+          disabled={exporting}
+          style={{
+            display: 'flex', gap: '0.5rem', alignItems: 'center',
             background: 'white', color: '#0f172a', border: '1px solid #e2e8f0',
             padding: '0.5rem 1rem', borderRadius: '8px', fontWeight: 600,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.02)', cursor: 'pointer'
+            boxShadow: '0 2px 4px rgba(0,0,0,0.02)', cursor: exporting ? 'not-allowed' : 'pointer',
+            opacity: exporting ? 0.6 : 1
           }}
         >
-          <span>📥</span> Export to CSV
+          <span>📥</span> {exporting ? 'Exporting...' : 'Export to CSV'}
         </motion.button>
       </div>
 
@@ -217,7 +176,7 @@ export default function PipelinePage() {
             placeholder="All Cities"
             options={uniqueCities}
             selected={selectedCities}
-            onChange={(val) => { setSelectedCities(val); setSelectedBlocks([]); setSelectedPanchayats([]); }}
+            onChange={(val) => { setSelectedCities(val); setSelectedBlocks([]); setSelectedPanchayats([]); setPage(1); }}
           />
         </div>
         <div style={{ flex: 1, minWidth: '220px' }}>
@@ -226,7 +185,7 @@ export default function PipelinePage() {
             placeholder="All Blocks"
             options={uniqueBlocks}
             selected={selectedBlocks}
-            onChange={(val) => { setSelectedBlocks(val); setSelectedPanchayats([]); }}
+            onChange={(val) => { setSelectedBlocks(val); setSelectedPanchayats([]); setPage(1); }}
             disabled={selectedCities.length === 0 && uniqueBlocks.length === 0}
           />
         </div>
@@ -236,11 +195,17 @@ export default function PipelinePage() {
             placeholder="All Panchayats"
             options={uniquePanchayats}
             selected={selectedPanchayats}
-            onChange={(val) => setSelectedPanchayats(val)}
+            onChange={(val) => { setSelectedPanchayats(val); setPage(1); }}
             disabled={selectedBlocks.length === 0 && uniquePanchayats.length === 0}
           />
         </div>
       </div>
+
+      {error && (
+        <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#b91c1c', fontSize: '0.85rem', fontWeight: 600 }}>
+          {error}
+        </div>
+      )}
 
       {loading ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -254,6 +219,7 @@ export default function PipelinePage() {
                 <tr>
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact Details</th>
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone</th>
+                  <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Location (Village)</th>
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', width: '160px' }}>Stage (Result)</th>
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', width: '160px' }}>Follow-up Date</th>
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Comments</th>
@@ -262,26 +228,55 @@ export default function PipelinePage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredContacts.map(c => (
-                  <ContactRow 
-                    key={c.clientId} 
-                    contact={c} 
-                    onSave={handleSaveContact} 
-                    onViewHistory={() => setHistoryModalContact(c)} 
-                  />
-                ))}
+                {contacts.map(c => {
+                  const pInfo = panchayatsData.find(p => p.id === c.panchayatId);
+                  return (
+                    <ContactRow
+                      key={c.clientId}
+                      contact={c}
+                      panchayatName={pInfo?.name}
+                      blockName={pInfo?.block}
+                      onSave={handleSaveContact}
+                      onViewHistory={() => setHistoryModalContact(c)}
+                    />
+                  );
+                })}
               </tbody>
             </table>
+          </div>
+
+          {/* Pagination */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1.25rem', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+            <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
+              {totalCount === 0 ? 'No contacts' : `Page ${page} of ${totalPages} · ${totalCount} total`}
+            </span>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                style={{ background: 'white', color: page <= 1 ? '#cbd5e1' : '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 0.9rem', borderRadius: '6px', fontWeight: 600, fontSize: '0.8rem', cursor: page <= 1 ? 'not-allowed' : 'pointer' }}
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                style={{ background: 'white', color: page >= totalPages ? '#cbd5e1' : '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 0.9rem', borderRadius: '6px', fontWeight: 600, fontSize: '0.8rem', cursor: page >= totalPages ? 'not-allowed' : 'pointer' }}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* History Modal */}
       <AnimatePresence>
-        {historyModalContact && (
-          <HistoryModal 
-            contact={historyModalContact} 
-            onClose={() => setHistoryModalContact(null)} 
+        {historyModalContact && token && (
+          <HistoryModal
+            contact={historyModalContact}
+            token={token}
+            onClose={() => setHistoryModalContact(null)}
           />
         )}
       </AnimatePresence>
@@ -292,7 +287,7 @@ export default function PipelinePage() {
 // -------------------------------------------------------------------------------------------------
 // Contact Row Component (Handles inline editing state)
 // -------------------------------------------------------------------------------------------------
-function ContactRow({ contact, onSave, onViewHistory }: { contact: Contact, onSave: (c: Contact) => void, onViewHistory: () => void }) {
+function ContactRow({ contact, panchayatName, blockName, onSave, onViewHistory }: { contact: Contact, panchayatName?: string, blockName?: string, onSave: (c: Contact) => void, onViewHistory: () => void }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editStatus, setEditStatus] = useState(contact.status || 'Lead');
   const [editFollowUp, setEditFollowUp] = useState(contact.followUpDate ? new Date(contact.followUpDate).toISOString().split('T')[0] : '');
@@ -320,9 +315,10 @@ function ContactRow({ contact, onSave, onViewHistory }: { contact: Contact, onSa
   };
 
   // Format last updated IST time
-  const lastHistory = contact.history && contact.history.length > 0 ? contact.history[contact.history.length - 1] : null;
-  const lastUpdatedTime = lastHistory ? new Date(lastHistory.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) + ' IST' : 'Never';
-  const lastUpdatedBy = lastHistory ? lastHistory.updatedBy : 'N/A';
+  const lastUpdatedTime = contact.lastUpdatedAt
+    ? new Date(contact.lastUpdatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) + ' IST'
+    : 'Never';
+  const lastUpdatedBy = contact.lastUpdatedBy || 'N/A';
 
   const statusColor = editStatus === 'Lead' ? '#94a3b8' :
                       editStatus === 'Contacted' ? '#eab308' :
@@ -337,6 +333,10 @@ function ContactRow({ contact, onSave, onViewHistory }: { contact: Contact, onSa
       </td>
       <td style={{ padding: '1rem', color: '#4f46e5', fontWeight: 600, fontSize: '0.9rem' }}>
         {contact.phone || '-'}
+      </td>
+      <td style={{ padding: '1rem' }}>
+        <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.85rem' }}>{panchayatName || '-'}</div>
+        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{blockName || '-'} Block</div>
       </td>
       <td style={{ padding: '1rem' }}>
         {isEditing ? (
@@ -403,9 +403,14 @@ function ContactRow({ contact, onSave, onViewHistory }: { contact: Contact, onSa
             <button onClick={handleCancel} style={{ background: 'transparent', color: '#64748b', border: '1px solid #cbd5e1', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
           </div>
         ) : (
-          <button onClick={() => setIsEditing(true)} style={{ background: 'transparent', color: '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 1rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-            Edit
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+            <button onClick={() => setIsEditing(true)} style={{ background: 'transparent', color: '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              Edit
+            </button>
+            <Link href={`/admin/pipeline/${contact.clientId}`} style={{ background: '#0f172a', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+              Profile
+            </Link>
+          </div>
         )}
       </td>
     </tr>
@@ -415,7 +420,28 @@ function ContactRow({ contact, onSave, onViewHistory }: { contact: Contact, onSa
 // -------------------------------------------------------------------------------------------------
 // History Modal Component
 // -------------------------------------------------------------------------------------------------
-function HistoryModal({ contact, onClose }: { contact: Contact, onClose: () => void }) {
+function HistoryModal({ contact, token, onClose }: { contact: Contact, token: string, onClose: () => void }) {
+  const [history, setHistory] = useState<ContactHistoryEntryDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const h = await getContactHistory(token, contact.clientId);
+        if (!cancelled) setHistory(h);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load history.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [contact.clientId, token]);
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
       <motion.div 
@@ -446,16 +472,20 @@ function HistoryModal({ contact, onClose }: { contact: Contact, onClose: () => v
         </div>
 
         <div style={{ overflowY: 'auto', flex: 1, paddingRight: '0.5rem' }}>
-          {(!contact.history || contact.history.length === 0) ? (
+          {loading ? (
+            <p style={{ color: '#64748b', textAlign: 'center', padding: '2rem' }}>Loading history...</p>
+          ) : error ? (
+            <p style={{ color: '#b91c1c', textAlign: 'center', padding: '2rem' }}>{error}</p>
+          ) : history.length === 0 ? (
             <p style={{ color: '#64748b', textAlign: 'center', padding: '2rem' }}>No history recorded.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               {/* Reverse history to show newest first */}
-              {[...contact.history].reverse().map((h, i) => (
+              {[...history].reverse().map((h, i) => (
                 <div key={h.id} style={{ display: 'flex', gap: '1rem' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#4f46e5', marginTop: '0.25rem' }} />
-                    {i !== contact.history!.length - 1 && <div style={{ width: 2, flex: 1, background: '#e2e8f0', marginTop: '0.5rem' }} />}
+                    {i !== history.length - 1 && <div style={{ width: 2, flex: 1, background: '#e2e8f0', marginTop: '0.5rem' }} />}
                   </div>
                   <div style={{ flex: 1, background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
@@ -465,9 +495,9 @@ function HistoryModal({ contact, onClose }: { contact: Contact, onClose: () => v
                       </span>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#94a3b8', textDecoration: 'line-through' }}>{h.previousStage}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#94a3b8', textDecoration: 'line-through' }}>{h.previousStatus}</span>
                       <span style={{ fontSize: '0.8rem' }}>➔</span>
-                      <span style={{ fontSize: '0.75rem', color: '#4f46e5', fontWeight: 700, background: '#e0e7ff', padding: '0.1rem 0.5rem', borderRadius: '4px' }}>{h.newStage}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#4f46e5', fontWeight: 700, background: '#e0e7ff', padding: '0.1rem 0.5rem', borderRadius: '4px' }}>{h.newStatus}</span>
                     </div>
                     {h.comments && (
                       <p style={{ margin: 0, fontSize: '0.85rem', color: '#334155', background: 'white', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>

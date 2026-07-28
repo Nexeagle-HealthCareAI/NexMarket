@@ -62,6 +62,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<List<AgentSummaryDto>>> GetAgents(CancellationToken cancellationToken)
         {
             var agents = await _db.Agents.AsNoTracking().OrderBy(a => a.Name).ToListAsync(cancellationToken);
@@ -144,6 +145,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet("{agentId}/trajectory")]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<object>> GetTrajectory(string agentId, [FromQuery] DateOnly? date, CancellationToken cancellationToken)
         {
             var day = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
@@ -166,6 +168,7 @@ namespace SeemanchalOutreach.Api.Controllers
         /// there is always a real login available, so no anonymous bootstrap path is needed.
         /// </summary>
         [HttpPost]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<object>> Onboard([FromBody] OnboardAgentRequest request, CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
@@ -248,7 +251,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var currentAgentId = User.FindFirst("agentId")?.Value;
             var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
 
-            if (currentAgentId != agentId && role != "admin")
+            if (currentAgentId != agentId && role != "Admin")
             {
                 return Forbid();
             }

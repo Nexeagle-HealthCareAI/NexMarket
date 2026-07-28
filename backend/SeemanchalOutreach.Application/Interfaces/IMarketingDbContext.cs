@@ -12,6 +12,7 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<FieldShift> Shifts { get; }
         DbSet<FieldVisit> Visits { get; }
         DbSet<OutreachContact> Contacts { get; }
+        DbSet<ContactHistoryEntry> ContactHistory { get; }
         DbSet<PatientReferral> Referrals { get; }
         DbSet<TrajectoryPoint> TrajectoryPoints { get; }
         DbSet<SurveyResponse> SurveyResponses { get; }
