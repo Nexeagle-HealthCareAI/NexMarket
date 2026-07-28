@@ -13,6 +13,8 @@ const ROLE_CLASSES: Record<ContactRole, string> = {
   rmp_doctor: 'role-rmp',
   ward_member: 'role-ward',
   medicine_shop: 'role-medicine',
+  mukhiya: 'role-mukhiya',
+  prominent_person: 'role-prominent',
 };
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -39,6 +41,8 @@ export default function ContactsPage() {
     rmp_doctor: t.roleRmpDoctor,
     ward_member: t.roleWardMember,
     medicine_shop: t.roleMedicineShop,
+    mukhiya: t.roleMukhiya,
+    prominent_person: t.roleProminentPerson,
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,7 +95,7 @@ export default function ContactsPage() {
 
       {/* Role filter chips */}
       <motion.div variants={itemVariants} style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-        {(['all', 'asha_worker', 'rmp_doctor', 'ward_member', 'medicine_shop'] as const).map((role) => (
+        {(['all', 'asha_worker', 'rmp_doctor', 'ward_member', 'medicine_shop', 'mukhiya', 'prominent_person'] as const).map((role) => (
           <button
             key={role}
             id={`filter-${role}`}

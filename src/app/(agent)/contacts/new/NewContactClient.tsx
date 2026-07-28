@@ -23,10 +23,12 @@ export default function NewContactPage() {
   const t = useTranslations();
 
   const ROLES: { value: ContactRole; label: string; emoji: string; desc: string }[] = [
-    { value: 'asha_worker',    label: t.roleAshaWorker, emoji: '🤝', desc: t.descAshaWorker },
-    { value: 'rmp_doctor',     label: t.roleRmpDoctor,     emoji: '🏢', desc: t.descRmpDoctor },
-    { value: 'ward_member',    label: t.roleWardMember,       emoji: '🏛️', desc: t.descWardMember },
-    { value: 'medicine_shop',  label: t.roleMedicineShop,   emoji: '🏪', desc: t.descMedicineShop },
+    { value: 'asha_worker',      label: t.roleAshaWorker,      emoji: '🤝', desc: t.descAshaWorker },
+    { value: 'rmp_doctor',       label: t.roleRmpDoctor,       emoji: '🩺', desc: t.descRmpDoctor },
+    { value: 'medicine_shop',    label: t.roleMedicineShop,    emoji: '🏪', desc: t.descMedicineShop },
+    { value: 'ward_member',      label: t.roleWardMember,      emoji: '🏛️', desc: t.descWardMember },
+    { value: 'mukhiya',          label: t.roleMukhiya,         emoji: '👑', desc: t.descMukhiya },
+    { value: 'prominent_person', label: t.roleProminentPerson, emoji: '🌟', desc: t.descProminentPerson },
   ];
 
   const [form, setForm] = useState({

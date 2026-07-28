@@ -48,7 +48,7 @@ export interface LocalShift {
 
 // ─── Contact ──────────────────────────────────────────────────────────────────
 
-export type ContactRole = 'asha_worker' | 'rmp_doctor' | 'ward_member' | 'medicine_shop';
+export type ContactRole = 'asha_worker' | 'rmp_doctor' | 'ward_member' | 'medicine_shop' | 'mukhiya' | 'prominent_person';
 
 export interface LocalContact {
   localId?: number;
