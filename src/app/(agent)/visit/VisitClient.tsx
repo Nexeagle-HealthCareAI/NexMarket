@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { useAgentStore } from '@/store/agent-store';
-import { usePanchayats, useActiveShift, useActiveVisit, db } from '@/lib/db';
+import { usePanchayats, useActiveShift, useActiveVisit, useVisits, db } from '@/lib/db';
 import { addToOutbox } from '@/lib/sync/outbox';
 import { useGeolocation } from '@/lib/geo/useGeolocation';
+import { getMyAssignment, type MyAssignmentDto } from '@/lib/sync/api-client';
 import type { LocalVisit } from '@/lib/db/schema';
 import { useTranslations } from '@/i18n/I18nProvider';
 
@@ -14,11 +15,13 @@ export default function VisitPage() {
   const router = useRouter();
   const agentId = useAgentStore((s) => s.agentId);
   const deviceId = useAgentStore((s) => s.deviceId);
+  const jwtToken = useAgentStore((s) => s.jwtToken);
   const activeShiftClientId = useAgentStore((s) => s.activeShiftClientId);
   const activeVisitClientId = useAgentStore((s) => s.activeVisitClientId);
   const setActiveVisit = useAgentStore((s) => s.setActiveVisit);
 
   const panchayats = usePanchayats();
+  const localVisits = useVisits(agentId ?? undefined);
   const activeShift = useActiveShift(agentId ?? undefined);
   const activeVisit = useActiveVisit(agentId ?? undefined);
   const t = useTranslations();
@@ -26,6 +29,14 @@ export default function VisitPage() {
   const [selectedPanchayat, setSelectedPanchayat] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [assignment, setAssignment] = useState<MyAssignmentDto | null>(null);
+
+  // Live fetch, best-effort — if it fails (offline, no assignment yet) we fall
+  // back to the full unscoped panchayat list below so check-in is never blocked.
+  useEffect(() => {
+    if (!jwtToken) return;
+    getMyAssignment(jwtToken).then(setAssignment).catch(() => setAssignment(null));
+  }, [jwtToken]);
 
   const { position, permission } = useGeolocation({
     shiftId: activeShift?.clientId,
@@ -35,6 +46,20 @@ export default function VisitPage() {
 
   const isOnShift = !!activeShift && !activeShift.endAt;
   const hasActiveVisit = !!activeVisit;
+
+  // Locally-recorded visits count as "visited" immediately, even before the
+  // server-computed assignment checklist has synced.
+  const locallyVisitedIds = useMemo(
+    () => new Set((localVisits ?? []).map((v) => v.panchayatId)),
+    [localVisits]
+  );
+
+  const assignedPanchayats = useMemo(() => {
+    if (!assignment?.block) return null;
+    return assignment.panchayats
+      .map((p) => ({ id: p.panchayatId, name: p.name, visited: p.visited || locallyVisitedIds.has(p.panchayatId) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [assignment, locallyVisitedIds]);
 
   const groupedPanchayats = useMemo(() => {
     if (!panchayats) return {};
@@ -147,23 +172,62 @@ export default function VisitPage() {
       </div>
 
       {/* Panchayat selector */}
-      <div className="field-group" style={{ marginBottom: '1rem' }}>
-        <label className="field-label" htmlFor="checkin-panchayat">{t.selectPanchayatTitle}</label>
-        <select
-          id="checkin-panchayat"
-          className="field-input"
-          value={selectedPanchayat}
-          onChange={(e) => setSelectedPanchayat(e.target.value)}
-        >
-          <option value="">{t.choosePanchayat}</option>
-          {Object.entries(groupedPanchayats).sort().map(([district, list]) => (
-            <optgroup key={district} label={district}>
-              {list.sort((a, b) => a.name.localeCompare(b.name)).map((p) => (
-                <option key={p.id} value={p.id}>{p.name} ({p.block})</option>
+      <div style={{ marginBottom: '1rem' }}>
+        <label className="field-label" style={{ display: 'block', marginBottom: '0.5rem' }}>{t.selectPanchayatTitle}</label>
+
+        {assignedPanchayats ? (
+          <>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+              {t.yourAssignedBlock}: <strong style={{ color: 'var(--text-primary)' }}>{assignment!.block}</strong>
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.6rem' }}>
+              {assignedPanchayats.map((p) => {
+                const isSelected = selectedPanchayat === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelectedPanchayat(p.id)}
+                    style={{
+                      padding: '0.75rem',
+                      borderRadius: 'var(--radius-md)',
+                      border: isSelected ? '2px solid var(--color-primary-500)' : '1px solid var(--surface-border)',
+                      background: isSelected ? 'rgba(99,102,241,0.08)' : 'var(--surface-card, #fff)',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{p.name}</div>
+                    <div style={{ fontSize: '0.7rem', marginTop: '0.25rem', color: p.visited ? '#10b981' : 'var(--text-muted)' }}>
+                      {p.visited ? `✅ ${t.visitedBadge}` : `⏳ ${t.pendingBadge}`}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+              {t.noBlockAssignedCheckin}
+            </p>
+            <select
+              id="checkin-panchayat"
+              className="field-input"
+              value={selectedPanchayat}
+              onChange={(e) => setSelectedPanchayat(e.target.value)}
+            >
+              <option value="">{t.choosePanchayat}</option>
+              {Object.entries(groupedPanchayats).sort().map(([district, list]) => (
+                <optgroup key={district} label={district}>
+                  {list.sort((a, b) => a.name.localeCompare(b.name)).map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.block})</option>
+                  ))}
+                </optgroup>
               ))}
-            </optgroup>
-          ))}
-        </select>
+            </select>
+          </>
+        )}
       </div>
 
       {error && (
