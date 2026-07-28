@@ -20,6 +20,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<PatientReferral> Referrals => Set<PatientReferral>();
         public DbSet<TrajectoryPoint> TrajectoryPoints => Set<TrajectoryPoint>();
         public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
+        public DbSet<BlockAssignment> BlockAssignments => Set<BlockAssignment>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -111,6 +112,14 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => new { e.ClientId, e.DeviceId }).IsUnique();
                 entity.HasIndex(e => e.AgentId);
                 entity.HasIndex(e => e.PanchayatId);
+            });
+
+            // ─── BlockAssignment ─────────────────────────────────────
+            modelBuilder.Entity<BlockAssignment>(entity =>
+            {
+                entity.ToTable("block_assignments");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.AgentId, e.Status });
             });
         }
     }

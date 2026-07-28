@@ -165,4 +165,21 @@ namespace SeemanchalOutreach.Domain.Entities
         public double? AccuracyM { get; set; }
         public DateTime ServerReceivedAt { get; set; } = DateTime.UtcNow;
     }
+
+    // A block-level task handed to a field agent — "go cover Kasba block". Kept as its own
+    // history (rather than just overwriting FieldAgent.District/Block) so admins can see past
+    // assignments, not just the current one. Progress (visited vs total panchayats) is derived
+    // at read time from FieldVisit + Panchayat, not stored here.
+    public class BlockAssignment
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        public string District { get; set; } = string.Empty;
+        public string Block { get; set; } = string.Empty;
+        public string Status { get; set; } = "Active"; // Active | Completed | Cancelled
+        public string? AssignedByAgentId { get; set; }
+        public string? Notes { get; set; }
+        public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? CompletedAt { get; set; }
+    }
 }

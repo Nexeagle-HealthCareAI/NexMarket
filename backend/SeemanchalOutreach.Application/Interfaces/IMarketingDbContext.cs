@@ -16,6 +16,7 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<PatientReferral> Referrals { get; }
         DbSet<TrajectoryPoint> TrajectoryPoints { get; }
         DbSet<SurveyResponse> SurveyResponses { get; }
+        DbSet<BlockAssignment> BlockAssignments { get; }
 
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     }

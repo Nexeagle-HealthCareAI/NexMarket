@@ -309,6 +309,25 @@ async function put<TBody, TResponse>(
   return res.json() as Promise<TResponse>;
 }
 
+async function patch<TBody, TResponse>(
+  path: string,
+  body: TBody,
+  token: string,
+): Promise<TResponse> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`API ${path} → ${res.status}: ${text}`);
+  }
+
+  return res.json() as Promise<TResponse>;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export interface LoginRequestBody {
@@ -424,6 +443,65 @@ export function getReportsSummary(token: string, district?: string): Promise<Rep
 
 export function getPanchayats(token: string): Promise<PanchayatDto[]> {
   return get<PanchayatDto[]>('/api/v1/panchayats', token);
+}
+
+// ─── Admin: Block Assignments ──────────────────────────────────────────────────
+
+export interface AssignmentSummaryDto {
+  id: string;
+  agentId: string;
+  agentName: string;
+  district: string;
+  block: string;
+  status: 'Active' | 'Completed' | 'Cancelled';
+  notes: string | null;
+  assignedAt: string;
+  completedAt: string | null;
+  totalPanchayats: number;
+  visitedPanchayats: number;
+}
+
+export interface CreateAssignmentRequest {
+  agentId: string;
+  district: string;
+  block: string;
+  notes?: string;
+}
+
+export interface AssignmentPanchayatDto {
+  panchayatId: string;
+  name: string;
+  visited: boolean;
+  lastVisitedAt: string | null;
+}
+
+export interface MyAssignmentDto {
+  assignmentId: string | null;
+  district: string | null;
+  block: string | null;
+  assignedAt: string | null;
+  notes: string | null;
+  panchayats: AssignmentPanchayatDto[];
+}
+
+export function getAssignments(token: string): Promise<AssignmentSummaryDto[]> {
+  return get<AssignmentSummaryDto[]>('/api/v1/assignments', token);
+}
+
+export function createAssignment(token: string, body: CreateAssignmentRequest): Promise<AssignmentSummaryDto> {
+  return post<CreateAssignmentRequest, AssignmentSummaryDto>('/api/v1/assignments', body, token);
+}
+
+export function updateAssignmentStatus(
+  token: string,
+  id: string,
+  status: 'Active' | 'Completed' | 'Cancelled'
+): Promise<{ success: boolean }> {
+  return patch<{ status: string }, { success: boolean }>(`/api/v1/assignments/${encodeURIComponent(id)}`, { status }, token);
+}
+
+export function getMyAssignment(token: string): Promise<MyAssignmentDto> {
+  return get<MyAssignmentDto>('/api/v1/assignments/mine', token);
 }
 
 export interface AdminContactDto {
