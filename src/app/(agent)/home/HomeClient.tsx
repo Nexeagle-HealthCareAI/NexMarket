@@ -28,7 +28,7 @@ export default function HomeClient() {
   const deviceId = useAgentStore((s) => s.deviceId);
   const name = useAgentStore((s) => s.name);
   const setActiveShift = useAgentStore((s) => s.setActiveShift);
-  const t = useTranslations(); // LOAD TRANSLATIONS
+  const t = useTranslations();
 
   const activeShift = useActiveShift(agentId ?? undefined);
   const activeVisit = useActiveVisit(agentId ?? undefined);
@@ -81,142 +81,247 @@ export default function HomeClient() {
     (v) => new Date(v.checkInAt).toDateString() === new Date().toDateString()
   ).length ?? 0;
 
+  const dailyTarget = 20;
+  const progressPercent = Math.min((todayVisits / dailyTarget) * 100, 100);
+
   return (
     <motion.div 
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      style={{ paddingTop: '1rem' }}
+      style={{ padding: '0.5rem 0 2rem' }}
     >
-      {/* Header */}
-      <motion.div variants={itemVariants} style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <h1 style={{ fontSize: '1.3rem' }}>{t.greeting}, {name?.split(' ')[0] ?? 'Agent'} 🙏</h1>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
-            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </p>
-        </div>
-        <div className="sync-indicator">
-          {syncing ? (
-            <><svg className="spin" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>{t.syncing}</>
-          ) : outboxCount && outboxCount > 0 ? (
-            <button id="sync-now-btn" onClick={handleManualSync} style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 'var(--radius-full)', color: 'var(--color-warning)', fontSize: '0.75rem', fontWeight: 600, padding: '0.2rem 0.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>
-              {outboxCount} {t.pending}
-            </button>
-          ) : (
-            <span className="badge badge-online">{t.synced}</span>
-          )}
-        </div>
-      </motion.div>
+      {/* ─── Hero Welcome Section ────────────────────────────────────────── */}
+      <motion.div variants={itemVariants} style={{
+        background: 'linear-gradient(135deg, var(--color-primary-600) 0%, var(--color-primary-800) 100%)',
+        borderRadius: '1.5rem',
+        padding: '2rem 1.5rem',
+        color: 'white',
+        position: 'relative',
+        overflow: 'hidden',
+        boxShadow: '0 10px 25px -5px rgba(79, 70, 229, 0.4)',
+        marginBottom: '1.5rem'
+      }}>
+        {/* Decorative background circles */}
+        <div style={{ position: 'absolute', top: -50, right: -50, width: 150, height: 150, borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
+        <div style={{ position: 'absolute', bottom: -20, left: 100, width: 80, height: 80, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
 
-      {/* GPS status */}
-      <motion.div variants={itemVariants} className={`gps-banner ${permission === 'granted' && position ? 'locked' : permission === 'denied' ? 'denied' : 'acquiring'}`} style={{ marginBottom: '1rem' }}>
-        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 2a7 7 0 017 7c0 5.25-7 13-7 13S5 14.25 5 9a7 7 0 017-7z" /><circle cx={12} cy={9} r={3} /></svg>
-        {permission === 'granted' && position ? `GPS locked · ±${Math.round(position.accuracyM)}m` : permission === 'denied' ? 'GPS denied — enable location in browser settings' : 'Acquiring GPS…'}
-      </motion.div>
-
-      {/* Shift banner */}
-      <motion.div variants={itemVariants} className="shift-banner" style={{ marginBottom: '1.25rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t.todayShift}</p>
-            {isOnShift ? (
-              <p style={{ color: 'var(--color-success)', fontWeight: 700, fontSize: '0.95rem', marginTop: '0.125rem' }}>
-                🟢 {t.onShiftSince} {new Date(activeShift!.startAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-              </p>
+            <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+              {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </p>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.02em', marginBottom: '0.5rem' }}>
+              {t.greeting}, <br/>{name?.split(' ')[0] ?? 'Agent'}! 👋
+            </h1>
+            <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.9)' }}>
+              {isOnShift ? "You're doing great. Keep up the momentum!" : "Ready to start your day?"}
+            </p>
+          </div>
+          
+          {/* Sync Button floating on top right of hero */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+            {syncing ? (
+              <div style={{ background: 'rgba(255,255,255,0.2)', padding: '0.4rem 0.75rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600 }}>
+                <svg className="spin" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>
+                Syncing
+              </div>
+            ) : outboxCount && outboxCount > 0 ? (
+              <button onClick={handleManualSync} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '0.4rem 0.75rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)' }}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>
+                {outboxCount} Pending
+              </button>
             ) : (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.125rem' }}>{t.notStarted}</p>
+              <div style={{ background: 'rgba(255,255,255,0.2)', padding: '0.4rem 0.75rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600 }}>
+                <span style={{ width: 6, height: 6, background: '#4ade80', borderRadius: '50%' }} /> Synced
+              </div>
             )}
           </div>
-          <motion.button 
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            id={isOnShift ? 'end-shift-btn' : 'start-shift-btn'} 
-            className={`btn btn-sm ${isOnShift ? 'btn-danger' : 'btn-primary'}`} 
+        </div>
+
+        {/* Shift Control inside Hero */}
+        <div style={{ marginTop: '1.5rem', background: 'rgba(255,255,255,0.1)', padding: '1rem', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backdropFilter: 'blur(10px)' }}>
+          <div>
+            <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600, textTransform: 'uppercase' }}>Shift Status</p>
+            {isOnShift ? (
+              <p style={{ fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span style={{ width: 8, height: 8, background: '#4ade80', borderRadius: '50%', boxShadow: '0 0 8px #4ade80' }} />
+                Active since {new Date(activeShift!.startAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            ) : (
+              <p style={{ fontWeight: 600, fontSize: '0.95rem' }}>Not Started</p>
+            )}
+          </div>
+          <button 
             onClick={isOnShift ? handleEndShift : handleStartShift} 
             disabled={shiftLoading || permission === 'denied'}
+            style={{ 
+              background: isOnShift ? 'rgba(239,68,68,0.9)' : 'white', 
+              color: isOnShift ? 'white' : 'var(--color-primary-700)', 
+              border: 'none', padding: '0.6rem 1.25rem', borderRadius: '2rem', 
+              fontWeight: 800, cursor: 'pointer', transition: 'transform 0.2s',
+              boxShadow: isOnShift ? '0 4px 12px rgba(239,68,68,0.3)' : '0 4px 12px rgba(0,0,0,0.1)'
+            }}
           >
             {shiftLoading ? '…' : isOnShift ? t.endShift : t.startShift}
-          </motion.button>
+          </button>
         </div>
       </motion.div>
 
-      {/* Quick stats */}
-      <motion.div variants={itemVariants} className="grid-cols-responsive-3" style={{ marginBottom: '1.75rem' }}>
-        <motion.div whileHover={{ y: -5 }} className="card" style={{ textAlign: 'center' }}>
-          <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--color-primary-600)' }}>{todayContacts}</p>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t.todayContacts}</p>
+      {/* GPS Warning if needed */}
+      {(permission === 'denied' || (permission === 'prompt' && !position)) && (
+        <motion.div variants={itemVariants} style={{ background: '#fef2f2', border: '1px solid #f87171', color: '#991b1b', padding: '0.75rem 1rem', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '0.85rem' }}>
+          <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 2a7 7 0 017 7c0 5.25-7 13-7 13S5 14.25 5 9a7 7 0 017-7z" /><circle cx={12} cy={9} r={3} /></svg>
+          {permission === 'denied' ? 'Location access denied. Please enable it in browser settings to start your shift.' : 'Waiting for GPS signal...'}
         </motion.div>
-        <motion.div whileHover={{ y: -5 }} className="card" style={{ textAlign: 'center' }}>
-          <p style={{ fontSize: '2rem', fontWeight: 800, color: '#d97706' }}>{todayVisits}</p>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t.todayVisits}</p>
-        </motion.div>
-        <motion.div whileHover={{ y: -5 }} className="card" style={{ textAlign: 'center' }}>
-          <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--color-success)' }}>{contacts?.length ?? 0}</p>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t.totalContacts}</p>
-        </motion.div>
+      )}
+
+      {/* ─── Gamified Stats Widget ───────────────────────────────────────── */}
+      <motion.div variants={itemVariants} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
+        <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid var(--surface-border)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column' }}>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Daily Target</p>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <span style={{ fontSize: '2.5rem', fontWeight: 900, lineHeight: 1, color: 'var(--color-primary-600)', letterSpacing: '-0.05em' }}>{todayVisits}</span>
+            <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 600, paddingBottom: '0.3rem' }}>/ {dailyTarget}</span>
+          </div>
+          <div style={{ width: '100%', height: '8px', background: 'var(--surface-input)', borderRadius: '4px', overflow: 'hidden' }}>
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${progressPercent}%` }}
+              transition={{ duration: 1, ease: 'easeOut' }}
+              style={{ height: '100%', background: 'linear-gradient(90deg, var(--color-primary-400), var(--color-primary-600))', borderRadius: '4px' }} 
+            />
+          </div>
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem', fontWeight: 600 }}>
+            {dailyTarget - todayVisits > 0 ? `${dailyTarget - todayVisits} more visits to hit target!` : 'Target achieved! 🎉'}
+          </p>
+        </div>
+
+        <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid var(--surface-border)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '12px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>
+              👤
+            </div>
+            <div>
+              <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>{todayContacts}</p>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>New Contacts</p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '12px', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>
+              🏆
+            </div>
+            <div>
+              <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>{contacts?.length ?? 0}</p>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Total Base</p>
+            </div>
+          </div>
+        </div>
       </motion.div>
 
-      {/* Quick actions */}
-      <motion.h3 variants={itemVariants} style={{ marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>{t.quickActions}</motion.h3>
-      <motion.div variants={itemVariants} className="grid-cols-responsive-2">
+      {/* ─── Quick Actions Grid ──────────────────────────────────────────── */}
+      <motion.div variants={itemVariants} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>Quick Actions</h3>
+      </motion.div>
+      
+      <motion.div variants={itemVariants} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
         {activeVisit ? (
           <Link href={`/visit/${activeVisit.clientId}`} style={{ textDecoration: 'none' }}>
-            <motion.div whileHover={{ scale: 1.02 }} className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '1.5rem' }}>📍</span>
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '1rem', padding: '1.25rem', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div style={{ background: '#3b82f6', color: 'white', width: 40, height: 40, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', marginBottom: '1rem', boxShadow: '0 4px 10px rgba(59,130,246,0.3)' }}>
+                📍
+              </div>
               <div>
-                <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{t.activeVisit}</p>
-                <p style={{ fontSize: '0.8rem', color: 'var(--color-warning)' }}>Started {new Date(activeVisit.checkInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · Tap to check out</p>
+                <p style={{ fontWeight: 800, color: '#1e3a8a', fontSize: '0.95rem' }}>Resume Visit</p>
+                <p style={{ fontSize: '0.75rem', color: '#3b82f6', fontWeight: 600, marginTop: '0.2rem' }}>Started {new Date(activeVisit.checkInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
               </div>
             </motion.div>
           </Link>
         ) : (
-          <Link href="/visit" style={{ textDecoration: 'none', opacity: isOnShift ? 1 : 0.5, pointerEvents: isOnShift ? 'auto' : 'none' }}>
-            <motion.div whileHover={{ scale: isOnShift ? 1.02 : 1 }} className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '1.5rem' }}>📍</span>
+          <Link href="/visit" style={{ textDecoration: 'none', opacity: isOnShift ? 1 : 0.6, pointerEvents: isOnShift ? 'auto' : 'none' }}>
+            <motion.div whileHover={{ scale: isOnShift ? 1.02 : 1 }} whileTap={{ scale: isOnShift ? 0.98 : 1 }} style={{ background: 'white', border: '1px solid var(--surface-border)', borderRadius: '1rem', padding: '1.25rem', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+              <div style={{ background: 'var(--surface-input)', color: '#0f172a', width: 40, height: 40, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', marginBottom: '1rem' }}>
+                📍
+              </div>
               <div>
-                <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{t.checkInPanchayat}</p>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{isOnShift ? 'Record your current location' : 'Start a shift first'}</p>
+                <p style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>Check In</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '0.2rem' }}>Start new field visit</p>
               </div>
             </motion.div>
           </Link>
         )}
 
         <Link href="/contacts/new" style={{ textDecoration: 'none' }}>
-          <motion.div whileHover={{ scale: 1.02 }} className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ fontSize: '1.5rem' }}>👤</span>
-            <div>
-              <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{t.addNewContact}</p>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Channel Partner · Key Account · Local Rep</p>
+          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} style={{ background: 'white', border: '1px solid var(--surface-border)', borderRadius: '1rem', padding: '1.25rem', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+            <div style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', width: 40, height: 40, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', marginBottom: '1rem' }}>
+              👤
             </div>
-          </motion.div>
-        </Link>
-
-        <Link href="/contacts" style={{ textDecoration: 'none' }}>
-          <motion.div whileHover={{ scale: 1.02 }} className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ fontSize: '1.5rem' }}>📋</span>
             <div>
-              <p style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{t.viewAllContacts}</p>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{contacts?.length ?? 0} contacts saved locally</p>
-            </div>
-          </motion.div>
-        </Link>
-
-        <Link href="/survey" style={{ textDecoration: 'none', gridColumn: '1 / -1' }}>
-          <motion.div whileHover={{ scale: 1.02 }} className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', color: 'white', border: 'none' }}>
-            <span style={{ fontSize: '2rem' }}>🎮</span>
-            <div>
-              <p style={{ color: 'white', fontWeight: 800, fontSize: '1.2rem' }}>Health Survey</p>
-              <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.8)' }}>Take the 3-minute gamified survey while talking to contacts</p>
+              <p style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>Add Contact</p>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '0.2rem' }}>Register new person</p>
             </div>
           </motion.div>
         </Link>
       </motion.div>
 
-      <motion.div variants={itemVariants} style={{ marginTop: '1.5rem', padding: '0.75rem', background: 'var(--surface-input)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-        {t.offlineNote}
+      {/* Gamified Survey Card */}
+      <motion.div variants={itemVariants} style={{ marginBottom: '2rem' }}>
+        <Link href="/survey" style={{ textDecoration: 'none' }}>
+          <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} style={{ 
+            background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', 
+            borderRadius: '1.25rem', padding: '1.5rem', color: 'white',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            boxShadow: '0 10px 25px -5px rgba(49, 46, 129, 0.4)'
+          }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#a5b4fc', background: 'rgba(165, 180, 252, 0.2)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>Gamified Mode</span>
+              </div>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: '0.25rem 0' }}>Health Survey 🎮</h3>
+              <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', fontWeight: 500, lineHeight: 1.4, maxWidth: '90%' }}>
+                Take the 3-minute interactive survey while talking to contacts.
+              </p>
+            </div>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+            </div>
+          </motion.div>
+        </Link>
       </motion.div>
+      
+      {/* ─── Recent Activity Feed (Empty State for now) ──────────────────── */}
+      <motion.div variants={itemVariants}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>Recent Activity</h3>
+          <Link href="/history" style={{ fontSize: '0.8rem', color: 'var(--color-primary-600)', fontWeight: 700, textDecoration: 'none' }}>View All</Link>
+        </div>
+        
+        {(!visits || visits.length === 0) ? (
+          <div style={{ background: 'white', borderRadius: '1rem', border: '1px solid var(--surface-border)', padding: '2rem 1rem', textAlign: 'center' }}>
+            <div style={{ width: 48, height: 48, background: 'var(--surface-input)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: '1.25rem' }}>⏳</div>
+            <p style={{ fontWeight: 600, color: '#0f172a', marginBottom: '0.25rem' }}>No recent activity</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Start a shift and check in to see history.</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {visits.sort((a, b) => new Date(b.checkInAt).getTime() - new Date(a.checkInAt).getTime()).slice(0, 3).map((visit) => {
+              const visitDate = new Date(visit.checkInAt);
+              return (
+                <div key={visit.clientId} style={{ background: 'white', borderRadius: '1rem', border: '1px solid var(--surface-border)', padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ width: 40, height: 40, background: '#eff6ff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
+                    📍
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>Panchayat Visit</p>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{visitDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · {visit.checkOutAt ? 'Completed' : 'Ongoing'}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </motion.div>
+
     </motion.div>
   );
 }

@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useOutboxCount } from '@/lib/db';
 import { startSyncPolling, registerBackgroundSync } from '@/lib/sync/engine';
 import { useAgentStore } from '@/store/agent-store';
@@ -57,14 +58,17 @@ const navItems = [
 export default function AgentLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const outboxCount = useOutboxCount();
-  const { agentId, name, role, profileCompleted, clearAuth } = useAgentStore((s) => ({
-    agentId: s.agentId,
-    name: s.name,
-    role: s.role,
-    profileCompleted: s.profileCompleted,
-    clearAuth: s.clearAuth,
-  }));
+  const { agentId, name, role, profileCompleted, clearAuth } = useAgentStore(
+    useShallow((s) => ({
+      agentId: s.agentId,
+      name: s.name,
+      role: s.role,
+      profileCompleted: s.profileCompleted,
+      clearAuth: s.clearAuth,
+    }))
+  );
 
   useEffect(() => {
     if (!agentId && typeof window !== 'undefined') {
@@ -82,6 +86,11 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
     void registerBackgroundSync();
   }, [agentId, profileCompleted, pathname, router]);
 
+  // Close drawer on path change
+  useEffect(() => {
+    setIsDrawerOpen(false);
+  }, [pathname]);
+
   // If on the onboarding page, render just children without sidebar navigation
   if (pathname.startsWith('/onboarding')) {
     return (
@@ -91,8 +100,165 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
     );
   }
 
+  const renderNavLinks = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0 0.5rem 0.4rem' }}>
+        Navigation
+      </div>
+      {navItems.map((item) => {
+        const isActive = pathname.startsWith(item.href);
+        const isVisit = item.href === '/visit';
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`sidebar-nav-link${isActive ? ' active' : ''}`}
+            onClick={() => setIsDrawerOpen(false)}
+          >
+            <span style={{ position: 'relative', display: 'flex' }}>
+              {item.icon}
+              {isVisit && outboxCount && outboxCount > 0 ? (
+                <span style={{
+                  position: 'absolute', top: -5, right: -6,
+                  background: 'var(--color-warning)', color: '#0f172a',
+                  borderRadius: '9999px', fontSize: '0.6rem', fontWeight: 700,
+                  padding: '1px 5px', minWidth: 16, textAlign: 'center'
+                }}>
+                  {outboxCount > 99 ? '99+' : outboxCount}
+                </span>
+              ) : null}
+            </span>
+            <span>{item.label}</span>
+          </Link>
+        );
+      })}
+      <Link
+        href="/admin/agents"
+        className="sidebar-nav-link"
+        onClick={() => setIsDrawerOpen(false)}
+        style={{ marginTop: '0.5rem', borderTop: '1px solid var(--surface-border)', paddingTop: '0.75rem' }}
+      >
+        <span style={{ display: 'flex' }}>
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 20, height: 20 }}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        </span>
+        <span>Admin Directory</span>
+      </Link>
+    </div>
+  );
+
+  const renderUserInfo = () => (
+    <>
+      <div style={{ background: 'var(--surface-input)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', padding: '0.85rem', marginBottom: '1.5rem' }}>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Logged in as</div>
+        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem', marginBottom: '0.2rem' }}>{name || 'Officer'}</div>
+        <div style={{ display: 'inline-block', background: 'rgba(99,102,241,0.15)', color: 'var(--color-primary-600)', fontSize: '0.75rem', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-sm)' }}>
+          {role || 'Marketing Executive'}
+        </div>
+      </div>
+    </>
+  );
+
+  const renderFooterInfo = () => (
+    <div>
+      <div style={{ background: 'var(--surface-input)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', padding: '0.75rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: outboxCount && outboxCount > 0 ? '#f59e0b' : '#10b981', display: 'inline-block' }} />
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            {outboxCount && outboxCount > 0 ? `${outboxCount} unsynced` : 'All Synced'}
+          </span>
+        </div>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Offline Safe</span>
+      </div>
+
+      <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'center' }}>
+        <LanguageSwitcher />
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          clearAuth();
+          router.replace('/login');
+        }}
+        style={{
+          width: '100%', padding: '0.65rem', background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444',
+          borderRadius: 'var(--radius-md)', fontWeight: 600, fontSize: '0.85rem',
+          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
+        }}
+      >
+        🚪 Sign Out
+      </button>
+    </div>
+  );
+
   return (
     <>
+      {/* ─── Mobile Top Nav (Visible on < 768px) ───────────────────────────── */}
+      <div className="mobile-top-nav">
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          onClick={() => setIsDrawerOpen(true)}
+          aria-label="Open menu"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        
+        <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#0f172a', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <div style={{
+            width: 24, height: 24,
+            background: 'linear-gradient(135deg, var(--color-primary-600), var(--color-primary-400))',
+            borderRadius: '6px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'white', fontWeight: 900, fontSize: '0.9rem',
+          }}>
+            N
+          </div>
+          NexMarket
+        </div>
+        
+        {/* Placeholder spacer for centering title */}
+        <div style={{ width: 40 }} />
+      </div>
+
+      {/* ─── Mobile Drawer Overlay ───────────────────────────────────────────── */}
+      <div 
+        className={`mobile-drawer-overlay ${isDrawerOpen ? 'open' : ''}`}
+        onClick={() => setIsDrawerOpen(false)}
+        aria-hidden={!isDrawerOpen}
+      />
+
+      {/* ─── Mobile Drawer ───────────────────────────────────────────────────── */}
+      <aside className={`mobile-drawer ${isDrawerOpen ? 'open' : ''}`} aria-label="Mobile navigation">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
+          <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.02em' }}>
+            Menu
+          </div>
+          <button
+            onClick={() => setIsDrawerOpen(false)}
+            style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '0.5rem', margin: '-0.5rem' }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {renderUserInfo()}
+          {renderNavLinks()}
+        </div>
+        
+        <div style={{ marginTop: 'auto', paddingTop: '1.5rem' }}>
+          {renderFooterInfo()}
+        </div>
+      </aside>
+
       {/* ─── Desktop Left Sidebar (Visible on >= 768px) ────────────────────── */}
       <aside className="desktop-sidebar" aria-label="Desktop navigation">
         <div>
@@ -113,89 +279,12 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
             </div>
           </div>
 
-          <div style={{ background: 'var(--surface-input)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', padding: '0.85rem', marginBottom: '1.5rem' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Logged in as</div>
-            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem', marginBottom: '0.2rem' }}>{name || 'Officer'}</div>
-            <div style={{ display: 'inline-block', background: 'rgba(99,102,241,0.15)', color: 'var(--color-primary-600)', fontSize: '0.75rem', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-sm)' }}>
-              {role || 'Marketing Executive'}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0 0.5rem 0.4rem' }}>
-              Navigation
-            </div>
-            {navItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
-              const isVisit = item.href === '/visit';
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`sidebar-nav-link${isActive ? ' active' : ''}`}
-                >
-                  <span style={{ position: 'relative', display: 'flex' }}>
-                    {item.icon}
-                    {isVisit && outboxCount && outboxCount > 0 ? (
-                      <span style={{
-                        position: 'absolute', top: -5, right: -6,
-                        background: 'var(--color-warning)', color: '#0f172a',
-                        borderRadius: '9999px', fontSize: '0.6rem', fontWeight: 700,
-                        padding: '1px 5px', minWidth: 16, textAlign: 'center'
-                      }}>
-                        {outboxCount > 99 ? '99+' : outboxCount}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
-            <Link
-              href="/admin/agents"
-              className="sidebar-nav-link"
-              style={{ marginTop: '0.5rem', borderTop: '1px solid var(--surface-border)', paddingTop: '0.75rem' }}
-            >
-              <span style={{ display: 'flex' }}>
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 20, height: 20 }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              </span>
-              <span>Admin Directory</span>
-            </Link>
-          </div>
+          {renderUserInfo()}
+          {renderNavLinks()}
         </div>
 
         <div>
-          <div style={{ background: 'var(--surface-input)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', padding: '0.75rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: outboxCount && outboxCount > 0 ? '#f59e0b' : '#10b981', display: 'inline-block' }} />
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                {outboxCount && outboxCount > 0 ? `${outboxCount} unsynced` : 'All Synced'}
-              </span>
-            </div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Offline Safe</span>
-          </div>
-
-          <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'center' }}>
-            <LanguageSwitcher />
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              clearAuth();
-              router.replace('/login');
-            }}
-            style={{
-              width: '100%', padding: '0.65rem', background: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444',
-              borderRadius: 'var(--radius-md)', fontWeight: 600, fontSize: '0.85rem',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
-            }}
-          >
-            🚪 Sign Out
-          </button>
+          {renderFooterInfo()}
         </div>
       </aside>
 
@@ -205,47 +294,6 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
         <NotificationListener />
         {children}
       </main>
-
-      {/* ─── Mobile Bottom Nav (Visible on < 768px) ─────────────────────────── */}
-      <nav className="bottom-nav" role="navigation" aria-label="Agent navigation">
-        {navItems.map((item) => {
-          const isActive = pathname.startsWith(item.href);
-          const isVisit = item.href === '/visit';
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`nav-item${isActive ? ' active' : ''}`}
-              aria-current={isActive ? 'page' : undefined}
-            >
-              <span style={{ position: 'relative' }}>
-                {item.icon}
-                {isVisit && outboxCount && outboxCount > 0 && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: -4,
-                      right: -6,
-                      background: 'var(--color-warning)',
-                      color: '#0f172a',
-                      borderRadius: '9999px',
-                      fontSize: '0.6rem',
-                      fontWeight: 700,
-                      padding: '1px 5px',
-                      minWidth: 16,
-                      textAlign: 'center',
-                    }}
-                    aria-label={`${outboxCount} items pending sync`}
-                  >
-                    {outboxCount > 99 ? '99+' : outboxCount}
-                  </span>
-                )}
-              </span>
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
     </>
   );
 }

@@ -19,99 +19,137 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--surface-bg)' }}>
-      {/* Top Admin Navbar */}
-      <header
+    <div style={{ minHeight: '100vh', display: 'flex', background: '#f8fafc' }}>
+      
+      {/* Sidebar Navigation */}
+      <aside
         style={{
-          background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(12px)',
-          borderBottom: '1px solid var(--surface-border)',
-          padding: '0.75rem 1.5rem',
+          width: '280px',
+          background: 'linear-gradient(180deg, #1e1b4b 0%, #312e81 100%)',
+          color: 'white',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          position: 'sticky',
+          flexDirection: 'column',
+          position: 'fixed',
           top: 0,
+          bottom: 0,
+          left: 0,
           zIndex: 50,
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
+          boxShadow: '4px 0 24px rgba(0,0,0,0.1)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        {/* Sidebar Header */}
+        <div style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
           <div
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: '8px',
-              background: 'linear-gradient(135deg, var(--color-primary-600), var(--color-primary-500))',
+              width: 40,
+              height: 40,
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #4ade80, #3b82f6)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: 'white',
               fontWeight: 900,
               fontSize: '1.25rem',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+              boxShadow: '0 4px 12px rgba(59,130,246,0.3)',
             }}
           >
             N
           </div>
           <div>
-            <h1 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
+            <h1 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'white', margin: 0, letterSpacing: '-0.02em' }}>
               NexMarket
             </h1>
-            <p style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', margin: 0, fontWeight: 600 }}>
-              Field Outreach · Admin Portal
+            <p style={{ fontSize: '0.75rem', color: '#a5b4fc', margin: 0, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Admin Portal
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <nav style={{ display: 'flex', gap: '0.5rem' }}>
-            {adminNavItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.4rem 0.85rem',
-                    borderRadius: '6px',
-                    fontSize: '0.85rem',
-                    fontWeight: 600,
-                    textDecoration: 'none',
-                    color: isActive ? '#fff' : 'var(--text-secondary)',
-                    background: isActive ? 'var(--color-primary-600)' : 'transparent',
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  <span>{item.icon}</span>
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
-          </nav>
+        {/* Navigation Links */}
+        <nav style={{ flex: 1, padding: '1.5rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto' }}>
+          <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem', paddingLeft: '0.75rem' }}>Management</p>
+          {adminNavItems.map((item) => {
+            const isActive = pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  padding: '0.75rem 1rem',
+                  borderRadius: '10px',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  color: isActive ? 'white' : '#c7d2fe',
+                  background: isActive ? 'rgba(255,255,255,0.15)' : 'transparent',
+                  border: '1px solid',
+                  borderColor: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
+                  transition: 'all 0.2s ease',
+                  boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                <span style={{ fontSize: '1.1rem' }}>{item.icon}</span>
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
 
-          <div style={{ height: 24, width: 1, background: 'var(--surface-border)' }} />
-
-          <LanguageSwitcher />
-
-          <div style={{ height: 24, width: 1, background: 'var(--surface-border)' }} />
-
+        {/* Sidebar Footer */}
+        <div style={{ padding: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ background: 'rgba(255,255,255,0.1)', padding: '0.5rem', borderRadius: '8px', display: 'flex', justifyContent: 'center' }}>
+            <LanguageSwitcher />
+          </div>
+          
           <Link
             href="/home"
-            className="btn btn-ghost btn-sm"
-            style={{ fontSize: '0.8rem', color: 'var(--color-primary-600)', borderColor: 'rgba(99, 102, 241, 0.3)' }}
+            style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+              padding: '0.75rem', borderRadius: '10px', background: 'white', color: '#1e1b4b',
+              fontSize: '0.85rem', fontWeight: 800, textDecoration: 'none',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.2)', transition: 'transform 0.2s'
+            }}
           >
-            📱 Switch to Field Agent App
+            <span>📱</span> Agent App
           </Link>
         </div>
-      </header>
+      </aside>
 
       {/* Main Content Area */}
-      <main style={{ flex: 1, padding: '1.5rem', maxWidth: 1600, width: '100%', margin: '0 auto' }}>
-        {children}
+      <main style={{ marginLeft: '280px', flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        
+        {/* Top bar (for spacing and maybe global actions in future) */}
+        <header style={{ 
+          height: '70px', 
+          background: 'rgba(255, 255, 255, 0.8)', 
+          backdropFilter: 'blur(12px)',
+          borderBottom: '1px solid #e2e8f0',
+          position: 'sticky',
+          top: 0,
+          zIndex: 40,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          padding: '0 2rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>Admin User</p>
+              <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>admin@nexmarket.com</p>
+            </div>
+            <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#4338ca' }}>
+              AD
+            </div>
+          </div>
+        </header>
+
+        <div style={{ padding: '2rem', flex: 1, maxWidth: 1600, width: '100%', margin: '0 auto' }}>
+          {children}
+        </div>
       </main>
     </div>
   );
