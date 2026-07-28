@@ -12,11 +12,12 @@ import NotificationListener from '@/components/NotificationListener';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { AnimatePresence, motion } from 'framer-motion';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
+import { useTranslations } from '@/i18n/I18nProvider';
 
-const navItems = [
+const navItems = (t: any) => [
   {
     href: '/home',
-    label: 'Home',
+    label: t.navHome,
     icon: (
       <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -26,7 +27,7 @@ const navItems = [
   },
   {
     href: '/contacts',
-    label: 'Contacts',
+    label: t.navContacts,
     icon: (
       <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -36,7 +37,7 @@ const navItems = [
   },
   {
     href: '/visit',
-    label: 'Visit',
+    label: t.navVisit,
     icon: (
       <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -47,7 +48,7 @@ const navItems = [
   },
   {
     href: '/history',
-    label: 'History',
+    label: t.navHistory,
     icon: (
       <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round"
@@ -71,6 +72,8 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
       clearAuth: s.clearAuth,
     }))
   );
+  
+  const t = useTranslations();
 
   useEffect(() => {
     if (!agentId && typeof window !== 'undefined') {
@@ -105,9 +108,9 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   const renderNavLinks = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
       <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0 0.5rem 0.4rem' }}>
-        Navigation
+        {t.navigation}
       </div>
-      {navItems.map((item) => {
+      {navItems(t).map((item) => {
         const isActive = pathname.startsWith(item.href);
         const isVisit = item.href === '/visit';
         return (
@@ -145,7 +148,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
           </svg>
         </span>
-        <span>Admin Directory</span>
+        <span>{t.navAdmin}</span>
       </Link>
     </div>
   );
@@ -153,10 +156,10 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   const renderUserInfo = () => (
     <>
       <div style={{ background: 'var(--surface-input)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', padding: '0.85rem', marginBottom: '1.5rem' }}>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Logged in as</div>
-        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem', marginBottom: '0.2rem' }}>{name || 'Officer'}</div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>{t.loggedInAs}</div>
+        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem', marginBottom: '0.2rem' }}>{name || t.officerRole}</div>
         <div style={{ display: 'inline-block', background: 'rgba(99,102,241,0.15)', color: 'var(--color-primary-600)', fontSize: '0.75rem', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-sm)' }}>
-          {role || 'Marketing Executive'}
+          {role || t.defaultRole}
         </div>
       </div>
     </>
@@ -168,10 +171,10 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: outboxCount && outboxCount > 0 ? '#f59e0b' : '#10b981', display: 'inline-block' }} />
           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            {outboxCount && outboxCount > 0 ? `${outboxCount} unsynced` : 'All Synced'}
+            {outboxCount && outboxCount > 0 ? `${outboxCount} ${t.unsynced}` : t.allSynced}
           </span>
         </div>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Offline Safe</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t.offlineSafe}</span>
       </div>
 
       <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'center' }}>
@@ -191,7 +194,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
           cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
         }}
       >
-        🚪 Sign Out
+        🚪 {t.signOut}
       </button>
     </div>
   );
@@ -205,7 +208,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
             NexMarket
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', fontWeight: 700, letterSpacing: '0.02em' }}>
-            Namaste, {name?.split(' ')[0] ?? 'Agent'} 👋
+            {t.greeting}, {name?.split(' ')[0] ?? t.defaultAgentName} 👋
           </div>
         </div>
         
@@ -234,7 +237,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem', padding: '0 0.5rem' }}>
             <div>
               <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.02em' }}>NexMarket</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', fontWeight: 600 }}>Outreach Portal</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', fontWeight: 600 }}>{t.outreachPortal}</div>
             </div>
           </div>
 

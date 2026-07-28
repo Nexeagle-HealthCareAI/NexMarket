@@ -2,112 +2,99 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '@/lib/db';
+import { db, useActiveVisit } from '@/lib/db';
 import { addToOutbox } from '@/lib/sync/outbox';
 import { useAgentStore } from '@/store/agent-store';
+import { useTranslations } from '@/i18n/I18nProvider';
 
-const questions = [
-  { id: 'q1', icon: '🩺', text: 'What are the most common health problems people in this area currently deal with?', type: 'text' },
-  { id: 'q2', icon: '🏥', text: 'Where do people usually go when they need treatment beyond what is available here?', type: 'text' },
-  { id: 'q3', icon: '🧳', text: 'Roughly how many people a month need to travel outside for surgery or specialist treatment?', type: 'number' },
-  { id: 'q4', icon: '💧', text: 'Do you commonly see or hear about kidney stone, urinary, or prostate problems here?', type: 'options', options: ['Yes, very common', 'Sometimes', 'Rarely', 'No'] },
-  { id: 'q5', icon: '🚰', text: 'What is the main drinking water source here?', type: 'options', options: ['Hand Pump', 'Piped Water', 'River', 'Other'] },
-  { id: 'q6', icon: '🤝', text: 'Who do people trust most when deciding where to go for treatment?', type: 'options', options: ['ASHA Worker', 'Local Doctor (RMP)', 'Family/Friends', 'Mukhiya/Sarpanch'] },
-  { id: 'q7', icon: '💳', text: 'Have people here used an Ayushman Bharat/PM-JAY card for treatment?', type: 'options', options: ['Yes, frequently', 'Yes, but rarely', 'No, they dont know how', 'No, they dont have cards'] },
-  { id: 'q8', icon: '🚧', text: 'What stops people from going to a hospital for specialist care when they need it?', type: 'text' },
-  { id: 'q9', icon: '📞', text: 'Would you be open to referring a patient to a specialist hospital if you could call and check with the doctor first?', type: 'options', options: ['Yes, absolutely', 'Maybe, need to see first', 'No'] },
-  { id: 'q10', icon: '🏆', text: 'Is there another hospital or clinic people here currently prefer, and why?', type: 'text' },
-  { id: 'q11', icon: '🚑', text: 'When someone has a medical emergency here, how do they currently reach a hospital?', type: 'options', options: ['Private Vehicle', 'Shared Auto/Jeep', 'Govt Ambulance (108)', 'No reliable option'] },
-  { id: 'q12', icon: '⏱️', text: 'How long does it typically take to get someone to a hospital in an emergency from here?', type: 'text' },
-  { id: 'q13', icon: '⚠️', text: 'Has anyone here suffered serious harm due to delay in reaching a hospital? (Log pattern only)', type: 'text' },
-];
+type Answer = string | number | string[];
 
 export default function SurveyClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const t = useTranslations();
   const agentId = useAgentStore((s) => s.agentId);
   const deviceId = useAgentStore((s) => s.deviceId);
+  const activeVisit = useActiveVisit(agentId ?? undefined);
+
+  const QUESTIONS = [
+    { id: 'q1', text: t.q1, type: 'text' },
+    { id: 'q2', text: t.q2, type: 'text' },
+    { id: 'q3', text: t.q3, type: 'number' },
+    { id: 'q4', text: t.q4, type: 'single', options: [t.q4_o1, t.q4_o2, t.q4_o3, t.q4_o4] },
+    { id: 'q5', text: t.q5, type: 'single', options: [t.q5_o1, t.q5_o2, t.q5_o3, t.q5_o4] },
+    { id: 'q6', text: t.q6, type: 'single', options: [t.q6_o1, t.q6_o2, t.q6_o3, t.q6_o4] },
+    { id: 'q7', text: t.q7, type: 'single', options: [t.q7_o1, t.q7_o2, t.q7_o3, t.q7_o4] },
+    { id: 'q8', text: t.q8, type: 'text' },
+    { id: 'q9', text: t.q9, type: 'single', options: [t.q9_o1, t.q9_o2, t.q9_o3] },
+    { id: 'q10', text: t.q10, type: 'text' },
+    { id: 'q11', text: t.q11, type: 'single', options: [t.q11_o1, t.q11_o2, t.q11_o3, t.q11_o4] },
+    { id: 'q12', text: t.q12, type: 'text' },
+    { id: 'q13', text: t.q13, type: 'text' }
+  ];
 
   const [currentIdx, setCurrentIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [inputValue, setInputValue] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [responses, setResponses] = useState<Record<string, Answer>>({});
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Hide sidebar for this page for full immersion
     document.body.classList.add('survey-mode');
     return () => {
       document.body.classList.remove('survey-mode');
     };
   }, []);
 
+  const handleInput = (val: Answer) => {
+    setResponses({ ...responses, [QUESTIONS[currentIdx].id]: val });
+  };
+
   const handleNext = async () => {
-    const q = questions[currentIdx];
-    const newAnswers = { ...answers, [q.id]: inputValue };
-    setAnswers(newAnswers);
-    setInputValue('');
-
-    if (currentIdx < questions.length - 1) {
+    if (currentIdx < QUESTIONS.length - 1) {
       setCurrentIdx(currentIdx + 1);
     } else {
-      await submitSurvey(newAnswers);
+      await submitSurvey();
     }
   };
 
-  const handleOption = async (opt: string) => {
-    const q = questions[currentIdx];
-    const newAnswers = { ...answers, [q.id]: opt };
-    setAnswers(newAnswers);
-    
-    if (currentIdx < questions.length - 1) {
-      setCurrentIdx(currentIdx + 1);
-    } else {
-      await submitSurvey(newAnswers);
-    }
-  };
-
-  const submitSurvey = async (finalAnswers: Record<string, string>) => {
+  const submitSurvey = async () => {
     if (!agentId || !deviceId) return;
-    setIsSubmitting(true);
+    setLoading(true);
     try {
       const clientId = uuidv4();
-      
-      // Look up active visit/panchayat context
-      const shifts = await db.shifts.where('agentId').equals(agentId).toArray();
-      const activeShift = shifts.find(s => !s.endAt);
-      const visits = await db.visits.where('agentId').equals(agentId).toArray();
-      const activeVisit = visits.find(v => !v.checkOutAt);
+      const responsesRecord = Object.fromEntries(
+        Object.entries(responses).map(([k, v]) => [k, String(v)])
+      );
 
       const surveyRecord = {
         clientId,
         deviceId,
         agentId,
         panchayatId: activeVisit?.panchayatId,
-        answersJson: JSON.stringify(finalAnswers),
+        answersJson: JSON.stringify(responsesRecord),
         createdAt: new Date().toISOString(),
       };
 
       await db.surveyResponses.add(surveyRecord);
       await addToOutbox(clientId, deviceId, 'survey', surveyRecord);
-      
       router.push('/home');
     } catch (e) {
       console.error(e);
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
-  const q = questions[currentIdx];
-  const progress = ((currentIdx) / questions.length) * 100;
+  const q = QUESTIONS[currentIdx];
+  const progress = ((currentIdx) / QUESTIONS.length) * 100;
 
-  if (isSubmitting) {
+  if (loading) {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--color-primary-900)' }}>
         <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }}>
           <span style={{ fontSize: '3rem' }}>⏳</span>
         </motion.div>
-        <h2 style={{ color: 'white', marginTop: '1rem' }}>Saving Survey...</h2>
+        <h2 style={{ color: 'white', marginTop: '1rem' }}>{t.savingSurvey}...</h2>
       </div>
     );
   }
@@ -115,7 +102,6 @@ export default function SurveyClient() {
   return (
     <div style={{ height: '100vh', width: '100%', background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', color: 'white', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       
-      {/* Progress Bar */}
       <div style={{ width: '100%', height: 6, background: 'rgba(255,255,255,0.2)' }}>
         <motion.div 
           initial={{ width: 0 }} 
@@ -126,8 +112,8 @@ export default function SurveyClient() {
       </div>
 
       <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={() => router.back()} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1rem', cursor: 'pointer', opacity: 0.7 }}>✕ Cancel</button>
-        <span style={{ fontWeight: 600, opacity: 0.8 }}>{currentIdx + 1} of {questions.length}</span>
+        <button onClick={() => router.back()} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1rem', cursor: 'pointer', opacity: 0.7 }}>{t.surveyCancel}</button>
+        <span style={{ fontWeight: 600, opacity: 0.8 }}>{currentIdx + 1} of {QUESTIONS.length}</span>
       </div>
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
@@ -140,19 +126,18 @@ export default function SurveyClient() {
             transition={{ duration: 0.4, ease: 'easeOut' }}
             style={{ width: '100%', maxWidth: 600 }}
           >
-            <div style={{ fontSize: '4rem', marginBottom: '1rem', textAlign: 'center' }}>{q.icon}</div>
             <h1 style={{ fontSize: '1.8rem', fontWeight: 800, lineHeight: 1.3, marginBottom: '2rem', textAlign: 'center' }}>
               {q.text}
             </h1>
 
-            {q.type === 'options' ? (
+            {q.type === 'single' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {q.options!.map((opt, i) => (
                   <motion.button
                     key={opt}
                     whileHover={{ scale: 1.02, background: 'rgba(255,255,255,0.2)' }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => handleOption(opt)}
+                    onClick={() => { handleInput(opt); handleNext(); }}
                     style={{
                       background: 'rgba(255,255,255,0.1)',
                       border: '2px solid rgba(255,255,255,0.2)',
@@ -181,18 +166,17 @@ export default function SurveyClient() {
                   <input 
                     type="number"
                     autoFocus
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && inputValue && handleNext()}
-                    placeholder="Type a number..."
+                    value={responses[q.id] as number || ''}
+                    onChange={(e) => handleInput(Number(e.target.value))}
+                    placeholder={t.typeNumber}
                     style={{ background: 'transparent', border: 'none', borderBottom: '3px solid rgba(255,255,255,0.3)', color: 'white', fontSize: '2rem', padding: '1rem 0', outline: 'none', textAlign: 'center' }}
                   />
                 ) : (
                   <textarea 
                     autoFocus
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="Type your answer here..."
+                    value={responses[q.id] as string || ''}
+                    onChange={(e) => handleInput(e.target.value)}
+                    placeholder={t.typeAnswer}
                     rows={3}
                     style={{ background: 'rgba(255,255,255,0.1)', border: '2px solid rgba(255,255,255,0.2)', borderRadius: '12px', color: 'white', fontSize: '1.2rem', padding: '1rem', outline: 'none', resize: 'none', width: '100%' }}
                   />
@@ -203,22 +187,22 @@ export default function SurveyClient() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={handleNext}
-                    disabled={!inputValue.trim()}
+                    disabled={!responses[q.id]}
                     style={{
-                      background: inputValue.trim() ? '#fbbf24' : 'rgba(255,255,255,0.2)',
-                      color: inputValue.trim() ? '#7c3aed' : 'rgba(255,255,255,0.5)',
+                      background: responses[q.id] ? '#fbbf24' : 'rgba(255,255,255,0.2)',
+                      color: responses[q.id] ? '#7c3aed' : 'rgba(255,255,255,0.5)',
                       border: 'none',
                       padding: '1rem 3rem',
                       borderRadius: '30px',
                       fontSize: '1.2rem',
                       fontWeight: 800,
-                      cursor: inputValue.trim() ? 'pointer' : 'not-allowed',
+                      cursor: responses[q.id] ? 'pointer' : 'not-allowed',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.5rem'
                     }}
                   >
-                    OK ➔
+                    {loading ? t.savingSurvey : t.okNext}
                   </motion.button>
                 </div>
               </div>

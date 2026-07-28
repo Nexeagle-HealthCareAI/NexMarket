@@ -8,6 +8,7 @@ import { usePanchayats, useActiveShift, useActiveVisit, db } from '@/lib/db';
 import { addToOutbox } from '@/lib/sync/outbox';
 import { useGeolocation } from '@/lib/geo/useGeolocation';
 import type { LocalVisit } from '@/lib/db/schema';
+import { useTranslations } from '@/i18n/I18nProvider';
 
 export default function VisitPage() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function VisitPage() {
   const panchayats = usePanchayats();
   const activeShift = useActiveShift(agentId ?? undefined);
   const activeVisit = useActiveVisit(agentId ?? undefined);
+  const t = useTranslations();
 
   const [selectedPanchayat, setSelectedPanchayat] = useState('');
   const [error, setError] = useState('');
@@ -43,8 +45,8 @@ export default function VisitPage() {
   }, [panchayats]);
 
   async function handleCheckIn() {
-    if (!position) { setError('Waiting for GPS fix…'); return; }
-    if (!selectedPanchayat) { setError('Select a panchayat first'); return; }
+    if (!position) { setError(t.errWaitGps); return; }
+    if (!selectedPanchayat) { setError(t.errSelectPanchayat); return; }
     if (!agentId || !deviceId) return;
 
     setLoading(true);
@@ -70,7 +72,7 @@ export default function VisitPage() {
       setActiveVisit(clientId);
       router.push(`/visit/${clientId}`);
     } catch {
-      setError('Failed to check in. Try again.');
+      setError(t.errCheckIn);
     } finally {
       setLoading(false);
     }
@@ -80,10 +82,10 @@ export default function VisitPage() {
     return (
       <div className="empty-state" style={{ paddingTop: '4rem' }}>
         <div className="empty-state-icon">⏰</div>
-        <h2>No Active Shift</h2>
-        <p style={{ fontSize: '0.85rem' }}>Start your shift from the Home screen before checking in</p>
+        <h2>{t.noActiveShift}</h2>
+        <p style={{ fontSize: '0.85rem' }}>{t.startShiftDesc}</p>
         <button className="btn btn-primary" onClick={() => router.push('/home')} style={{ marginTop: '0.5rem' }}>
-          Go to Home
+          {t.goToHome}
         </button>
       </div>
     );
@@ -93,13 +95,13 @@ export default function VisitPage() {
     return (
       <div>
         <div className="page-header">
-          <h1>Current Visit</h1>
+          <h1>{t.currentVisit}</h1>
         </div>
         <div className="shift-banner" style={{ marginBottom: '1rem', textAlign: 'center' }}>
           <p style={{ fontSize: '2rem' }}>📍</p>
-          <p style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Visit in progress</p>
+          <p style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{t.visitInProgress}</p>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Checked in at {new Date(activeVisit.checkInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            {t.checkedInAt} {new Date(activeVisit.checkInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
           </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -108,14 +110,14 @@ export default function VisitPage() {
             className="btn btn-primary btn-full btn-lg"
             onClick={() => router.push(`/visit/${activeVisit.clientId}`)}
           >
-            View Visit Details & Check Out
+            {t.viewVisitDetails}
           </button>
           <button
             id="new-contact-in-visit-btn"
             className="btn btn-ghost btn-full"
             onClick={() => router.push('/contacts/new')}
           >
-            + Add Contact in This Panchayat
+            {t.addContactPanchayat}
           </button>
         </div>
       </div>
@@ -125,7 +127,7 @@ export default function VisitPage() {
   return (
     <div>
       <div className="page-header">
-        <h1>Check In</h1>
+        <h1>{t.checkInTitle}</h1>
       </div>
 
       {/* GPS status */}
@@ -138,22 +140,22 @@ export default function VisitPage() {
           <circle cx={12} cy={9} r={3} />
         </svg>
         {permission === 'granted' && position
-          ? `GPS locked · ${position.lat.toFixed(5)}, ${position.lng.toFixed(5)} · ±${Math.round(position.accuracyM)}m`
+          ? `${t.gpsLocked} ${position.lat.toFixed(5)}, ${position.lng.toFixed(5)} · ±${Math.round(position.accuracyM)}m`
           : permission === 'denied'
-          ? 'Location denied — required for check-in'
-          : 'Acquiring GPS position…'}
+          ? t.gpsDenied
+          : t.acquiringGps}
       </div>
 
       {/* Panchayat selector */}
       <div className="field-group" style={{ marginBottom: '1rem' }}>
-        <label className="field-label" htmlFor="checkin-panchayat">Select Panchayat *</label>
+        <label className="field-label" htmlFor="checkin-panchayat">{t.selectPanchayatTitle}</label>
         <select
           id="checkin-panchayat"
           className="field-input"
           value={selectedPanchayat}
           onChange={(e) => setSelectedPanchayat(e.target.value)}
         >
-          <option value="">Choose panchayat…</option>
+          <option value="">{t.choosePanchayat}</option>
           {Object.entries(groupedPanchayats).sort().map(([district, list]) => (
             <optgroup key={district} label={district}>
               {list.sort((a, b) => a.name.localeCompare(b.name)).map((p) => (
@@ -175,14 +177,14 @@ export default function VisitPage() {
         disabled={loading || permission === 'denied' || !position}
       >
         {loading
-          ? 'Checking in…'
+          ? t.checkingIn
           : !position
-          ? 'Waiting for GPS…'
-          : '📍 Check In Now'}
+          ? t.waitingGpsBtn
+          : t.checkInNow}
       </button>
 
       <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', textAlign: 'center', marginTop: '1rem' }}>
-        Your GPS location will be recorded at check-in and check-out
+        {t.gpsWarning}
       </p>
     </div>
   );

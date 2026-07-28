@@ -113,10 +113,10 @@ export default function HomeClient() {
               {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
             <h1 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.02em', marginBottom: '0.5rem' }}>
-              {t.greeting}, <br/>{name?.split(' ')[0] ?? 'Agent'}! 👋
+              {t.greeting}, <br/>{name?.split(' ')[0] ?? t.defaultAgentName}! 👋
             </h1>
             <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.9)' }}>
-              {isOnShift ? "You're doing great. Keep up the momentum!" : "Ready to start your day?"}
+              {isOnShift ? t.homeGreetingActive : t.homeGreetingInactive}
             </p>
           </div>
           
@@ -125,16 +125,16 @@ export default function HomeClient() {
             {syncing ? (
               <div style={{ background: 'rgba(255,255,255,0.2)', padding: '0.4rem 0.75rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600 }}>
                 <svg className="spin" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>
-                Syncing
+                {t.syncing}
               </div>
             ) : outboxCount && outboxCount > 0 ? (
               <button onClick={handleManualSync} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '0.4rem 0.75rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)' }}>
                 <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>
-                {outboxCount} Pending
+                {outboxCount} {t.pending}
               </button>
             ) : (
               <div style={{ background: 'rgba(255,255,255,0.2)', padding: '0.4rem 0.75rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600 }}>
-                <span style={{ width: 6, height: 6, background: '#4ade80', borderRadius: '50%' }} /> Synced
+                <span style={{ width: 6, height: 6, background: '#4ade80', borderRadius: '50%' }} /> {t.synced}
               </div>
             )}
           </div>
@@ -143,14 +143,14 @@ export default function HomeClient() {
         {/* Shift Control inside Hero */}
         <div style={{ marginTop: '1.5rem', background: 'rgba(255,255,255,0.1)', padding: '1rem', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backdropFilter: 'blur(10px)' }}>
           <div>
-            <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600, textTransform: 'uppercase' }}>Shift Status</p>
+            <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600, textTransform: 'uppercase' }}>{t.shiftStatus}</p>
             {isOnShift ? (
               <p style={{ color: 'white', fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <span style={{ width: 8, height: 8, background: '#4ade80', borderRadius: '50%', boxShadow: '0 0 8px #4ade80' }} />
-                Active since {new Date(activeShift!.startAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                {t.activeSince} {new Date(activeShift!.startAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
               </p>
             ) : (
-              <p style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem' }}>Not Started</p>
+              <p style={{ color: 'white', fontWeight: 600, fontSize: '0.95rem' }}>{t.notStarted}</p>
             )}
           </div>
           <button 
@@ -176,14 +176,14 @@ export default function HomeClient() {
       {(permission === 'denied' || (permission === 'prompt' && !position)) && (
         <motion.div variants={itemVariants} style={{ background: '#fef2f2', border: '1px solid #f87171', color: '#991b1b', padding: '0.75rem 1rem', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', fontSize: '0.85rem' }}>
           <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 2a7 7 0 017 7c0 5.25-7 13-7 13S5 14.25 5 9a7 7 0 017-7z" /><circle cx={12} cy={9} r={3} /></svg>
-          {permission === 'denied' ? 'Location access denied. Please enable it in browser settings to start your shift.' : 'Waiting for GPS signal...'}
+          {permission === 'denied' ? t.locationDenied : t.waitingGps}
         </motion.div>
       )}
 
       {/* ─── Gamified Stats Widget ───────────────────────────────────────── */}
       <motion.div variants={itemVariants} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
         <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid var(--surface-border)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column' }}>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Daily Target</p>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.5rem' }}>{t.dailyTarget}</p>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', marginBottom: '0.75rem' }}>
             <span style={{ fontSize: '2.5rem', fontWeight: 900, lineHeight: 1, color: 'var(--color-primary-600)', letterSpacing: '-0.05em' }}>{todayVisits}</span>
             <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 600, paddingBottom: '0.3rem' }}>/ {dailyTarget}</span>
@@ -197,7 +197,7 @@ export default function HomeClient() {
             />
           </div>
           <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem', fontWeight: 600 }}>
-            {dailyTarget - todayVisits > 0 ? `${dailyTarget - todayVisits} more visits to hit target!` : 'Target achieved! 🎉'}
+            {dailyTarget - todayVisits > 0 ? `${dailyTarget - todayVisits} ${t.moreVisitsToHitTarget}` : t.targetAchieved}
           </p>
         </div>
 
@@ -208,7 +208,7 @@ export default function HomeClient() {
             </div>
             <div>
               <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>{todayContacts}</p>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>New Contacts</p>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>{t.newContacts}</p>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -217,7 +217,7 @@ export default function HomeClient() {
             </div>
             <div>
               <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>{contacts?.length ?? 0}</p>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Total Base</p>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>{t.totalBase}</p>
             </div>
           </div>
         </div>
@@ -225,7 +225,7 @@ export default function HomeClient() {
 
       {/* ─── Quick Actions Grid ──────────────────────────────────────────── */}
       <motion.div variants={itemVariants} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>Quick Actions</h3>
+        <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>{t.quickActions}</h3>
       </motion.div>
       
       <motion.div variants={itemVariants} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
@@ -236,8 +236,8 @@ export default function HomeClient() {
                 📍
               </div>
               <div>
-                <p style={{ fontWeight: 800, color: '#1e3a8a', fontSize: '0.95rem' }}>Resume Visit</p>
-                <p style={{ fontSize: '0.75rem', color: '#3b82f6', fontWeight: 600, marginTop: '0.2rem' }}>Started {new Date(activeVisit.checkInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
+                <p style={{ fontWeight: 800, color: '#1e3a8a', fontSize: '0.95rem' }}>{t.resumeVisit}</p>
+                <p style={{ fontSize: '0.75rem', color: '#3b82f6', fontWeight: 600, marginTop: '0.2rem' }}>{t.started} {new Date(activeVisit.checkInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
               </div>
             </motion.div>
           </Link>
@@ -248,8 +248,8 @@ export default function HomeClient() {
                 📍
               </div>
               <div>
-                <p style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>Check In</p>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '0.2rem' }}>Start new field visit</p>
+                <p style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>{t.checkIn}</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '0.2rem' }}>{t.startNewFieldVisit}</p>
               </div>
             </motion.div>
           </Link>
@@ -261,8 +261,8 @@ export default function HomeClient() {
               👤
             </div>
             <div>
-              <p style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>Add Contact</p>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '0.2rem' }}>Register new person</p>
+              <p style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>{t.addContact}</p>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '0.2rem' }}>{t.registerNewPerson}</p>
             </div>
           </motion.div>
         </Link>
@@ -279,11 +279,11 @@ export default function HomeClient() {
           }}>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#a5b4fc', background: 'rgba(165, 180, 252, 0.2)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>Gamified Mode</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#a5b4fc', background: 'rgba(165, 180, 252, 0.2)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>{t.gamifiedMode}</span>
               </div>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: '0.25rem 0' }}>Health Survey 🎮</h3>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: '0.25rem 0' }}>{t.healthSurvey}</h3>
               <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', fontWeight: 500, lineHeight: 1.4, maxWidth: '90%' }}>
-                Take the 3-minute interactive survey while talking to contacts.
+                {t.surveyDesc}
               </p>
             </div>
             <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
@@ -296,15 +296,15 @@ export default function HomeClient() {
       {/* ─── Recent Activity Feed (Empty State for now) ──────────────────── */}
       <motion.div variants={itemVariants}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>Recent Activity</h3>
-          <Link href="/history" style={{ fontSize: '0.8rem', color: 'var(--color-primary-600)', fontWeight: 700, textDecoration: 'none' }}>View All</Link>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>{t.recentActivity}</h3>
+          <Link href="/history" style={{ fontSize: '0.8rem', color: 'var(--color-primary-600)', fontWeight: 700, textDecoration: 'none' }}>{t.viewAll}</Link>
         </div>
         
         {(!visits || visits.length === 0) ? (
           <div style={{ background: 'white', borderRadius: '1rem', border: '1px solid var(--surface-border)', padding: '2rem 1rem', textAlign: 'center' }}>
             <div style={{ width: 48, height: 48, background: 'var(--surface-input)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: '1.25rem' }}>⏳</div>
-            <p style={{ fontWeight: 600, color: '#0f172a', marginBottom: '0.25rem' }}>No recent activity</p>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Start a shift and check in to see history.</p>
+            <p style={{ fontWeight: 600, color: '#0f172a', marginBottom: '0.25rem' }}>{t.noRecentActivity}</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t.noRecentActivityDesc}</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -316,8 +316,8 @@ export default function HomeClient() {
                     📍
                   </div>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>Panchayat Visit</p>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{visitDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · {visit.checkOutAt ? 'Completed' : 'Ongoing'}</p>
+                    <p style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>{t.panchayatVisit}</p>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{visitDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · {visit.checkOutAt ? t.completed : t.ongoing}</p>
                   </div>
                 </div>
               );

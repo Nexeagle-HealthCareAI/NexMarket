@@ -6,12 +6,7 @@ import { useAgentStore } from '@/store/agent-store';
 import { useContacts, usePanchayats } from '@/lib/db';
 import type { ContactRole } from '@/lib/db/schema';
 
-const ROLE_LABELS: Record<ContactRole, string> = {
-  asha_worker: 'Channel Partner',
-  rmp_doctor: 'Key Account',
-  ward_member: 'Local Rep',
-  medicine_shop: 'Retail Outlet',
-};
+
 
 const ROLE_CLASSES: Record<ContactRole, string> = {
   asha_worker: 'role-asha',
@@ -21,6 +16,7 @@ const ROLE_CLASSES: Record<ContactRole, string> = {
 };
 
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslations } from '@/i18n/I18nProvider';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -36,6 +32,14 @@ export default function ContactsPage() {
   const agentId = useAgentStore((s) => s.agentId);
   const contacts = useContacts(agentId ?? undefined);
   const panchayats = usePanchayats();
+  const t = useTranslations();
+
+  const ROLE_LABELS: Record<ContactRole, string> = {
+    asha_worker: t.roleAshaWorker,
+    rmp_doctor: t.roleRmpDoctor,
+    ward_member: t.roleWardMember,
+    medicine_shop: t.roleMedicineShop,
+  };
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<ContactRole | 'all'>('all');
@@ -64,10 +68,10 @@ export default function ContactsPage() {
     <motion.div initial="hidden" animate="visible" variants={containerVariants}>
       <motion.div variants={itemVariants} className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h1>Contacts</h1>
+          <h1>{t.contactsPageTitle}</h1>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Link href="/contacts/new" className="btn btn-primary btn-sm" id="add-contact-btn">
-              + Add
+              {t.btnAdd}
             </Link>
           </motion.div>
         </div>
@@ -79,7 +83,7 @@ export default function ContactsPage() {
           id="contact-search"
           className="field-input"
           type="search"
-          placeholder="Search name, phone, panchayat…"
+          placeholder={t.searchPlaceholder}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
@@ -106,14 +110,14 @@ export default function ContactsPage() {
               transition: 'all 120ms ease',
             }}
           >
-            {role === 'all' ? 'All' : ROLE_LABELS[role]}
+            {role === 'all' ? t.filterAll : ROLE_LABELS[role]}
           </button>
         ))}
       </motion.div>
 
       {/* Count */}
       <motion.p variants={itemVariants} style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-        {filtered.length} contact{filtered.length !== 1 ? 's' : ''}
+        {filtered.length} {filtered.length !== 1 ? t.contactCountPlural : t.contactCount}
       </motion.p>
 
       {/* List */}
@@ -127,10 +131,10 @@ export default function ContactsPage() {
             className="empty-state"
           >
             <div className="empty-state-icon">👤</div>
-            <h3>No contacts yet</h3>
-            <p style={{ fontSize: '0.85rem' }}>Add contacts from the panchayats you visit</p>
+            <h3>{t.noContactsYet}</h3>
+            <p style={{ fontSize: '0.85rem' }}>{t.addContactsDesc}</p>
             <Link href="/contacts/new" className="btn btn-primary btn-sm" style={{ marginTop: '0.5rem' }}>
-              Add First Contact
+              {t.addFirstContact}
             </Link>
           </motion.div>
         ) : (
@@ -149,11 +153,11 @@ export default function ContactsPage() {
                             {contact.name}
                           </p>
                           {contact.potentialDuplicateOf?.length ? (
-                            <span className="badge badge-dup">⚠ Dup</span>
+                            <span className="badge badge-dup">{t.dupBadge}</span>
                           ) : null}
                         </div>
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          📍 {panchayatMap.get(contact.panchayatId) ?? 'Unknown panchayat'}
+                          📍 {panchayatMap.get(contact.panchayatId) ?? t.unknownPanchayat}
                         </p>
                         {contact.phone && (
                           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
@@ -162,13 +166,13 @@ export default function ContactsPage() {
                         )}
                         <div style={{ display: 'flex', gap: '0.375rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                           {contact.whatsappAdded && (
-                            <span className="badge" style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--color-success)' }}>WhatsApp ✓</span>
+                            <span className="badge" style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--color-success)' }}>{t.whatsappBadge}</span>
                           )}
                           {contact.cardGiven && (
-                            <span className="badge" style={{ background: 'rgba(99,102,241,0.1)', color: 'var(--color-primary-600)' }}>Card ✓</span>
+                            <span className="badge" style={{ background: 'rgba(99,102,241,0.1)', color: 'var(--color-primary-600)' }}>{t.cardBadge}</span>
                           )}
                           {!contact.syncedAt && (
-                            <span className="badge badge-pending">Unsynced</span>
+                            <span className="badge badge-pending">{t.unsyncedBadge}</span>
                           )}
                         </div>
                       </div>

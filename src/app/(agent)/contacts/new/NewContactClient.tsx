@@ -8,12 +8,9 @@ import { usePanchayats, useActiveVisit, db } from '@/lib/db';
 import { addToOutbox } from '@/lib/sync/outbox';
 import type { ContactRole, LocalContact } from '@/lib/db/schema';
 
-const ROLES: { value: ContactRole; label: string; emoji: string; desc: string }[] = [
-  { value: 'asha_worker',    label: 'Channel Partner', emoji: '🤝', desc: 'Local channel & distribution partner' },
-  { value: 'rmp_doctor',     label: 'Key Account',     emoji: '🏢', desc: 'Verified retail business or merchant' },
-  { value: 'ward_member',    label: 'Local Rep',       emoji: '🏛️', desc: 'Local community representative' },
-  { value: 'medicine_shop',  label: 'Retail Outlet',   emoji: '🏪', desc: 'Local business store / outlet' },
-];
+
+
+import { useTranslations } from '@/i18n/I18nProvider';
 
 export default function NewContactPage() {
   const router = useRouter();
@@ -23,6 +20,14 @@ export default function NewContactPage() {
 
   const panchayats = usePanchayats();
   const activeVisit = useActiveVisit(agentId ?? undefined);
+  const t = useTranslations();
+
+  const ROLES: { value: ContactRole; label: string; emoji: string; desc: string }[] = [
+    { value: 'asha_worker',    label: t.roleAshaWorker, emoji: '🤝', desc: t.descAshaWorker },
+    { value: 'rmp_doctor',     label: t.roleRmpDoctor,     emoji: '🏢', desc: t.descRmpDoctor },
+    { value: 'ward_member',    label: t.roleWardMember,       emoji: '🏛️', desc: t.descWardMember },
+    { value: 'medicine_shop',  label: t.roleMedicineShop,   emoji: '🏪', desc: t.descMedicineShop },
+  ];
 
   const [form, setForm] = useState({
     name: '',
@@ -65,10 +70,10 @@ export default function NewContactPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) { setError('Name is required'); return; }
-    if (!form.role) { setError('Select a contact type'); return; }
-    if (!form.panchayatId) { setError('Select a panchayat'); return; }
-    if (!agentId || !deviceId) { setError('Not logged in'); return; }
+    if (!form.name.trim()) { setError(t.errNameRequired); return; }
+    if (!form.role) { setError(t.errContactType); return; }
+    if (!form.panchayatId) { setError(t.errPanchayat); return; }
+    if (!agentId || !deviceId) { setError(t.errNotLoggedIn); return; }
 
     setSaving(true);
     setError('');
@@ -99,7 +104,7 @@ export default function NewContactPage() {
       await addToOutbox(clientId, deviceId, 'contact', contact);
       router.push('/contacts');
     } catch (err) {
-      setError('Failed to save contact. Please try again.');
+      setError(t.errSaveContact);
       setSaving(false);
     }
   }
@@ -115,14 +120,14 @@ export default function NewContactPage() {
           >
             ← 
           </button>
-          <h1>New Contact</h1>
+          <h1>{t.newContact}</h1>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {/* Contact Type */}
         <div>
-          <p className="field-label" style={{ marginBottom: '0.5rem' }}>Contact Type *</p>
+          <p className="field-label" style={{ marginBottom: '0.5rem' }}>{t.contactType}</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
             {ROLES.map((r) => (
               <button
@@ -151,12 +156,12 @@ export default function NewContactPage() {
 
         {/* Name */}
         <div className="field-group">
-          <label className="field-label" htmlFor="contact-name">Full Name *</label>
+          <label className="field-label" htmlFor="contact-name">{t.fullName}</label>
           <input
             id="contact-name"
             className="field-input"
             type="text"
-            placeholder="e.g. Sunita Devi"
+            placeholder={t.namePlaceholder}
             value={form.name}
             onChange={(e) => update('name', e.target.value)}
             autoComplete="name"
@@ -170,7 +175,7 @@ export default function NewContactPage() {
 
         {/* Panchayat */}
         <div className="field-group">
-          <label className="field-label" htmlFor="contact-panchayat">Panchayat *</label>
+          <label className="field-label" htmlFor="contact-panchayat">{t.panchayatLabel}</label>
           <select
             id="contact-panchayat"
             className="field-input"
@@ -178,7 +183,7 @@ export default function NewContactPage() {
             onChange={(e) => update('panchayatId', e.target.value)}
             required
           >
-            <option value="">Select panchayat…</option>
+            <option value="">{t.selectPanchayat}</option>
             {Object.entries(groupedPanchayats).sort().map(([district, list]) => (
               <optgroup key={district} label={district}>
                 {list.sort((a, b) => a.name.localeCompare(b.name)).map((p) => (
@@ -191,13 +196,13 @@ export default function NewContactPage() {
 
         {/* Phone */}
         <div className="field-group">
-          <label className="field-label" htmlFor="contact-phone">Mobile Number (optional)</label>
+          <label className="field-label" htmlFor="contact-phone">{t.mobileNumber}</label>
           <input
             id="contact-phone"
             className="field-input"
             type="tel"
             inputMode="numeric"
-            placeholder="10-digit number"
+            placeholder={t.mobilePlaceholder}
             minLength={10}
             maxLength={10}
             pattern="^[0-9]{10}$"
@@ -219,7 +224,7 @@ export default function NewContactPage() {
             onKeyDown={(e) => e.key === 'Enter' && update('whatsappAdded', !form.whatsappAdded)}
             id="whatsapp-toggle"
           >
-            <span className="toggle-label">Added to WhatsApp Group</span>
+            <span className="toggle-label">{t.addedToWhatsapp}</span>
             <div className={`toggle-switch${form.whatsappAdded ? ' on' : ''}`} />
           </div>
 
@@ -232,18 +237,18 @@ export default function NewContactPage() {
             onKeyDown={(e) => e.key === 'Enter' && update('cardGiven', !form.cardGiven)}
             id="card-toggle"
           >
-            <span className="toggle-label">Partner Card Given</span>
+            <span className="toggle-label">{t.partnerCardGiven}</span>
             <div className={`toggle-switch${form.cardGiven ? ' on' : ''}`} />
           </div>
         </div>
 
         {/* Notes */}
         <div className="field-group">
-          <label className="field-label" htmlFor="contact-notes">Notes (optional)</label>
+          <label className="field-label" htmlFor="contact-notes">{t.notesLabel}</label>
           <textarea
             id="contact-notes"
             className="field-input"
-            placeholder="Any relevant details…"
+            placeholder={t.notesPlaceholder}
             value={form.notes}
             onChange={(e) => update('notes', e.target.value)}
             rows={3}
@@ -252,26 +257,26 @@ export default function NewContactPage() {
 
         {/* CRM Workflows: Lead Status, Follow-up, Photo */}
         <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b' }}>CRM Details</h3>
+          <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b' }}>{t.crmDetails}</h3>
           
           <div className="field-group">
-            <label className="field-label" htmlFor="contact-status">Lead Status</label>
+            <label className="field-label" htmlFor="contact-status">{t.leadStatus}</label>
             <select
               id="contact-status"
               className="field-input"
               value={form.status}
               onChange={(e) => update('status', e.target.value as any)}
             >
-              <option value="Lead">Lead (Initial)</option>
-              <option value="Contacted">Contacted</option>
-              <option value="Interested">Interested</option>
-              <option value="Converted">Converted</option>
-              <option value="Rejected">Rejected</option>
+              <option value="Lead">{t.statusLead}</option>
+              <option value="Contacted">{t.statusContacted}</option>
+              <option value="Interested">{t.statusInterested}</option>
+              <option value="Converted">{t.statusConverted}</option>
+              <option value="Rejected">{t.statusRejected}</option>
             </select>
           </div>
 
           <div className="field-group">
-            <label className="field-label" htmlFor="contact-followup">Follow-up Date (optional)</label>
+            <label className="field-label" htmlFor="contact-followup">{t.followUpDate}</label>
             <input
               id="contact-followup"
               className="field-input"
@@ -282,7 +287,7 @@ export default function NewContactPage() {
           </div>
 
           <div className="field-group">
-            <label className="field-label" htmlFor="contact-photo">Capture Photo (Offline Sync)</label>
+            <label className="field-label" htmlFor="contact-photo">{t.capturePhoto}</label>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
               <input
                 id="contact-photo"
@@ -306,9 +311,9 @@ export default function NewContactPage() {
                   fontSize: '0.85rem'
                 }}
               >
-                📸 Take Photo
+                {t.btnTakePhoto}
               </button>
-              {form.photoDataUri && <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>✓ Photo attached</span>}
+              {form.photoDataUri && <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>{t.photoAttached}</span>}
             </div>
           </div>
         </div>
@@ -324,7 +329,7 @@ export default function NewContactPage() {
           disabled={saving}
           style={{ marginBottom: '1rem' }}
         >
-          {saving ? 'Saving…' : '💾 Save Contact'}
+          {saving ? t.saving : t.btnSaveContact}
         </button>
       </form>
     </div>

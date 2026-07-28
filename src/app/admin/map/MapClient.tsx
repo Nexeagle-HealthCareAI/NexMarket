@@ -171,18 +171,15 @@ export default function MapClient() {
     };
   }, []);
 
-  // Update markers & trajectory line on agent selection
+  // Redraw agent pins whenever the agent list or selection changes (every 30s
+  // poll included). Kept separate from the trajectory/flyTo effect below so a
+  // routine agent-list poll never yanks the map back to the trajectory start.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
-    // Clear old markers
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
-    if (replayMarkerRef.current) {
-      replayMarkerRef.current.remove();
-      replayMarkerRef.current = null;
-    }
 
     // Add agent pins — only for agents with at least one recorded GPS fix
     agents.forEach((agent) => {
@@ -232,8 +229,21 @@ export default function MapClient() {
 
       markersRef.current.push(marker);
     });
+  }, [selectedAgentId, agents, mapLoaded]);
 
-    // Update GeoJSON line if style is loaded
+  // Update the trajectory line and fly to it — deliberately keyed only on
+  // `trajectory` (which only changes when a different agent is selected or
+  // the trajectory is refetched), NOT on `agents`, so the routine 30s agent
+  // poll never yanks the map back to the trajectory start mid-pan/zoom.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+
+    if (replayMarkerRef.current) {
+      replayMarkerRef.current.remove();
+      replayMarkerRef.current = null;
+    }
+
     if (map.isStyleLoaded() && map.getSource('route')) {
       const coords = trajectory.map((p) => [p.lng, p.lat]);
       const source = map.getSource('route') as maplibregl.GeoJSONSource;
@@ -255,7 +265,7 @@ export default function MapClient() {
         });
       }
     }
-  }, [selectedAgentId, trajectory, agents, mapLoaded]);
+  }, [trajectory, mapLoaded]);
 
   // Replay animation loop
   useEffect(() => {
@@ -391,7 +401,6 @@ export default function MapClient() {
                 className="field-input"
                 value={selectedPanchayatBlock}
                 onChange={(e) => { setSelectedPanchayatBlock(e.target.value); setSelectedPanchayat(''); }}
-                disabled={!selectedPanchayatDistrict && availableBlocks.length > 50}
               >
                 <option value="">All Blocks</option>
                 {availableBlocks.map((b) => <option key={b} value={b}>{b}</option>)}
