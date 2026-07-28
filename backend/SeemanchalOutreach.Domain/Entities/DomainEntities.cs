@@ -21,9 +21,23 @@ namespace SeemanchalOutreach.Domain.Entities
         public bool MustChangePassword { get; set; } = false;
 
         public string? PhotoUrl { get; set; }
-        public string? Education { get; set; }
-        public string? PersonalDetails { get; set; }
+        public string? Education { get; set; } // "Education Qualification"
+        public string? PersonalDetails { get; set; } // free-text "about me" bio, distinct from the structured fields below
         public bool ProfileCompleted { get; set; } = false;
+
+        // Structured identity/profile fields (admin-collected at onboarding, editable later
+        // by the agent or an admin). Name stays the source of truth for display/JWT — kept in
+        // sync from First/Middle/Last whenever they're set.
+        public string? FirstName { get; set; }
+        public string? MiddleName { get; set; }
+        public string? LastName { get; set; }
+        public DateTime? DateOfBirth { get; set; } // Age is derived from this, not stored
+        public string? Gender { get; set; }
+        public string? Address { get; set; }
+        public string? Pincode { get; set; }
+        public string? WorkExperience { get; set; } // "Prior Work Experience"
+        public string? EmergencyContactName { get; set; }
+        public string? EmergencyContactPhone { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

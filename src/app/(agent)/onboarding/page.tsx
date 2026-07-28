@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAgentStore } from '@/store/agent-store';
-import { completeProfile, uploadPhoto } from '@/lib/sync/api-client';
+import { updateAgentProfile, uploadPhoto } from '@/lib/sync/api-client';
 import { useTranslations } from '@/i18n/I18nProvider';
 
 export default function OnboardingPage() {
@@ -68,7 +68,7 @@ export default function OnboardingPage() {
     try {
       const { url: photoUrl } = await uploadPhoto(jwtToken, photoFile);
 
-      await completeProfile(agentId, jwtToken, {
+      await updateAgentProfile(agentId, jwtToken, {
         personalDetails,
         education,
         photoUrl

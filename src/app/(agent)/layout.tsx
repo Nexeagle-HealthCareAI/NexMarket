@@ -56,6 +56,16 @@ const navItems = (t: any) => [
       </svg>
     ),
   },
+  {
+    href: '/profile',
+    label: t.navProfile,
+    icon: (
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+    ),
+  },
 ];
 
 export default function AgentLayout({ children }: { children: React.ReactNode }) {
@@ -137,19 +147,21 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
           </Link>
         );
       })}
-      <Link
-        href="/admin/agents"
-        className="sidebar-nav-link"
-        onClick={() => setIsDrawerOpen(false)}
-        style={{ marginTop: '0.5rem', borderTop: '1px solid var(--surface-border)', paddingTop: '0.75rem' }}
-      >
-        <span style={{ display: 'flex' }}>
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 20, height: 20 }}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-        </span>
-        <span>{t.navAdmin}</span>
-      </Link>
+      {role?.toLowerCase() === 'admin' && (
+        <Link
+          href="/admin/agents"
+          className="sidebar-nav-link"
+          onClick={() => setIsDrawerOpen(false)}
+          style={{ marginTop: '0.5rem', borderTop: '1px solid var(--surface-border)', paddingTop: '0.75rem' }}
+        >
+          <span style={{ display: 'flex' }}>
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ width: 20, height: 20 }}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          </span>
+          <span>{t.navAdmin}</span>
+        </Link>
+      )}
     </div>
   );
 

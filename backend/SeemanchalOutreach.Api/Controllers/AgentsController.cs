@@ -14,11 +14,23 @@ namespace SeemanchalOutreach.Api.Controllers
 {
     public class OnboardAgentRequest
     {
-        [Required, MinLength(2), MaxLength(80)]
-        public string Name { get; set; } = string.Empty;
+        [Required, MinLength(2), MaxLength(50)]
+        public string FirstName { get; set; } = string.Empty;
+
+        [MaxLength(50)]
+        public string? MiddleName { get; set; }
+
+        [Required, MinLength(1), MaxLength(50)]
+        public string LastName { get; set; } = string.Empty;
 
         [Required, RegularExpression(@"^[0-9]{10}$", ErrorMessage = "Phone must be exactly 10 digits.")]
         public string Phone { get; set; } = string.Empty;
+
+        [EmailAddress, MaxLength(120)]
+        public string? Email { get; set; }
+
+        [Required, MinLength(8), MaxLength(100)]
+        public string Password { get; set; } = string.Empty;
 
         [Required, MaxLength(50)]
         public string Role { get; set; } = string.Empty;
@@ -28,6 +40,46 @@ namespace SeemanchalOutreach.Api.Controllers
 
         [Required, MaxLength(50)]
         public string Block { get; set; } = string.Empty;
+
+        public DateTime? DateOfBirth { get; set; }
+        public string? Gender { get; set; }
+        public string? Address { get; set; }
+
+        [MaxLength(10)]
+        public string? Pincode { get; set; }
+
+        public string? Education { get; set; }
+        public string? WorkExperience { get; set; }
+        public string? EmergencyContactName { get; set; }
+        public string? EmergencyContactPhone { get; set; }
+        public string? PhotoUrl { get; set; } // optional — admin can upload now or the agent can add it later
+    }
+
+    // Fields a profile update may touch. Self-edit (agent editing their own profile) and
+    // admin-edit share this DTO; Role/District/Block/IsActive are only applied when the
+    // caller has the Admin role (see UpdateProfile).
+    public class UpdateAgentProfileDto
+    {
+        public string? FirstName { get; set; }
+        public string? MiddleName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+        public DateTime? DateOfBirth { get; set; }
+        public string? Gender { get; set; }
+        public string? Address { get; set; }
+        public string? Pincode { get; set; }
+        public string? Education { get; set; }
+        public string? WorkExperience { get; set; }
+        public string? EmergencyContactName { get; set; }
+        public string? EmergencyContactPhone { get; set; }
+        public string? PhotoUrl { get; set; }
+        public string? PersonalDetails { get; set; }
+
+        // Admin-only fields — ignored unless the caller is an Admin.
+        public string? Role { get; set; }
+        public string? District { get; set; }
+        public string? Block { get; set; }
+        public bool? IsActive { get; set; }
     }
 
     public class AgentSummaryDto
@@ -47,6 +99,45 @@ namespace SeemanchalOutreach.Api.Controllers
         public int TodayContacts { get; set; }
         public int TodayVisits { get; set; }
         public int TodayReferrals { get; set; }
+    }
+
+    public class AgentDetailDto
+    {
+        public string AgentId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string? FirstName { get; set; }
+        public string? MiddleName { get; set; }
+        public string? LastName { get; set; }
+        public string Phone { get; set; } = string.Empty;
+        public string? Email { get; set; }
+        public string Role { get; set; } = string.Empty;
+        public string District { get; set; } = string.Empty;
+        public string Block { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+        public bool MustChangePassword { get; set; }
+        public bool ProfileCompleted { get; set; }
+
+        public DateTime? DateOfBirth { get; set; }
+        public int? Age { get; set; }
+        public string? Gender { get; set; }
+        public string? Address { get; set; }
+        public string? Pincode { get; set; }
+        public string? FullAddress { get; set; }
+        public string? Education { get; set; }
+        public string? WorkExperience { get; set; }
+        public string? EmergencyContactName { get; set; }
+        public string? EmergencyContactPhone { get; set; }
+        public string? PhotoUrl { get; set; }
+        public string? PersonalDetails { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+
+        // Presence — same derivation as AgentSummaryDto.Status
+        public string Status { get; set; } = "offline";
+        public bool ActiveShift { get; set; }
+        public double? LastSeenLat { get; set; }
+        public double? LastSeenLng { get; set; }
+        public string? LastSeenAt { get; set; }
     }
 
     [ApiController]
@@ -109,17 +200,7 @@ namespace SeemanchalOutreach.Api.Controllers
             {
                 var hasActiveShift = activeShiftSet.Contains(a.AgentId);
                 lastTrajectoryMap.TryGetValue(a.AgentId, out var lastPoint);
-                var minutesSinceActivity = lastPoint != null ? (now - lastPoint.RecordedAt).TotalMinutes : (double?)null;
-
-                // "online" / "low-connectivity" / "offline" are derived from recency of GPS
-                // sync while on an active shift — there is no separate presence/heartbeat
-                // system, so this is the best real signal available.
-                string status = "offline";
-                if (hasActiveShift && minutesSinceActivity is not null)
-                {
-                    if (minutesSinceActivity <= 5) status = "online";
-                    else if (minutesSinceActivity <= 30) status = "low-connectivity";
-                }
+                string status = DerivePresenceStatus(hasActiveShift, lastPoint?.RecordedAt, now);
 
                 return new AgentSummaryDto
                 {
@@ -161,11 +242,99 @@ namespace SeemanchalOutreach.Api.Controllers
             return Ok(points);
         }
 
+        [HttpGet("{agentId}")]
+        [Authorize]
+        public async Task<ActionResult<AgentDetailDto>> GetAgentDetail(string agentId, CancellationToken cancellationToken)
+        {
+            // Admin can view anyone; an agent can view their own record.
+            var currentAgentId = User.FindFirst("agentId")?.Value;
+            var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            if (currentAgentId != agentId && role != "Admin")
+            {
+                return Forbid();
+            }
+
+            var agent = await _db.Agents.AsNoTracking().FirstOrDefaultAsync(a => a.AgentId == agentId, cancellationToken);
+            if (agent == null) return NotFound();
+
+            var hasActiveShift = await _db.Shifts.AsNoTracking()
+                .AnyAsync(s => s.AgentId == agentId && s.EndTime == null, cancellationToken);
+
+            var lastPoint = await _db.TrajectoryPoints.AsNoTracking()
+                .Where(t => t.AgentId == agentId)
+                .OrderByDescending(t => t.RecordedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var now = DateTime.UtcNow;
+            var status = DerivePresenceStatus(hasActiveShift, lastPoint?.RecordedAt, now);
+
+            var addressParts = new[] { agent.Address, agent.Block, agent.District, agent.Pincode }
+                .Where(p => !string.IsNullOrWhiteSpace(p));
+            var fullAddress = addressParts.Any() ? string.Join(", ", addressParts) : null;
+
+            return Ok(new AgentDetailDto
+            {
+                AgentId = agent.AgentId,
+                Name = agent.Name,
+                FirstName = agent.FirstName,
+                MiddleName = agent.MiddleName,
+                LastName = agent.LastName,
+                Phone = agent.Phone,
+                Email = agent.Email,
+                Role = agent.Role,
+                District = agent.District,
+                Block = agent.Block,
+                IsActive = agent.IsActive,
+                MustChangePassword = agent.MustChangePassword,
+                ProfileCompleted = agent.ProfileCompleted,
+                DateOfBirth = agent.DateOfBirth,
+                Age = CalculateAge(agent.DateOfBirth, now),
+                Gender = agent.Gender,
+                Address = agent.Address,
+                Pincode = agent.Pincode,
+                FullAddress = fullAddress,
+                Education = agent.Education,
+                WorkExperience = agent.WorkExperience,
+                EmergencyContactName = agent.EmergencyContactName,
+                EmergencyContactPhone = agent.EmergencyContactPhone,
+                PhotoUrl = agent.PhotoUrl,
+                PersonalDetails = agent.PersonalDetails,
+                CreatedAt = agent.CreatedAt,
+                Status = status,
+                ActiveShift = hasActiveShift,
+                LastSeenLat = lastPoint?.Lat,
+                LastSeenLng = lastPoint?.Lng,
+                LastSeenAt = lastPoint?.RecordedAt.ToString("o"),
+            });
+        }
+
+        private static string DerivePresenceStatus(bool hasActiveShift, DateTime? lastActivityAt, DateTime now)
+        {
+            // "online" / "low-connectivity" / "offline" are derived from recency of GPS
+            // sync while on an active shift — there is no separate presence/heartbeat
+            // system, so this is the best real signal available.
+            if (!hasActiveShift || lastActivityAt is null) return "offline";
+            var minutesSinceActivity = (now - lastActivityAt.Value).TotalMinutes;
+            if (minutesSinceActivity <= 5) return "online";
+            if (minutesSinceActivity <= 30) return "low-connectivity";
+            return "offline";
+        }
+
+        private static int? CalculateAge(DateTime? dateOfBirth, DateTime now)
+        {
+            if (dateOfBirth is null) return null;
+            var dob = dateOfBirth.Value;
+            var age = now.Year - dob.Year;
+            if (now.Month < dob.Month || (now.Month == dob.Month && now.Day < dob.Day)) age--;
+            return age;
+        }
+
         /// <summary>
-        /// Onboards a new field agent with a real, randomly generated password (BCrypt-hashed,
-        /// returned in the response exactly once — it is never stored or retrievable again).
-        /// Always requires a valid JWT — the seeded default Admin account (AdminSeeder) means
-        /// there is always a real login available, so no anonymous bootstrap path is needed.
+        /// Onboards a new field agent with an admin-set password (BCrypt-hashed — the
+        /// plaintext is never stored). The agent still starts with MustChangePassword=true
+        /// so they're forced to set their own password on first login. Always requires a
+        /// valid JWT — the seeded default Admin account (AdminSeeder) means there is always
+        /// a real login available, so no anonymous bootstrap path is needed.
         /// </summary>
         [HttpPost]
         [Authorize(Roles = "Admin")]
@@ -176,6 +345,12 @@ namespace SeemanchalOutreach.Api.Controllers
             if (await _db.Agents.AnyAsync(a => a.Phone == request.Phone, cancellationToken))
             {
                 return Conflict($"An agent with phone number {request.Phone} already exists.");
+            }
+
+            var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
+            if (email != null && await _db.Agents.AnyAsync(a => a.Email == email, cancellationToken))
+            {
+                return Conflict($"An agent with email {email} already exists.");
             }
 
             string prefix = request.Role.Trim().ToLowerInvariant() switch
@@ -197,20 +372,39 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Max() + 1;
             string agentId = $"{prefix}-{nextNumber}";
 
-            string password = GenerateRandomPassword();
+            var firstName = request.FirstName.Trim();
+            var middleName = string.IsNullOrWhiteSpace(request.MiddleName) ? null : request.MiddleName.Trim();
+            var lastName = request.LastName.Trim();
+            var fullName = string.Join(" ", new[] { firstName, middleName, lastName }.Where(p => !string.IsNullOrWhiteSpace(p)));
 
             var agent = new FieldAgent
             {
                 Id = Guid.NewGuid(),
                 AgentId = agentId,
-                Name = request.Name.Trim(),
+                Name = fullName,
+                FirstName = firstName,
+                MiddleName = middleName,
+                LastName = lastName,
                 Phone = request.Phone,
+                Email = email,
                 Role = request.Role.Trim(),
                 District = request.District.Trim(),
                 Block = request.Block.Trim(),
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
                 MustChangePassword = true,
                 IsActive = true,
+                DateOfBirth = request.DateOfBirth,
+                Gender = request.Gender,
+                Address = request.Address,
+                Pincode = request.Pincode,
+                Education = request.Education,
+                WorkExperience = request.WorkExperience,
+                EmergencyContactName = request.EmergencyContactName,
+                EmergencyContactPhone = request.EmergencyContactPhone,
+                PhotoUrl = request.PhotoUrl,
+                // The admin already collected everything the old self-onboarding wizard
+                // asked for — no need to force it again on first login.
+                ProfileCompleted = true,
             };
 
             _db.Agents.Add(agent);
@@ -223,35 +417,20 @@ namespace SeemanchalOutreach.Api.Controllers
                 role = agent.Role,
                 district = agent.District,
                 block = agent.Block,
-                password, // shown once — caller is responsible for delivering it securely
+                password = request.Password, // echoed back once so the admin can copy/share it
             });
         }
 
-        private static string GenerateRandomPassword()
-        {
-            const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-            var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(12);
-            var sb = new System.Text.StringBuilder(12);
-            foreach (var b in bytes) sb.Append(chars[b % chars.Length]);
-            return sb.ToString();
-        }
-
-        public class CompleteProfileDto
-        {
-            public string? PhotoUrl { get; set; }
-            public string? Education { get; set; }
-            public string? PersonalDetails { get; set; }
-        }
-
-        [HttpPut("{agentId}/onboarding")]
+        [HttpPut("{agentId}/profile")]
         [Authorize]
-        public async Task<IActionResult> CompleteProfile(string agentId, [FromBody] CompleteProfileDto dto, CancellationToken cancellationToken)
+        public async Task<IActionResult> UpdateProfile(string agentId, [FromBody] UpdateAgentProfileDto dto, CancellationToken cancellationToken)
         {
             // Only allow the agent themselves to update their own profile, or an admin
             var currentAgentId = User.FindFirst("agentId")?.Value;
             var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            var isAdmin = role == "Admin";
 
-            if (currentAgentId != agentId && role != "Admin")
+            if (currentAgentId != agentId && !isAdmin)
             {
                 return Forbid();
             }
@@ -259,10 +438,42 @@ namespace SeemanchalOutreach.Api.Controllers
             var agent = await _db.Agents.FirstOrDefaultAsync(a => a.AgentId == agentId, cancellationToken);
             if (agent == null) return NotFound();
 
-            if (!string.IsNullOrEmpty(dto.PhotoUrl)) agent.PhotoUrl = dto.PhotoUrl;
+            if (dto.Email != null && await _db.Agents.AnyAsync(a => a.AgentId != agentId && a.Email == dto.Email, cancellationToken))
+            {
+                return Conflict($"An agent with email {dto.Email} already exists.");
+            }
+
+            var nameChanged = false;
+            if (!string.IsNullOrEmpty(dto.FirstName)) { agent.FirstName = dto.FirstName; nameChanged = true; }
+            if (dto.MiddleName != null) { agent.MiddleName = string.IsNullOrWhiteSpace(dto.MiddleName) ? null : dto.MiddleName; nameChanged = true; }
+            if (!string.IsNullOrEmpty(dto.LastName)) { agent.LastName = dto.LastName; nameChanged = true; }
+            if (nameChanged)
+            {
+                agent.Name = string.Join(" ", new[] { agent.FirstName, agent.MiddleName, agent.LastName }.Where(p => !string.IsNullOrWhiteSpace(p)));
+            }
+
+            if (!string.IsNullOrEmpty(dto.Email)) agent.Email = dto.Email;
+            if (dto.DateOfBirth != null) agent.DateOfBirth = dto.DateOfBirth;
+            if (!string.IsNullOrEmpty(dto.Gender)) agent.Gender = dto.Gender;
+            if (!string.IsNullOrEmpty(dto.Address)) agent.Address = dto.Address;
+            if (!string.IsNullOrEmpty(dto.Pincode)) agent.Pincode = dto.Pincode;
             if (!string.IsNullOrEmpty(dto.Education)) agent.Education = dto.Education;
+            if (!string.IsNullOrEmpty(dto.WorkExperience)) agent.WorkExperience = dto.WorkExperience;
+            if (!string.IsNullOrEmpty(dto.EmergencyContactName)) agent.EmergencyContactName = dto.EmergencyContactName;
+            if (!string.IsNullOrEmpty(dto.EmergencyContactPhone)) agent.EmergencyContactPhone = dto.EmergencyContactPhone;
+            if (!string.IsNullOrEmpty(dto.PhotoUrl)) agent.PhotoUrl = dto.PhotoUrl;
             if (!string.IsNullOrEmpty(dto.PersonalDetails)) agent.PersonalDetails = dto.PersonalDetails;
-            
+
+            // Admin-only fields — silently ignored for a self-edit so an agent can't
+            // reassign their own role/district/block or reactivate themselves.
+            if (isAdmin)
+            {
+                if (!string.IsNullOrEmpty(dto.Role)) agent.Role = dto.Role;
+                if (!string.IsNullOrEmpty(dto.District)) agent.District = dto.District;
+                if (!string.IsNullOrEmpty(dto.Block)) agent.Block = dto.Block;
+                if (dto.IsActive != null) agent.IsActive = dto.IsActive.Value;
+            }
+
             agent.ProfileCompleted = true;
 
             await _db.SaveChangesAsync(cancellationToken);

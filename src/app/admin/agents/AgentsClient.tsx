@@ -3,7 +3,14 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAgentStore } from '@/store/agent-store';
-import { getAgents, onboardAgent, type AdminAgentDto } from '@/lib/sync/api-client';
+import { getAgents, onboardAgent, uploadPhoto, type AdminAgentDto } from '@/lib/sync/api-client';
+
+const PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+function generatePassword(length = 12): string {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => PASSWORD_CHARS[b % PASSWORD_CHARS.length]).join('');
+}
 
 export default function AgentsClient() {
   const token = useAgentStore((s) => s.jwtToken);
@@ -15,11 +22,25 @@ export default function AgentsClient() {
 
   // Onboarding Modal State
   const [showOnboardModal, setShowOnboardModal] = useState(false);
-  const [newName, setNewName] = useState('');
+  const [newFirstName, setNewFirstName] = useState('');
+  const [newMiddleName, setNewMiddleName] = useState('');
+  const [newLastName, setNewLastName] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [newDistrict, setNewDistrict] = useState('Purnia');
   const [newBlock, setNewBlock] = useState('Kasba');
   const [newRole, setNewRole] = useState('Marketing Executive');
+  const [newDob, setNewDob] = useState('');
+  const [newGender, setNewGender] = useState('');
+  const [newAddress, setNewAddress] = useState('');
+  const [newPincode, setNewPincode] = useState('');
+  const [newEducation, setNewEducation] = useState('');
+  const [newWorkExperience, setNewWorkExperience] = useState('');
+  const [newEmergencyName, setNewEmergencyName] = useState('');
+  const [newEmergencyPhone, setNewEmergencyPhone] = useState('');
+  const [newPhotoFile, setNewPhotoFile] = useState<File | null>(null);
+  const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null);
   const [onboarding, setOnboarding] = useState(false);
   const [onboardError, setOnboardError] = useState('');
   const [generatedCreds, setGeneratedCreds] = useState<{
@@ -74,19 +95,45 @@ export default function AgentsClient() {
     return { total, online, activeShifts, totalContacts };
   }, [agentsList]);
 
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setNewPhotoFile(file);
+    setNewPhotoPreview(URL.createObjectURL(file));
+  }
+
   async function handleOnboardSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!newName.trim() || !newPhone.trim() || !token) return;
+    if (!newFirstName.trim() || !newLastName.trim() || !newPhone.trim() || !newPassword.trim() || !token) return;
 
     setOnboarding(true);
     setOnboardError('');
     try {
+      let photoUrl: string | undefined;
+      if (newPhotoFile) {
+        const uploaded = await uploadPhoto(token, newPhotoFile);
+        photoUrl = uploaded.url;
+      }
+
       const created = await onboardAgent(token, {
-        name: newName.trim(),
+        firstName: newFirstName.trim(),
+        middleName: newMiddleName.trim() || undefined,
+        lastName: newLastName.trim(),
         phone: newPhone.trim(),
+        email: newEmail.trim() || undefined,
+        password: newPassword,
         role: newRole,
         district: newDistrict,
         block: newBlock.trim() || newDistrict,
+        dateOfBirth: newDob || undefined,
+        gender: newGender || undefined,
+        address: newAddress.trim() || undefined,
+        pincode: newPincode.trim() || undefined,
+        education: newEducation.trim() || undefined,
+        workExperience: newWorkExperience.trim() || undefined,
+        emergencyContactName: newEmergencyName.trim() || undefined,
+        emergencyContactPhone: newEmergencyPhone.trim() || undefined,
+        photoUrl,
       });
 
       setGeneratedCreds({
@@ -113,11 +160,25 @@ export default function AgentsClient() {
   }
 
   function resetModal() {
-    setNewName('');
+    setNewFirstName('');
+    setNewMiddleName('');
+    setNewLastName('');
     setNewPhone('');
+    setNewEmail('');
+    setNewPassword('');
     setNewDistrict('Purnia');
     setNewBlock('Kasba');
     setNewRole('Marketing Executive');
+    setNewDob('');
+    setNewGender('');
+    setNewAddress('');
+    setNewPincode('');
+    setNewEducation('');
+    setNewWorkExperience('');
+    setNewEmergencyName('');
+    setNewEmergencyPhone('');
+    setNewPhotoFile(null);
+    setNewPhotoPreview(null);
     setGeneratedCreds(null);
     setOnboardError('');
     setShowOnboardModal(false);
@@ -277,9 +338,14 @@ export default function AgentsClient() {
                     {agent.todayReferrals}
                   </td>
                   <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
-                    <Link href="/admin/map" className="btn btn-ghost btn-sm" style={{ fontSize: '0.78rem' }}>
-                      📍 Trace Route
-                    </Link>
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                      <Link href={`/admin/agents/${encodeURIComponent(agent.agentId)}`} className="btn btn-ghost btn-sm" style={{ fontSize: '0.78rem' }}>
+                        👁 View
+                      </Link>
+                      <Link href={`/admin/map?agentId=${encodeURIComponent(agent.agentId)}`} className="btn btn-ghost btn-sm" style={{ fontSize: '0.78rem' }}>
+                        📍 Trace Route
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -307,7 +373,9 @@ export default function AgentsClient() {
             className="card slide-up"
             style={{
               width: '100%',
-              maxWidth: 480,
+              maxWidth: 640,
+              maxHeight: '90vh',
+              overflowY: 'auto',
               padding: '1.75rem',
               background: 'var(--surface-card)',
               border: '1px solid var(--color-primary-500)',
@@ -334,22 +402,61 @@ export default function AgentsClient() {
                   </button>
                 </div>
 
-                <div className="field-group" style={{ margin: 0 }}>
-                  <label className="field-label">Full Name</label>
-                  <input
-                    type="text"
-                    className="field-input"
-                    placeholder="e.g. Anjali Sharma"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    required
-                    minLength={2}
-                    maxLength={50}
-                    pattern="^[A-Za-z\s]+$"
-                    title="Name must contain only letters and spaces"
-                  />
+                {/* Photo */}
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <label style={{ cursor: 'pointer', textAlign: 'center' }}>
+                    <div style={{
+                      width: 80, height: 80, borderRadius: '50%', overflow: 'hidden',
+                      background: 'var(--surface-input)', border: '2px dashed var(--surface-border)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 0.4rem'
+                    }}>
+                      {newPhotoPreview ? (
+                        <img src={newPhotoPreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: '1.5rem' }}>📷</span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', fontWeight: 600 }}>
+                      {newPhotoPreview ? 'Change Photo' : 'Add Photo (optional)'}
+                    </span>
+                    <input type="file" accept="image/*" onChange={handlePhotoChange} style={{ display: 'none' }} />
+                  </label>
                 </div>
 
+                {/* Identity */}
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Identity</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">First Name</label>
+                    <input type="text" className="field-input" value={newFirstName} onChange={(e) => setNewFirstName(e.target.value)} required minLength={2} maxLength={50} />
+                  </div>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">Middle Name</label>
+                    <input type="text" className="field-input" value={newMiddleName} onChange={(e) => setNewMiddleName(e.target.value)} maxLength={50} />
+                  </div>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">Last Name</label>
+                    <input type="text" className="field-input" value={newLastName} onChange={(e) => setNewLastName(e.target.value)} required maxLength={50} />
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">Date of Birth</label>
+                    <input type="date" className="field-input" value={newDob} onChange={(e) => setNewDob(e.target.value)} />
+                  </div>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">Sex</label>
+                    <select className="field-input" value={newGender} onChange={(e) => setNewGender(e.target.value)} style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}>
+                      <option value="">Select…</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Contact & Login */}
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact & Login</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div className="field-group" style={{ margin: 0 }}>
                     <label className="field-label">Mobile Number</label>
@@ -366,7 +473,37 @@ export default function AgentsClient() {
                       title="Mobile number must be exactly 10 digits"
                     />
                   </div>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">Email (optional)</label>
+                    <input type="email" className="field-input" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} maxLength={120} />
+                  </div>
+                </div>
+                <div className="field-group" style={{ margin: 0 }}>
+                  <label className="field-label">Password</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input
+                      type="text"
+                      className="field-input"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                      minLength={8}
+                      maxLength={100}
+                      placeholder="Set an initial password"
+                      style={{ flex: 1 }}
+                    />
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNewPassword(generatePassword())}>
+                      🎲 Generate
+                    </button>
+                  </div>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                    The agent will be required to change this on first login.
+                  </p>
+                </div>
 
+                {/* Territory & Role */}
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Territory & Role</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div className="field-group" style={{ margin: 0 }}>
                     <label className="field-label">Assigned Role</label>
                     <select
@@ -380,10 +517,12 @@ export default function AgentsClient() {
                       <option value="Regional Representative">Regional Representative</option>
                       <option value="Admin">Admin</option>
                     </select>
+                    {newRole !== 'Admin' && (
+                      <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                        This role only has access to the Agent App, not this dashboard.
+                      </p>
+                    )}
                   </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div className="field-group" style={{ margin: 0 }}>
                     <label className="field-label">District</label>
                     <select
@@ -399,7 +538,8 @@ export default function AgentsClient() {
                       <option value="Uttar Dinajpur">Uttar Dinajpur</option>
                     </select>
                   </div>
-
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div className="field-group" style={{ margin: 0 }}>
                     <label className="field-label">Assigned Block / Council</label>
                     <input
@@ -411,6 +551,40 @@ export default function AgentsClient() {
                       required
                       maxLength={50}
                     />
+                  </div>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">Pincode</label>
+                    <input type="text" className="field-input" value={newPincode} onChange={(e) => setNewPincode(e.target.value.replace(/\D/g, ''))} maxLength={10} />
+                  </div>
+                </div>
+                <div className="field-group" style={{ margin: 0 }}>
+                  <label className="field-label">Address</label>
+                  <textarea className="field-input" rows={2} value={newAddress} onChange={(e) => setNewAddress(e.target.value)} />
+                </div>
+
+                {/* Background */}
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Background</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">Education Qualification</label>
+                    <input type="text" className="field-input" value={newEducation} onChange={(e) => setNewEducation(e.target.value)} />
+                  </div>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">Prior Work Experience</label>
+                    <input type="text" className="field-input" value={newWorkExperience} onChange={(e) => setNewWorkExperience(e.target.value)} />
+                  </div>
+                </div>
+
+                {/* Emergency Contact */}
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Emergency Contact</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">Contact Person Name</label>
+                    <input type="text" className="field-input" value={newEmergencyName} onChange={(e) => setNewEmergencyName(e.target.value)} />
+                  </div>
+                  <div className="field-group" style={{ margin: 0 }}>
+                    <label className="field-label">Contact Number</label>
+                    <input type="tel" className="field-input" value={newEmergencyPhone} onChange={(e) => setNewEmergencyPhone(e.target.value.replace(/\D/g, ''))} maxLength={10} />
                   </div>
                 </div>
 

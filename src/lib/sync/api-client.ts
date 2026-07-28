@@ -94,11 +94,24 @@ export interface AdminAgentDto {
 }
 
 export interface OnboardAgentRequest {
-  name: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
   phone: string;
+  email?: string;
+  password: string;
   role: string;
   district: string;
   block: string;
+  dateOfBirth?: string; // ISO date
+  gender?: string;
+  address?: string;
+  pincode?: string;
+  education?: string;
+  workExperience?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  photoUrl?: string;
 }
 
 export interface OnboardAgentResponse {
@@ -115,6 +128,62 @@ export interface TrajectoryPointDto {
   lng: number;
   recordedAt: string;
   accuracyM: number | null;
+}
+
+export interface AgentDetailDto {
+  agentId: string;
+  name: string;
+  firstName: string | null;
+  middleName: string | null;
+  lastName: string | null;
+  phone: string;
+  email: string | null;
+  role: string;
+  district: string;
+  block: string;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  profileCompleted: boolean;
+  dateOfBirth: string | null;
+  age: number | null;
+  gender: string | null;
+  address: string | null;
+  pincode: string | null;
+  fullAddress: string | null;
+  education: string | null;
+  workExperience: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  photoUrl: string | null;
+  personalDetails: string | null;
+  createdAt: string;
+  status: 'online' | 'low-connectivity' | 'offline';
+  activeShift: boolean;
+  lastSeenLat: number | null;
+  lastSeenLng: number | null;
+  lastSeenAt: string | null;
+}
+
+export interface UpdateAgentProfileRequest {
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  email?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  address?: string;
+  pincode?: string;
+  education?: string;
+  workExperience?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  photoUrl?: string;
+  personalDetails?: string;
+  // Admin-only — ignored by the API unless the caller is an Admin
+  role?: string;
+  district?: string;
+  block?: string;
+  isActive?: boolean;
 }
 
 // ─── Admin: Duplicates ──────────────────────────────────────────────────────────
@@ -293,12 +362,6 @@ export async function changePassword(
   );
 }
 
-export interface CompleteProfileDto {
-  photoUrl?: string;
-  education?: string;
-  personalDetails?: string;
-}
-
 export async function uploadPhoto(token: string, file: File): Promise<{ url: string; fileName: string }> {
   const formData = new FormData();
   formData.append('file', file);
@@ -311,24 +374,26 @@ export async function uploadPhoto(token: string, file: File): Promise<{ url: str
   return res.json();
 }
 
-export async function completeProfile(
+export async function updateAgentProfile(
   agentId: string,
   token: string,
-  body: CompleteProfileDto
+  body: UpdateAgentProfileRequest
 ): Promise<{ success: boolean; profileCompleted: boolean }> {
-  const res = await fetch(`${API_BASE}/api/v1/agents/${encodeURIComponent(agentId)}/onboarding`, {
-    method: 'PUT',
-    headers: authHeaders(token),
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error('Failed to complete profile');
-  return res.json();
+  return put<UpdateAgentProfileRequest, { success: boolean; profileCompleted: boolean }>(
+    `/api/v1/agents/${encodeURIComponent(agentId)}/profile`,
+    body,
+    token
+  );
 }
 
 // ─── Admin API ────────────────────────────────────────────────────────────────
 
 export function getAgents(token: string): Promise<AdminAgentDto[]> {
   return get<AdminAgentDto[]>('/api/v1/agents', token);
+}
+
+export function getAgentDetail(token: string, agentId: string): Promise<AgentDetailDto> {
+  return get<AgentDetailDto>(`/api/v1/agents/${encodeURIComponent(agentId)}`, token);
 }
 
 export function onboardAgent(token: string, body: OnboardAgentRequest): Promise<OnboardAgentResponse> {

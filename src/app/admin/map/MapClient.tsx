@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useAgentStore } from '@/store/agent-store';
@@ -16,6 +17,8 @@ interface PanchayatGeo {
 
 export default function MapClient() {
   const token = useAgentStore((s) => s.jwtToken);
+  const searchParams = useSearchParams();
+  const deepLinkAgentId = searchParams.get('agentId');
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -44,11 +47,11 @@ export default function MapClient() {
     try {
       const data = await getAgents(token);
       setAgents(data);
-      setSelectedAgentId((current) => current || data[0]?.agentId || '');
+      setSelectedAgentId((current) => current || deepLinkAgentId || data[0]?.agentId || '');
     } catch (err) {
       console.error('Failed to load agents', err);
     }
-  }, [token]);
+  }, [token, deepLinkAgentId]);
 
   useEffect(() => {
     void loadAgents();
