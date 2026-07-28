@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { useAgentStore } from '@/store/agent-store';
@@ -43,6 +43,15 @@ export default function NewContactPage() {
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // useActiveVisit is an async Dexie live-query — it's still undefined on the
+  // very first render, so the useState initializer above almost never actually
+  // captures it. Sync it in once it loads, but never clobber a panchayat the
+  // agent has already picked themselves.
+  useEffect(() => {
+    if (!activeVisit?.panchayatId) return;
+    setForm((prev) => (prev.panchayatId ? prev : { ...prev, panchayatId: activeVisit.panchayatId }));
+  }, [activeVisit?.panchayatId]);
 
   // Group panchayats by district for the select dropdown
   const groupedPanchayats = useMemo(() => {
