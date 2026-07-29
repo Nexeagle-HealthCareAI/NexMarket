@@ -17,6 +17,10 @@ COPY . .
 # API origin must be known here, not just at container runtime.
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# Optional — omit to fall back to MapLibre's key-free demo basemap (see
+# src/lib/geo/mapStyle.ts).
+ARG NEXT_PUBLIC_MAPBOX_TOKEN
+ENV NEXT_PUBLIC_MAPBOX_TOKEN=${NEXT_PUBLIC_MAPBOX_TOKEN}
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build

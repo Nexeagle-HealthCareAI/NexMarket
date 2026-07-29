@@ -40,11 +40,20 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? EmergencyContactPhone { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
 
-        // Opaque refresh token — stored hashed, rotated on every use, so a stolen
-        // DB row alone can't be replayed as a live session token.
-        public string? RefreshTokenHash { get; set; }
-        public DateTime? RefreshTokenExpiresAt { get; set; }
+    // One row per (AgentId, DeviceId) — lets an agent stay logged in on more than
+    // one device at once. Token is stored hashed and rotated on every refresh, so
+    // a stolen DB row alone can't be replayed as a live session token. A password
+    // change deletes every row for the agent, revoking all devices at once.
+    public class AgentRefreshToken
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        public string DeviceId { get; set; } = string.Empty;
+        public string TokenHash { get; set; } = string.Empty;
+        public DateTime ExpiresAt { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
     public class Panchayat

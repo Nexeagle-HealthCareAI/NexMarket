@@ -21,6 +21,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<TrajectoryPoint> TrajectoryPoints => Set<TrajectoryPoint>();
         public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
         public DbSet<BlockAssignment> BlockAssignments => Set<BlockAssignment>();
+        public DbSet<AgentRefreshToken> AgentRefreshTokens => Set<AgentRefreshToken>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -120,6 +121,14 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("block_assignments");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.AgentId, e.Status });
+            });
+
+            // ─── AgentRefreshToken (one row per agent+device session) ──
+            modelBuilder.Entity<AgentRefreshToken>(entity =>
+            {
+                entity.ToTable("agent_refresh_tokens");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.AgentId, e.DeviceId }).IsUnique();
             });
         }
     }

@@ -46,6 +46,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public string Name { get; set; } = string.Empty;
         public bool Visited { get; set; }
         public DateTime? LastVisitedAt { get; set; }
+        public double? CentroidLat { get; set; }
+        public double? CentroidLng { get; set; }
     }
 
     public class MyAssignmentDto
@@ -257,6 +259,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     Name = p.Name,
                     Visited = visitMap.ContainsKey(p.PanchayatId),
                     LastVisitedAt = visitMap.GetValueOrDefault(p.PanchayatId),
+                    CentroidLat = p.CentroidLat,
+                    CentroidLng = p.CentroidLng,
                 }).ToList(),
             });
         }

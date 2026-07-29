@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -31,6 +32,9 @@ namespace SeemanchalOutreach.Api.Controllers
     {
         [Required]
         public string AgentId { get; set; } = string.Empty;
+
+        [Required]
+        public string DeviceId { get; set; } = string.Empty;
 
         [Required]
         public string RefreshToken { get; set; } = string.Empty;
@@ -85,7 +89,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 ? Guid.NewGuid().ToString()
                 : request.DeviceId;
 
-            string refreshToken = IssueRefreshToken(agent);
+            string refreshToken = await IssueRefreshTokenAsync(agent.AgentId, deviceId, cancellationToken);
             await _db.SaveChangesAsync(cancellationToken);
 
             return Ok(new
@@ -109,18 +113,24 @@ namespace SeemanchalOutreach.Api.Controllers
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
             var agent = await _db.Agents.FirstOrDefaultAsync(a => a.AgentId == request.AgentId, cancellationToken);
-
-            if (agent == null
-                || !agent.IsActive
-                || agent.RefreshTokenHash == null
-                || agent.RefreshTokenExpiresAt == null
-                || agent.RefreshTokenExpiresAt < DateTime.UtcNow
-                || agent.RefreshTokenHash != HashToken(request.RefreshToken))
+            if (agent == null || !agent.IsActive)
             {
                 return Unauthorized("Refresh token is invalid or expired — sign in again.");
             }
 
-            string refreshToken = IssueRefreshToken(agent); // rotate — the old token can't be reused
+            // Scoped to (AgentId, DeviceId) — a session on one device can't be
+            // refreshed using a token issued to a different device.
+            var session = await _db.AgentRefreshTokens.FirstOrDefaultAsync(
+                t => t.AgentId == request.AgentId && t.DeviceId == request.DeviceId, cancellationToken);
+
+            if (session == null
+                || session.ExpiresAt < DateTime.UtcNow
+                || session.TokenHash != HashToken(request.RefreshToken))
+            {
+                return Unauthorized("Refresh token is invalid or expired — sign in again.");
+            }
+
+            string refreshToken = await IssueRefreshTokenAsync(agent.AgentId, request.DeviceId, cancellationToken); // rotate — the old token can't be reused
             await _db.SaveChangesAsync(cancellationToken);
 
             return Ok(new
@@ -160,17 +170,36 @@ namespace SeemanchalOutreach.Api.Controllers
 
             agent.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
             agent.MustChangePassword = false;
+
+            // A password change is often prompted by a suspected leak — revoke every
+            // device's session so whoever already holds a refresh token can't keep
+            // using it for up to 30 more days regardless of the password change. The
+            // device making this request will simply get a new one on its next login.
+            var existingSessions = await _db.AgentRefreshTokens
+                .Where(t => t.AgentId == agentId)
+                .ToListAsync(cancellationToken);
+            _db.AgentRefreshTokens.RemoveRange(existingSessions);
+
             await _db.SaveChangesAsync(cancellationToken);
 
             return Ok(new { message = "Password updated." });
         }
 
-        private string IssueRefreshToken(FieldAgent agent)
+        private async Task<string> IssueRefreshTokenAsync(string agentId, string deviceId, CancellationToken cancellationToken)
         {
             string token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
                 .Replace('+', '-').Replace('/', '_').TrimEnd('=');
-            agent.RefreshTokenHash = HashToken(token);
-            agent.RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(RefreshTokenDays);
+
+            var session = await _db.AgentRefreshTokens.FirstOrDefaultAsync(
+                t => t.AgentId == agentId && t.DeviceId == deviceId, cancellationToken);
+            if (session == null)
+            {
+                session = new AgentRefreshToken { AgentId = agentId, DeviceId = deviceId };
+                _db.AgentRefreshTokens.Add(session);
+            }
+
+            session.TokenHash = HashToken(token);
+            session.ExpiresAt = DateTime.UtcNow.AddDays(RefreshTokenDays);
             return token;
         }
 

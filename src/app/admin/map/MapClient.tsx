@@ -6,6 +6,7 @@ import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useAgentStore } from '@/store/agent-store';
 import { getAgents, getAgentTrajectory, type AdminAgentDto, type TrajectoryPointDto } from '@/lib/sync/api-client';
+import { getBasemapStyle } from '@/lib/geo/mapStyle';
 
 interface PanchayatGeo {
   name: string;
@@ -22,6 +23,7 @@ export default function MapClient() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapError, setMapError] = useState(false);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const replayMarkerRef = useRef<maplibregl.Marker | null>(null);
 
@@ -89,7 +91,7 @@ export default function MapClient() {
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+      style: getBasemapStyle(),
       center: [87.5701, 25.5541], // Seemanchal center
       zoom: 9.5,
       attributionControl: false,
@@ -97,6 +99,13 @@ export default function MapClient() {
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
     mapRef.current = map;
+
+    // A failed tile/style load (bad token, network issue, provider outage)
+    // otherwise leaves a blank map with no indication anything went wrong.
+    map.on('error', (e) => {
+      console.error('Map load error', e.error);
+      setMapError(true);
+    });
 
     map.on('load', () => {
       // Add Seemanchal block boundaries GeoJSON source & layer
@@ -598,6 +607,16 @@ export default function MapClient() {
       {/* Right Map Canvas Area */}
       <div style={{ position: 'relative', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-lg)', minHeight: '500px' }}>
         <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
+
+        {mapError && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,0.85)', color: '#fff', zIndex: 20, textAlign: 'center', padding: '2rem' }}>
+            <div>
+              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🗺️⚠️</div>
+              <p style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Map failed to load</p>
+              <p style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>The basemap tile provider couldn&apos;t be reached. Agent list and data below are unaffected.</p>
+            </div>
+          </div>
+        )}
 
         {/* Map Overlay Badge */}
         <div style={{ position: 'absolute', top: 16, left: 16, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--surface-border)', zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.05)' }}>

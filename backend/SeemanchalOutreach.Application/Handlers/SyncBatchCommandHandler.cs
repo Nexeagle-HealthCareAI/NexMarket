@@ -31,9 +31,22 @@ namespace SeemanchalOutreach.Application.Handlers
                 try
                 {
                     result = await ProcessItemAsync(item, request.AgentId, request.DeviceId, response.DuplicateWarnings, cancellationToken);
+
+                    // Save per item, not once for the whole batch — otherwise a single
+                    // conflict (e.g. a duplicate ClientId+DeviceId raced into the same
+                    // batch) would throw here uncaught and roll back every other item
+                    // this loop already successfully processed.
+                    await _db.SaveChangesAsync(cancellationToken);
                 }
                 catch (Exception ex)
                 {
+                    // Detach whatever this item added/modified so the failure doesn't
+                    // get retried (and re-fail) on every subsequent item's SaveChanges.
+                    foreach (var entry in _db.ChangeTracker.Entries().ToList())
+                    {
+                        entry.State = EntityState.Detached;
+                    }
+
                     result = new SyncResultDto
                     {
                         ClientId = item.ClientId,
@@ -46,7 +59,6 @@ namespace SeemanchalOutreach.Application.Handlers
                 response.Results.Add(result);
             }
 
-            await _db.SaveChangesAsync(cancellationToken);
             return response;
         }
 

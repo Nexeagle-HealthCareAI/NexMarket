@@ -18,6 +18,12 @@
 #   DEV_SSH_HOST        151.185.45.77
 #   DEV_SSH_USER        Dev VM SSH username
 #   DEV_SSH_PASSWORD    Dev VM SSH password
+#   DEV_MAPBOX_TOKEN    OPTIONAL — a Mapbox access token, used only to render the
+#                       admin live map and the agent "My Task" map (see
+#                       src/lib/geo/mapStyle.ts). Omit it and both fall back to
+#                       MapLibre's key-free demo basemap; no other feature
+#                       depends on it. Kept as a secret, not a repo variable,
+#                       since Mapbox tokens are billable/rate-limited per account.
 #
 #   OPTIONAL repo VARIABLES (Settings → Variables):
 #     DEV_WEB_PORT        default 3010
@@ -113,6 +119,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             NEXT_PUBLIC_API_URL=${{ vars.DEV_API_PUBLIC_URL || 'https://nexmarket-api.nexeagle.com' }}
+            NEXT_PUBLIC_MAPBOX_TOKEN=${{ secrets.DEV_MAPBOX_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

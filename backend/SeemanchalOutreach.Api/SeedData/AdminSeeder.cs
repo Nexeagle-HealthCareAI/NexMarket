@@ -1,4 +1,5 @@
 using System;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -21,7 +22,10 @@ namespace SeemanchalOutreach.Api.SeedData
         {
             if (await db.Agents.AnyAsync()) return null;
 
-            string password = config["Seed:DefaultAdminPassword"] ?? "Admin@123";
+            // No hardcoded fallback — a fixed default like "Admin@123" would be a
+            // guessable credential on every fresh deployment that forgets to set
+            // Seed:DefaultAdminPassword. Generate a random one-time password instead.
+            string password = config["Seed:DefaultAdminPassword"] ?? GenerateRandomPassword();
 
             db.Agents.Add(new FieldAgent
             {
@@ -39,6 +43,18 @@ namespace SeemanchalOutreach.Api.SeedData
 
             await db.SaveChangesAsync();
             return password;
+        }
+
+        private static string GenerateRandomPassword()
+        {
+            const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+            var bytes = RandomNumberGenerator.GetBytes(16);
+            var passwordChars = new char[16];
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                passwordChars[i] = chars[bytes[i] % chars.Length];
+            }
+            return new string(passwordChars);
         }
     }
 }

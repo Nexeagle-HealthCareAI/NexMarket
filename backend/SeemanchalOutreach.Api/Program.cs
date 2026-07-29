@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,6 +44,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1),
+        };
+
+        // Browsers can't attach an Authorization header to the WebSocket upgrade
+        // request SignalR uses, so the JS client sends the token as a query-string
+        // parameter instead — accept it there, but only for the hub path (never
+        // widen this to accept query-string tokens on ordinary REST endpoints).
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -93,10 +112,16 @@ using (var scope = app.Services.CreateScope())
     var seededAdminPassword = await AdminSeeder.SeedIfEmptyAsync(db, app.Configuration);
     if (seededAdminPassword != null)
     {
+        // The password itself must never go through the structured logger — logs are
+        // routinely shipped to aggregators/dashboards with far broader read access
+        // than "whoever is watching this deploy's console output". Console.WriteLine
+        // keeps the one-time credential out of that persisted, widely-readable sink.
         app.Logger.LogWarning(
-            "Seeded default Admin account — AgentId: '{AgentId}', Password: '{Password}'. " +
-            "You will be required to change this password on first login.",
-            AdminSeeder.DefaultAgentId, seededAdminPassword);
+            "Seeded default Admin account — AgentId: '{AgentId}'. Password was printed to " +
+            "console output only. You will be required to change it on first login.",
+            AdminSeeder.DefaultAgentId);
+        Console.WriteLine(
+            $"[first-run] Seeded Admin account '{AdminSeeder.DefaultAgentId}' with password: {seededAdminPassword}");
     }
 }
 
@@ -112,7 +137,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHub<LocationHub>("/hubs/location");
+app.MapHub<LocationHub>("/hubs/location").RequireAuthorization();
 
 // Deploy-pipeline health check — intentionally anonymous, no DB round-trip
 // (keep it cheap so it can't false-negative on a slow query under load).

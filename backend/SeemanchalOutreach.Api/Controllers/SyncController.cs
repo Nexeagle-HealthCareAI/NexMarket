@@ -47,6 +47,14 @@ namespace SeemanchalOutreach.Api.Controllers
                 return BadRequest("Invalid sync batch payload.");
             }
 
+            // Never trust a client-supplied AgentId — every record this batch creates
+            // (contacts, visits, shifts, referrals, trajectory points) gets attributed
+            // to it, so a spoofed value would let one agent forge data under another
+            // agent's identity. Always use the caller's own identity from the JWT.
+            var callerAgentId = User.FindFirst("agentId")?.Value;
+            if (string.IsNullOrEmpty(callerAgentId)) return Unauthorized();
+            command.AgentId = callerAgentId;
+
             var response = await _mediator.Send(command, cancellationToken);
 
             int syncedCount = response.Results.Count(r => r.Status == "created" || r.Status == "already_exists");
@@ -94,10 +102,14 @@ namespace SeemanchalOutreach.Api.Controllers
         [HttpPost("pull")]
         public async Task<ActionResult<object>> Pull([FromBody] SyncPullRequestDto request, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(request.AgentId))
-            {
-                return BadRequest("agentId is required.");
-            }
+            // Never trust a client-supplied AgentId here either — it would let any
+            // authenticated agent read another agent's contacts/visits/GPS trajectory
+            // (all PII) just by naming their ID, which is trivially guessable
+            // (sequential, e.g. "MKT-1001", "MKT-1002", ...). Always scope to the
+            // caller's own identity from the JWT.
+            var callerAgentId = User.FindFirst("agentId")?.Value;
+            if (string.IsNullOrEmpty(callerAgentId)) return Unauthorized();
+            request.AgentId = callerAgentId;
 
             var contacts = await _db.Contacts.AsNoTracking()
                 .Where(c => c.AgentId == request.AgentId && c.ServerReceivedAt >= request.Since)

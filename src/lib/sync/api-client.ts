@@ -362,10 +362,10 @@ export async function syncPull(
   return post<SyncPullRequest, SyncPullResponse>('/api/v1/sync/pull', body, token);
 }
 
-export async function refreshToken(agentId: string, refresh: string): Promise<AuthResponse> {
-  return post<{ agentId: string; refreshToken: string }, AuthResponse>(
+export async function refreshToken(agentId: string, deviceId: string, refresh: string): Promise<AuthResponse> {
+  return post<{ agentId: string; deviceId: string; refreshToken: string }, AuthResponse>(
     '/api/v1/auth/refresh',
-    { agentId, refreshToken: refresh },
+    { agentId, deviceId, refreshToken: refresh },
   );
 }
 
@@ -473,6 +473,8 @@ export interface AssignmentPanchayatDto {
   name: string;
   visited: boolean;
   lastVisitedAt: string | null;
+  centroidLat: number | null;
+  centroidLng: number | null;
 }
 
 export interface MyAssignmentDto {

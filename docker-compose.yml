@@ -16,7 +16,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-nexmarket}
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      # Bound to loopback only — the API container reaches this via `localhost`
+      # (see api-deploy.yml), nothing external needs it directly.
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -26,7 +28,9 @@ services:
     container_name: seemanchal_redis
     restart: unless-stopped
     ports:
-      - '${REDIS_PORT:-6379}:6379'
+      # Bound to loopback only — same reasoning as the db service above. Redis
+      # also has no password configured, so it must never be reachable off-host.
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
 
 volumes:
   pgdata:

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAgentStore } from '@/store/agent-store';
 import { getMyAssignment, type MyAssignmentDto } from '@/lib/sync/api-client';
+import TaskMap from './TaskMap';
 
 export default function MyTaskPage() {
   const jwtToken = useAgentStore((s) => s.jwtToken);
@@ -71,6 +72,8 @@ export default function MyTaskPage() {
           </p>
         )}
       </div>
+
+      <TaskMap panchayats={assignment.panchayats} />
 
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
         {(['all', 'pending', 'visited'] as const).map((f) => (

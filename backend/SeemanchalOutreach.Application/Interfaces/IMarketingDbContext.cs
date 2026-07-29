@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using SeemanchalOutreach.Domain.Entities;
 
 namespace SeemanchalOutreach.Application.Interfaces
@@ -17,6 +18,9 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<TrajectoryPoint> TrajectoryPoints { get; }
         DbSet<SurveyResponse> SurveyResponses { get; }
         DbSet<BlockAssignment> BlockAssignments { get; }
+        DbSet<AgentRefreshToken> AgentRefreshTokens { get; }
+
+        ChangeTracker ChangeTracker { get; }
 
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     }
