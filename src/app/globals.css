@@ -644,7 +644,7 @@ textarea.field-input { resize: none; min-height: 80px; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem;
+  padding: 0;
   background: #f8fafc;
   position: relative;
   overflow: hidden;
@@ -659,7 +659,7 @@ textarea.field-input { resize: none; min-height: 80px; }
   flex-direction: column;
   height: 100dvh;
   overflow: hidden;
-  background: linear-gradient(180deg, #4f46e5 0%, #312e81 30%, #f8fafc 30.1%, #f8fafc 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #312e81 100%);
   width: 100%;
   max-width: 100%;
   position: relative;
@@ -667,7 +667,7 @@ textarea.field-input { resize: none; min-height: 80px; }
 }
 
 .login-mobile-hero {
-  height: 30vh;
+  height: 32vh;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -675,15 +675,16 @@ textarea.field-input { resize: none; min-height: 80px; }
   justify-content: center;
   color: white;
   padding: 2rem;
+  text-align: center;
 }
 
 .login-card-container {
   flex: 1;
   background: #ffffff;
-  border-top-left-radius: 32px;
-  border-top-right-radius: 32px;
-  padding: 2rem;
-  box-shadow: 0 -4px 24px rgba(0,0,0,0.05);
+  border-top-left-radius: 40px;
+  border-top-right-radius: 40px;
+  padding: 2.5rem 2rem;
+  box-shadow: 0 -8px 30px rgba(0,0,0,0.2);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -741,6 +742,10 @@ textarea.field-input { resize: none; min-height: 80px; }
     border-radius: var(--radius-xl);
     box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(99, 102, 241, 0.15);
     overflow-y: visible;
+  }
+
+  .mobile-only-pwa-prompt {
+    display: none !important;
   }
 }
 

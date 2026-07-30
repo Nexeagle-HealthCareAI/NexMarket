@@ -204,55 +204,52 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
             {history.length === 0 ? (
               <p style={{ color: '#64748b', fontStyle: 'italic', margin: 0 }}>No history available.</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', position: 'relative' }}>
-                {/* Vertical Line connecting timeline */}
-                <div style={{ position: 'absolute', left: '16px', top: '10px', bottom: '10px', width: '2px', background: '#e2e8f0', zIndex: 0 }} />
-
-                {history.slice().reverse().map((h) => (
-                  <div key={h.id} style={{ display: 'flex', gap: '1rem', position: 'relative', zIndex: 1 }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.7rem', flexShrink: 0, border: '4px solid white' }}>
-                      {h.updatedBy.charAt(0)}
-                    </div>
-                    <div style={{ flex: 1, background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                        <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.9rem' }}>{h.updatedBy}</span>
-                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
-                          {new Date(h.timestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} at {new Date(h.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, background: '#e2e8f0', padding: '0.1rem 0.5rem', borderRadius: '4px' }}>{h.previousStatus}</span>
-                        <span style={{ color: '#94a3b8' }}>→</span>
-                        <span style={{ fontSize: '0.75rem', color: '#4f46e5', fontWeight: 700, background: '#e0e7ff', padding: '0.1rem 0.5rem', borderRadius: '4px' }}>{h.newStatus}</span>
-                        {h.followUpDate && (
-                          <span style={{ fontSize: '0.75rem', color: '#0ea5e9', fontWeight: 600, background: '#e0f2fe', padding: '0.1rem 0.5rem', borderRadius: '4px' }}>
-                            📅 {new Date(h.followUpDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {h.comments && (
-                          <p style={{ margin: 0, fontSize: '0.9rem', color: '#334155', background: 'white', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                            <strong style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', marginBottom: '0.25rem' }}>Comment</strong>
-                            {h.comments}
-                          </p>
-                        )}
-                        {h.complaints && (
-                          <p style={{ margin: 0, fontSize: '0.9rem', color: '#b91c1c', background: '#fef2f2', padding: '0.75rem', borderRadius: '8px', border: '1px solid #fecaca' }}>
-                            <strong style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: '#ef4444', marginBottom: '0.25rem' }}>Complaint / Issue</strong>
-                            {h.complaints}
-                          </p>
-                        )}
-                        {h.conflicts && (
-                          <p style={{ margin: 0, fontSize: '0.9rem', color: '#c2410c', background: '#fff7ed', padding: '0.75rem', borderRadius: '8px', border: '1px solid #fed7aa' }}>
-                            <strong style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: '#f97316', marginBottom: '0.25rem' }}>Conflict</strong>
-                            {h.conflicts}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
+                  <thead style={{ background: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }}>
+                    <tr>
+                      <th style={{ padding: '0.75rem', fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Date & Time</th>
+                      <th style={{ padding: '0.75rem', fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Agent</th>
+                      <th style={{ padding: '0.75rem', fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Stage Update</th>
+                      <th style={{ padding: '0.75rem', fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Follow-up</th>
+                      <th style={{ padding: '0.75rem', fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Comments</th>
+                      <th style={{ padding: '0.75rem', fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Issues</th>
+                      <th style={{ padding: '0.75rem', fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Conflicts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.slice().reverse().map((h) => (
+                      <tr key={h.id} style={{ borderBottom: '1px solid #e2e8f0', background: 'white' }}>
+                        <td style={{ padding: '0.75rem', fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
+                          <div>{new Date(h.timestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                          <div style={{ fontSize: '0.7rem' }}>{new Date(h.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
+                        </td>
+                        <td style={{ padding: '0.75rem', fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
+                          {h.updatedBy}
+                        </td>
+                        <td style={{ padding: '0.75rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.7rem', color: '#64748b', background: '#f1f5f9', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>{h.previousStatus}</span>
+                            <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>→</span>
+                            <span style={{ fontSize: '0.75rem', color: '#4f46e5', fontWeight: 700, background: '#e0e7ff', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>{h.newStatus}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.75rem', fontSize: '0.8rem', color: '#0ea5e9', fontWeight: 600 }}>
+                          {h.followUpDate ? new Date(h.followUpDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                        </td>
+                        <td style={{ padding: '0.75rem', fontSize: '0.85rem', color: '#334155', maxWidth: '200px', whiteSpace: 'pre-wrap' }}>
+                          {h.comments || '-'}
+                        </td>
+                        <td style={{ padding: '0.75rem', fontSize: '0.85rem', color: '#b91c1c', fontWeight: 500, maxWidth: '150px', whiteSpace: 'pre-wrap' }}>
+                          {h.complaints || '-'}
+                        </td>
+                        <td style={{ padding: '0.75rem', fontSize: '0.85rem', color: '#c2410c', fontWeight: 500, maxWidth: '150px', whiteSpace: 'pre-wrap' }}>
+                          {h.conflicts || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

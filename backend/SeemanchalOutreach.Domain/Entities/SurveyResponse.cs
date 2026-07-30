@@ -25,6 +25,10 @@ namespace SeemanchalOutreach.Domain.Entities
 
         public string? PanchayatId { get; set; }
 
+        public bool IsSkipped { get; set; } = false;
+
+        public string? SkipReason { get; set; }
+
         // Store answers as a flexible JSON string (can be queried via PostgreSQL JSONB)
         [Column(TypeName = "jsonb")]
         public string AnswersJson { get; set; } = "{}";

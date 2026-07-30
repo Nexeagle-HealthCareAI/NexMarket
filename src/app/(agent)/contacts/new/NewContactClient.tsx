@@ -12,6 +12,7 @@ import type { ContactRole, LocalContact } from '@/lib/db/schema';
 
 
 import { useTranslations } from '@/i18n/I18nProvider';
+import SurveyClient from '@/app/(agent)/survey/SurveyClient';
 
 export default function NewContactPage() {
   const router = useRouter();
@@ -47,6 +48,7 @@ export default function NewContactPage() {
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [newContactId, setNewContactId] = useState<string | null>(null);
 
   // useActiveVisit is an async Dexie live-query — it's still undefined on the
   // very first render, so the useState initializer above almost never actually
@@ -117,11 +119,20 @@ export default function NewContactPage() {
     try {
       await db.contacts.add(contact);
       await addToOutbox(clientId, deviceId, 'contact', contact);
-      router.push('/contacts');
+      // Show survey modal instead of routing away immediately
+      setNewContactId(clientId);
     } catch (err) {
       setError(t.errSaveContact);
       setSaving(false);
     }
+  }
+
+  if (newContactId) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9999 }}>
+        <SurveyClient contactId={newContactId} onClose={() => router.push('/contacts')} />
+      </div>
+    );
   }
 
   return (

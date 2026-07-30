@@ -545,6 +545,8 @@ export interface AdminContactsQuery {
   statuses?: string[];
   startDate?: string;
   endDate?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface PaginatedContactsResponse {
@@ -564,6 +566,8 @@ export function getAdminContacts(token: string, query: AdminContactsQuery = {}):
   if (query.statuses?.length) params.set('statuses', query.statuses.join(','));
   if (query.startDate) params.set('startDate', query.startDate);
   if (query.endDate) params.set('endDate', query.endDate);
+  if (query.sortBy) params.set('sortBy', query.sortBy);
+  if (query.sortOrder) params.set('sortOrder', query.sortOrder);
   const qs = params.toString();
   return get<PaginatedContactsResponse>(`/api/v1/admin/contacts${qs ? `?${qs}` : ''}`, token);
 }
@@ -598,4 +602,21 @@ export function updateAdminContact(
     body,
     token
   );
+}
+
+// ─── Admin: Surveys ─────────────────────────────────────────────────────────────
+
+export interface AdminSurveyDto {
+  id: string;
+  clientId: string;
+  agentId: string;
+  contactId: string;
+  panchayatId: string;
+  answersJson: string;
+  createdAt: string;
+  syncedAt: string;
+}
+
+export function getAdminSurveys(token: string): Promise<AdminSurveyDto[]> {
+  return get<AdminSurveyDto[]>('/api/v1/admin/surveys', token);
 }

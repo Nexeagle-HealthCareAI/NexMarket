@@ -44,6 +44,8 @@ namespace SeemanchalOutreach.Api.Controllers
             [FromQuery] string? statuses = null,
             [FromQuery] DateTime? startDate = null,
             [FromQuery] DateTime? endDate = null,
+            [FromQuery] string? sortBy = null,
+            [FromQuery] string? sortOrder = null,
             CancellationToken cancellationToken = default)
         {
             page = Math.Max(page, 1);
@@ -90,8 +92,22 @@ namespace SeemanchalOutreach.Api.Controllers
 
             var totalCount = await contactsQuery.CountAsync(cancellationToken);
 
+            bool isDesc = string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase);
+
+            contactsQuery = sortBy?.ToLowerInvariant() switch
+            {
+                "name" => isDesc ? contactsQuery.OrderByDescending(c => c.Name) : contactsQuery.OrderBy(c => c.Name),
+                "location" => isDesc ? contactsQuery.OrderByDescending(c => c.PanchayatId) : contactsQuery.OrderBy(c => c.PanchayatId),
+                "status" => isDesc ? contactsQuery.OrderByDescending(c => c.Status) : contactsQuery.OrderBy(c => c.Status),
+                "followupdate" => isDesc ? contactsQuery.OrderByDescending(c => c.FollowUpDate) : contactsQuery.OrderBy(c => c.FollowUpDate),
+                "addedby" => isDesc ? contactsQuery.OrderByDescending(c => c.AgentId) : contactsQuery.OrderBy(c => c.AgentId),
+                "comments" => isDesc ? contactsQuery.OrderByDescending(c => c.Comments) : contactsQuery.OrderBy(c => c.Comments),
+                "complaints" => isDesc ? contactsQuery.OrderByDescending(c => c.Complaints) : contactsQuery.OrderBy(c => c.Complaints),
+                "conflicts" => isDesc ? contactsQuery.OrderByDescending(c => c.Conflicts) : contactsQuery.OrderBy(c => c.Conflicts),
+                _ => isDesc ? contactsQuery.OrderByDescending(c => c.CreatedAt) : contactsQuery.OrderBy(c => c.CreatedAt)
+            };
+
             var pageItems = await contactsQuery
-                .OrderByDescending(c => c.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(c => new

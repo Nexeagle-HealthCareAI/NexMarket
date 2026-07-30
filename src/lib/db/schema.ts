@@ -139,7 +139,9 @@ export interface LocalSurveyResponse {
   agentId: string;
   contactId?: string;
   panchayatId?: string;
-  answersJson: string; // The gamified Q&A
+  isSkipped?: boolean;
+  skipReason?: string;
+  answersJson: string; // JSON string
   createdAt: string;
   syncedAt?: string;
 }

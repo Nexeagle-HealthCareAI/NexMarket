@@ -2,40 +2,39 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useAgentStore } from '@/store/agent-store';
+import { getAdminSurveys, type AdminSurveyDto } from '@/lib/sync/api-client';
 
 export default function AdminSurveysPage() {
-  const [surveys, setSurveys] = useState<any[]>([]);
+  const token = useAgentStore((s) => s.jwtToken);
+  const [surveys, setSurveys] = useState<AdminSurveyDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchSurveys() {
-      try {
-        const token = localStorage.getItem('admin_token'); // from dummy auth or real auth
-        if (!token) {
-          throw new Error('Not authenticated');
-        }
-        
-        const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-        const res = await fetch(`${API_BASE}/api/v1/admin/surveys`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (!res.ok) throw new Error('Failed to fetch surveys');
-        
-        const data = await res.json();
-        setSurveys(data);
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
+    if (!token) {
+      setLoading(false);
+      setError('Not authenticated');
+      return;
     }
 
-    fetchSurveys();
-  }, []);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    getAdminSurveys(token)
+      .then((data) => {
+        if (!cancelled) setSurveys(data);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to fetch surveys');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [token]);
 
   return (
     <div style={{ padding: '2rem' }}>
@@ -51,19 +50,21 @@ export default function AdminSurveysPage() {
       {!loading && !error && surveys.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '1.5rem' }}>
           {surveys.map((survey) => {
-            let answers = {};
+            let answers: Record<string, unknown> = {};
             try {
               answers = JSON.parse(survey.answersJson);
-            } catch(e) {}
-            
+            } catch {
+              // Malformed/legacy payload — render the card with no answers rather than crash.
+            }
+
             return (
-              <motion.div 
+              <motion.div
                 key={survey.id}
                 whileHover={{ scale: 1.01 }}
-                style={{ 
-                  background: 'white', 
-                  borderRadius: '12px', 
-                  padding: '1.5rem', 
+                style={{
+                  background: 'white',
+                  borderRadius: '12px',
+                  padding: '1.5rem',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                   border: '1px solid #e5e7eb'
                 }}
@@ -72,7 +73,7 @@ export default function AdminSurveysPage() {
                   <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Agent ID: {survey.agentId}</p>
                   <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Date: {new Date(survey.createdAt).toLocaleString()}</p>
                 </div>
-                
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {Object.entries(answers).map(([qId, ans]) => (
                     <div key={qId}>

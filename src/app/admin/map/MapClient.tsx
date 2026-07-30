@@ -322,7 +322,7 @@ export default function MapClient() {
       el.style.background = '#38bdf8';
       el.style.border = '3px solid #fff';
       el.style.boxShadow = '0 0 12px #38bdf8';
-      replayMarkerRef.current = new maplibregl.Marker({ element: el }).addTo(map);
+      replayMarkerRef.current = new maplibregl.Marker({ element: el }).setLngLat([pt.lng, pt.lat]).addTo(map);
     }
 
     replayMarkerRef.current.setLngLat([pt.lng, pt.lat]);

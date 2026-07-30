@@ -11,7 +11,7 @@ import { useTranslations } from '@/i18n/I18nProvider';
 
 type Answer = string | number | string[];
 
-export default function SurveyClient() {
+export default function SurveyClient({ contactId: initialContactId, onClose }: { contactId?: string, onClose?: () => void }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const t = useTranslations();
@@ -20,24 +20,22 @@ export default function SurveyClient() {
   const activeVisit = useActiveVisit(agentId ?? undefined);
 
   const QUESTIONS = [
-    { id: 'q1', text: t.q1, type: 'text' },
-    { id: 'q2', text: t.q2, type: 'text' },
-    { id: 'q3', text: t.q3, type: 'number' },
+    { id: 'q1', text: t.q1, type: 'single', options: [t.q1_o1, t.q1_o2, t.q1_o3, t.q1_o4] },
+    { id: 'q2', text: t.q2, type: 'single', options: [t.q2_o1, t.q2_o2, t.q2_o3, t.q2_o4] },
+    { id: 'q3', text: t.q3, type: 'single', options: [t.q3_o1, t.q3_o2, t.q3_o3, t.q3_o4] },
     { id: 'q4', text: t.q4, type: 'single', options: [t.q4_o1, t.q4_o2, t.q4_o3, t.q4_o4] },
     { id: 'q5', text: t.q5, type: 'single', options: [t.q5_o1, t.q5_o2, t.q5_o3, t.q5_o4] },
-    { id: 'q6', text: t.q6, type: 'single', options: [t.q6_o1, t.q6_o2, t.q6_o3, t.q6_o4] },
-    { id: 'q7', text: t.q7, type: 'single', options: [t.q7_o1, t.q7_o2, t.q7_o3, t.q7_o4] },
-    { id: 'q8', text: t.q8, type: 'text' },
-    { id: 'q9', text: t.q9, type: 'single', options: [t.q9_o1, t.q9_o2, t.q9_o3] },
-    { id: 'q10', text: t.q10, type: 'text' },
-    { id: 'q11', text: t.q11, type: 'single', options: [t.q11_o1, t.q11_o2, t.q11_o3, t.q11_o4] },
-    { id: 'q12', text: t.q12, type: 'text' },
-    { id: 'q13', text: t.q13, type: 'text' }
+    { id: 'q6', text: t.q6, type: 'text' }
   ];
 
   const [currentIdx, setCurrentIdx] = useState(0);
   const [responses, setResponses] = useState<Record<string, Answer>>({});
   const [loading, setLoading] = useState(false);
+  const [showSkipPrompt, setShowSkipPrompt] = useState(false);
+  const [skipReason, setSkipReason] = useState<string>('');
+
+  // Fallback to URL param if prop isn't provided
+  const contactId = initialContactId || searchParams.get('contactId') || undefined;
 
   useEffect(() => {
     document.body.classList.add('survey-mode');
@@ -58,7 +56,7 @@ export default function SurveyClient() {
     }
   };
 
-  const submitSurvey = async () => {
+  const submitSurvey = async (isSkipped = false, reason = '') => {
     if (!agentId || !deviceId) return;
     setLoading(true);
     try {
@@ -71,14 +69,19 @@ export default function SurveyClient() {
         clientId,
         deviceId,
         agentId,
+        contactId,
         panchayatId: activeVisit?.panchayatId,
+        isSkipped,
+        skipReason: reason || undefined,
         answersJson: JSON.stringify(responsesRecord),
         createdAt: new Date().toISOString(),
       };
 
       await db.surveyResponses.add(surveyRecord);
       await addToOutbox(clientId, deviceId, 'survey', surveyRecord);
-      router.push('/home');
+      
+      if (onClose) onClose();
+      else router.push('/home');
     } catch (e) {
       console.error(e);
       setLoading(false);
@@ -111,9 +114,10 @@ export default function SurveyClient() {
         />
       </div>
 
-      <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={() => router.back()} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1rem', cursor: 'pointer', opacity: 0.7 }}>{t.surveyCancel}</button>
+      <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
+        <button onClick={() => { if (onClose) onClose(); else router.back(); }} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1rem', cursor: 'pointer', opacity: 0.7 }}>{t.surveyCancel}</button>
         <span style={{ fontWeight: 600, opacity: 0.8 }}>{currentIdx + 1} of {QUESTIONS.length}</span>
+        <button onClick={() => setShowSkipPrompt(true)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>{t.skipSurvey || 'Skip Survey'}</button>
       </div>
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
@@ -210,6 +214,44 @@ export default function SurveyClient() {
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {/* Skip Prompt Overlay */}
+      <AnimatePresence>
+        {showSkipPrompt && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', zIndex: 50 }}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+              style={{ background: 'white', color: '#0f172a', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '400px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
+            >
+              <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', fontWeight: 800 }}>{t.reasonForSkip || 'Why are you skipping?'}</h3>
+              <p style={{ margin: '0 0 1.5rem 0', color: '#64748b', fontSize: '0.9rem' }}>{t.surveyOptional || 'The health survey is optional.'}</p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                {[
+                  { value: 'not_interested', label: t.skipReasonNotInterested || 'Not interested / Refused' },
+                  { value: 'no_time', label: t.skipReasonNoTime || 'No time / Too busy' },
+                  { value: 'not_applicable', label: t.skipReasonNotApplicable || 'Not applicable' },
+                  { value: 'other', label: t.skipReasonOther || 'Other' }
+                ].map(reason => (
+                  <label key={reason.value} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: skipReason === reason.value ? '#eff6ff' : 'white', borderColor: skipReason === reason.value ? '#3b82f6' : '#e2e8f0' }}>
+                    <input type="radio" name="skipReason" value={reason.value} checked={skipReason === reason.value} onChange={() => setSkipReason(reason.value)} style={{ width: '1rem', height: '1rem' }} />
+                    <span style={{ fontSize: '0.95rem', fontWeight: 500 }}>{reason.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <button onClick={() => setShowSkipPrompt(false)} style={{ flex: 1, padding: '0.85rem', background: '#f1f5f9', border: 'none', borderRadius: '8px', color: '#475569', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => submitSurvey(true, skipReason)} disabled={!skipReason} style={{ flex: 1, padding: '0.85rem', background: skipReason ? '#ef4444' : '#fca5a5', border: 'none', borderRadius: '8px', color: 'white', fontWeight: 700, cursor: skipReason ? 'pointer' : 'not-allowed' }}>{t.confirmSkip || 'Confirm Skip'}</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

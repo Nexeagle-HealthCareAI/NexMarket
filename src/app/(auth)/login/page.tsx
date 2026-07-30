@@ -212,7 +212,48 @@ export default function LoginPage() {
       >
         {/* Native App Top/Hero Section (Mobile Only) */}
         <div className="login-mobile-hero">
-          <h1 style={{ fontSize: '2.25rem', fontWeight: 900, letterSpacing: '-0.03em', marginBottom: '0.25rem' }}>NexMarket</h1>
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+            style={{
+              width: 56,
+              height: 56,
+              background: 'linear-gradient(135deg, #ffffff 0%, #e2e8f0 100%)',
+              borderRadius: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 8px 16px rgba(0,0,0,0.2)',
+              marginBottom: '1rem'
+            }}
+          >
+            <svg width={32} height={32} viewBox="0 0 24 24" fill="none" stroke="url(#blueGrad)" strokeWidth={2.5}>
+              <defs>
+                <linearGradient id="blueGrad" x1="0" y1="0" x2="24" y2="24">
+                  <stop stopColor="#4f46e5" />
+                  <stop offset="1" stopColor="#0284c7" />
+                </linearGradient>
+              </defs>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </motion.div>
+          <motion.h1 
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.1, ease: 'easeOut' }}
+            style={{ fontSize: '2.5rem', fontWeight: 900, letterSpacing: '-0.04em', marginBottom: '0.25rem' }}
+          >
+            NexMarket
+          </motion.h1>
+          <motion.p
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.2, ease: 'easeOut' }}
+            style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.85)', fontWeight: 500, letterSpacing: '0.01em' }}
+          >
+            Field Operations Platform
+          </motion.p>
         </div>
 
         {/* Desktop Title (Desktop Only) */}

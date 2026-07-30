@@ -25,9 +25,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [isCollapsed, setIsCollapsed] = useState(false);
   const agentId = useAgentStore((s) => s.agentId);
   const role = useAgentStore((s) => s.role);
+  const clearAuth = useAgentStore((s) => s.clearAuth);
 
   const handleLogout = () => {
-    localStorage.removeItem('admin_token');
+    clearAuth();
     router.push('/');
   };
 

@@ -15,6 +15,34 @@ const EXPORT_PAGE_SIZE = 2000;
 
 type Contact = AdminContactDto;
 
+function SortableHeader({ label, columnKey, currentSortBy, currentSortOrder, onSort, width }: { label: string, columnKey: string, currentSortBy?: string, currentSortOrder?: 'asc' | 'desc', onSort: (key: string, order: 'asc' | 'desc') => void, width?: string }) {
+  const isActive = currentSortBy === columnKey;
+  
+  const handleClick = () => {
+    if (!isActive) {
+      onSort(columnKey, 'asc');
+    } else if (currentSortOrder === 'asc') {
+      onSort(columnKey, 'desc');
+    } else {
+      onSort(columnKey, 'asc'); // Or clear sort, but toggling is fine
+    }
+  };
+
+  return (
+    <th 
+      onClick={handleClick}
+      style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', width, userSelect: 'none' }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+        {label}
+        <span style={{ color: isActive ? '#4f46e5' : '#cbd5e1', fontSize: '0.9rem' }}>
+          {isActive ? (currentSortOrder === 'asc' ? '↑' : '↓') : '↕'}
+        </span>
+      </div>
+    </th>
+  );
+}
+
 export default function PipelinePage() {
   const token = useAgentStore((s) => s.jwtToken);
   const name = useAgentStore((s) => s.name);
@@ -25,10 +53,13 @@ export default function PipelinePage() {
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [historyModalContact, setHistoryModalContact] = useState<Contact | null>(null);
+  const [editDrawerContact, setEditDrawerContact] = useState<Contact | null>(null);
   const [activeTab, setActiveTab] = useState<'worklist' | 'historical'>('worklist');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [sortBy, setSortBy] = useState<string | undefined>(undefined);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | undefined>(undefined);
 
   // Filter States
   const [panchayatsData, setPanchayatsData] = useState<PanchayatDto[]>([]);
@@ -85,6 +116,8 @@ export default function PipelinePage() {
           statuses: activeTab === 'worklist' ? ['Lead', 'Contacted', 'FollowUp'] : undefined,
           startDate,
           endDate,
+          sortBy,
+          sortOrder,
         });
         if (cancelled) return;
         setContacts(res.items);
@@ -97,7 +130,7 @@ export default function PipelinePage() {
     })();
 
     return () => { cancelled = true; };
-  }, [token, page, selectedCities, selectedBlocks, selectedPanchayats, activeTab, dateFilter, customStartDate, customEndDate]);
+  }, [token, page, selectedCities, selectedBlocks, selectedPanchayats, activeTab, dateFilter, customStartDate, customEndDate, sortBy, sortOrder]);
 
   const handleSaveContact = async (updatedContact: Contact) => {
     if (!token) return;
@@ -327,23 +360,23 @@ export default function PipelinePage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr>
-                  <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact Details</th>
-                  <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Location (Village)</th>
+                  <SortableHeader label="Contact Details" columnKey="name" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
+                  <SortableHeader label="Location (Village)" columnKey="location" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
                   {activeTab === 'worklist' && (
                     <>
-                      <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', width: '160px' }}>Stage (Result)</th>
-                      <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Follow-up Date</th>
+                      <SortableHeader label="Stage (Result)" columnKey="status" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} width="160px" />
+                      <SortableHeader label="Follow-up Date" columnKey="followupdate" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
                     </>
                   )}
-                  <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Added By</th>
+                  <SortableHeader label="Added By" columnKey="addedby" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
                   {activeTab === 'worklist' && (
                     <>
-                      <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Comments</th>
-                      <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Issues</th>
-                      <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Conflicts</th>
+                      <SortableHeader label="Comments" columnKey="comments" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
+                      <SortableHeader label="Issues" columnKey="complaints" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
+                      <SortableHeader label="Conflicts" columnKey="conflicts" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
                     </>
                   )}
-                  <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last Updated</th>
+                  <SortableHeader label="Last Updated" columnKey="lastupdated" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
@@ -358,7 +391,7 @@ export default function PipelinePage() {
                       blockName={pInfo?.block}
                       showStageAndFollowUp={activeTab === 'worklist'}
                       showComments={activeTab === 'worklist'}
-                      onSave={handleSaveContact}
+                      onEdit={() => setEditDrawerContact(c)}
                       onViewHistory={() => setHistoryModalContact(c)}
                     />
                   );
@@ -402,6 +435,20 @@ export default function PipelinePage() {
           />
         )}
       </AnimatePresence>
+
+      {/* Edit Contact Drawer */}
+      <AnimatePresence>
+        {editDrawerContact && (
+          <EditContactDrawer
+            contact={editDrawerContact}
+            onClose={() => setEditDrawerContact(null)}
+            onSave={(updated) => {
+              handleSaveContact(updated);
+              setEditDrawerContact(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -409,54 +456,20 @@ export default function PipelinePage() {
 // -------------------------------------------------------------------------------------------------
 // Contact Row Component (Handles inline editing state)
 // -------------------------------------------------------------------------------------------------
-function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, showComments, onSave, onViewHistory }: { contact: Contact, panchayatName?: string, blockName?: string, showStageAndFollowUp: boolean, showComments: boolean, onSave: (c: Contact) => void, onViewHistory: () => void }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editStatus, setEditStatus] = useState(contact.status || 'Lead');
-  const [editFollowUp, setEditFollowUp] = useState(contact.followUpDate ? new Date(contact.followUpDate).toISOString().split('T')[0] : '');
-  const [editComments, setEditComments] = useState(contact.comments || '');
-  const [editComplaints, setEditComplaints] = useState(contact.complaints || '');
-  const [editConflicts, setEditConflicts] = useState(contact.conflicts || '');
-
-  const hasChanges = editStatus !== contact.status || 
-                     editFollowUp !== (contact.followUpDate ? new Date(contact.followUpDate).toISOString().split('T')[0] : '') ||
-                     editComments !== (contact.comments || '') ||
-                     editComplaints !== (contact.complaints || '') ||
-                     editConflicts !== (contact.conflicts || '');
-
-  const handleSave = () => {
-    onSave({
-      ...contact,
-      status: editStatus,
-      followUpDate: editFollowUp ? new Date(editFollowUp).toISOString() : null,
-      comments: editComments,
-      complaints: editComplaints,
-      conflicts: editConflicts
-    });
-    setIsEditing(false);
-  };
-
-  const handleCancel = () => {
-    setEditStatus(contact.status || 'Lead');
-    setEditFollowUp(contact.followUpDate ? new Date(contact.followUpDate).toISOString().split('T')[0] : '');
-    setEditComments(contact.comments || '');
-    setEditComplaints(contact.complaints || '');
-    setEditConflicts(contact.conflicts || '');
-    setIsEditing(false);
-  };
-
+function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, showComments, onEdit, onViewHistory }: { contact: Contact, panchayatName?: string, blockName?: string, showStageAndFollowUp: boolean, showComments: boolean, onEdit: () => void, onViewHistory: () => void }) {
   // Format last updated IST time
   const lastUpdatedTime = contact.lastUpdatedAt
     ? new Date(contact.lastUpdatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) + ' IST'
     : 'Never';
   const lastUpdatedBy = contact.lastUpdatedBy || 'N/A';
 
-  const statusColor = editStatus === 'Lead' ? '#94a3b8' :
-                      editStatus === 'Contacted' ? '#eab308' :
-                      editStatus === 'FollowUp' ? '#3b82f6' :
-                      editStatus === 'Converted' ? '#22c55e' : '#ef4444';
+  const statusColor = contact.status === 'Lead' ? '#94a3b8' :
+                      contact.status === 'Contacted' ? '#eab308' :
+                      contact.status === 'FollowUp' ? '#3b82f6' :
+                      contact.status === 'Converted' ? '#22c55e' : '#ef4444';
 
   return (
-    <tr style={{ borderBottom: '1px solid #e2e8f0', background: isEditing ? '#f8fafc' : 'white', transition: 'background 0.2s' }}>
+    <tr style={{ borderBottom: '1px solid #e2e8f0', background: 'white', transition: 'background 0.2s' }}>
       <td style={{ padding: '1rem' }}>
         <div style={{ fontWeight: 700, color: '#0f172a' }}>{contact.name}</div>
         <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'capitalize', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -490,36 +503,17 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
       {showStageAndFollowUp && (
         <>
           <td style={{ padding: '1rem' }}>
-            {isEditing ? (
-              <select 
-                value={editStatus} 
-                onChange={e => setEditStatus(e.target.value)}
-                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${statusColor}`, outline: 'none', background: 'white', fontWeight: 600, fontSize: '0.85rem' }}
-              >
-                {STATUSES.map(col => <option key={col} value={col}>{col}</option>)}
-              </select>
-            ) : (
-              <span style={{ 
-                background: `${statusColor}20`, color: statusColor, 
-                padding: '0.25rem 0.75rem', borderRadius: '20px', fontWeight: 700, fontSize: '0.8rem' 
-              }}>
-                {contact.status}
-              </span>
-            )}
+            <span style={{ 
+              background: `${statusColor}20`, color: statusColor, 
+              padding: '0.25rem 0.75rem', borderRadius: '20px', fontWeight: 700, fontSize: '0.8rem' 
+            }}>
+              {contact.status}
+            </span>
           </td>
           <td style={{ padding: '1rem' }}>
-            {isEditing ? (
-              <input 
-                type="date" 
-                value={editFollowUp} 
-                onChange={e => setEditFollowUp(e.target.value)}
-                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontWeight: 600, fontSize: '0.85rem', color: '#0f172a' }}
-              />
-            ) : (
-              <div style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 600 }}>
-                {contact.followUpDate ? new Date(contact.followUpDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
-              </div>
-            )}
+            <div style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 600 }}>
+              {contact.followUpDate ? new Date(contact.followUpDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+            </div>
           </td>
         </>
       )}
@@ -530,49 +524,19 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
       {showComments && (
         <>
           <td style={{ padding: '1rem' }}>
-            {isEditing ? (
-              <textarea 
-                rows={2}
-                value={editComments} 
-                onChange={e => setEditComments(e.target.value)}
-                placeholder="Notes..."
-                style={{ width: '100%', minWidth: '180px', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical', background: 'white', fontWeight: 500, fontSize: '0.85rem', color: '#0f172a' }}
-              />
-            ) : (
-              <div style={{ fontSize: '0.85rem', color: '#475569', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={contact.comments || ''}>
-                {contact.comments || '-'}
-              </div>
-            )}
+            <div style={{ fontSize: '0.85rem', color: '#475569', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={contact.comments || ''}>
+              {contact.comments || '-'}
+            </div>
           </td>
           <td style={{ padding: '1rem' }}>
-            {isEditing ? (
-              <textarea 
-                rows={2}
-                value={editComplaints} 
-                onChange={e => setEditComplaints(e.target.value)}
-                placeholder="Issues / Complaints..."
-                style={{ width: '100%', minWidth: '150px', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical', background: 'white', fontWeight: 500, fontSize: '0.85rem', color: '#0f172a' }}
-              />
-            ) : (
-              <div style={{ fontSize: '0.85rem', color: '#ef4444', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={contact.complaints || ''}>
-                {contact.complaints || '-'}
-              </div>
-            )}
+            <div style={{ fontSize: '0.85rem', color: '#ef4444', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={contact.complaints || ''}>
+              {contact.complaints || '-'}
+            </div>
           </td>
           <td style={{ padding: '1rem' }}>
-            {isEditing ? (
-              <textarea 
-                rows={2}
-                value={editConflicts} 
-                onChange={e => setEditConflicts(e.target.value)}
-                placeholder="Conflicts..."
-                style={{ width: '100%', minWidth: '150px', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical', background: 'white', fontWeight: 500, fontSize: '0.85rem', color: '#0f172a' }}
-              />
-            ) : (
-              <div style={{ fontSize: '0.85rem', color: '#f97316', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={contact.conflicts || ''}>
-                {contact.conflicts || '-'}
-              </div>
-            )}
+            <div style={{ fontSize: '0.85rem', color: '#f97316', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={contact.conflicts || ''}>
+              {contact.conflicts || '-'}
+            </div>
           </td>
         </>
       )}
@@ -588,21 +552,14 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
         </div>
       </td>
       <td style={{ padding: '1rem', textAlign: 'center', minWidth: '120px' }}>
-        {isEditing ? (
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-            <button onClick={handleSave} disabled={!hasChanges} style={{ background: hasChanges ? '#4f46e5' : '#cbd5e1', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: hasChanges ? 'pointer' : 'not-allowed', fontSize: '0.8rem' }}>Save</button>
-            <button onClick={handleCancel} style={{ background: 'transparent', color: '#64748b', border: '1px solid #cbd5e1', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-            <button onClick={() => setIsEditing(true)} style={{ background: 'transparent', color: '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-              Edit
-            </button>
-            <Link href={`/admin/pipeline/${contact.clientId}`} style={{ background: '#0f172a', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
-              Profile
-            </Link>
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+          <button onClick={onEdit} style={{ background: 'transparent', color: '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+            Update
+          </button>
+          <Link href={`/admin/pipeline/${contact.clientId}`} style={{ background: '#0f172a', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+            Profile
+          </Link>
+        </div>
       </td>
     </tr>
   );
@@ -793,26 +750,150 @@ function MultiSelectDropdown({ label, options, selected, onChange, disabled, pla
               }}
             >
               {options.length === 0 ? (
-                <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: '#64748b' }}>No options</div>
+                <div style={{ padding: '0.75rem', color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center' }}>No options</div>
               ) : (
-                options.map((opt: string) => (
-                  <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', background: selected.includes(opt) ? '#f8fafc' : 'white' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={selected.includes(opt)} 
-                      onChange={() => toggleSelection(opt)} 
-                      style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#4f46e5' }} 
-                    />
-                    <span style={{ fontSize: '0.85rem', fontWeight: selected.includes(opt) ? 700 : 500, color: selected.includes(opt) ? '#4f46e5' : '#334155' }}>
-                      {opt}
-                    </span>
-                  </label>
-                ))
+                <div style={{ padding: '0.5rem' }}>
+                  {options.map(opt => (
+                    <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', cursor: 'pointer', borderRadius: '4px' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <input 
+                        type="checkbox" 
+                        checked={selected.includes(opt)}
+                        onChange={(e) => {
+                          if (e.target.checked) onChange([...selected, opt]);
+                          else onChange(selected.filter(s => s !== opt));
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 500 }}>{opt}</span>
+                    </label>
+                  ))}
+                </div>
               )}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------------------------------------
+// Edit Contact Drawer Component
+// -------------------------------------------------------------------------------------------------
+function EditContactDrawer({ contact, onClose, onSave }: { contact: Contact, onClose: () => void, onSave: (c: Contact) => void }) {
+  const [editStatus, setEditStatus] = useState(contact.status || 'Lead');
+  const [editFollowUp, setEditFollowUp] = useState(contact.followUpDate ? new Date(contact.followUpDate).toISOString().split('T')[0] : '');
+  const [editComments, setEditComments] = useState(contact.comments || '');
+  const [editComplaints, setEditComplaints] = useState(contact.complaints || '');
+  const [editConflicts, setEditConflicts] = useState(contact.conflicts || '');
+
+  const hasChanges = editStatus !== contact.status || 
+                     editFollowUp !== (contact.followUpDate ? new Date(contact.followUpDate).toISOString().split('T')[0] : '') ||
+                     editComments !== (contact.comments || '') ||
+                     editComplaints !== (contact.complaints || '') ||
+                     editConflicts !== (contact.conflicts || '');
+
+  const handleSave = () => {
+    onSave({
+      ...contact,
+      status: editStatus,
+      followUpDate: editFollowUp ? new Date(editFollowUp).toISOString() : null,
+      comments: editComments,
+      complaints: editComplaints,
+      conflicts: editConflicts
+    });
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', justifyContent: 'flex-end' }}>
+      <motion.div 
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        exit={{ opacity: 0 }} 
+        onClick={onClose}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(2px)' }} 
+      />
+      
+      <motion.div 
+        initial={{ x: '100%' }} 
+        animate={{ x: 0 }} 
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        style={{ 
+          position: 'relative', background: 'white', width: '100%', maxWidth: 450, 
+          height: '100%', boxShadow: '-10px 0 25px rgba(0, 0, 0, 0.1)',
+          display: 'flex', flexDirection: 'column'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', padding: '1.5rem', background: '#f8fafc' }}>
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>Update Contact</h2>
+            <p style={{ color: '#64748b', margin: 0, fontSize: '0.85rem' }}>{contact.name} ({contact.phone || 'No Phone'})</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'white', border: '1px solid #e2e8f0', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', transition: 'background 0.2s' }}>✕</button>
+        </div>
+
+        <div style={{ overflowY: 'auto', flex: 1, padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Stage (Result)</label>
+            <select 
+              value={editStatus} 
+              onChange={e => setEditStatus(e.target.value)}
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontWeight: 600, fontSize: '0.9rem', color: '#0f172a' }}
+            >
+              {STATUSES.map(col => <option key={col} value={col}>{col}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Follow-up Date</label>
+            <input 
+              type="date" 
+              value={editFollowUp} 
+              onChange={e => setEditFollowUp(e.target.value)}
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontWeight: 600, fontSize: '0.9rem', color: '#0f172a', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Comments / Notes</label>
+            <textarea 
+              rows={3}
+              value={editComments} 
+              onChange={e => setEditComments(e.target.value)}
+              placeholder="Add any general notes here..."
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical', background: 'white', fontWeight: 500, fontSize: '0.9rem', color: '#0f172a', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Issues / Complaints</label>
+            <textarea 
+              rows={3}
+              value={editComplaints} 
+              onChange={e => setEditComplaints(e.target.value)}
+              placeholder="Record any issues..."
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #fecaca', outline: 'none', resize: 'vertical', background: '#fef2f2', fontWeight: 500, fontSize: '0.9rem', color: '#7f1d1d', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#f97316', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Conflicts</label>
+            <textarea 
+              rows={3}
+              value={editConflicts} 
+              onChange={e => setEditConflicts(e.target.value)}
+              placeholder="Record any conflicts..."
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #fed7aa', outline: 'none', resize: 'vertical', background: '#fff7ed', fontWeight: 500, fontSize: '0.9rem', color: '#9a3412', boxSizing: 'border-box' }}
+            />
+          </div>
+        </div>
+
+        <div style={{ padding: '1.5rem', borderTop: '1px solid #e2e8f0', background: 'white', display: 'flex', gap: '1rem' }}>
+          <button onClick={onClose} style={{ flex: 1, background: 'white', color: '#64748b', border: '1px solid #cbd5e1', padding: '0.75rem', borderRadius: '8px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>Cancel</button>
+          <button onClick={handleSave} disabled={!hasChanges} style={{ flex: 2, background: hasChanges ? '#4f46e5' : '#cbd5e1', color: 'white', border: 'none', padding: '0.75rem', borderRadius: '8px', fontWeight: 600, cursor: hasChanges ? 'pointer' : 'not-allowed', fontSize: '0.9rem' }}>Save Updates</button>
+        </div>
+      </motion.div>
     </div>
   );
 }
