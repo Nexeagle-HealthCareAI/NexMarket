@@ -161,6 +161,8 @@ namespace SeemanchalOutreach.Application.Handlers
                     string status = GetString(root, "status", "Lead");
                     DateTime? followUpDate = GetOptionalDateTime(root, "followUpDate");
                     string? comments = root.TryGetProperty("comments", out var cProp) && cProp.ValueKind == JsonValueKind.String ? cProp.GetString() : null;
+                    double? lat = GetOptionalDouble(root, "lat");
+                    double? lng = GetOptionalDouble(root, "lng");
 
                     if (existing == null)
                     {
@@ -178,6 +180,8 @@ namespace SeemanchalOutreach.Application.Handlers
                             Status = status,
                             FollowUpDate = followUpDate,
                             Comments = comments,
+                            Latitude = lat,
+                            Longitude = lng,
                             CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
                             ServerReceivedAt = syncedAt
                         };
@@ -239,6 +243,8 @@ namespace SeemanchalOutreach.Application.Handlers
                             existing.Status = status;
                             existing.FollowUpDate = followUpDate;
                             if (comments != null) existing.Comments = comments;
+                            if (lat.HasValue) existing.Latitude = lat.Value;
+                            if (lng.HasValue) existing.Longitude = lng.Value;
 
                             // Guard against outbox retries re-sending the same unchanged item and
                             // spamming the audit trail with no-op entries.

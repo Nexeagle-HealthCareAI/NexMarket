@@ -25,6 +25,10 @@ export default function PipelinePage() {
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [historyModalContact, setHistoryModalContact] = useState<Contact | null>(null);
+  const [activeTab, setActiveTab] = useState<'worklist' | 'historical'>('worklist');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
   // Filter States
   const [panchayatsData, setPanchayatsData] = useState<PanchayatDto[]>([]);
@@ -40,6 +44,34 @@ export default function PipelinePage() {
     if (!token) return;
     let cancelled = false;
 
+    let startDate: string | undefined = undefined;
+    let endDate: string | undefined = undefined;
+    const now = new Date();
+    if (dateFilter === 'today') {
+      const d = new Date(now.setHours(0,0,0,0));
+      startDate = d.toISOString();
+      const end = new Date(now.setHours(23,59,59,999));
+      endDate = end.toISOString();
+    } else if (dateFilter === 'yesterday') {
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      const d = new Date(y.setHours(0,0,0,0));
+      startDate = d.toISOString();
+      const end = new Date(y.setHours(23,59,59,999));
+      endDate = end.toISOString();
+    } else if (dateFilter === 'custom') {
+      if (customStartDate) {
+        const d = new Date(customStartDate);
+        d.setHours(0,0,0,0);
+        startDate = d.toISOString();
+      }
+      if (customEndDate) {
+        const d = new Date(customEndDate);
+        d.setHours(23,59,59,999);
+        endDate = d.toISOString();
+      }
+    }
+
     (async () => {
       setLoading(true);
       setError('');
@@ -50,6 +82,9 @@ export default function PipelinePage() {
           districts: selectedCities,
           blocks: selectedBlocks,
           panchayats: selectedPanchayats,
+          statuses: activeTab === 'worklist' ? ['Lead', 'Contacted', 'FollowUp'] : undefined,
+          startDate,
+          endDate,
         });
         if (cancelled) return;
         setContacts(res.items);
@@ -62,7 +97,7 @@ export default function PipelinePage() {
     })();
 
     return () => { cancelled = true; };
-  }, [token, page, selectedCities, selectedBlocks, selectedPanchayats]);
+  }, [token, page, selectedCities, selectedBlocks, selectedPanchayats, activeTab, dateFilter, customStartDate, customEndDate]);
 
   const handleSaveContact = async (updatedContact: Contact) => {
     if (!token) return;
@@ -100,6 +135,23 @@ export default function PipelinePage() {
     if (!token) return;
     setExporting(true);
     setError('');
+
+    let startDate: string | undefined = undefined;
+    let endDate: string | undefined = undefined;
+    const now = new Date();
+    if (dateFilter === 'today') {
+      startDate = new Date(now.setHours(0,0,0,0)).toISOString();
+      endDate = new Date(now.setHours(23,59,59,999)).toISOString();
+    } else if (dateFilter === 'yesterday') {
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      startDate = new Date(y.setHours(0,0,0,0)).toISOString();
+      endDate = new Date(y.setHours(23,59,59,999)).toISOString();
+    } else if (dateFilter === 'custom') {
+      if (customStartDate) startDate = new Date(new Date(customStartDate).setHours(0,0,0,0)).toISOString();
+      if (customEndDate) endDate = new Date(new Date(customEndDate).setHours(23,59,59,999)).toISOString();
+    }
+
     try {
       const res = await getAdminContacts(token, {
         page: 1,
@@ -107,12 +159,15 @@ export default function PipelinePage() {
         districts: selectedCities,
         blocks: selectedBlocks,
         panchayats: selectedPanchayats,
+        statuses: activeTab === 'worklist' ? ['Lead', 'Contacted', 'FollowUp'] : undefined,
+        startDate,
+        endDate,
       });
       if (res.totalCount > EXPORT_PAGE_SIZE) {
         setError(`Export is capped at ${EXPORT_PAGE_SIZE} rows — narrow the filters to export everything matching (${res.totalCount} total).`);
       }
 
-      const headers = ['Name', 'Phone', 'Role', 'Status', 'Follow-Up Date', 'Comments', 'City', 'Block', 'Panchayat'];
+      const headers = ['Name', 'Phone', 'Role', 'Status', 'Follow-Up Date', 'Comments', 'City', 'Block', 'Panchayat', 'Added By', 'Date Added'];
       const rows = res.items.map(c => {
         const pInfo = panchayatsData.find(p => p.id === c.panchayatId) || { district: '', block: '', name: '' };
         return [
@@ -124,7 +179,9 @@ export default function PipelinePage() {
           `"${(c.comments || '').replace(/"/g, '""')}"`,
           `"${pInfo.district}"`,
           `"${pInfo.block}"`,
-          `"${pInfo.name}"`
+          `"${pInfo.name}"`,
+          `"${(c.agentName || c.agentId).replace(/"/g, '""')}"`,
+          `"${new Date(c.createdAt).toLocaleDateString()}"`
         ];
       });
       const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
@@ -148,8 +205,8 @@ export default function PipelinePage() {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>CRM Pipeline</h1>
-          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Tabular view of all outreach contacts</p>
+          <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>Contact Management</h1>
+          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Manage active leads and historical contact data</p>
         </div>
         <motion.button
           whileHover={{ scale: 1.02 }}
@@ -168,9 +225,62 @@ export default function PipelinePage() {
         </motion.button>
       </div>
 
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '1rem', borderBottom: '2px solid #e2e8f0', marginBottom: '1.5rem' }}>
+        <button
+          onClick={() => { setActiveTab('worklist'); setPage(1); }}
+          style={{
+            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
+            fontSize: '1rem', fontWeight: 700, color: activeTab === 'worklist' ? '#4f46e5' : '#64748b',
+            borderBottom: activeTab === 'worklist' ? '3px solid #4f46e5' : '3px solid transparent',
+            marginBottom: '-2px', transition: 'all 0.2s'
+          }}
+        >
+          📝 Worklist
+        </button>
+        <button
+          onClick={() => { setActiveTab('historical'); setPage(1); }}
+          style={{
+            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
+            fontSize: '1rem', fontWeight: 700, color: activeTab === 'historical' ? '#4f46e5' : '#64748b',
+            borderBottom: activeTab === 'historical' ? '3px solid #4f46e5' : '3px solid transparent',
+            marginBottom: '-2px', transition: 'all 0.2s'
+          }}
+        >
+          🗄️ Historical Data
+        </button>
+      </div>
+
       {/* Filters Section */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', zIndex: 20, position: 'relative' }}>
-        <div style={{ flex: 1, minWidth: '220px' }}>
+        <div style={{ flex: 1, minWidth: '180px' }}>
+          <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date Filter</label>
+          <select 
+            value={dateFilter} 
+            onChange={(e) => { setDateFilter(e.target.value as any); setPage(1); }}
+            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 600, color: '#0f172a', outline: 'none' }}
+          >
+            <option value="all">All Dates</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="custom">Custom Range</option>
+          </select>
+        </div>
+        
+        {dateFilter === 'custom' && (
+          <>
+            <div style={{ minWidth: '130px' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Start Date</label>
+              <input type="date" value={customStartDate} onChange={e => { setCustomStartDate(e.target.value); setPage(1); }} style={{ width: '100%', padding: '0.7rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontWeight: 600, color: '#0f172a' }} />
+            </div>
+            <div style={{ minWidth: '130px' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>End Date</label>
+              <input type="date" value={customEndDate} onChange={e => { setCustomEndDate(e.target.value); setPage(1); }} style={{ width: '100%', padding: '0.7rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontWeight: 600, color: '#0f172a' }} />
+            </div>
+          </>
+        )}
+
+        <div style={{ flex: 1, minWidth: '180px' }}>
           <MultiSelectDropdown
             label="City (District)"
             placeholder="All Cities"
@@ -220,9 +330,16 @@ export default function PipelinePage() {
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact Details</th>
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone</th>
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Location (Village)</th>
-                  <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', width: '160px' }}>Stage (Result)</th>
-                  <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', width: '160px' }}>Follow-up Date</th>
-                  <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Comments</th>
+                  {activeTab === 'worklist' && (
+                    <>
+                      <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', width: '160px' }}>Stage (Result)</th>
+                      <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Follow-up Date</th>
+                    </>
+                  )}
+                  <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Added By</th>
+                  {activeTab === 'worklist' && (
+                    <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Comments</th>
+                  )}
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last Updated</th>
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Actions</th>
                 </tr>
@@ -236,6 +353,8 @@ export default function PipelinePage() {
                       contact={c}
                       panchayatName={pInfo?.name}
                       blockName={pInfo?.block}
+                      showStageAndFollowUp={activeTab === 'worklist'}
+                      showComments={activeTab === 'worklist'}
                       onSave={handleSaveContact}
                       onViewHistory={() => setHistoryModalContact(c)}
                     />
@@ -287,7 +406,7 @@ export default function PipelinePage() {
 // -------------------------------------------------------------------------------------------------
 // Contact Row Component (Handles inline editing state)
 // -------------------------------------------------------------------------------------------------
-function ContactRow({ contact, panchayatName, blockName, onSave, onViewHistory }: { contact: Contact, panchayatName?: string, blockName?: string, onSave: (c: Contact) => void, onViewHistory: () => void }) {
+function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, showComments, onSave, onViewHistory }: { contact: Contact, panchayatName?: string, blockName?: string, showStageAndFollowUp: boolean, showComments: boolean, onSave: (c: Contact) => void, onViewHistory: () => void }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editStatus, setEditStatus] = useState(contact.status || 'Lead');
   const [editFollowUp, setEditFollowUp] = useState(contact.followUpDate ? new Date(contact.followUpDate).toISOString().split('T')[0] : '');
@@ -336,55 +455,79 @@ function ContactRow({ contact, panchayatName, blockName, onSave, onViewHistory }
       </td>
       <td style={{ padding: '1rem' }}>
         <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.85rem' }}>{panchayatName || '-'}</div>
-        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{blockName || '-'} Block</div>
-      </td>
-      <td style={{ padding: '1rem' }}>
-        {isEditing ? (
-          <select 
-            value={editStatus} 
-            onChange={e => setEditStatus(e.target.value)}
-            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${statusColor}`, outline: 'none', background: 'white', fontWeight: 600, fontSize: '0.85rem' }}
+        <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.25rem' }}>{blockName || '-'} Block</div>
+        {contact.latitude && contact.longitude && (
+          <a
+            href={`https://www.google.com/maps?q=${contact.latitude},${contact.longitude}`}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+              fontSize: '0.7rem', fontWeight: 600, color: '#059669',
+              textDecoration: 'none', background: '#d1fae5', padding: '0.15rem 0.4rem', borderRadius: '4px'
+            }}
           >
-            {STATUSES.map(col => <option key={col} value={col}>{col}</option>)}
-          </select>
-        ) : (
-          <span style={{ 
-            background: `${statusColor}20`, color: statusColor, 
-            padding: '0.25rem 0.75rem', borderRadius: '20px', fontWeight: 700, fontSize: '0.8rem' 
-          }}>
-            {contact.status}
-          </span>
+            📍 Map
+          </a>
         )}
       </td>
+      {showStageAndFollowUp && (
+        <>
+          <td style={{ padding: '1rem' }}>
+            {isEditing ? (
+              <select 
+                value={editStatus} 
+                onChange={e => setEditStatus(e.target.value)}
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${statusColor}`, outline: 'none', background: 'white', fontWeight: 600, fontSize: '0.85rem' }}
+              >
+                {STATUSES.map(col => <option key={col} value={col}>{col}</option>)}
+              </select>
+            ) : (
+              <span style={{ 
+                background: `${statusColor}20`, color: statusColor, 
+                padding: '0.25rem 0.75rem', borderRadius: '20px', fontWeight: 700, fontSize: '0.8rem' 
+              }}>
+                {contact.status}
+              </span>
+            )}
+          </td>
+          <td style={{ padding: '1rem' }}>
+            {isEditing ? (
+              <input 
+                type="date" 
+                value={editFollowUp} 
+                onChange={e => setEditFollowUp(e.target.value)}
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontWeight: 600, fontSize: '0.85rem', color: '#0f172a' }}
+              />
+            ) : (
+              <div style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 600 }}>
+                {contact.followUpDate ? new Date(contact.followUpDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+              </div>
+            )}
+          </td>
+        </>
+      )}
       <td style={{ padding: '1rem' }}>
-        {isEditing ? (
-          <input 
-            type="date" 
-            value={editFollowUp} 
-            onChange={e => setEditFollowUp(e.target.value)}
-            style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontWeight: 600, fontSize: '0.85rem', color: '#0f172a' }}
-          />
-        ) : (
-          <div style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 600 }}>
-            {contact.followUpDate ? new Date(contact.followUpDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
-          </div>
-        )}
+        <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.85rem' }}>{contact.agentName || contact.agentId || 'Agent'}</div>
+        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(contact.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
       </td>
-      <td style={{ padding: '1rem' }}>
-        {isEditing ? (
-          <textarea 
-            rows={2}
-            value={editComments} 
-            onChange={e => setEditComments(e.target.value)}
-            placeholder="Notes..."
-            style={{ width: '100%', minWidth: '180px', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical', background: 'white', fontWeight: 500, fontSize: '0.85rem', color: '#0f172a' }}
-          />
-        ) : (
-          <div style={{ fontSize: '0.85rem', color: '#475569', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={contact.comments || ''}>
-            {contact.comments || '-'}
-          </div>
-        )}
-      </td>
+      {showComments && (
+        <td style={{ padding: '1rem' }}>
+          {isEditing ? (
+            <textarea 
+              rows={2}
+              value={editComments} 
+              onChange={e => setEditComments(e.target.value)}
+              placeholder="Notes..."
+              style={{ width: '100%', minWidth: '180px', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical', background: 'white', fontWeight: 500, fontSize: '0.85rem', color: '#0f172a' }}
+            />
+          ) : (
+            <div style={{ fontSize: '0.85rem', color: '#475569', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={contact.comments || ''}>
+              {contact.comments || '-'}
+            </div>
+          )}
+        </td>
+      )}
       <td style={{ padding: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <div>

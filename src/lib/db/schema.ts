@@ -66,6 +66,8 @@ export interface LocalContact {
   status: 'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected'; // Added in v2
   followUpDate?: string; // YYYY-MM-DD
   photoDataUri?: string; // Base64 offline photo storage
+  lat?: number;
+  lng?: number;
   potentialDuplicateOf?: string[];  // server-flagged duplicate serverIds
   createdAt: string;    // ISO string — client clock
   updatedAt: string;

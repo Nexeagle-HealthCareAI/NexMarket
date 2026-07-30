@@ -14,6 +14,7 @@ interface TaskMapProps {
 export default function TaskMap({ panchayats }: TaskMapProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const hasLoadedRef = useRef(false);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const ownMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -43,16 +44,22 @@ export default function TaskMap({ panchayats }: TaskMapProps) {
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     mapRef.current = map;
 
+    // See MapClient.tsx for why this only surfaces an error before the first
+    // successful load — an error afterward is normal per-tile flakiness.
     map.on('error', (e) => {
-      console.error('Task map load error', e.error);
-      setMapError(true);
+      console.error('Task map error', e.error);
+      if (!hasLoadedRef.current) setMapError(true);
     });
 
-    map.on('load', () => setMapLoaded(true));
+    map.on('load', () => {
+      hasLoadedRef.current = true;
+      setMapLoaded(true);
+    });
 
     return () => {
       map.remove();
       mapRef.current = null;
+      hasLoadedRef.current = false;
     };
   }, []);
 

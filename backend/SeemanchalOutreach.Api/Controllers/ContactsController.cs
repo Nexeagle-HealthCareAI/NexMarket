@@ -41,6 +41,9 @@ namespace SeemanchalOutreach.Api.Controllers
             [FromQuery] string? districts = null,
             [FromQuery] string? blocks = null,
             [FromQuery] string? panchayats = null,
+            [FromQuery] string? statuses = null,
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null,
             CancellationToken cancellationToken = default)
         {
             page = Math.Max(page, 1);
@@ -52,6 +55,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var districtList = ParseCsv(districts);
             var blockList = ParseCsv(blocks);
             var panchayatList = ParseCsv(panchayats);
+            var statusList = ParseCsv(statuses);
 
             IQueryable<OutreachContact> contactsQuery = _db.Contacts.AsNoTracking();
 
@@ -69,6 +73,21 @@ namespace SeemanchalOutreach.Api.Controllers
                 contactsQuery = contactsQuery.Where(c => matchingPanchayatIds.Contains(c.PanchayatId));
             }
 
+            if (statusList.Count > 0)
+            {
+                contactsQuery = contactsQuery.Where(c => statusList.Contains(c.Status));
+            }
+
+            if (startDate.HasValue)
+            {
+                contactsQuery = contactsQuery.Where(c => c.CreatedAt >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                contactsQuery = contactsQuery.Where(c => c.CreatedAt <= endDate.Value);
+            }
+
             var totalCount = await contactsQuery.CountAsync(cancellationToken);
 
             var pageItems = await contactsQuery
@@ -83,6 +102,9 @@ namespace SeemanchalOutreach.Api.Controllers
                     c.Role,
                     c.PanchayatId,
                     c.AgentId,
+                    c.Latitude,
+                    c.Longitude,
+                    AgentName = _db.Agents.Where(a => a.AgentId == c.AgentId).Select(a => a.Name).FirstOrDefault(),
                     c.Status,
                     c.FollowUpDate,
                     c.Comments,
@@ -106,6 +128,9 @@ namespace SeemanchalOutreach.Api.Controllers
                 c.Role,
                 c.PanchayatId,
                 c.AgentId,
+                c.Latitude,
+                c.Longitude,
+                c.AgentName,
                 c.Status,
                 c.FollowUpDate,
                 c.Comments,
@@ -139,6 +164,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     c.Role,
                     c.PanchayatId,
                     c.AgentId,
+                    c.Latitude,
+                    c.Longitude,
                     c.Status,
                     c.FollowUpDate,
                     c.Comments,

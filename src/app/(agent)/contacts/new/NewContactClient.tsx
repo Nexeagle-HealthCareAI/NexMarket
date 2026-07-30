@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useAgentStore } from '@/store/agent-store';
 import { usePanchayats, useActiveVisit, db } from '@/lib/db';
 import { addToOutbox } from '@/lib/sync/outbox';
+import { useGeolocation } from '@/lib/geo/useGeolocation';
 import type { ContactRole, LocalContact } from '@/lib/db/schema';
 
 
@@ -20,6 +21,7 @@ export default function NewContactPage() {
 
   const panchayats = usePanchayats();
   const activeVisit = useActiveVisit(agentId ?? undefined);
+  const { position } = useGeolocation();
   const t = useTranslations();
 
   const ROLES: { value: ContactRole; label: string; emoji: string; desc: string }[] = [
@@ -106,6 +108,8 @@ export default function NewContactPage() {
       status: form.status,
       followUpDate: form.followUpDate || undefined,
       photoDataUri: form.photoDataUri || undefined,
+      lat: position?.lat,
+      lng: position?.lng,
       createdAt: now,
       updatedAt: now,
     };

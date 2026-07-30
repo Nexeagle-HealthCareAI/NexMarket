@@ -22,6 +22,7 @@ export default function MapClient() {
   const deepLinkAgentId = searchParams.get('agentId');
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const hasLoadedRef = useRef(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapError, setMapError] = useState(false);
   const markersRef = useRef<maplibregl.Marker[]>([]);
@@ -100,14 +101,20 @@ export default function MapClient() {
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
     mapRef.current = map;
 
-    // A failed tile/style load (bad token, network issue, provider outage)
-    // otherwise leaves a blank map with no indication anything went wrong.
+    // A style/tile-source failure that happens before the map ever loads
+    // otherwise leaves a blank map with no indication anything went wrong —
+    // but MapLibre also fires 'error' for individual tile hiccups during
+    // ordinary panning/zooming (a single dropped request on a flaky
+    // connection, common for field agents), which is normal and shouldn't
+    // hide an otherwise-working map. Only surface the fatal message if the
+    // map never successfully loaded in the first place.
     map.on('error', (e) => {
-      console.error('Map load error', e.error);
-      setMapError(true);
+      console.error('Map error', e.error);
+      if (!hasLoadedRef.current) setMapError(true);
     });
 
     map.on('load', () => {
+      hasLoadedRef.current = true;
       // Add Seemanchal block boundaries GeoJSON source & layer
       map.addSource('seemanchal-blocks', {
         type: 'geojson',
@@ -180,6 +187,7 @@ export default function MapClient() {
     return () => {
       map.remove();
       mapRef.current = null;
+      hasLoadedRef.current = false;
     };
   }, []);
 

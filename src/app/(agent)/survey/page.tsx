@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { Suspense } from 'react';
 import SurveyClient from './SurveyClient';
 
 export const metadata: Metadata = {
@@ -6,5 +7,9 @@ export const metadata: Metadata = {
 };
 
 export default function SurveyPage() {
-  return <SurveyClient />;
+  return (
+    <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center', color: 'white' }}>Loading Survey...</div>}>
+      <SurveyClient />
+    </Suspense>
+  );
 }

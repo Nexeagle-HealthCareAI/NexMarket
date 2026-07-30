@@ -513,6 +513,9 @@ export interface AdminContactDto {
   role: string;
   panchayatId: string;
   agentId: string;
+  agentName?: string;
+  latitude?: number;
+  longitude?: number;
   status: string;
   followUpDate: string | null;
   comments: string | null;
@@ -539,6 +542,9 @@ export interface AdminContactsQuery {
   districts?: string[];
   blocks?: string[];
   panchayats?: string[];
+  statuses?: string[];
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface PaginatedContactsResponse {
@@ -555,6 +561,9 @@ export function getAdminContacts(token: string, query: AdminContactsQuery = {}):
   if (query.districts?.length) params.set('districts', query.districts.join(','));
   if (query.blocks?.length) params.set('blocks', query.blocks.join(','));
   if (query.panchayats?.length) params.set('panchayats', query.panchayats.join(','));
+  if (query.statuses?.length) params.set('statuses', query.statuses.join(','));
+  if (query.startDate) params.set('startDate', query.startDate);
+  if (query.endDate) params.set('endDate', query.endDate);
   const qs = params.toString();
   return get<PaginatedContactsResponse>(`/api/v1/admin/contacts${qs ? `?${qs}` : ''}`, token);
 }

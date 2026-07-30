@@ -1,5 +1,6 @@
 'use client';
 import dynamic from 'next/dynamic';
+import { Suspense } from 'react';
 
 const MapClient = dynamic(() => import('./MapClient'), {
   ssr: false,
@@ -7,5 +8,9 @@ const MapClient = dynamic(() => import('./MapClient'), {
 });
 
 export default function AdminMapPage() {
-  return <MapClient />;
+  return (
+    <Suspense fallback={<div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Live Map & Trajectories…</div>}>
+      <MapClient />
+    </Suspense>
+  );
 }

@@ -10,6 +10,9 @@ const withSerwist = withSerwistInit({
 });
 
 const nextConfig: NextConfig = {
+  // Set output file tracing root to prevent multiple lockfile warnings in monorepos/workspaces
+  outputFileTracingRoot: process.cwd(),
+
   // Enable PWA headers
   async headers() {
     return [

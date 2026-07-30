@@ -116,6 +116,9 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime? FollowUpDate { get; set; }
         public string? Comments { get; set; }
 
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+
         // Admin CRM engagement tracking (set from the contact profile page, not mobile sync)
         public string? Relation { get; set; } // Unknown, Supporter, Neutral, Opponent, Core Member
         public string? Complaints { get; set; }
