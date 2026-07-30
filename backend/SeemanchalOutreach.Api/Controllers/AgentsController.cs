@@ -230,7 +230,10 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<ActionResult<object>> GetTrajectory(string agentId, [FromQuery] DateOnly? date, CancellationToken cancellationToken)
         {
             var day = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
-            var start = day.ToDateTime(TimeOnly.MinValue);
+            // DateOnly.ToDateTime produces Kind=Unspecified, which Npgsql refuses to bind
+            // against a `timestamp with time zone` column (RecordedAt) — it throws rather
+            // than guess the offset. Every timestamp in this app is UTC, so say so explicitly.
+            var start = DateTime.SpecifyKind(day.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
             var end = start.AddDays(1);
 
             var points = await _db.TrajectoryPoints.AsNoTracking()

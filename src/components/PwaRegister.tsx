@@ -12,6 +12,10 @@ export default function PwaRegister() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
+    // next.config.ts disables the Serwist build in development, so /sw.js is
+    // never generated there — registering it anyway always 404s.
+    if (process.env.NODE_ENV !== 'production') return;
+
     // When a new SW version takes control of an already-open tab (skipWaiting +
     // clientsClaim), reload once so the page picks up the new build's module
     // graph instead of continuing to run against now-mismatched chunk hashes —

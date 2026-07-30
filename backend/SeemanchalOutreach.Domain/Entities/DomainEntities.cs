@@ -146,7 +146,10 @@ namespace SeemanchalOutreach.Domain.Entities
         public string UpdatedBy { get; set; } = string.Empty;
         public string PreviousStatus { get; set; } = string.Empty;
         public string NewStatus { get; set; } = string.Empty;
+        public DateTime? FollowUpDate { get; set; }
         public string? Comments { get; set; }
+        public string? Complaints { get; set; }
+        public string? Conflicts { get; set; }
     }
 
     public class PatientReferral

@@ -220,16 +220,36 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
                           {new Date(h.timestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} at {new Date(h.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, background: '#e2e8f0', padding: '0.1rem 0.5rem', borderRadius: '4px' }}>{h.previousStatus}</span>
                         <span style={{ color: '#94a3b8' }}>→</span>
                         <span style={{ fontSize: '0.75rem', color: '#4f46e5', fontWeight: 700, background: '#e0e7ff', padding: '0.1rem 0.5rem', borderRadius: '4px' }}>{h.newStatus}</span>
+                        {h.followUpDate && (
+                          <span style={{ fontSize: '0.75rem', color: '#0ea5e9', fontWeight: 600, background: '#e0f2fe', padding: '0.1rem 0.5rem', borderRadius: '4px' }}>
+                            📅 {new Date(h.followUpDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        )}
                       </div>
-                      {h.comments && (
-                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#334155', background: 'white', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                          {h.comments}
-                        </p>
-                      )}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {h.comments && (
+                          <p style={{ margin: 0, fontSize: '0.9rem', color: '#334155', background: 'white', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            <strong style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', marginBottom: '0.25rem' }}>Comment</strong>
+                            {h.comments}
+                          </p>
+                        )}
+                        {h.complaints && (
+                          <p style={{ margin: 0, fontSize: '0.9rem', color: '#b91c1c', background: '#fef2f2', padding: '0.75rem', borderRadius: '8px', border: '1px solid #fecaca' }}>
+                            <strong style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: '#ef4444', marginBottom: '0.25rem' }}>Complaint / Issue</strong>
+                            {h.complaints}
+                          </p>
+                        )}
+                        {h.conflicts && (
+                          <p style={{ margin: 0, fontSize: '0.9rem', color: '#c2410c', background: '#fff7ed', padding: '0.75rem', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                            <strong style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: '#f97316', marginBottom: '0.25rem' }}>Conflict</strong>
+                            {h.conflicts}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

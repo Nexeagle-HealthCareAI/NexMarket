@@ -220,7 +220,10 @@ namespace SeemanchalOutreach.Application.Handlers
                             UpdatedBy = agentId,
                             PreviousStatus = "None",
                             NewStatus = contact.Status,
-                            Comments = contact.Comments
+                            Comments = contact.Comments,
+                            FollowUpDate = contact.FollowUpDate,
+                            Complaints = contact.Complaints,
+                            Conflicts = contact.Conflicts
                         });
                         return Result(clientId, deviceId, contact.Id, syncedAt, "created");
                     }
@@ -230,6 +233,7 @@ namespace SeemanchalOutreach.Application.Handlers
                         {
                             var previousStatus = existing.Status;
                             var previousComments = existing.Comments;
+                            var previousFollowUpDate = existing.FollowUpDate;
 
                             existing.Name = name;
                             existing.Phone = phone;
@@ -248,7 +252,9 @@ namespace SeemanchalOutreach.Application.Handlers
 
                             // Guard against outbox retries re-sending the same unchanged item and
                             // spamming the audit trail with no-op entries.
-                            if (previousStatus != existing.Status || previousComments != existing.Comments)
+                            if (previousStatus != existing.Status || 
+                                previousComments != existing.Comments ||
+                                previousFollowUpDate != existing.FollowUpDate)
                             {
                                 _db.ContactHistory.Add(new ContactHistoryEntry
                                 {
@@ -256,7 +262,10 @@ namespace SeemanchalOutreach.Application.Handlers
                                     UpdatedBy = agentId,
                                     PreviousStatus = previousStatus,
                                     NewStatus = existing.Status,
-                                    Comments = existing.Comments
+                                    Comments = existing.Comments,
+                                    FollowUpDate = existing.FollowUpDate,
+                                    Complaints = existing.Complaints,
+                                    Conflicts = existing.Conflicts
                                 });
                             }
                         }

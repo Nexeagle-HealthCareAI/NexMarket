@@ -195,6 +195,9 @@ namespace SeemanchalOutreach.Api.Controllers
 
             var previousStatus = contact.Status;
             var previousComments = contact.Comments;
+            var previousFollowUpDate = contact.FollowUpDate;
+            var previousComplaints = contact.Complaints;
+            var previousConflicts = contact.Conflicts;
 
             if (dto.Status != null) contact.Status = dto.Status;
             contact.FollowUpDate = dto.FollowUpDate; // Can be null to clear
@@ -203,10 +206,11 @@ namespace SeemanchalOutreach.Api.Controllers
             if (dto.Complaints != null) contact.Complaints = dto.Complaints;
             if (dto.Conflicts != null) contact.Conflicts = dto.Conflicts;
 
-            // Only log a history entry when status/comments actually changed — an
-            // engagement-only save (relation/complaints/conflicts) shouldn't produce
-            // a no-op "FollowUp -> FollowUp" entry in the follow-up audit trail.
-            if (previousStatus != contact.Status || previousComments != contact.Comments)
+            if (previousStatus != contact.Status || 
+                previousComments != contact.Comments ||
+                previousFollowUpDate != contact.FollowUpDate ||
+                previousComplaints != contact.Complaints ||
+                previousConflicts != contact.Conflicts)
             {
                 _db.ContactHistory.Add(new ContactHistoryEntry
                 {
@@ -214,7 +218,10 @@ namespace SeemanchalOutreach.Api.Controllers
                     UpdatedBy = User.FindFirst(ClaimTypes.Name)?.Value ?? User.FindFirst("agentId")?.Value ?? "Unknown",
                     PreviousStatus = previousStatus,
                     NewStatus = contact.Status,
-                    Comments = contact.Comments
+                    Comments = contact.Comments,
+                    FollowUpDate = contact.FollowUpDate,
+                    Complaints = contact.Complaints,
+                    Conflicts = contact.Conflicts
                 });
             }
 
@@ -246,7 +253,10 @@ namespace SeemanchalOutreach.Api.Controllers
                     h.UpdatedBy,
                     h.PreviousStatus,
                     h.NewStatus,
-                    h.Comments
+                    h.Comments,
+                    h.FollowUpDate,
+                    h.Complaints,
+                    h.Conflicts
                 })
                 .ToListAsync(cancellationToken);
 

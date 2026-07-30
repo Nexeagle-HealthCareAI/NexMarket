@@ -328,7 +328,6 @@ export default function PipelinePage() {
               <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr>
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact Details</th>
-                  <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone</th>
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Location (Village)</th>
                   {activeTab === 'worklist' && (
                     <>
@@ -338,7 +337,11 @@ export default function PipelinePage() {
                   )}
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Added By</th>
                   {activeTab === 'worklist' && (
-                    <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Comments</th>
+                    <>
+                      <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Comments</th>
+                      <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Issues</th>
+                      <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Conflicts</th>
+                    </>
                   )}
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last Updated</th>
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Actions</th>
@@ -411,17 +414,23 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
   const [editStatus, setEditStatus] = useState(contact.status || 'Lead');
   const [editFollowUp, setEditFollowUp] = useState(contact.followUpDate ? new Date(contact.followUpDate).toISOString().split('T')[0] : '');
   const [editComments, setEditComments] = useState(contact.comments || '');
+  const [editComplaints, setEditComplaints] = useState(contact.complaints || '');
+  const [editConflicts, setEditConflicts] = useState(contact.conflicts || '');
 
   const hasChanges = editStatus !== contact.status || 
                      editFollowUp !== (contact.followUpDate ? new Date(contact.followUpDate).toISOString().split('T')[0] : '') ||
-                     editComments !== (contact.comments || '');
+                     editComments !== (contact.comments || '') ||
+                     editComplaints !== (contact.complaints || '') ||
+                     editConflicts !== (contact.conflicts || '');
 
   const handleSave = () => {
     onSave({
       ...contact,
       status: editStatus,
       followUpDate: editFollowUp ? new Date(editFollowUp).toISOString() : null,
-      comments: editComments
+      comments: editComments,
+      complaints: editComplaints,
+      conflicts: editConflicts
     });
     setIsEditing(false);
   };
@@ -430,6 +439,8 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
     setEditStatus(contact.status || 'Lead');
     setEditFollowUp(contact.followUpDate ? new Date(contact.followUpDate).toISOString().split('T')[0] : '');
     setEditComments(contact.comments || '');
+    setEditComplaints(contact.complaints || '');
+    setEditConflicts(contact.conflicts || '');
     setIsEditing(false);
   };
 
@@ -448,10 +459,15 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
     <tr style={{ borderBottom: '1px solid #e2e8f0', background: isEditing ? '#f8fafc' : 'white', transition: 'background 0.2s' }}>
       <td style={{ padding: '1rem' }}>
         <div style={{ fontWeight: 700, color: '#0f172a' }}>{contact.name}</div>
-        <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'capitalize' }}>{contact.role.replace('_', ' ')}</div>
-      </td>
-      <td style={{ padding: '1rem', color: '#4f46e5', fontWeight: 600, fontSize: '0.9rem' }}>
-        {contact.phone || '-'}
+        <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'capitalize', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <span>{contact.role.replace('_', ' ')}</span>
+          {contact.phone && (
+            <>
+              <span style={{ color: '#cbd5e1' }}>•</span>
+              <span style={{ color: '#4f46e5' }}>{contact.phone}</span>
+            </>
+          )}
+        </div>
       </td>
       <td style={{ padding: '1rem' }}>
         <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.85rem' }}>{panchayatName || '-'}</div>
@@ -512,21 +528,53 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(contact.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
       </td>
       {showComments && (
-        <td style={{ padding: '1rem' }}>
-          {isEditing ? (
-            <textarea 
-              rows={2}
-              value={editComments} 
-              onChange={e => setEditComments(e.target.value)}
-              placeholder="Notes..."
-              style={{ width: '100%', minWidth: '180px', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical', background: 'white', fontWeight: 500, fontSize: '0.85rem', color: '#0f172a' }}
-            />
-          ) : (
-            <div style={{ fontSize: '0.85rem', color: '#475569', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={contact.comments || ''}>
-              {contact.comments || '-'}
-            </div>
-          )}
-        </td>
+        <>
+          <td style={{ padding: '1rem' }}>
+            {isEditing ? (
+              <textarea 
+                rows={2}
+                value={editComments} 
+                onChange={e => setEditComments(e.target.value)}
+                placeholder="Notes..."
+                style={{ width: '100%', minWidth: '180px', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical', background: 'white', fontWeight: 500, fontSize: '0.85rem', color: '#0f172a' }}
+              />
+            ) : (
+              <div style={{ fontSize: '0.85rem', color: '#475569', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={contact.comments || ''}>
+                {contact.comments || '-'}
+              </div>
+            )}
+          </td>
+          <td style={{ padding: '1rem' }}>
+            {isEditing ? (
+              <textarea 
+                rows={2}
+                value={editComplaints} 
+                onChange={e => setEditComplaints(e.target.value)}
+                placeholder="Issues / Complaints..."
+                style={{ width: '100%', minWidth: '150px', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical', background: 'white', fontWeight: 500, fontSize: '0.85rem', color: '#0f172a' }}
+              />
+            ) : (
+              <div style={{ fontSize: '0.85rem', color: '#ef4444', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={contact.complaints || ''}>
+                {contact.complaints || '-'}
+              </div>
+            )}
+          </td>
+          <td style={{ padding: '1rem' }}>
+            {isEditing ? (
+              <textarea 
+                rows={2}
+                value={editConflicts} 
+                onChange={e => setEditConflicts(e.target.value)}
+                placeholder="Conflicts..."
+                style={{ width: '100%', minWidth: '150px', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical', background: 'white', fontWeight: 500, fontSize: '0.85rem', color: '#0f172a' }}
+              />
+            ) : (
+              <div style={{ fontSize: '0.85rem', color: '#f97316', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={contact.conflicts || ''}>
+                {contact.conflicts || '-'}
+              </div>
+            )}
+          </td>
+        </>
       )}
       <td style={{ padding: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -637,16 +685,36 @@ function HistoryModal({ contact, token, onClose }: { contact: Contact, token: st
                         {new Date(h.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })} IST
                       </span>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.75rem', color: '#94a3b8', textDecoration: 'line-through' }}>{h.previousStatus}</span>
                       <span style={{ fontSize: '0.8rem' }}>➔</span>
                       <span style={{ fontSize: '0.75rem', color: '#4f46e5', fontWeight: 700, background: '#e0e7ff', padding: '0.1rem 0.5rem', borderRadius: '4px' }}>{h.newStatus}</span>
+                      {h.followUpDate && (
+                        <span style={{ fontSize: '0.75rem', color: '#0ea5e9', fontWeight: 600, background: '#e0f2fe', padding: '0.1rem 0.5rem', borderRadius: '4px' }}>
+                          📅 {new Date(h.followUpDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      )}
                     </div>
-                    {h.comments && (
-                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#334155', background: 'white', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                        {h.comments}
-                      </p>
-                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {h.comments && (
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#334155', background: 'white', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                          <strong style={{ display: 'block', fontSize: '0.7rem', textTransform: 'uppercase', color: '#64748b', marginBottom: '0.1rem' }}>Comment</strong>
+                          {h.comments}
+                        </p>
+                      )}
+                      {h.complaints && (
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#b91c1c', background: '#fef2f2', padding: '0.75rem', borderRadius: '8px', border: '1px solid #fecaca' }}>
+                          <strong style={{ display: 'block', fontSize: '0.7rem', textTransform: 'uppercase', color: '#ef4444', marginBottom: '0.1rem' }}>Issue</strong>
+                          {h.complaints}
+                        </p>
+                      )}
+                      {h.conflicts && (
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#c2410c', background: '#fff7ed', padding: '0.75rem', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                          <strong style={{ display: 'block', fontSize: '0.7rem', textTransform: 'uppercase', color: '#f97316', marginBottom: '0.1rem' }}>Conflict</strong>
+                          {h.conflicts}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

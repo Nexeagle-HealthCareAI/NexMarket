@@ -579,6 +579,9 @@ export interface ContactHistoryEntryDto {
   previousStatus: string;
   newStatus: string;
   comments: string | null;
+  followUpDate?: string | null;
+  complaints?: string | null;
+  conflicts?: string | null;
 }
 
 export function getContactHistory(token: string, clientId: string): Promise<ContactHistoryEntryDto[]> {
