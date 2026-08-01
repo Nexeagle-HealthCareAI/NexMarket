@@ -14,7 +14,7 @@ function generatePassword(length = 12): string {
 }
 
 export default function AgentsClient() {
-  const token = useAgentStore((s) => s.jwtToken);
+  const agentId = useAgentStore((s) => s.agentId);
   const [agentsList, setAgentsList] = useState<AdminAgentDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -56,18 +56,18 @@ export default function AgentsClient() {
   } | null>(null);
 
   const loadAgents = useCallback(async () => {
-    if (!token) return;
+    if (!agentId) return;
     setLoading(true);
     setError('');
     try {
-      const data = await getAgents(token);
+      const data = await getAgents();
       setAgentsList(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load agents.');
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [agentId]);
 
   useEffect(() => {
     void loadAgents();
@@ -128,18 +128,18 @@ export default function AgentsClient() {
 
   async function handleOnboardSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!newFirstName.trim() || !newLastName.trim() || !newPhone.trim() || !newPassword.trim() || !token) return;
+    if (!newFirstName.trim() || !newLastName.trim() || !newPhone.trim() || !newPassword.trim() || !agentId) return;
 
     setOnboarding(true);
     setOnboardError('');
     try {
       let photoUrl: string | undefined;
       if (newPhotoFile) {
-        const uploaded = await uploadPhoto(token, newPhotoFile);
+        const uploaded = await uploadPhoto(newPhotoFile);
         photoUrl = uploaded.url;
       }
 
-      const created = await onboardAgent(token, {
+      const created = await onboardAgent({
         firstName: newFirstName.trim(),
         middleName: newMiddleName.trim() || undefined,
         lastName: newLastName.trim(),

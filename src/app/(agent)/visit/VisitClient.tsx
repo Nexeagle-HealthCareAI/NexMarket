@@ -15,7 +15,6 @@ export default function VisitPage() {
   const router = useRouter();
   const agentId = useAgentStore((s) => s.agentId);
   const deviceId = useAgentStore((s) => s.deviceId);
-  const jwtToken = useAgentStore((s) => s.jwtToken);
   const activeShiftClientId = useAgentStore((s) => s.activeShiftClientId);
   const activeVisitClientId = useAgentStore((s) => s.activeVisitClientId);
   const setActiveVisit = useAgentStore((s) => s.setActiveVisit);
@@ -34,9 +33,9 @@ export default function VisitPage() {
   // Live fetch, best-effort — if it fails (offline, no assignment yet) we fall
   // back to the full unscoped panchayat list below so check-in is never blocked.
   useEffect(() => {
-    if (!jwtToken) return;
-    getMyAssignment(jwtToken).then(setAssignment).catch(() => setAssignment(null));
-  }, [jwtToken]);
+    if (!agentId) return;
+    getMyAssignment().then(setAssignment).catch(() => setAssignment(null));
+  }, [agentId]);
 
   const { position, permission } = useGeolocation({
     shiftId: activeShift?.clientId,

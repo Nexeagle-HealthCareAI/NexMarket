@@ -6,7 +6,7 @@ import { getDuplicates, mergeDuplicate, dismissDuplicate, type DuplicatePairDto 
 import { useFlaggedDuplicates } from '@/lib/db';
 
 export default function DuplicatesClient() {
-  const token = useAgentStore((s) => s.jwtToken);
+  const agentId = useAgentStore((s) => s.agentId);
   const localFlagged = useFlaggedDuplicates() || [];
   const [pairs, setPairs] = useState<DuplicatePairDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,31 +14,31 @@ export default function DuplicatesClient() {
   const [actingOn, setActingOn] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!token) return;
+    if (!agentId) return;
     setLoading(true);
     setError('');
     try {
-      setPairs(await getDuplicates(token));
+      setPairs(await getDuplicates());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load duplicates.');
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [agentId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   async function handleAction(id: string, action: 'merged' | 'dismissed') {
-    if (!token) return;
+    if (!agentId) return;
     setActingOn(id);
     setError('');
     try {
       if (action === 'merged') {
-        await mergeDuplicate(token, id);
+        await mergeDuplicate(id);
       } else {
-        await dismissDuplicate(token, id);
+        await dismissDuplicate(id);
       }
       setPairs((prev) => prev.map((p) => (p.id === id ? { ...p, status: action } : p)));
     } catch (err) {

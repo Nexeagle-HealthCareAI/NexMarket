@@ -6,20 +6,20 @@ import { getMyAssignment, type MyAssignmentDto } from '@/lib/sync/api-client';
 import TaskMap from './TaskMap';
 
 export default function MyTaskPage() {
-  const jwtToken = useAgentStore((s) => s.jwtToken);
+  const agentId = useAgentStore((s) => s.agentId);
   const [assignment, setAssignment] = useState<MyAssignmentDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'visited' | 'pending'>('all');
 
   useEffect(() => {
-    if (!jwtToken) return;
+    if (!agentId) return;
     setLoading(true);
-    getMyAssignment(jwtToken)
+    getMyAssignment()
       .then(setAssignment)
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load your assignment.'))
       .finally(() => setLoading(false));
-  }, [jwtToken]);
+  }, [agentId]);
 
   if (loading) {
     return <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading your task…</div>;

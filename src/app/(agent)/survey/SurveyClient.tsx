@@ -8,6 +8,7 @@ import { db, useActiveVisit } from '@/lib/db';
 import { addToOutbox } from '@/lib/sync/outbox';
 import { useAgentStore } from '@/store/agent-store';
 import { useTranslations } from '@/i18n/I18nProvider';
+import { useLiveQuery } from 'dexie-react-hooks';
 
 type Answer = string | number | string[];
 
@@ -19,7 +20,20 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   const deviceId = useAgentStore((s) => s.deviceId);
   const activeVisit = useActiveVisit(agentId ?? undefined);
 
-  const QUESTIONS = [
+  // Load dynamic questions from DB
+  const dynamicQuestions = useLiveQuery(() => 
+    db.surveyQuestions.where('isActive').equals('true').or('isActive').equals(1).sortBy('order')
+      .then(qs => qs.length > 0 ? qs : db.surveyQuestions.orderBy('order').filter(q => q.isActive).toArray())
+  );
+
+  // Fallback to legacy translation questions if no dynamic questions exist
+  const QUESTIONS = dynamicQuestions?.length ? dynamicQuestions.map(q => ({
+    id: q.questionId,
+    text: q.text,
+    type: q.type,
+    options: q.optionsJson ? JSON.parse(q.optionsJson) : undefined,
+    isOptional: q.isOptional
+  })) : [
     { id: 'q1', text: t.q1, type: 'single', options: [t.q1_o1, t.q1_o2, t.q1_o3, t.q1_o4] },
     { id: 'q2', text: t.q2, type: 'single', options: [t.q2_o1, t.q2_o2, t.q2_o3, t.q2_o4] },
     { id: 'q3', text: t.q3, type: 'single', options: [t.q3_o1, t.q3_o2, t.q3_o3, t.q3_o4] },
@@ -87,6 +101,15 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
       setLoading(false);
     }
   };
+
+  // Wait for dynamic questions to load if they are still undefined (useLiveQuery initial state)
+  if (dynamicQuestions === undefined) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--color-primary-900)' }}>
+        <h2 style={{ color: 'white' }}>Loading Questions...</h2>
+      </div>
+    );
+  }
 
   const q = QUESTIONS[currentIdx];
   const progress = ((currentIdx) / QUESTIONS.length) * 100;
@@ -191,22 +214,22 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={handleNext}
-                    disabled={!responses[q.id]}
+                    disabled={!q.isOptional && !responses[q.id]}
                     style={{
-                      background: responses[q.id] ? '#fbbf24' : 'rgba(255,255,255,0.2)',
-                      color: responses[q.id] ? '#7c3aed' : 'rgba(255,255,255,0.5)',
+                      background: (q.isOptional || responses[q.id]) ? '#fbbf24' : 'rgba(255,255,255,0.2)',
+                      color: (q.isOptional || responses[q.id]) ? '#7c3aed' : 'rgba(255,255,255,0.5)',
                       border: 'none',
                       padding: '1rem 3rem',
                       borderRadius: '30px',
                       fontSize: '1.2rem',
                       fontWeight: 800,
-                      cursor: responses[q.id] ? 'pointer' : 'not-allowed',
+                      cursor: (q.isOptional || responses[q.id]) ? 'pointer' : 'not-allowed',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.5rem'
                     }}
                   >
-                    {loading ? t.savingSurvey : t.okNext}
+                    {loading ? t.savingSurvey : (q.isOptional && !responses[q.id] ? 'Skip (Optional)' : t.okNext)}
                   </motion.button>
                 </div>
               </div>

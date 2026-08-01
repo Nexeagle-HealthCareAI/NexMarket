@@ -3,6 +3,10 @@
  *
  * Persisted to sessionStorage via middleware.
  * Source of truth for: agentId, deviceId, active shift, current visit.
+ *
+ * The JWT and refresh token are NOT stored here (or anywhere in JS-reachable
+ * storage) — both live in httpOnly cookies set by the API, invisible to this
+ * store and to any XSS payload that might run in the page.
  */
 
 import { create } from 'zustand';
@@ -13,8 +17,6 @@ interface AgentState {
   deviceId: string | null;
   name: string | null;
   role: string | null;
-  jwtToken: string | null;
-  refreshToken: string | null;
   activeShiftClientId: string | null;
   activeVisitClientId: string | null;
   profileCompleted: boolean;
@@ -32,8 +34,6 @@ interface AgentState {
     deviceId: string;
     name: string;
     role: string;
-    jwtToken: string;
-    refreshToken: string;
     profileCompleted?: boolean;
   }) => void;
 
@@ -50,8 +50,6 @@ export const useAgentStore = create<AgentState>()(
       deviceId: null,
       name: null,
       role: null,
-      jwtToken: null,
-      refreshToken: null,
       activeShiftClientId: null,
       activeVisitClientId: null,
       profileCompleted: false,
@@ -65,8 +63,6 @@ export const useAgentStore = create<AgentState>()(
           deviceId: auth.deviceId,
           name: auth.name,
           role: auth.role,
-          jwtToken: auth.jwtToken,
-          refreshToken: auth.refreshToken,
           profileCompleted: auth.profileCompleted ?? false,
         }),
 
@@ -80,8 +76,6 @@ export const useAgentStore = create<AgentState>()(
           deviceId: null,
           name: null,
           role: null,
-          jwtToken: null,
-          refreshToken: null,
           activeShiftClientId: null,
           activeVisitClientId: null,
           profileCompleted: false,

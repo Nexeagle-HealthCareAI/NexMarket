@@ -58,16 +58,20 @@ export interface SyncPullResponse {
   referrals: unknown[];
   shifts: unknown[];
   panchayats: unknown[];
+  surveys: unknown[];
+  surveyQuestions: SurveyQuestionDto[];
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export interface AuthResponse {
-  token: string;
-  refreshToken: string;
+  // No token/refreshToken fields — both are set server-side as httpOnly
+  // cookies (see AuthController.SetAuthCookies) and never touch client JS.
   agentId: string;
   name: string;
   role: string;
+  district?: string;
+  block?: string;
   deviceId: string; // echoed back from the request — the client owns this id, not the server
   mustChangePassword?: boolean;
   profileCompleted?: boolean;
@@ -252,21 +256,18 @@ export interface PanchayatDto {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function authHeaders(token: string): HeadersInit {
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
-}
+// Auth is entirely cookie-based now (httpOnly cookies set by AuthController) —
+// every request just needs the browser to attach them, which `credentials:
+// 'include'` does automatically. This also works from the service worker's
+// fetch context, since cookies are origin-scoped, not tied to which JS
+// context issued the request.
+const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' };
 
-async function post<TBody, TResponse>(
-  path: string,
-  body: TBody,
-  token?: string,
-): Promise<TResponse> {
+async function post<TBody, TResponse>(path: string, body: TBody): Promise<TResponse> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: token ? authHeaders(token) : { 'Content-Type': 'application/json' },
+    headers: JSON_HEADERS,
+    credentials: 'include',
     body: JSON.stringify(body),
   });
 
@@ -278,9 +279,9 @@ async function post<TBody, TResponse>(
   return res.json() as Promise<TResponse>;
 }
 
-async function get<TResponse>(path: string, token: string): Promise<TResponse> {
+async function get<TResponse>(path: string): Promise<TResponse> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: authHeaders(token),
+    credentials: 'include',
   });
 
   if (!res.ok) {
@@ -290,14 +291,11 @@ async function get<TResponse>(path: string, token: string): Promise<TResponse> {
   return res.json() as Promise<TResponse>;
 }
 
-async function put<TBody, TResponse>(
-  path: string,
-  body: TBody,
-  token: string,
-): Promise<TResponse> {
+async function put<TBody, TResponse>(path: string, body: TBody): Promise<TResponse> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'PUT',
-    headers: authHeaders(token),
+    headers: JSON_HEADERS,
+    credentials: 'include',
     body: JSON.stringify(body),
   });
 
@@ -309,14 +307,11 @@ async function put<TBody, TResponse>(
   return res.json() as Promise<TResponse>;
 }
 
-async function patch<TBody, TResponse>(
-  path: string,
-  body: TBody,
-  token: string,
-): Promise<TResponse> {
+async function patch<TBody, TResponse>(path: string, body: TBody): Promise<TResponse> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'PATCH',
-    headers: authHeaders(token),
+    headers: JSON_HEADERS,
+    credentials: 'include',
     body: JSON.stringify(body),
   });
 
@@ -326,6 +321,22 @@ async function patch<TBody, TResponse>(
   }
 
   return res.json() as Promise<TResponse>;
+}
+
+async function del<TResponse>(path: string): Promise<TResponse> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`API ${path} → ${res.status}: ${text}`);
+  }
+
+  // Delete endpoints commonly return 204 No Content — guard against an empty body.
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as TResponse;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -348,45 +359,41 @@ export async function loginWithPassword(
   });
 }
 
-export async function syncBatch(
-  token: string,
-  body: SyncBatchRequest,
-): Promise<SyncBatchResponse> {
-  return post<SyncBatchRequest, SyncBatchResponse>('/api/v1/sync/batch', body, token);
+export async function syncBatch(body: SyncBatchRequest): Promise<SyncBatchResponse> {
+  return post<SyncBatchRequest, SyncBatchResponse>('/api/v1/sync/batch', body);
 }
 
-export async function syncPull(
-  token: string,
-  body: SyncPullRequest,
-): Promise<SyncPullResponse> {
-  return post<SyncPullRequest, SyncPullResponse>('/api/v1/sync/pull', body, token);
+export async function syncPull(body: SyncPullRequest): Promise<SyncPullResponse> {
+  return post<SyncPullRequest, SyncPullResponse>('/api/v1/sync/pull', body);
 }
 
-export async function refreshToken(agentId: string, deviceId: string, refresh: string): Promise<AuthResponse> {
-  return post<{ agentId: string; deviceId: string; refreshToken: string }, AuthResponse>(
+export async function refreshToken(agentId: string, deviceId: string): Promise<AuthResponse> {
+  return post<{ agentId: string; deviceId: string }, AuthResponse>(
     '/api/v1/auth/refresh',
-    { agentId, deviceId, refreshToken: refresh },
+    { agentId, deviceId },
   );
 }
 
+export async function logout(): Promise<{ message: string }> {
+  return post<Record<string, never>, { message: string }>('/api/v1/auth/logout', {});
+}
+
 export async function changePassword(
-  token: string,
   currentPassword: string,
   newPassword: string,
 ): Promise<{ message: string }> {
   return post<{ currentPassword: string; newPassword: string }, { message: string }>(
     '/api/v1/auth/change-password',
     { currentPassword, newPassword },
-    token,
   );
 }
 
-export async function uploadPhoto(token: string, file: File): Promise<{ url: string; fileName: string }> {
+export async function uploadPhoto(file: File): Promise<{ url: string; fileName: string }> {
   const formData = new FormData();
   formData.append('file', file);
   const res = await fetch(`${API_BASE}/api/v1/sync/photo`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    credentials: 'include',
     body: formData
   });
   if (!res.ok) throw new Error('Failed to upload photo');
@@ -395,54 +402,52 @@ export async function uploadPhoto(token: string, file: File): Promise<{ url: str
 
 export async function updateAgentProfile(
   agentId: string,
-  token: string,
   body: UpdateAgentProfileRequest
 ): Promise<{ success: boolean; profileCompleted: boolean }> {
   return put<UpdateAgentProfileRequest, { success: boolean; profileCompleted: boolean }>(
     `/api/v1/agents/${encodeURIComponent(agentId)}/profile`,
     body,
-    token
   );
 }
 
 // ─── Admin API ────────────────────────────────────────────────────────────────
 
-export function getAgents(token: string): Promise<AdminAgentDto[]> {
-  return get<AdminAgentDto[]>('/api/v1/agents', token);
+export function getAgents(): Promise<AdminAgentDto[]> {
+  return get<AdminAgentDto[]>('/api/v1/agents');
 }
 
-export function getAgentDetail(token: string, agentId: string): Promise<AgentDetailDto> {
-  return get<AgentDetailDto>(`/api/v1/agents/${encodeURIComponent(agentId)}`, token);
+export function getAgentDetail(agentId: string): Promise<AgentDetailDto> {
+  return get<AgentDetailDto>(`/api/v1/agents/${encodeURIComponent(agentId)}`);
 }
 
-export function onboardAgent(token: string, body: OnboardAgentRequest): Promise<OnboardAgentResponse> {
-  return post<OnboardAgentRequest, OnboardAgentResponse>('/api/v1/agents', body, token);
+export function onboardAgent(body: OnboardAgentRequest): Promise<OnboardAgentResponse> {
+  return post<OnboardAgentRequest, OnboardAgentResponse>('/api/v1/agents', body);
 }
 
-export function getAgentTrajectory(token: string, agentId: string, date?: string): Promise<TrajectoryPointDto[]> {
+export function getAgentTrajectory(agentId: string, date?: string): Promise<TrajectoryPointDto[]> {
   const qs = date ? `?date=${encodeURIComponent(date)}` : '';
-  return get<TrajectoryPointDto[]>(`/api/v1/agents/${encodeURIComponent(agentId)}/trajectory${qs}`, token);
+  return get<TrajectoryPointDto[]>(`/api/v1/agents/${encodeURIComponent(agentId)}/trajectory${qs}`);
 }
 
-export function getDuplicates(token: string): Promise<DuplicatePairDto[]> {
-  return get<DuplicatePairDto[]>('/api/v1/duplicates', token);
+export function getDuplicates(): Promise<DuplicatePairDto[]> {
+  return get<DuplicatePairDto[]>('/api/v1/duplicates');
 }
 
-export function mergeDuplicate(token: string, clientId: string): Promise<unknown> {
-  return post<Record<string, never>, unknown>(`/api/v1/duplicates/${encodeURIComponent(clientId)}/merge`, {}, token);
+export function mergeDuplicate(clientId: string): Promise<unknown> {
+  return post<Record<string, never>, unknown>(`/api/v1/duplicates/${encodeURIComponent(clientId)}/merge`, {});
 }
 
-export function dismissDuplicate(token: string, clientId: string): Promise<unknown> {
-  return post<Record<string, never>, unknown>(`/api/v1/duplicates/${encodeURIComponent(clientId)}/dismiss`, {}, token);
+export function dismissDuplicate(clientId: string): Promise<unknown> {
+  return post<Record<string, never>, unknown>(`/api/v1/duplicates/${encodeURIComponent(clientId)}/dismiss`, {});
 }
 
-export function getReportsSummary(token: string, district?: string): Promise<ReportSummaryDto> {
+export function getReportsSummary(district?: string): Promise<ReportSummaryDto> {
   const qs = district && district !== 'All' ? `?district=${encodeURIComponent(district)}` : '';
-  return get<ReportSummaryDto>(`/api/v1/reports/summary${qs}`, token);
+  return get<ReportSummaryDto>(`/api/v1/reports/summary${qs}`);
 }
 
-export function getPanchayats(token: string): Promise<PanchayatDto[]> {
-  return get<PanchayatDto[]>('/api/v1/panchayats', token);
+export function getPanchayats(): Promise<PanchayatDto[]> {
+  return get<PanchayatDto[]>('/api/v1/panchayats');
 }
 
 // ─── Admin: Block Assignments ──────────────────────────────────────────────────
@@ -486,24 +491,23 @@ export interface MyAssignmentDto {
   panchayats: AssignmentPanchayatDto[];
 }
 
-export function getAssignments(token: string): Promise<AssignmentSummaryDto[]> {
-  return get<AssignmentSummaryDto[]>('/api/v1/assignments', token);
+export function getAssignments(): Promise<AssignmentSummaryDto[]> {
+  return get<AssignmentSummaryDto[]>('/api/v1/assignments');
 }
 
-export function createAssignment(token: string, body: CreateAssignmentRequest): Promise<AssignmentSummaryDto> {
-  return post<CreateAssignmentRequest, AssignmentSummaryDto>('/api/v1/assignments', body, token);
+export function createAssignment(body: CreateAssignmentRequest): Promise<AssignmentSummaryDto> {
+  return post<CreateAssignmentRequest, AssignmentSummaryDto>('/api/v1/assignments', body);
 }
 
 export function updateAssignmentStatus(
-  token: string,
   id: string,
   status: 'Active' | 'Completed' | 'Cancelled'
 ): Promise<{ success: boolean }> {
-  return patch<{ status: string }, { success: boolean }>(`/api/v1/assignments/${encodeURIComponent(id)}`, { status }, token);
+  return patch<{ status: string }, { success: boolean }>(`/api/v1/assignments/${encodeURIComponent(id)}`, { status });
 }
 
-export function getMyAssignment(token: string): Promise<MyAssignmentDto> {
-  return get<MyAssignmentDto>('/api/v1/assignments/mine', token);
+export function getMyAssignment(): Promise<MyAssignmentDto> {
+  return get<MyAssignmentDto>('/api/v1/assignments/mine');
 }
 
 export interface AdminContactDto {
@@ -545,6 +549,8 @@ export interface AdminContactsQuery {
   statuses?: string[];
   startDate?: string;
   endDate?: string;
+  maxFollowUpDate?: string;
+  updatedAfter?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
@@ -556,7 +562,7 @@ export interface PaginatedContactsResponse {
   pageSize: number;
 }
 
-export function getAdminContacts(token: string, query: AdminContactsQuery = {}): Promise<PaginatedContactsResponse> {
+export function getAdminContacts(query: AdminContactsQuery = {}): Promise<PaginatedContactsResponse> {
   const params = new URLSearchParams();
   if (query.page) params.set('page', String(query.page));
   if (query.pageSize) params.set('pageSize', String(query.pageSize));
@@ -566,14 +572,57 @@ export function getAdminContacts(token: string, query: AdminContactsQuery = {}):
   if (query.statuses?.length) params.set('statuses', query.statuses.join(','));
   if (query.startDate) params.set('startDate', query.startDate);
   if (query.endDate) params.set('endDate', query.endDate);
+  if (query.maxFollowUpDate) params.set('maxFollowUpDate', query.maxFollowUpDate);
+  if (query.updatedAfter) params.set('updatedAfter', query.updatedAfter);
   if (query.sortBy) params.set('sortBy', query.sortBy);
   if (query.sortOrder) params.set('sortOrder', query.sortOrder);
   const qs = params.toString();
-  return get<PaginatedContactsResponse>(`/api/v1/admin/contacts${qs ? `?${qs}` : ''}`, token);
+  return get<PaginatedContactsResponse>(`/api/v1/admin/contacts${qs ? `?${qs}` : ''}`);
 }
 
-export function getAdminContact(token: string, clientId: string): Promise<AdminContactDto> {
-  return get<AdminContactDto>(`/api/v1/admin/contacts/${encodeURIComponent(clientId)}`, token);
+export function deleteAdminSurveyResponse(id: string): Promise<void> {
+  return del<void>(`/api/v1/admin/surveys/${encodeURIComponent(id)}`);
+}
+
+// ─── Admin Survey Questions ──────────────────────────────────────────────
+
+export interface SurveyQuestionDto {
+  id: string;
+  questionId: string;
+  text: string;
+  type: 'single' | 'text';
+  optionsJson?: string | null;
+  isOptional: boolean;
+  isActive: boolean;
+  order: number;
+}
+
+export function getAdminSurveyQuestions(): Promise<SurveyQuestionDto[]> {
+  return get<SurveyQuestionDto[]>('/api/v1/admin/questions');
+}
+
+export function createAdminSurveyQuestion(data: Omit<SurveyQuestionDto, 'id'>): Promise<SurveyQuestionDto> {
+  const body = {
+    ...data,
+    options: data.optionsJson ? JSON.parse(data.optionsJson) : null
+  };
+  return post<typeof body, SurveyQuestionDto>('/api/v1/admin/questions', body);
+}
+
+export function updateAdminSurveyQuestion(id: string, data: Omit<SurveyQuestionDto, 'id'>): Promise<SurveyQuestionDto> {
+  const body = {
+    ...data,
+    options: data.optionsJson ? JSON.parse(data.optionsJson) : null
+  };
+  return put<typeof body, SurveyQuestionDto>(`/api/v1/admin/questions/${encodeURIComponent(id)}`, body);
+}
+
+export function deleteAdminSurveyQuestion(id: string): Promise<void> {
+  return del<void>(`/api/v1/admin/questions/${encodeURIComponent(id)}`);
+}
+
+export function getAdminContact(clientId: string): Promise<AdminContactDto> {
+  return get<AdminContactDto>(`/api/v1/admin/contacts/${encodeURIComponent(clientId)}`);
 }
 
 export interface ContactHistoryEntryDto {
@@ -588,19 +637,17 @@ export interface ContactHistoryEntryDto {
   conflicts?: string | null;
 }
 
-export function getContactHistory(token: string, clientId: string): Promise<ContactHistoryEntryDto[]> {
-  return get<ContactHistoryEntryDto[]>(`/api/v1/admin/contacts/${encodeURIComponent(clientId)}/history`, token);
+export function getContactHistory(clientId: string): Promise<ContactHistoryEntryDto[]> {
+  return get<ContactHistoryEntryDto[]>(`/api/v1/admin/contacts/${encodeURIComponent(clientId)}/history`);
 }
 
 export function updateAdminContact(
-  token: string,
   clientId: string,
   body: ContactUpdateRequest
 ): Promise<AdminContactDto> {
   return put<ContactUpdateRequest, AdminContactDto>(
     `/api/v1/admin/contacts/${encodeURIComponent(clientId)}`,
     body,
-    token
   );
 }
 
@@ -617,6 +664,6 @@ export interface AdminSurveyDto {
   syncedAt: string;
 }
 
-export function getAdminSurveys(token: string): Promise<AdminSurveyDto[]> {
-  return get<AdminSurveyDto[]>('/api/v1/admin/surveys', token);
+export function getAdminSurveys(): Promise<AdminSurveyDto[]> {
+  return get<AdminSurveyDto[]>('/api/v1/admin/surveys');
 }

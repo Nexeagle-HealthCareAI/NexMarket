@@ -9,7 +9,7 @@ import { useTranslations } from '@/i18n/I18nProvider';
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { agentId, jwtToken, profileCompleted, setProfileCompleted } = useAgentStore();
+  const { agentId, profileCompleted, setProfileCompleted } = useAgentStore();
   const t = useTranslations();
 
   const [step, setStep] = useState(1);
@@ -60,15 +60,15 @@ export default function OnboardingPage() {
       setError(t.errPhotoRequired);
       return;
     }
-    if (!agentId || !jwtToken) return;
-    
+    if (!agentId) return;
+
     setLoading(true);
     setError('');
-    
-    try {
-      const { url: photoUrl } = await uploadPhoto(jwtToken, photoFile);
 
-      await updateAgentProfile(agentId, jwtToken, {
+    try {
+      const { url: photoUrl } = await uploadPhoto(photoFile);
+
+      await updateAgentProfile(agentId, {
         personalDetails,
         education,
         photoUrl

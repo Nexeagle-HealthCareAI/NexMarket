@@ -44,7 +44,7 @@ function SortableHeader({ label, columnKey, currentSortBy, currentSortOrder, onS
 }
 
 export default function PipelinePage() {
-  const token = useAgentStore((s) => s.jwtToken);
+  const agentId = useAgentStore((s) => s.agentId);
   const name = useAgentStore((s) => s.name);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -54,7 +54,7 @@ export default function PipelinePage() {
   const [exporting, setExporting] = useState(false);
   const [historyModalContact, setHistoryModalContact] = useState<Contact | null>(null);
   const [editDrawerContact, setEditDrawerContact] = useState<Contact | null>(null);
-  const [activeTab, setActiveTab] = useState<'worklist' | 'historical'>('worklist');
+  const [activeTab, setActiveTab] = useState<'worklist' | 'recent' | 'historical'>('worklist');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -68,11 +68,11 @@ export default function PipelinePage() {
   const [selectedPanchayats, setSelectedPanchayats] = useState<string[]>([]);
 
   useEffect(() => {
-    if (token) getPanchayats(token).then(setPanchayatsData).catch(() => {});
-  }, [token]);
+    if (agentId) getPanchayats().then(setPanchayatsData).catch(() => {});
+  }, [agentId]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!agentId) return;
     let cancelled = false;
 
     let startDate: string | undefined = undefined;
@@ -107,15 +107,35 @@ export default function PipelinePage() {
       setLoading(true);
       setError('');
       try {
-        const res = await getAdminContacts(token, {
+        const isWorklist = activeTab === 'worklist';
+        const isRecent = activeTab === 'recent';
+        
+        let maxFollowUpDate: string | undefined = undefined;
+        if (isWorklist) {
+           const d = new Date();
+           d.setHours(23,59,59,999);
+           maxFollowUpDate = d.toISOString();
+        }
+
+        let updatedAfter: string | undefined = undefined;
+        if (isRecent) {
+           const d = new Date();
+           d.setDate(d.getDate() - 1);
+           d.setHours(0,0,0,0);
+           updatedAfter = d.toISOString();
+        }
+
+        const res = await getAdminContacts({
           page,
           pageSize: PAGE_SIZE,
           districts: selectedCities,
           blocks: selectedBlocks,
           panchayats: selectedPanchayats,
-          statuses: activeTab === 'worklist' ? ['Lead', 'Contacted', 'FollowUp'] : undefined,
+          statuses: isWorklist ? ['Lead', 'Contacted', 'FollowUp'] : undefined,
           startDate,
           endDate,
+          maxFollowUpDate,
+          updatedAfter,
           sortBy,
           sortOrder,
         });
@@ -130,13 +150,13 @@ export default function PipelinePage() {
     })();
 
     return () => { cancelled = true; };
-  }, [token, page, selectedCities, selectedBlocks, selectedPanchayats, activeTab, dateFilter, customStartDate, customEndDate, sortBy, sortOrder]);
+  }, [agentId, page, selectedCities, selectedBlocks, selectedPanchayats, activeTab, dateFilter, customStartDate, customEndDate, sortBy, sortOrder]);
 
   const handleSaveContact = async (updatedContact: Contact) => {
-    if (!token) return;
+    if (!agentId) return;
 
     try {
-      const saved = await updateAdminContact(token, updatedContact.clientId, {
+      const saved = await updateAdminContact(updatedContact.clientId, {
         status: updatedContact.status,
         followUpDate: updatedContact.followUpDate,
         comments: updatedContact.comments ?? undefined
@@ -165,7 +185,7 @@ export default function PipelinePage() {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   const exportToCsv = async () => {
-    if (!token) return;
+    if (!agentId) return;
     setExporting(true);
     setError('');
 
@@ -186,7 +206,7 @@ export default function PipelinePage() {
     }
 
     try {
-      const res = await getAdminContacts(token, {
+      const res = await getAdminContacts({
         page: 1,
         pageSize: EXPORT_PAGE_SIZE,
         districts: selectedCities,
@@ -272,6 +292,17 @@ export default function PipelinePage() {
           📝 Worklist
         </button>
         <button
+          onClick={() => { setActiveTab('recent'); setPage(1); }}
+          style={{
+            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
+            fontSize: '1rem', fontWeight: 700, color: activeTab === 'recent' ? '#4f46e5' : '#64748b',
+            borderBottom: activeTab === 'recent' ? '3px solid #4f46e5' : '3px solid transparent',
+            marginBottom: '-2px', transition: 'all 0.2s'
+          }}
+        >
+          🕒 Recent Activity
+        </button>
+        <button
           onClick={() => { setActiveTab('historical'); setPage(1); }}
           style={{
             background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
@@ -290,7 +321,7 @@ export default function PipelinePage() {
           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date Filter</label>
           <select 
             value={dateFilter} 
-            onChange={(e) => { setDateFilter(e.target.value as any); setPage(1); }}
+            onChange={(e) => { setDateFilter(e.target.value as 'all' | 'today' | 'yesterday' | 'custom'); setPage(1); }}
             style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', background: 'white', fontWeight: 600, color: '#0f172a', outline: 'none' }}
           >
             <option value="all">All Dates</option>
@@ -362,7 +393,7 @@ export default function PipelinePage() {
                 <tr>
                   <SortableHeader label="Contact Details" columnKey="name" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
                   <SortableHeader label="Location (Village)" columnKey="location" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
-                  {activeTab === 'worklist' && (
+                  {(activeTab === 'worklist' || activeTab === 'recent') && (
                     <>
                       <SortableHeader label="Stage (Result)" columnKey="status" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} width="160px" />
                       <SortableHeader label="Follow-up Date" columnKey="followupdate" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
@@ -389,10 +420,16 @@ export default function PipelinePage() {
                       contact={c}
                       panchayatName={pInfo?.name}
                       blockName={pInfo?.block}
-                      showStageAndFollowUp={activeTab === 'worklist'}
+                      showStageAndFollowUp={activeTab === 'worklist' || activeTab === 'recent'}
                       showComments={activeTab === 'worklist'}
                       onEdit={() => setEditDrawerContact(c)}
                       onViewHistory={() => setHistoryModalContact(c)}
+                      onQuickFollowUp={(days) => {
+                        const nextDate = new Date();
+                        nextDate.setDate(nextDate.getDate() + days);
+                        handleSaveContact({ ...c, followUpDate: nextDate.toISOString(), status: 'FollowUp' });
+                      }}
+                      showQuickActions={activeTab === 'worklist'}
                     />
                   );
                 })}
@@ -427,10 +464,9 @@ export default function PipelinePage() {
 
       {/* History Modal */}
       <AnimatePresence>
-        {historyModalContact && token && (
+        {historyModalContact && (
           <HistoryModal
             contact={historyModalContact}
-            token={token}
             onClose={() => setHistoryModalContact(null)}
           />
         )}
@@ -456,7 +492,7 @@ export default function PipelinePage() {
 // -------------------------------------------------------------------------------------------------
 // Contact Row Component (Handles inline editing state)
 // -------------------------------------------------------------------------------------------------
-function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, showComments, onEdit, onViewHistory }: { contact: Contact, panchayatName?: string, blockName?: string, showStageAndFollowUp: boolean, showComments: boolean, onEdit: () => void, onViewHistory: () => void }) {
+function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, showComments, onEdit, onViewHistory, onQuickFollowUp, showQuickActions }: { contact: Contact, panchayatName?: string, blockName?: string, showStageAndFollowUp: boolean, showComments: boolean, onEdit: () => void, onViewHistory: () => void, onQuickFollowUp?: (days: number) => void, showQuickActions?: boolean }) {
   // Format last updated IST time
   const lastUpdatedTime = contact.lastUpdatedAt
     ? new Date(contact.lastUpdatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) + ' IST'
@@ -552,13 +588,25 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
         </div>
       </td>
       <td style={{ padding: '1rem', textAlign: 'center', minWidth: '120px' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-          <button onClick={onEdit} style={{ background: 'transparent', color: '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-            Update
-          </button>
-          <Link href={`/admin/pipeline/${contact.clientId}`} style={{ background: '#0f172a', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
-            Profile
-          </Link>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+            <button onClick={onEdit} style={{ background: 'transparent', color: '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              Update
+            </button>
+            <Link href={`/admin/pipeline/${contact.clientId}`} style={{ background: '#0f172a', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+              Profile
+            </Link>
+          </div>
+          {showQuickActions && onQuickFollowUp && (
+            <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.25rem' }}>
+              <button onClick={() => onQuickFollowUp(1)} title="Follow up tomorrow" style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>
+                +1 Day
+              </button>
+              <button onClick={() => onQuickFollowUp(7)} title="Follow up next week" style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>
+                +1 Wk
+              </button>
+            </div>
+          )}
         </div>
       </td>
     </tr>
@@ -568,7 +616,7 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
 // -------------------------------------------------------------------------------------------------
 // History Modal Component
 // -------------------------------------------------------------------------------------------------
-function HistoryModal({ contact, token, onClose }: { contact: Contact, token: string, onClose: () => void }) {
+function HistoryModal({ contact, onClose }: { contact: Contact, onClose: () => void }) {
   const [history, setHistory] = useState<ContactHistoryEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -579,7 +627,7 @@ function HistoryModal({ contact, token, onClose }: { contact: Contact, token: st
       setLoading(true);
       setError('');
       try {
-        const h = await getContactHistory(token, contact.clientId);
+        const h = await getContactHistory(contact.clientId);
         if (!cancelled) setHistory(h);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load history.');
@@ -588,7 +636,7 @@ function HistoryModal({ contact, token, onClose }: { contact: Contact, token: st
       }
     })();
     return () => { cancelled = true; };
-  }, [contact.clientId, token]);
+  }, [contact.clientId]);
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>

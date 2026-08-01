@@ -7,7 +7,7 @@ import { useAgentStore } from '@/store/agent-store';
 
 export default function ChangePasswordPage() {
   const router = useRouter();
-  const token = useAgentStore((s) => s.jwtToken);
+  const agentId = useAgentStore((s) => s.agentId);
   const role = useAgentStore((s) => s.role);
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -28,14 +28,14 @@ export default function ChangePasswordPage() {
       setError('New passwords do not match.');
       return;
     }
-    if (!token) {
+    if (!agentId) {
       setError('Your session has expired — please sign in again.');
       return;
     }
 
     setIsLoading(true);
     try {
-      await changePassword(token, currentPassword, newPassword);
+      await changePassword(currentPassword, newPassword);
       router.push(role?.toLowerCase() === 'admin' ? '/admin/agents' : '/home');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to change password. Please try again.');

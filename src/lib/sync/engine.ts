@@ -41,9 +41,8 @@ async function runSync(): Promise<void> {
   try {
     const agentId = await getSyncStateValue('agentId');
     const deviceId = await getSyncStateValue('deviceId');
-    const token = await getSyncStateValue('jwtToken');
 
-    if (!agentId || !deviceId || !token) {
+    if (!agentId || !deviceId) {
       _isSyncing = false;
       return;
     }
@@ -60,7 +59,7 @@ async function runSync(): Promise<void> {
       }
 
       try {
-        const response = await syncBatch(token, {
+        const response = await syncBatch({
           deviceId,
           agentId,
           items: batch.map((e) => ({

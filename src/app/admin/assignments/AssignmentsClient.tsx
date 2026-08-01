@@ -15,7 +15,7 @@ import {
 } from '@/lib/sync/api-client';
 
 export default function AssignmentsClient() {
-  const token = useAgentStore((s) => s.jwtToken);
+  const agentId = useAgentStore((s) => s.agentId);
 
   const [agents, setAgents] = useState<AdminAgentDto[]>([]);
   const [assignments, setAssignments] = useState<AssignmentSummaryDto[]>([]);
@@ -33,14 +33,14 @@ export default function AssignmentsClient() {
   const [createError, setCreateError] = useState('');
 
   const loadAll = useCallback(async () => {
-    if (!token) return;
+    if (!agentId) return;
     setLoading(true);
     setError('');
     try {
       const [agentsData, assignmentsData, panchayatsData] = await Promise.all([
-        getAgents(token),
-        getAssignments(token),
-        getPanchayats(token),
+        getAgents(),
+        getAssignments(),
+        getPanchayats(),
       ]);
       setAgents(agentsData);
       setAssignments(assignmentsData);
@@ -50,7 +50,7 @@ export default function AssignmentsClient() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [agentId]);
 
   useEffect(() => {
     void loadAll();
@@ -72,11 +72,11 @@ export default function AssignmentsClient() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!token || !formAgentId || !formDistrict || !formBlock) return;
+    if (!agentId || !formAgentId || !formDistrict || !formBlock) return;
     setCreating(true);
     setCreateError('');
     try {
-      await createAssignment(token, {
+      await createAssignment({
         agentId: formAgentId,
         district: formDistrict,
         block: formBlock,
@@ -95,9 +95,9 @@ export default function AssignmentsClient() {
   }
 
   async function handleStatusChange(id: string, status: 'Completed' | 'Cancelled') {
-    if (!token) return;
+    if (!agentId) return;
     try {
-      await updateAssignmentStatus(token, id, status);
+      await updateAssignmentStatus(id, status);
       void loadAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update assignment.');

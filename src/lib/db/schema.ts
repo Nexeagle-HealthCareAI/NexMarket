@@ -187,6 +187,7 @@ export class NexMarketDB extends Dexie {
   surveyResponses!: EntityTable<LocalSurveyResponse, 'localId'>;
   syncOutbox!: EntityTable<SyncOutboxEntry, 'localId'>;
   syncState!: EntityTable<SyncState, 'key'>;
+  surveyQuestions!: EntityTable<import('../sync/api-client').SurveyQuestionDto, 'id'>;
 
   constructor() {
     super('nexmarket_db');
@@ -213,6 +214,10 @@ export class NexMarketDB extends Dexie {
 
     this.version(3).stores({
       surveyResponses: '++localId, [clientId+deviceId], serverId, agentId, contactId, panchayatId, syncedAt',
+    });
+
+    this.version(4).stores({
+      surveyQuestions: 'id, questionId, isActive, order',
     });
   }
 }

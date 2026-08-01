@@ -31,11 +31,10 @@ export default function LoginPage() {
       const deviceId = await getOrCreateDeviceId();
       const auth = await loginWithPassword(targetId, targetPass, deviceId);
 
-      // Persist to Dexie syncState for sync engine
+      // Persist to Dexie syncState for sync engine — no token here, the JWT
+      // and refresh token are httpOnly cookies now, invisible to this code.
       await setSyncStateValue('agentId', auth.agentId);
       await setSyncStateValue('deviceId', auth.deviceId);
-      await setSyncStateValue('jwtToken', auth.token);
-      await setSyncStateValue('refreshToken', auth.refreshToken);
 
       // Persist to Zustand
       setAuth({
@@ -43,19 +42,17 @@ export default function LoginPage() {
         deviceId: auth.deviceId,
         name: auth.name,
         role: auth.role,
-        jwtToken: auth.token,
-        refreshToken: auth.refreshToken,
         profileCompleted: auth.profileCompleted,
       });
 
       // Seed panchayat list if empty
-      await seedPanchayatsIfEmpty(auth.token);
+      await seedPanchayatsIfEmpty();
 
       // Reinstall recovery: if local DB is empty, pull down all agent data
       const isEmpty = await isLocalDatabaseEmpty();
       if (isEmpty) {
         try {
-          const pulled = await syncPull(auth.token, {
+          const pulled = await syncPull({
             agentId: auth.agentId,
             deviceId: auth.deviceId,
             since: '1970-01-01T00:00:00Z',
@@ -83,6 +80,14 @@ export default function LoginPage() {
             await db.referrals.bulkPut(
               (pulled.referrals as LocalReferral[]).map((r) => ({ ...r, syncedAt: new Date().toISOString() }))
             );
+          }
+          if (pulled.surveys?.length) {
+            await db.surveyResponses.bulkPut(
+              (pulled.surveys as import('@/lib/db/schema').LocalSurveyResponse[]).map((s) => ({ ...s, syncedAt: new Date().toISOString() }))
+            );
+          }
+          if (pulled.surveyQuestions?.length) {
+            await db.surveyQuestions.bulkPut(pulled.surveyQuestions);
           }
         } catch (pullErr) {
           console.warn('Reinstall recovery pull failed — continuing with an empty local DB:', pullErr);

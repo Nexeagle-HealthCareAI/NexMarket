@@ -30,7 +30,7 @@ function escapeHtml(value: string | number): string {
 }
 
 export default function MapClient() {
-  const token = useAgentStore((s) => s.jwtToken);
+  const agentId = useAgentStore((s) => s.agentId);
   const searchParams = useSearchParams();
   const deepLinkAgentId = searchParams.get('agentId');
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -59,15 +59,15 @@ export default function MapClient() {
 
   // Fetch agents (list + poll — same cadence as the Agents page)
   const loadAgents = useCallback(async () => {
-    if (!token) return;
+    if (!agentId) return;
     try {
-      const data = await getAgents(token);
+      const data = await getAgents();
       setAgents(data);
       setSelectedAgentId((current) => current || deepLinkAgentId || data[0]?.agentId || '');
     } catch (err) {
       console.error('Failed to load agents', err);
     }
-  }, [token, deepLinkAgentId]);
+  }, [agentId, deepLinkAgentId]);
 
   useEffect(() => {
     void loadAgents();
@@ -77,19 +77,19 @@ export default function MapClient() {
 
   // Fetch trajectory whenever the selected agent changes
   useEffect(() => {
-    if (!token || !selectedAgentId) {
+    if (!agentId || !selectedAgentId) {
       setTrajectory([]);
       return;
     }
     setReplayIdx(0);
     setIsPlaying(false);
-    getAgentTrajectory(token, selectedAgentId)
+    getAgentTrajectory(selectedAgentId)
       .then(setTrajectory)
       .catch((err) => {
         console.error('Failed to load trajectory', err);
         setTrajectory([]);
       });
-  }, [token, selectedAgentId]);
+  }, [agentId, selectedAgentId]);
 
   // Fetch Panchayats (real LGD reference data bundled with the frontend)
   useEffect(() => {

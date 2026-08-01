@@ -11,11 +11,11 @@
 import { db } from '../db';
 import { getPanchayats } from './api-client';
 
-export async function seedPanchayatsIfEmpty(token: string): Promise<void> {
+export async function seedPanchayatsIfEmpty(): Promise<void> {
   const count = await db.panchayats.count();
   if (count > 0) return; // Already seeded
 
-  const panchayats = await getPanchayats(token);
+  const panchayats = await getPanchayats();
   await db.panchayats.bulkPut(
     panchayats.map((p) => ({
       ...p,

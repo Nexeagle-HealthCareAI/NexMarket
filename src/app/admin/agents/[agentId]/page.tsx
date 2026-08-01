@@ -13,7 +13,7 @@ const STATUS_LABEL: Record<AgentDetailDto['status'], string> = {
 
 export default function AgentDetailPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = use(params);
-  const token = useAgentStore((s) => s.jwtToken);
+  const viewerAgentId = useAgentStore((s) => s.agentId);
 
   const [agent, setAgent] = useState<AgentDetailDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -23,10 +23,10 @@ export default function AgentDetailPage({ params }: { params: Promise<{ agentId:
   const [form, setForm] = useState<UpdateAgentProfileRequest>({});
 
   const load = () => {
-    if (!token) return;
+    if (!viewerAgentId) return;
     setLoading(true);
     setError('');
-    getAgentDetail(token, agentId)
+    getAgentDetail(agentId)
       .then((data) => {
         setAgent(data);
         setForm({
@@ -53,14 +53,14 @@ export default function AgentDetailPage({ params }: { params: Promise<{ agentId:
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [token, agentId]);
+  useEffect(load, [viewerAgentId, agentId]);
 
   const handleSave = async () => {
-    if (!token) return;
+    if (!viewerAgentId) return;
     setSaving(true);
     setError('');
     try {
-      await updateAgentProfile(agentId, token, form);
+      await updateAgentProfile(agentId, form);
       setIsEditing(false);
       load();
     } catch (e) {

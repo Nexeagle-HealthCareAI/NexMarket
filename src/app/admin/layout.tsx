@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { logout as apiLogout } from '@/lib/sync/api-client';
 import { useAgentStore } from '@/store/agent-store';
 
 const adminNavItems = [
@@ -29,6 +30,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const clearAuth = useAgentStore((s) => s.clearAuth);
 
   const handleLogout = () => {
+    // Best-effort: revoke the session server-side and clear the httpOnly
+    // cookies — clearAuth() alone only wipes Zustand/localStorage.
+    void apiLogout().catch(() => {});
     clearAuth();
     router.push('/');
   };

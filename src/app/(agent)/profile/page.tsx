@@ -6,7 +6,6 @@ import { getAgentDetail, updateAgentProfile, uploadPhoto, type AgentDetailDto, t
 
 export default function ProfilePage() {
   const agentId = useAgentStore((s) => s.agentId);
-  const jwtToken = useAgentStore((s) => s.jwtToken);
 
   const [agent, setAgent] = useState<AgentDetailDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,9 +18,9 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!agentId || !jwtToken) return;
+    if (!agentId) return;
     setLoading(true);
-    getAgentDetail(jwtToken, agentId)
+    getAgentDetail(agentId)
       .then((data) => {
         setAgent(data);
         setForm({
@@ -42,7 +41,7 @@ export default function ProfilePage() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load your profile.'))
       .finally(() => setLoading(false));
-  }, [agentId, jwtToken]);
+  }, [agentId]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -52,20 +51,20 @@ export default function ProfilePage() {
   };
 
   const handleSave = async () => {
-    if (!agentId || !jwtToken) return;
+    if (!agentId) return;
     setSaving(true);
     setError('');
     setSuccess('');
     try {
       let photoUrl: string | undefined;
       if (photoFile) {
-        const uploaded = await uploadPhoto(jwtToken, photoFile);
+        const uploaded = await uploadPhoto(photoFile);
         photoUrl = uploaded.url;
       }
-      await updateAgentProfile(agentId, jwtToken, { ...form, photoUrl });
+      await updateAgentProfile(agentId, { ...form, photoUrl });
       setSuccess('Profile updated.');
       setPhotoFile(null);
-      const refreshed = await getAgentDetail(jwtToken, agentId);
+      const refreshed = await getAgentDetail(agentId);
       setAgent(refreshed);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save changes.');

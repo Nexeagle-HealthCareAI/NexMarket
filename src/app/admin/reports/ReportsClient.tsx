@@ -16,24 +16,24 @@ const EMPTY_SUMMARY: ReportSummaryDto = {
 };
 
 export default function ReportsClient() {
-  const token = useAgentStore((s) => s.jwtToken);
+  const agentId = useAgentStore((s) => s.agentId);
   const [districtFilter, setDistrictFilter] = useState<string>('All');
   const [summary, setSummary] = useState<ReportSummaryDto>(EMPTY_SUMMARY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
-    if (!token) return;
+    if (!agentId) return;
     setLoading(true);
     setError('');
     try {
-      setSummary(await getReportsSummary(token, districtFilter));
+      setSummary(await getReportsSummary(districtFilter));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load reports.');
     } finally {
       setLoading(false);
     }
-  }, [token, districtFilter]);
+  }, [agentId, districtFilter]);
 
   useEffect(() => {
     void load();

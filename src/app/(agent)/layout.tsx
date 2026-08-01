@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useOutboxCount } from '@/lib/db';
 import { startSyncPolling, registerBackgroundSync } from '@/lib/sync/engine';
+import { logout as apiLogout } from '@/lib/sync/api-client';
 import { useAgentStore } from '@/store/agent-store';
 import PwaInstallPrompt from '@/components/PwaInstallPrompt';
 import NotificationListener from '@/components/NotificationListener';
@@ -95,6 +96,16 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   );
 
   const t = useTranslations();
+
+  const handleSignOut = () => {
+    // Best-effort: revoke the session server-side and clear the httpOnly
+    // cookies. clearAuth() alone only wipes Zustand/localStorage — it can't
+    // touch httpOnly cookies, so without this call they'd stay valid until
+    // they expire even after the user "signs out".
+    void apiLogout().catch(() => {});
+    clearAuth();
+    router.replace('/login');
+  };
 
   useEffect(() => {
     // Zustand's persist middleware rehydrates from localStorage asynchronously,
@@ -225,10 +236,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
 
       <button
         type="button"
-        onClick={() => {
-          clearAuth();
-          router.replace('/login');
-        }}
+        onClick={handleSignOut}
         style={{
           width: '100%', padding: '0.65rem', background: 'rgba(239, 68, 68, 0.1)',
           border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444',
@@ -259,10 +267,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
           
           <button
             type="button"
-            onClick={() => {
-              clearAuth();
-              router.replace('/login');
-            }}
+            onClick={handleSignOut}
             style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-full)', color: '#ef4444', cursor: 'pointer', padding: '0.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background var(--transition-fast)' }}
             aria-label="Sign Out"
           >

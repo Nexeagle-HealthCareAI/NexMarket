@@ -12,7 +12,7 @@ const RELATIONS = ['Unknown', 'Supporter', 'Neutral', 'Opponent', 'Core Member']
 
 export default function ContactProfilePage({ params }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = use(params);
-  const token = useAgentStore((s) => s.jwtToken);
+  const agentId = useAgentStore((s) => s.agentId);
 
   const [contact, setContact] = useState<ContactProfile | null>(null);
   const [panchayat, setPanchayat] = useState<PanchayatDto | null>(null);
@@ -27,7 +27,7 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
-    if (!token) return;
+    if (!agentId) return;
     let cancelled = false;
 
     (async () => {
@@ -35,9 +35,9 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
       setError('');
       try {
         const [contactDto, panchayats, historyEntries] = await Promise.all([
-          getAdminContact(token, clientId),
-          getPanchayats(token),
-          getContactHistory(token, clientId),
+          getAdminContact(clientId),
+          getPanchayats(),
+          getContactHistory(clientId),
         ]);
         if (cancelled) return;
 
@@ -56,12 +56,12 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
     })();
 
     return () => { cancelled = true; };
-  }, [clientId, token]);
+  }, [clientId, agentId]);
 
   const handleSave = async () => {
-    if (!contact || !token) return;
+    if (!contact || !agentId) return;
     try {
-      const saved = await updateAdminContact(token, contact.clientId, {
+      const saved = await updateAdminContact(contact.clientId, {
         status: contact.status,
         followUpDate: contact.followUpDate,
         comments: contact.comments ?? undefined,
