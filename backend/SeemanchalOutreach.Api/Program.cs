@@ -50,20 +50,34 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.FromMinutes(1),
         };
 
-        // Browsers can't attach an Authorization header to the WebSocket upgrade
-        // request SignalR uses, so the JS client sends the token as a query-string
-        // parameter instead — accept it there, but only for the hub path (never
-        // widen this to accept query-string tokens on ordinary REST endpoints).
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
             {
+                // Browsers can't attach an Authorization header to the WebSocket
+                // upgrade request SignalR uses, so the JS client sends the token as
+                // a query-string parameter instead — accept it there, but only for
+                // the hub path (never widen this to accept query-string tokens on
+                // ordinary REST endpoints).
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
                 if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
                 {
                     context.Token = accessToken;
+                    return Task.CompletedTask;
                 }
+
+                // Primary auth path: the access token lives in an httpOnly cookie
+                // (never readable by JS — set by AuthController on login/refresh),
+                // not localStorage. Fall back to a normal Authorization header if
+                // present, for tooling/testing convenience — the client no longer
+                // sends one, but nothing stops it from working if it did.
+                if (context.Request.Cookies.TryGetValue(SeemanchalOutreach.Api.AuthCookies.AccessToken, out var cookieToken)
+                    && !string.IsNullOrEmpty(cookieToken))
+                {
+                    context.Token = cookieToken;
+                }
+
                 return Task.CompletedTask;
             }
         };

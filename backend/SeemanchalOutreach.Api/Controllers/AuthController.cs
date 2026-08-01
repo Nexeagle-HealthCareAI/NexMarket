@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -37,8 +38,10 @@ namespace SeemanchalOutreach.Api.Controllers
         [Required]
         public string DeviceId { get; set; } = string.Empty;
 
-        [Required]
-        public string RefreshToken { get; set; } = string.Empty;
+        // The refresh token itself is read from the httpOnly cookie, not the body
+        // — it's never exposed to client JS, so the client has no way to send it
+        // here even if it wanted to. AgentId/DeviceId are just identifiers (not
+        // secrets), needed to look up which session to refresh.
     }
 
     public class ChangePasswordRequestDto
@@ -94,10 +97,10 @@ namespace SeemanchalOutreach.Api.Controllers
             string refreshToken = await IssueRefreshTokenAsync(agent.AgentId, deviceId, cancellationToken);
             await _db.SaveChangesAsync(cancellationToken);
 
+            SetAuthCookies(GenerateJwt(agent), refreshToken);
+
             return Ok(new
             {
-                token = GenerateJwt(agent),
-                refreshToken,
                 agentId = agent.AgentId,
                 name = agent.Name,
                 role = agent.Role,
@@ -114,6 +117,12 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
+            if (!Request.Cookies.TryGetValue(AuthCookies.RefreshToken, out var refreshTokenCookie)
+                || string.IsNullOrEmpty(refreshTokenCookie))
+            {
+                return Unauthorized("Refresh token is invalid or expired — sign in again.");
+            }
+
             var agent = await _db.Agents.FirstOrDefaultAsync(a => a.AgentId == request.AgentId, cancellationToken);
             if (agent == null || !agent.IsActive)
             {
@@ -127,18 +136,18 @@ namespace SeemanchalOutreach.Api.Controllers
 
             if (session == null
                 || session.ExpiresAt < DateTime.UtcNow
-                || session.TokenHash != HashToken(request.RefreshToken))
+                || session.TokenHash != HashToken(refreshTokenCookie))
             {
                 return Unauthorized("Refresh token is invalid or expired — sign in again.");
             }
 
-            string refreshToken = await IssueRefreshTokenAsync(agent.AgentId, request.DeviceId, cancellationToken); // rotate — the old token can't be reused
+            string newRefreshToken = await IssueRefreshTokenAsync(agent.AgentId, request.DeviceId, cancellationToken); // rotate — the old token can't be reused
             await _db.SaveChangesAsync(cancellationToken);
+
+            SetAuthCookies(GenerateJwt(agent), newRefreshToken);
 
             return Ok(new
             {
-                token = GenerateJwt(agent),
-                refreshToken,
                 agentId = agent.AgentId,
                 name = agent.Name,
                 role = agent.Role,
@@ -147,6 +156,30 @@ namespace SeemanchalOutreach.Api.Controllers
                 profileCompleted = agent.ProfileCompleted,
                 mustChangePassword = agent.MustChangePassword,
             });
+        }
+
+        [HttpPost("logout")]
+        [Authorize]
+        public async Task<IActionResult> Logout(CancellationToken cancellationToken)
+        {
+            string? agentId = User.FindFirst("agentId")?.Value;
+            if (!string.IsNullOrEmpty(agentId) && Request.Cookies.TryGetValue(AuthCookies.RefreshToken, out var refreshTokenCookie))
+            {
+                // Best-effort: revoke this device's session server-side too, not just
+                // the client-side cookies, so the (now-cleared) refresh token can't
+                // be replayed by anyone who captured it in transit before this call.
+                var hash = HashToken(refreshTokenCookie);
+                var session = await _db.AgentRefreshTokens
+                    .FirstOrDefaultAsync(t => t.AgentId == agentId && t.TokenHash == hash, cancellationToken);
+                if (session != null)
+                {
+                    _db.AgentRefreshTokens.Remove(session);
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+            }
+
+            ClearAuthCookies();
+            return Ok(new { message = "Logged out." });
         }
 
         [HttpPost("change-password")]
@@ -184,6 +217,11 @@ namespace SeemanchalOutreach.Api.Controllers
 
             await _db.SaveChangesAsync(cancellationToken);
 
+            // This device's own cookies are now for a revoked session too — clear
+            // them so the client doesn't keep sending a refresh token that will
+            // just fail next time, and force a clean re-login.
+            ClearAuthCookies();
+
             return Ok(new { message = "Password updated." });
         }
 
@@ -209,6 +247,40 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
             return Convert.ToHexString(bytes);
+        }
+
+        // Secure is tied to the request's actual scheme (via UseForwardedHeaders
+        // trusting Caddy's X-Forwarded-Proto), not the environment name — so this
+        // correctly requires HTTPS in every deployed environment while still
+        // working over plain http://localhost for local `dotnet run`.
+        private void SetAuthCookies(string jwt, string refreshToken)
+        {
+            double.TryParse(_config["Jwt:ExpiryHours"], out var expiryHours);
+            if (expiryHours <= 0) expiryHours = 12;
+
+            Response.Cookies.Append(AuthCookies.AccessToken, jwt, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = Request.IsHttps,
+                SameSite = SameSiteMode.Lax,
+                Path = "/",
+                Expires = DateTimeOffset.UtcNow.AddHours(expiryHours),
+            });
+
+            Response.Cookies.Append(AuthCookies.RefreshToken, refreshToken, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = Request.IsHttps,
+                SameSite = SameSiteMode.Lax,
+                Path = "/api/v1/auth",
+                Expires = DateTimeOffset.UtcNow.AddDays(RefreshTokenDays),
+            });
+        }
+
+        private void ClearAuthCookies()
+        {
+            Response.Cookies.Delete(AuthCookies.AccessToken, new CookieOptions { Path = "/" });
+            Response.Cookies.Delete(AuthCookies.RefreshToken, new CookieOptions { Path = "/api/v1/auth" });
         }
 
         private string GenerateJwt(FieldAgent agent)
