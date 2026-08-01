@@ -212,7 +212,7 @@ export default function AdminSurveysPage() {
                         <td style={{ padding: '1rem', color: '#4f46e5', fontWeight: 600 }}>{q.questionId}</td>
                         <td style={{ padding: '1rem', color: '#0f172a' }}>
                           <div style={{ fontWeight: 600 }}>{q.text}</div>
-                          {q.type === 'single' && q.optionsJson && (
+                          {(q.type === 'single' || q.type === 'multi') && q.optionsJson && (
                             <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.4rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                               {JSON.parse(q.optionsJson).map((opt: string) => (
                                 <span key={opt} style={{ background: '#f1f5f9', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #e2e8f0' }}>{opt}</span>
@@ -265,7 +265,8 @@ export default function AdminSurveysPage() {
                   <div style={{ flex: 1 }}>
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem' }}>Type</label>
                     <select value={editingQuestion.type || 'single'} onChange={e => setEditingQuestion({...editingQuestion, type: e.target.value as any})} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: 'white' }}>
-                      <option value="single">Single Choice (Options)</option>
+                      <option value="single">Single Choice (one answer)</option>
+                      <option value="multi">Multiple Choice (many answers)</option>
                       <option value="text">Free Text Input</option>
                     </select>
                   </div>
@@ -275,7 +276,7 @@ export default function AdminSurveysPage() {
                   </div>
                 </div>
 
-                {editingQuestion.type === 'single' && (
+                {(editingQuestion.type === 'single' || editingQuestion.type === 'multi') && (
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem' }}>Options (JSON Array)</label>
                     <textarea 

@@ -84,7 +84,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
     try {
       const clientId = uuidv4();
       const responsesRecord = Object.fromEntries(
-        Object.entries(responses).map(([k, v]) => [k, String(v)])
+        Object.entries(responses).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)])
       );
 
       const surveyRecord = {
@@ -194,6 +194,69 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
                     {opt}
                   </motion.button>
                 ))}
+              </div>
+            ) : q.type === 'multi' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {q.options!.map((opt) => {
+                  const selected = Array.isArray(responses[q.id]) && (responses[q.id] as string[]).includes(opt);
+                  return (
+                    <motion.button
+                      key={opt}
+                      whileHover={{ scale: 1.02, background: 'rgba(255,255,255,0.2)' }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        const current = Array.isArray(responses[q.id]) ? (responses[q.id] as string[]) : [];
+                        handleInput(selected ? current.filter((o) => o !== opt) : [...current, opt]);
+                      }}
+                      style={{
+                        background: selected ? 'rgba(251,191,36,0.25)' : 'rgba(255,255,255,0.1)',
+                        border: selected ? '2px solid #fbbf24' : '2px solid rgba(255,255,255,0.2)',
+                        padding: '1.25rem',
+                        borderRadius: '12px',
+                        color: 'white',
+                        fontSize: '1.2rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '1rem'
+                      }}
+                    >
+                      <span style={{
+                        width: 26, height: 26, borderRadius: 6, flexShrink: 0,
+                        border: '2px solid rgba(255,255,255,0.6)',
+                        background: selected ? '#fbbf24' : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '1rem', fontWeight: 800, color: '#7c3aed',
+                      }}>
+                        {selected ? '✓' : ''}
+                      </span>
+                      {opt}
+                    </motion.button>
+                  );
+                })}
+
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.5rem' }}>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleNext}
+                    disabled={!q.isOptional && !(Array.isArray(responses[q.id]) && (responses[q.id] as string[]).length > 0)}
+                    style={{
+                      background: (q.isOptional || (Array.isArray(responses[q.id]) && (responses[q.id] as string[]).length > 0)) ? '#fbbf24' : 'rgba(255,255,255,0.2)',
+                      color: (q.isOptional || (Array.isArray(responses[q.id]) && (responses[q.id] as string[]).length > 0)) ? '#7c3aed' : 'rgba(255,255,255,0.5)',
+                      border: 'none',
+                      padding: '1rem 3rem',
+                      borderRadius: '30px',
+                      fontSize: '1.2rem',
+                      fontWeight: 800,
+                      cursor: (q.isOptional || (Array.isArray(responses[q.id]) && (responses[q.id] as string[]).length > 0)) ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {t.okNext}
+                  </motion.button>
+                </div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

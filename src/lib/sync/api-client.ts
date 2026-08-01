@@ -590,7 +590,7 @@ export interface SurveyQuestionDto {
   id: string;
   questionId: string;
   text: string;
-  type: 'single' | 'text';
+  type: 'single' | 'multi' | 'text';
   optionsJson?: string | null;
   isOptional: boolean;
   isActive: boolean;

@@ -203,8 +203,8 @@ namespace SeemanchalOutreach.Domain.Entities
         public Guid Id { get; set; } = Guid.NewGuid();
         public string QuestionId { get; set; } = string.Empty; // e.g. "q1", "q2"
         public string Text { get; set; } = string.Empty; // The question text
-        public string Type { get; set; } = "single"; // "single" | "text"
-        public string? OptionsJson { get; set; } // JSON array of options if Type == "single"
+        public string Type { get; set; } = "single"; // "single" | "multi" | "text"
+        public string? OptionsJson { get; set; } // JSON array of options if Type == "single" or "multi"
         public bool IsOptional { get; set; } = false;
         public bool IsActive { get; set; } = true;
         public int Order { get; set; } = 0; // For sorting
