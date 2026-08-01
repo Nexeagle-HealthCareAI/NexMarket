@@ -27,6 +27,8 @@ namespace SeemanchalOutreach.Api.Controllers
                                  from c in cj.DefaultIfEmpty()
                                  join a in _db.Agents.AsNoTracking() on s.AgentId equals a.AgentId into aj
                                  from a in aj.DefaultIfEmpty()
+                                 join p in _db.Panchayats.AsNoTracking() on s.PanchayatId equals p.PanchayatId into pj
+                                 from p in pj.DefaultIfEmpty()
                                  orderby s.CreatedAt descending
                                  select new
                                  {
@@ -36,7 +38,9 @@ namespace SeemanchalOutreach.Api.Controllers
                                      AgentName = a != null ? a.Name : "Unknown",
                                      s.ContactId,
                                      ContactName = c != null ? c.Name : "Unknown",
+                                     ContactPhone = c != null ? c.Phone : "",
                                      s.PanchayatId,
+                                     LocationName = p != null ? p.Name : "Unknown",
                                      s.AnswersJson,
                                      s.CreatedAt,
                                      s.SyncedAt

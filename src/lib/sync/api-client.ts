@@ -660,7 +660,9 @@ export interface AdminSurveyDto {
   agentName?: string;
   contactId: string;
   contactName?: string;
+  contactPhone?: string;
   panchayatId: string;
+  locationName?: string;
   answersJson: string;
   createdAt: string;
   syncedAt: string;
