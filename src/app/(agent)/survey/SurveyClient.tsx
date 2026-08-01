@@ -12,6 +12,14 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 type Answer = string | number | string[];
 
+interface SurveyQuestion {
+  id: string;
+  text: string;
+  type: string;
+  options?: string[];
+  isOptional?: boolean;
+}
+
 export default function SurveyClient({ contactId: initialContactId, onClose }: { contactId?: string, onClose?: () => void }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -27,11 +35,11 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   );
 
   // Fallback to legacy translation questions if no dynamic questions exist
-  const QUESTIONS = dynamicQuestions?.length ? dynamicQuestions.map(q => ({
+  const QUESTIONS: SurveyQuestion[] = dynamicQuestions?.length ? dynamicQuestions.map(q => ({
     id: q.questionId,
     text: q.text,
     type: q.type,
-    options: q.optionsJson ? JSON.parse(q.optionsJson) : undefined,
+    options: q.optionsJson ? (JSON.parse(q.optionsJson) as string[]) : undefined,
     isOptional: q.isOptional
   })) : [
     { id: 'q1', text: t.q1, type: 'single', options: [t.q1_o1, t.q1_o2, t.q1_o3, t.q1_o4] },
