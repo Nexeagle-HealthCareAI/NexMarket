@@ -16,6 +16,19 @@ interface PanchayatGeo {
   centroidLng: number;
 }
 
+// Popup.setHTML() renders raw HTML with no escaping of its own — agent.name in
+// particular comes from the onboarding form with no character restriction, so
+// an unescaped interpolation here is a stored-XSS vector (any admin viewing the
+// map runs whatever a crafted name contains).
+function escapeHtml(value: string | number): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export default function MapClient() {
   const token = useAgentStore((s) => s.jwtToken);
   const searchParams = useSearchParams();
@@ -239,9 +252,9 @@ export default function MapClient() {
         .setPopup(
           new maplibregl.Popup({ offset: 25 }).setHTML(`
             <div style="color: #0f172a; padding: 4px;">
-              <strong>${agent.name}</strong> (${agent.block})<br/>
-              Status: <span style="color: ${agent.status === 'online' ? '#10b981' : '#64748b'}">${agent.status.toUpperCase()}</span><br/>
-              Visits today: ${agent.todayVisits}
+              <strong>${escapeHtml(agent.name)}</strong> (${escapeHtml(agent.block)})<br/>
+              Status: <span style="color: ${agent.status === 'online' ? '#10b981' : '#64748b'}">${escapeHtml(agent.status.toUpperCase())}</span><br/>
+              Visits today: ${escapeHtml(agent.todayVisits)}
             </div>
           `)
         )
@@ -364,8 +377,8 @@ export default function MapClient() {
         .setPopup(
           new maplibregl.Popup({ offset: 15, closeButton: false }).setHTML(
             `<div style="padding:6px;font-family:inherit;">
-              <strong style="color:var(--text-primary);font-size:0.9rem">${p.name}</strong><br/>
-              <span style="color:var(--text-muted);font-size:0.75rem">${p.block}, ${p.district}</span>
+              <strong style="color:var(--text-primary);font-size:0.9rem">${escapeHtml(p.name)}</strong><br/>
+              <span style="color:var(--text-muted);font-size:0.75rem">${escapeHtml(p.block)}, ${escapeHtml(p.district)}</span>
             </div>`
           )
         )

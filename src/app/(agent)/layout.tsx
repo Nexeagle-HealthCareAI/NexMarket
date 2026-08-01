@@ -83,24 +83,32 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const outboxCount = useOutboxCount();
-  const { agentId, name, role, profileCompleted, clearAuth } = useAgentStore(
+  const { agentId, name, role, profileCompleted, hasHydrated, clearAuth } = useAgentStore(
     useShallow((s) => ({
       agentId: s.agentId,
       name: s.name,
       role: s.role,
       profileCompleted: s.profileCompleted,
+      hasHydrated: s.hasHydrated,
       clearAuth: s.clearAuth,
     }))
   );
-  
+
   const t = useTranslations();
 
   useEffect(() => {
+    // Zustand's persist middleware rehydrates from localStorage asynchronously,
+    // so agentId is briefly null on every fresh load even for an already-logged
+    // -in agent. Deciding "not logged in" before hydration finishes is what was
+    // causing a false redirect to /login on refresh (reported as "automatic
+    // logout") — wait for it first.
+    if (!hasHydrated) return;
+
     if (!agentId && typeof window !== 'undefined') {
       router.replace('/login');
       return;
     }
-    
+
     // Redirect un-onboarded agents to the onboarding page
     if (agentId && !profileCompleted && !pathname.startsWith('/onboarding') && typeof window !== 'undefined') {
       router.replace('/onboarding');
@@ -109,12 +117,24 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
 
     startSyncPolling();
     void registerBackgroundSync();
-  }, [agentId, profileCompleted, pathname, router]);
+  }, [hasHydrated, agentId, profileCompleted, pathname, router]);
 
   // Close drawer on path change
   useEffect(() => {
     setIsDrawerOpen(false);
   }, [pathname]);
+
+  // Before hydration finishes, agentId/name/role are all momentarily null even
+  // for an already-logged-in agent — render a neutral loading state instead of
+  // a flash of the sidebar with empty user info (or content that's about to be
+  // redirected away from a beat later).
+  if (!hasHydrated) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div className="spinner" style={{ width: 32, height: 32, border: '3px solid var(--surface-border)', borderTopColor: 'var(--color-primary-500)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      </div>
+    );
+  }
 
   // If on the onboarding page, render just children without sidebar navigation
   if (pathname.startsWith('/onboarding')) {

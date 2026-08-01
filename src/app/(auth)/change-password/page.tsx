@@ -148,12 +148,12 @@ export default function ChangePasswordPage() {
                 id="new-password"
                 className="field-input"
                 type="password"
-                placeholder="At least 6 characters"
+                placeholder="At least 8 characters"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 autoComplete="new-password"
                 required
-                minLength={6}
+                minLength={8}
                 style={{ background: '#f8fafc', border: '1px solid #cbd5e1', fontWeight: 600, color: '#0f172a' }}
               />
             </div>
@@ -170,7 +170,7 @@ export default function ChangePasswordPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 autoComplete="new-password"
                 required
-                minLength={6}
+                minLength={8}
                 style={{ background: '#f8fafc', border: '1px solid #cbd5e1', fontWeight: 600, color: '#0f172a' }}
               />
             </div>

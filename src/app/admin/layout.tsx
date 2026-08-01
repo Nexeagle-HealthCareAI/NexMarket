@@ -25,6 +25,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [isCollapsed, setIsCollapsed] = useState(false);
   const agentId = useAgentStore((s) => s.agentId);
   const role = useAgentStore((s) => s.role);
+  const hasHydrated = useAgentStore((s) => s.hasHydrated);
   const clearAuth = useAgentStore((s) => s.clearAuth);
 
   const handleLogout = () => {
@@ -40,16 +41,34 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => clearInterval(timer);
   }, []);
 
-  // The API now rejects non-Admin roles on every admin endpoint (403) — redirect
-  // here too so a non-admin agent sees a clean bounce instead of a page full of
-  // permission-error banners.
   useEffect(() => {
-    if (agentId && role && role.toLowerCase() !== 'admin') {
+    // Wait for the persisted session to rehydrate before deciding anything —
+    // agentId is briefly null on every fresh load even for an already-logged
+    // -in admin.
+    if (!hasHydrated) return;
+
+    if (!agentId) {
+      router.replace('/login');
+      return;
+    }
+
+    // The API now rejects non-Admin roles on every admin endpoint (403) — redirect
+    // here too so a non-admin agent sees a clean bounce instead of a page full of
+    // permission-error banners.
+    if (role && role.toLowerCase() !== 'admin') {
       router.replace('/home');
     }
-  }, [agentId, role, router]);
+  }, [hasHydrated, agentId, role, router]);
 
   const sidebarWidth = isCollapsed ? 80 : 260;
+
+  if (!hasHydrated) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f8fafc' }}>
+        <div className="spinner" style={{ width: 32, height: 32, border: '3px solid #e2e8f0', borderTopColor: 'var(--color-primary-500)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', background: '#f8fafc', overflow: 'hidden' }}>

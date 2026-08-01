@@ -19,6 +19,14 @@ interface AgentState {
   activeVisitClientId: string | null;
   profileCompleted: boolean;
 
+  // Zustand's persist middleware rehydrates from localStorage asynchronously —
+  // on every fresh page load, agentId is briefly null (pre-hydration) even for
+  // an already-logged-in agent. Anything that redirects to /login on a falsy
+  // agentId must wait for hasHydrated first, or it fires a false "automatic
+  // logout" on every refresh.
+  hasHydrated: boolean;
+  setHasHydrated: (state: boolean) => void;
+
   setAuth: (auth: {
     agentId: string;
     deviceId: string;
@@ -47,6 +55,9 @@ export const useAgentStore = create<AgentState>()(
       activeShiftClientId: null,
       activeVisitClientId: null,
       profileCompleted: false,
+
+      hasHydrated: false,
+      setHasHydrated: (state) => set({ hasHydrated: state }),
 
       setAuth: (auth) =>
         set({
@@ -81,6 +92,9 @@ export const useAgentStore = create<AgentState>()(
       storage: createJSONStorage(() =>
         typeof window !== 'undefined' ? localStorage : ({} as Storage),
       ),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     },
   ),
 );

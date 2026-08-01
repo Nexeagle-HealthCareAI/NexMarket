@@ -9,6 +9,7 @@ import { useAgentStore } from '@/store/agent-store';
 import type { LocalContact, LocalVisit, LocalShift, LocalReferral, LocalPanchayat } from '@/lib/db/schema';
 import { motion } from 'framer-motion';
 import PwaInstallPrompt from '@/components/PwaInstallPrompt';
+import NexMarketLogo from '@/components/NexMarketLogo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -228,15 +229,7 @@ export default function LoginPage() {
               marginBottom: '1rem'
             }}
           >
-            <svg width={32} height={32} viewBox="0 0 24 24" fill="none" stroke="url(#blueGrad)" strokeWidth={2.5}>
-              <defs>
-                <linearGradient id="blueGrad" x1="0" y1="0" x2="24" y2="24">
-                  <stop stopColor="#4f46e5" />
-                  <stop offset="1" stopColor="#0284c7" />
-                </linearGradient>
-              </defs>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
+            <NexMarketLogo size={32} />
           </motion.div>
           <motion.h1 
             initial={{ y: 20, opacity: 0 }}

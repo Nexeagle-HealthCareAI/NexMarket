@@ -1,7 +1,11 @@
+using System.Net;
 using System.Text;
+using System.Threading.RateLimiting;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
@@ -91,6 +95,33 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "NexMarket Outreach API", Version = "v1" });
 });
 
+// Caddy fronts this app on the same host (--network host) and terminates TLS,
+// so without this, every request's RemoteIpAddress is Caddy's own loopback
+// address rather than the real client — which would make the rate limiter
+// below key off "everyone" as a single bucket instead of per-client.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownProxies.Add(IPAddress.Loopback);
+    options.KnownProxies.Add(IPAddress.IPv6Loopback);
+});
+
+// Login/refresh/change-password have no other brute-force protection (BCrypt
+// slows a single guess, not a flood of them) — cap attempts per client IP.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 8,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+});
+
 var app = builder.Build();
 
 // Auto-apply EF Core migrations on boot. Fine for this dev-stage deployment
@@ -125,14 +156,22 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-if (app.Environment.IsDevelopment())
+// Gated on an explicit config flag, not IsDevelopment() — the Dev VM deployment
+// runs with ASPNETCORE_ENVIRONMENT=Development (it's the "Dev" environment, not
+// a local machine), which made this true there too and left the full API schema
+// publicly browsable at /swagger with no auth. appsettings.Development.json (the
+// only place this defaults to true) is excluded from the Docker image, so it
+// only turns on for a real local `dotnet run`.
+if (app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseCors("AllowFrontend");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

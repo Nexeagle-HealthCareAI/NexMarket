@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -45,12 +46,13 @@ namespace SeemanchalOutreach.Api.Controllers
         [Required]
         public string CurrentPassword { get; set; } = string.Empty;
 
-        [Required, MinLength(6)]
+        [Required, MinLength(8)]
         public string NewPassword { get; set; } = string.Empty;
     }
 
     [ApiController]
     [Route("api/v1/[controller]")]
+    [EnableRateLimiting("auth")]
     public class AuthController : ControllerBase
     {
         private const int RefreshTokenDays = 30;
