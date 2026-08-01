@@ -9,7 +9,7 @@ namespace SeemanchalOutreach.Api.Controllers
 {
     [ApiController]
     [Route("api/v1/admin/questions")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "Admin")]
     public class AdminSurveyQuestionsController : ControllerBase
     {
         private readonly IMarketingDbContext _db;
