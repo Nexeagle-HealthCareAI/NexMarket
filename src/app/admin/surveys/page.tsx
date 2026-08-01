@@ -135,70 +135,53 @@ export default function AdminSurveysPage() {
             {surveysError && <p style={{ color: 'red' }}>{surveysError}</p>}
             {!surveysLoading && !surveysError && surveys.length === 0 && <p>No responses yet.</p>}
             {!surveysLoading && surveys.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.25rem', paddingBottom: '1rem' }}>
-                {surveys.map((survey) => {
-                  let answers: Record<string, unknown> = {};
-                  try { answers = JSON.parse(survey.answersJson); } catch {}
-                  
-                  return (
-                    <motion.div 
-                      key={survey.id} 
-                      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                      style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}
-                    >
-                      {/* Top Row: Contact Name and Phone */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>{survey.contactName || 'Unknown Contact'}</h3>
-                          <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.25rem' }}>
-                            {survey.contactPhone ? (
-                              <span style={{color: '#4f46e5'}}>{survey.contactPhone}</span>
-                            ) : (
-                              <span style={{color: '#94a3b8'}}>No phone</span>
-                            )}
-                            <span style={{color: '#cbd5e1'}}>•</span>
-                            <span>{survey.locationName || 'Unknown Location'}</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Sub Info: Added By & Date */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                          <span style={{ fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginRight: '0.4rem' }}>Agent</span>
-                          <span style={{ fontWeight: 600, color: '#334155' }}>{survey.agentName || survey.agentId}</span>
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
-                          {new Date(survey.createdAt).toLocaleDateString('en-GB')}
-                        </div>
-                      </div>
+              <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                      <tr>
+                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '160px' }}>Person Name</th>
+                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '140px' }}>Added By</th>
+                        {questions.map((q, i) => (
+                          <th key={q.questionId} title={q.text} style={{ padding: '1rem', fontWeight: 700, color: '#4f46e5', minWidth: '200px' }}>
+                            Question {i + 1}
+                            <div style={{ fontWeight: 500, color: '#64748b', fontSize: '0.75rem', marginTop: '0.2rem' }}>{q.text}</div>
+                          </th>
+                        ))}
+                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '120px' }}>Date Added</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {surveys.map((survey) => {
+                        let answers: Record<string, unknown> = {};
+                        try { answers = JSON.parse(survey.answersJson); } catch {}
 
-                      {/* Q&A Rows */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, marginBottom: '-0.25rem' }}>Survey Responses</div>
-                        {questions.map((q) => {
-                          const ans = answers[q.questionId];
-                          const hasAnswer = ans !== undefined && ans !== null && ans !== '';
-                          
-                          return (
-                            <div key={q.questionId} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', paddingBottom: '0.5rem', borderBottom: '1px dashed #e2e8f0' }}>
-                              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>{q.text}</div>
-                              <div>
-                                {hasAnswer ? (
-                                  <span style={{ background: '#f1f5f9', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, color: '#4f46e5', display: 'inline-block' }}>
-                                    {String(ans)}
-                                  </span>
-                                ) : (
-                                  <span style={{ color: '#cbd5e1', fontSize: '0.8rem', fontStyle: 'italic' }}>No answer</span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                        return (
+                          <tr key={survey.id} style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <td style={{ padding: '1rem', fontWeight: 600, color: '#0f172a' }}>{survey.contactName || 'Unknown'}</td>
+                            <td style={{ padding: '1rem', color: '#334155' }}>{survey.agentName || survey.agentId}</td>
+                            {questions.map((q) => {
+                              const ans = answers[q.questionId];
+                              const hasAnswer = ans !== undefined && ans !== null && ans !== '';
+                              return (
+                                <td key={q.questionId} style={{ padding: '1rem', color: '#334155' }}>
+                                  {hasAnswer ? (
+                                    <span style={{ background: '#f1f5f9', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 500, display: 'inline-block' }}>
+                                      {String(ans)}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: '#cbd5e1', fontSize: '0.85rem', fontStyle: 'italic' }}>No answer</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td style={{ padding: '1rem', color: '#64748b', whiteSpace: 'nowrap' }}>{new Date(survey.createdAt).toLocaleDateString('en-GB')}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
