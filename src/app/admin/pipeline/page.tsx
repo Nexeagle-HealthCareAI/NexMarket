@@ -381,9 +381,77 @@ export default function PipelinePage() {
         </div>
       )}
 
+      {/* Sorting Controls for Worklist Tab */}
+      {activeTab === 'worklist' && !loading && contacts.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem', gap: '0.5rem', zIndex: 10, position: 'relative' }}>
+          <select value={sortBy || ''} onChange={e => { setSortBy(e.target.value); setPage(1); }} style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+            <option value="">Sort By...</option>
+            <option value="name">Name</option>
+            <option value="status">Stage</option>
+            <option value="followupdate">Follow-up Date</option>
+            <option value="lastupdated">Last Updated Date</option>
+          </select>
+          <select value={sortOrder || 'asc'} onChange={e => { setSortOrder(e.target.value as 'asc' | 'desc'); setPage(1); }} style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
+          </select>
+        </div>
+      )}
+
       {loading ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: 40, height: 40, border: '3px solid #e2e8f0', borderTopColor: '#4f46e5', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        </div>
+      ) : activeTab === 'worklist' ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {contacts.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b', background: 'white', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+              No contacts found for the selected filters.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem', paddingBottom: '1rem', overflowY: 'auto', flex: 1 }}>
+              {contacts.map(c => {
+                const pInfo = panchayatsData.find(p => p.id === c.panchayatId);
+                return (
+                  <WorklistCard
+                    key={c.clientId}
+                    contact={c}
+                    panchayatName={pInfo?.name}
+                    blockName={pInfo?.block}
+                    onEdit={() => setEditDrawerContact(c)}
+                    onViewHistory={() => setHistoryModalContact(c)}
+                    onQuickFollowUp={(days) => {
+                      const nextDate = new Date();
+                      nextDate.setDate(nextDate.getDate() + days);
+                      handleSaveContact({ ...c, followUpDate: nextDate.toISOString(), status: 'FollowUp' });
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
+          {/* Pagination */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', marginTop: 'auto', background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+            <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
+              {totalCount === 0 ? 'No contacts' : `Page ${page} of ${totalPages} · ${totalCount} total`}
+            </span>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                style={{ background: 'white', color: page <= 1 ? '#cbd5e1' : '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 0.9rem', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: page <= 1 ? 'not-allowed' : 'pointer' }}
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                style={{ background: 'white', color: page >= totalPages ? '#cbd5e1' : '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 0.9rem', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: page >= totalPages ? 'not-allowed' : 'pointer' }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         <div style={{ flex: 1, background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -393,20 +461,11 @@ export default function PipelinePage() {
                 <tr>
                   <SortableHeader label="Contact Details" columnKey="name" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
                   <SortableHeader label="Location (Village)" columnKey="location" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
-                  {(activeTab === 'worklist' || activeTab === 'recent') && (
-                    <>
-                      <SortableHeader label="Stage (Result)" columnKey="status" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} width="160px" />
-                      <SortableHeader label="Follow-up Date" columnKey="followupdate" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
-                    </>
+                  <SortableHeader label="Stage (Result)" columnKey="status" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} width="160px" />
+                  {activeTab === 'recent' && (
+                    <SortableHeader label="Follow-up Date" columnKey="followupdate" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
                   )}
                   <SortableHeader label="Added By" columnKey="addedby" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
-                  {activeTab === 'worklist' && (
-                    <>
-                      <SortableHeader label="Comments" columnKey="comments" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
-                      <SortableHeader label="Issues" columnKey="complaints" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
-                      <SortableHeader label="Conflicts" columnKey="conflicts" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
-                    </>
-                  )}
                   <SortableHeader label="Last Updated" columnKey="lastupdated" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
                   <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Actions</th>
                 </tr>
@@ -420,16 +479,10 @@ export default function PipelinePage() {
                       contact={c}
                       panchayatName={pInfo?.name}
                       blockName={pInfo?.block}
-                      showStageAndFollowUp={activeTab === 'worklist' || activeTab === 'recent'}
-                      showComments={activeTab === 'worklist'}
+                      showStageAndFollowUp={true}
+                      showComments={false}
                       onEdit={() => setEditDrawerContact(c)}
                       onViewHistory={() => setHistoryModalContact(c)}
-                      onQuickFollowUp={(days) => {
-                        const nextDate = new Date();
-                        nextDate.setDate(nextDate.getDate() + days);
-                        handleSaveContact({ ...c, followUpDate: nextDate.toISOString(), status: 'FollowUp' });
-                      }}
-                      showQuickActions={activeTab === 'worklist'}
                     />
                   );
                 })}
@@ -486,6 +539,101 @@ export default function PipelinePage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// -------------------------------------------------------------------------------------------------
+// Worklist Card Component (For Modern Worklist UI)
+// -------------------------------------------------------------------------------------------------
+function WorklistCard({ contact, panchayatName, blockName, onEdit, onViewHistory, onQuickFollowUp }: { contact: Contact, panchayatName?: string, blockName?: string, onEdit: () => void, onViewHistory: () => void, onQuickFollowUp: (days: number) => void }) {
+  const statusColor = contact.status === 'Lead' ? '#94a3b8' :
+                      contact.status === 'Contacted' ? '#eab308' :
+                      contact.status === 'FollowUp' ? '#3b82f6' :
+                      contact.status === 'Converted' ? '#22c55e' : '#ef4444';
+  
+  const lastUpdatedTime = contact.lastUpdatedAt
+    ? new Date(contact.lastUpdatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) + ' IST'
+    : 'Never';
+  const lastUpdatedBy = contact.lastUpdatedBy || 'N/A';
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -2, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)' }}
+      style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', transition: 'all 0.2s' }}
+    >
+       {/* Top Row: Name and Status */}
+       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+         <div>
+           <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>{contact.name}</h3>
+           <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.25rem' }}>
+             <span>{contact.role.replace('_', ' ')}</span>
+             {contact.phone && <><span style={{color: '#cbd5e1'}}>•</span><span style={{color: '#4f46e5'}}>{contact.phone}</span></>}
+           </div>
+         </div>
+         <span style={{ background: `${statusColor}15`, color: statusColor, padding: '0.25rem 0.6rem', borderRadius: '20px', fontWeight: 700, fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+           {contact.status}
+         </span>
+       </div>
+       
+       {/* Details: Location and Follow-up */}
+       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', background: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+         <div style={{ flex: 1, minWidth: '100px' }}>
+           <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, marginBottom: '0.25rem' }}>Location</div>
+           <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>{panchayatName || '-'}</div>
+           <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{blockName || '-'} Block</div>
+         </div>
+         <div style={{ flex: 1, minWidth: '100px' }}>
+           <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, marginBottom: '0.25rem' }}>Follow Up Date</div>
+           <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>{contact.followUpDate ? new Date(contact.followUpDate).toLocaleDateString('en-GB') : '-'}</div>
+         </div>
+       </div>
+
+       {/* Comments / Issues */}
+       {(contact.comments || contact.complaints || contact.conflicts) && (
+         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+           {contact.comments && (
+             <div style={{ fontSize: '0.85rem', color: '#475569', background: '#f1f5f9', padding: '0.5rem 0.75rem', borderRadius: '6px', borderLeft: '3px solid #cbd5e1' }}>
+               <strong style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: '#64748b', marginBottom: '0.1rem' }}>Comment</strong>
+               {contact.comments}
+             </div>
+           )}
+           {contact.complaints && (
+             <div style={{ fontSize: '0.85rem', color: '#b91c1c', background: '#fef2f2', padding: '0.5rem 0.75rem', borderRadius: '6px', borderLeft: '3px solid #ef4444' }}>
+               <strong style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: '#ef4444', marginBottom: '0.1rem' }}>Issue</strong>
+               {contact.complaints}
+             </div>
+           )}
+           {contact.conflicts && (
+             <div style={{ fontSize: '0.85rem', color: '#c2410c', background: '#fff7ed', padding: '0.5rem 0.75rem', borderRadius: '6px', borderLeft: '3px solid #f97316' }}>
+               <strong style={{ display: 'block', fontSize: '0.65rem', textTransform: 'uppercase', color: '#f97316', marginBottom: '0.1rem' }}>Conflict</strong>
+               {contact.conflicts}
+             </div>
+           )}
+         </div>
+       )}
+
+       {/* Updates Info */}
+       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: '#64748b' }}>
+         <div>Updated: {lastUpdatedTime}</div>
+         <div>By: {lastUpdatedBy}</div>
+       </div>
+
+       {/* Actions */}
+       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+         <div style={{ display: 'flex', gap: '0.5rem' }}>
+           <button onClick={onEdit} style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 0.75rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'} onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}>Update</button>
+           <button onClick={onViewHistory} style={{ background: 'transparent', color: '#4f46e5', border: '1px solid #4f46e5', padding: '0.4rem 0.75rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem' }}>History</button>
+           <Link href={`/admin/pipeline/${contact.clientId}`} style={{ background: '#0f172a', color: 'white', border: 'none', padding: '0.4rem 0.75rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.75rem', textDecoration: 'none' }}>
+             Profile
+           </Link>
+         </div>
+         <div style={{ display: 'flex', gap: '0.25rem' }}>
+           <button onClick={() => onQuickFollowUp(1)} title="Follow up tomorrow" style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '0.3rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>+1 Day</button>
+           <button onClick={() => onQuickFollowUp(7)} title="Follow up next week" style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '0.3rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>+1 Wk</button>
+         </div>
+       </div>
+    </motion.div>
   );
 }
 

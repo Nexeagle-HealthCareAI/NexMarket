@@ -22,21 +22,25 @@ namespace SeemanchalOutreach.Api.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAllSurveys()
         {
-            var surveys = await _db.SurveyResponses
-                .AsNoTracking()
-                .OrderByDescending(s => s.CreatedAt)
-                .Select(s => new
-                {
-                    s.Id,
-                    s.ClientId,
-                    s.AgentId,
-                    s.ContactId,
-                    s.PanchayatId,
-                    s.AnswersJson,
-                    s.CreatedAt,
-                    s.SyncedAt
-                })
-                .ToListAsync();
+            var surveys = await (from s in _db.SurveyResponses.AsNoTracking()
+                                 join c in _db.Contacts.AsNoTracking() on s.ContactId equals c.ClientId into cj
+                                 from c in cj.DefaultIfEmpty()
+                                 join a in _db.Agents.AsNoTracking() on s.AgentId equals a.AgentId into aj
+                                 from a in aj.DefaultIfEmpty()
+                                 orderby s.CreatedAt descending
+                                 select new
+                                 {
+                                     s.Id,
+                                     s.ClientId,
+                                     s.AgentId,
+                                     AgentName = a != null ? a.Name : "Unknown",
+                                     s.ContactId,
+                                     ContactName = c != null ? c.Name : "Unknown",
+                                     s.PanchayatId,
+                                     s.AnswersJson,
+                                     s.CreatedAt,
+                                     s.SyncedAt
+                                 }).ToListAsync();
 
             return Ok(surveys);
         }

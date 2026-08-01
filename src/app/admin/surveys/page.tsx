@@ -26,22 +26,23 @@ export default function AdminSurveysPage() {
     if (!agentId) return;
     let cancelled = false;
 
-    if (activeTab === 'responses') {
-      setSurveysLoading(true);
-      getAdminSurveys()
-        .then(data => { if (!cancelled) setSurveys(data); })
-        .catch(e => { if (!cancelled) setSurveysError(e.message); })
-        .finally(() => { if (!cancelled) setSurveysLoading(false); });
-    } else {
-      setQuestionsLoading(true);
-      getAdminSurveyQuestions()
-        .then(data => { if (!cancelled) setQuestions(data); })
-        .catch(e => { if (!cancelled) setQuestionsError(e.message); })
-        .finally(() => { if (!cancelled) setQuestionsLoading(false); });
-    }
+    setSurveysLoading(true);
+    setQuestionsLoading(true);
+
+    Promise.all([
+      getAdminSurveys().catch(e => { if (!cancelled) setSurveysError(e.message); return []; }),
+      getAdminSurveyQuestions().catch(e => { if (!cancelled) setQuestionsError(e.message); return []; })
+    ]).then(([sData, qData]) => {
+      if (!cancelled) {
+        if (sData) setSurveys(sData as AdminSurveyDto[]);
+        if (qData) setQuestions(qData as SurveyQuestionDto[]);
+        setSurveysLoading(false);
+        setQuestionsLoading(false);
+      }
+    });
 
     return () => { cancelled = true; };
-  }, [agentId, activeTab]);
+  }, [agentId]);
 
   const handleSaveQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,39 +136,57 @@ export default function AdminSurveysPage() {
             {!surveysLoading && !surveysError && surveys.length === 0 && <p>No responses yet.</p>}
             {!surveysLoading && surveys.length > 0 && (
               <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                    <tr>
-                      <th style={{ padding: '1rem', fontWeight: 600, color: '#334155' }}>S.No</th>
-                      <th style={{ padding: '1rem', fontWeight: 600, color: '#334155' }}>Added By</th>
-                      <th style={{ padding: '1rem', fontWeight: 600, color: '#334155' }}>Contact ID</th>
-                      <th style={{ padding: '1rem', fontWeight: 600, color: '#334155' }}>Answers</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {surveys.map((survey, index) => {
-                      let answers: Record<string, unknown> = {};
-                      try { answers = JSON.parse(survey.answersJson); } catch {}
-                      return (
-                        <tr key={survey.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                          <td style={{ padding: '1rem', color: '#475569' }}>{index + 1}</td>
-                          <td style={{ padding: '1rem', color: '#475569' }}>{survey.agentId}</td>
-                          <td style={{ padding: '1rem', color: '#475569' }}>{survey.contactId || 'Unknown'}</td>
-                          <td style={{ padding: '1rem' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                              {Object.entries(answers).map(([qId, ans]) => (
-                                <div key={qId} style={{ fontSize: '0.85rem' }}>
-                                  <span style={{ fontWeight: 600, color: '#4f46e5', marginRight: '0.5rem' }}>{qId}:</span>
-                                  <span style={{ color: '#1e293b' }}>{String(ans)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
+                    <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                      <tr>
+                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', width: '60px' }}>S.No</th>
+                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '150px' }}>Added By</th>
+                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '150px' }}>Contact Name</th>
+                        {/* Dynamic Question Headers */}
+                        {questions.map((q) => (
+                          <th key={q.questionId} style={{ padding: '1rem', fontWeight: 700, color: '#4f46e5', minWidth: '200px' }}>
+                            {q.text}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {surveys.map((survey, index) => {
+                        let answers: Record<string, unknown> = {};
+                        try { answers = JSON.parse(survey.answersJson); } catch {}
+                        return (
+                          <tr key={survey.id} style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <td style={{ padding: '1rem', color: '#64748b', fontWeight: 600 }}>{index + 1}</td>
+                            <td style={{ padding: '1rem' }}>
+                              <div style={{ fontWeight: 600, color: '#0f172a' }}>{survey.agentName || survey.agentId}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(survey.createdAt).toLocaleDateString('en-GB')}</div>
+                            </td>
+                            <td style={{ padding: '1rem' }}>
+                              <div style={{ fontWeight: 600, color: '#0f172a' }}>{survey.contactName || survey.contactId}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Contact</div>
+                            </td>
+                            {/* Dynamic Answer Cells */}
+                            {questions.map((q) => {
+                              const ans = answers[q.questionId];
+                              return (
+                                <td key={q.questionId} style={{ padding: '1rem', color: '#334155' }}>
+                                  {ans !== undefined && ans !== null && ans !== '' ? (
+                                    <span style={{ background: '#f1f5f9', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 500, display: 'inline-block' }}>
+                                      {String(ans)}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: '#cbd5e1', fontSize: '0.85rem', fontStyle: 'italic' }}>No answer</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
@@ -181,38 +200,40 @@ export default function AdminSurveysPage() {
             {!questionsLoading && questions.length > 0 && (
               <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                     <tr>
-                      <th style={{ padding: '1rem', fontWeight: 600, color: '#334155', width: '60px' }}>Order</th>
-                      <th style={{ padding: '1rem', fontWeight: 600, color: '#334155', width: '120px' }}>Key (ID)</th>
-                      <th style={{ padding: '1rem', fontWeight: 600, color: '#334155' }}>Question Text</th>
-                      <th style={{ padding: '1rem', fontWeight: 600, color: '#334155', width: '120px' }}>Type</th>
-                      <th style={{ padding: '1rem', fontWeight: 600, color: '#334155', width: '100px' }}>Required</th>
-                      <th style={{ padding: '1rem', fontWeight: 600, color: '#334155', width: '140px', textAlign: 'right' }}>Actions</th>
+                      <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', width: '60px' }}>Order</th>
+                      <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', width: '120px' }}>Key (ID)</th>
+                      <th style={{ padding: '1rem', fontWeight: 700, color: '#334155' }}>Question Text</th>
+                      <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', width: '120px' }}>Type</th>
+                      <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', width: '100px' }}>Required</th>
+                      <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', width: '140px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {questions.map((q) => (
-                      <tr key={q.id} style={{ borderBottom: '1px solid #e2e8f0', opacity: q.isActive ? 1 : 0.5 }}>
-                        <td style={{ padding: '1rem', color: '#475569', fontWeight: 600 }}>{q.order}</td>
+                      <tr key={q.id} style={{ borderBottom: '1px solid #e2e8f0', opacity: q.isActive ? 1 : 0.5, transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <td style={{ padding: '1rem', color: '#64748b', fontWeight: 600, textAlign: 'center' }}>{q.order}</td>
                         <td style={{ padding: '1rem', color: '#4f46e5', fontWeight: 600 }}>{q.questionId}</td>
                         <td style={{ padding: '1rem', color: '#0f172a' }}>
-                          <div>{q.text}</div>
+                          <div style={{ fontWeight: 600 }}>{q.text}</div>
                           {q.type === 'single' && q.optionsJson && (
-                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
-                              Options: {JSON.parse(q.optionsJson).join(', ')}
+                            <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.4rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                              {JSON.parse(q.optionsJson).map((opt: string) => (
+                                <span key={opt} style={{ background: '#f1f5f9', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #e2e8f0' }}>{opt}</span>
+                              ))}
                             </div>
                           )}
                         </td>
-                        <td style={{ padding: '1rem', color: '#475569', textTransform: 'capitalize' }}>{q.type}</td>
+                        <td style={{ padding: '1rem', color: '#475569', textTransform: 'capitalize', fontWeight: 500 }}>{q.type}</td>
                         <td style={{ padding: '1rem' }}>
-                          <span style={{ padding: '0.2rem 0.5rem', background: q.isOptional ? '#f1f5f9' : '#fee2e2', color: q.isOptional ? '#64748b' : '#b91c1c', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
+                          <span style={{ padding: '0.3rem 0.6rem', background: q.isOptional ? '#f1f5f9' : '#fee2e2', color: q.isOptional ? '#64748b' : '#b91c1c', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 700 }}>
                             {q.isOptional ? 'Optional' : 'Required'}
                           </span>
                         </td>
                         <td style={{ padding: '1rem', textAlign: 'right' }}>
-                          <button onClick={() => setEditingQuestion(q)} style={{ background: 'transparent', border: 'none', color: '#4f46e5', fontWeight: 600, cursor: 'pointer', marginRight: '1rem' }}>Edit</button>
-                          <button onClick={() => handleDeleteQuestion(q.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+                          <button onClick={() => setEditingQuestion(q)} style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', marginRight: '0.5rem', fontSize: '0.8rem', transition: 'all 0.2s' }}>Edit</button>
+                          <button onClick={() => handleDeleteQuestion(q.id)} style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s' }}>Delete</button>
                         </td>
                       </tr>
                     ))}

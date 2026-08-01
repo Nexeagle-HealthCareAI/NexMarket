@@ -657,7 +657,9 @@ export interface AdminSurveyDto {
   id: string;
   clientId: string;
   agentId: string;
+  agentName?: string;
   contactId: string;
+  contactName?: string;
   panchayatId: string;
   answersJson: string;
   createdAt: string;
