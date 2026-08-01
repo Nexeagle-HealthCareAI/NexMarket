@@ -197,6 +197,20 @@ namespace SeemanchalOutreach.Api.Controllers
                         panchayatId = s.PanchayatId,
                         answersJson = s.AnswersJson,
                         createdAt = s.CreatedAt.ToString("o")
+                    }),
+                surveyQuestions = (await _db.SurveyQuestions.AsNoTracking()
+                    .Where(q => q.CreatedAt >= request.Since || q.IsActive == true)
+                    .ToListAsync(cancellationToken))
+                    .Select(q => new
+                    {
+                        id = q.Id.ToString(),
+                        questionId = q.QuestionId,
+                        text = q.Text,
+                        type = q.Type,
+                        optionsJson = q.OptionsJson,
+                        isOptional = q.IsOptional,
+                        isActive = q.IsActive,
+                        order = q.Order
                     })
             });
         }

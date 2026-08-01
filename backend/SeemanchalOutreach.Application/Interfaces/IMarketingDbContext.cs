@@ -19,6 +19,7 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<SurveyResponse> SurveyResponses { get; }
         DbSet<BlockAssignment> BlockAssignments { get; }
         DbSet<AgentRefreshToken> AgentRefreshTokens { get; }
+        DbSet<SurveyQuestion> SurveyQuestions { get; }
 
         ChangeTracker ChangeTracker { get; }
 

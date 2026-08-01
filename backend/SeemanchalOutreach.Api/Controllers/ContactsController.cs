@@ -44,6 +44,8 @@ namespace SeemanchalOutreach.Api.Controllers
             [FromQuery] string? statuses = null,
             [FromQuery] DateTime? startDate = null,
             [FromQuery] DateTime? endDate = null,
+            [FromQuery] DateTime? maxFollowUpDate = null,
+            [FromQuery] DateTime? updatedAfter = null,
             [FromQuery] string? sortBy = null,
             [FromQuery] string? sortOrder = null,
             CancellationToken cancellationToken = default)
@@ -88,6 +90,16 @@ namespace SeemanchalOutreach.Api.Controllers
             if (endDate.HasValue)
             {
                 contactsQuery = contactsQuery.Where(c => c.CreatedAt <= endDate.Value);
+            }
+
+            if (maxFollowUpDate.HasValue)
+            {
+                contactsQuery = contactsQuery.Where(c => c.FollowUpDate == null || c.FollowUpDate <= maxFollowUpDate.Value);
+            }
+
+            if (updatedAfter.HasValue)
+            {
+                contactsQuery = contactsQuery.Where(c => c.CreatedAt >= updatedAfter.Value || _db.ContactHistory.Any(h => h.ContactClientId == c.ClientId && h.Timestamp >= updatedAfter.Value));
             }
 
             var totalCount = await contactsQuery.CountAsync(cancellationToken);

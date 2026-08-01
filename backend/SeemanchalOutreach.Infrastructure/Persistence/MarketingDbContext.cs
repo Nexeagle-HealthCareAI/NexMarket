@@ -22,6 +22,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
         public DbSet<BlockAssignment> BlockAssignments => Set<BlockAssignment>();
         public DbSet<AgentRefreshToken> AgentRefreshTokens => Set<AgentRefreshToken>();
+        public DbSet<SurveyQuestion> SurveyQuestions => Set<SurveyQuestion>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -129,6 +130,15 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("agent_refresh_tokens");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.AgentId, e.DeviceId }).IsUnique();
+            });
+
+            // ─── SurveyQuestion ──────────────────────────────────────
+            modelBuilder.Entity<SurveyQuestion>(entity =>
+            {
+                entity.ToTable("survey_questions");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.QuestionId).IsUnique();
+                entity.HasIndex(e => e.Order);
             });
         }
     }
