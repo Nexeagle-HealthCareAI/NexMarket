@@ -9,7 +9,7 @@
  */
 
 import { db } from '../db';
-import { getPanchayats } from './api-client';
+import { getPanchayats, getReferenceData } from './api-client';
 
 export async function seedPanchayatsIfEmpty(): Promise<void> {
   const count = await db.panchayats.count();
@@ -23,4 +23,24 @@ export async function seedPanchayatsIfEmpty(): Promise<void> {
       centroidLng: p.centroidLng ?? undefined,
     })),
   );
+}
+
+/**
+ * Refreshes panchayats + the active questionnaire unconditionally (upsert,
+ * not seed-if-empty) — call on every login and periodically while the app is
+ * open, so admin-side reference-data changes reach devices that already
+ * finished onboarding, not just brand-new installs.
+ */
+export async function refreshReferenceData(): Promise<void> {
+  const { panchayats, surveyQuestions } = await getReferenceData();
+
+  await db.panchayats.bulkPut(
+    panchayats.map((p) => ({
+      ...p,
+      centroidLat: p.centroidLat ?? undefined,
+      centroidLng: p.centroidLng ?? undefined,
+    })),
+  );
+
+  await db.surveyQuestions.bulkPut(surveyQuestions);
 }

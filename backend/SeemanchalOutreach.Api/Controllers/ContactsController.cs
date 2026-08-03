@@ -16,6 +16,11 @@ namespace SeemanchalOutreach.Api.Controllers
     {
         public string? Status { get; set; }
         public DateTime? FollowUpDate { get; set; }
+        // FollowUpDate == null is ambiguous between "field omitted" and "clear it" —
+        // every other field on this DTO treats null as "don't touch," so FollowUpDate
+        // needs its own explicit opt-in to clear rather than silently wiping it
+        // whenever a caller's payload just doesn't happen to include it.
+        public bool ClearFollowUpDate { get; set; } = false;
         public string? Comments { get; set; }
         public string? Relation { get; set; }
         public string? Complaints { get; set; }
@@ -61,7 +66,10 @@ namespace SeemanchalOutreach.Api.Controllers
             var panchayatList = ParseCsv(panchayats);
             var statusList = ParseCsv(statuses);
 
-            IQueryable<OutreachContact> contactsQuery = _db.Contacts.AsNoTracking();
+            // Excludes merged duplicates — otherwise a contact an admin just merged
+            // in the Duplicates tab keeps showing up here as a separate, live entry
+            // (ReportsController already excludes these; this list didn't).
+            IQueryable<OutreachContact> contactsQuery = _db.Contacts.AsNoTracking().Where(c => !c.IsMerged);
 
             if (districtList.Count > 0 || blockList.Count > 0 || panchayatList.Count > 0)
             {
@@ -228,18 +236,24 @@ namespace SeemanchalOutreach.Api.Controllers
             var previousConflicts = contact.Conflicts;
 
             if (dto.Status != null) contact.Status = dto.Status;
-            contact.FollowUpDate = dto.FollowUpDate; // Can be null to clear
+            if (dto.ClearFollowUpDate) contact.FollowUpDate = null;
+            else if (dto.FollowUpDate != null) contact.FollowUpDate = dto.FollowUpDate;
             if (dto.Comments != null) contact.Comments = dto.Comments;
             if (dto.Relation != null) contact.Relation = dto.Relation;
             if (dto.Complaints != null) contact.Complaints = dto.Complaints;
             if (dto.Conflicts != null) contact.Conflicts = dto.Conflicts;
 
-            if (previousStatus != contact.Status || 
+            if (previousStatus != contact.Status ||
                 previousComments != contact.Comments ||
                 previousFollowUpDate != contact.FollowUpDate ||
                 previousComplaints != contact.Complaints ||
                 previousConflicts != contact.Conflicts)
             {
+                // Marks this as the newest write to Status/FollowUpDate/Comments —
+                // a stale queued sync from an agent's device that later arrives
+                // claiming an older edit time than this will skip overwriting them.
+                contact.LastModifiedAt = DateTime.UtcNow;
+
                 _db.ContactHistory.Add(new ContactHistoryEntry
                 {
                     ContactClientId = clientId,

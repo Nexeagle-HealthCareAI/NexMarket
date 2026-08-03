@@ -163,6 +163,9 @@ export interface SyncOutboxEntry {
   entityType: EntityType;
   payload: string;       // JSON serialized entity
   attemptCount: number;
+  createdAt: string;      // when the edit was actually made (client clock) — distinct
+                           // from lastAttemptAt, which only reflects sync-retry timing
+                           // and previously stood in for it, breaking staleness checks
   lastAttemptAt?: string;
   errorMessage?: string;
 }
@@ -218,6 +221,17 @@ export class NexMarketDB extends Dexie {
 
     this.version(4).stores({
       surveyQuestions: 'id, questionId, isActive, order',
+    });
+
+    this.version(5).stores({
+      syncOutbox: '++localId, [clientId+deviceId], entityType, attemptCount, createdAt',
+    }).upgrade(tx => {
+      return tx.table('syncOutbox').toCollection().modify(entry => {
+        // Best-effort backfill for entries queued before this field existed —
+        // lastAttemptAt (if any retries happened) or "now" is a better guess
+        // than leaving it undefined.
+        if (!entry.createdAt) entry.createdAt = entry.lastAttemptAt ?? new Date().toISOString();
+      });
     });
   }
 }

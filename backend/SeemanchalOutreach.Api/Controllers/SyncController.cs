@@ -214,5 +214,45 @@ namespace SeemanchalOutreach.Api.Controllers
                     })
             });
         }
+
+        // Panchayats and the questionnaire are reference data every agent device
+        // needs to stay current — but Pull (above) only ever runs once, at first
+        // login on an empty local DB. An admin adding a panchayat or a survey
+        // question (or deactivating one) previously never reached a device that
+        // was already set up, since nothing re-fetched this after that first pull.
+        // Cheap enough (bounded reference tables, not per-agent transactional data)
+        // to call this on every login and periodically while the app is open.
+        [HttpGet("reference-data")]
+        public async Task<ActionResult<object>> GetReferenceData(CancellationToken cancellationToken)
+        {
+            var panchayats = await _db.Panchayats.AsNoTracking().ToListAsync(cancellationToken);
+            var questions = await _db.SurveyQuestions.AsNoTracking().Where(q => q.IsActive).ToListAsync(cancellationToken);
+
+            return Ok(new
+            {
+                panchayats = panchayats.Select(p => new
+                {
+                    id = p.PanchayatId,
+                    lgdCode = p.LgdCode,
+                    name = p.Name,
+                    block = p.Block,
+                    district = p.District,
+                    state = p.State,
+                    centroidLat = p.CentroidLat,
+                    centroidLng = p.CentroidLng,
+                }),
+                surveyQuestions = questions.Select(q => new
+                {
+                    id = q.Id.ToString(),
+                    questionId = q.QuestionId,
+                    text = q.Text,
+                    type = q.Type,
+                    optionsJson = q.OptionsJson,
+                    isOptional = q.IsOptional,
+                    isActive = q.IsActive,
+                    order = q.Order
+                })
+            });
+        }
     }
 }

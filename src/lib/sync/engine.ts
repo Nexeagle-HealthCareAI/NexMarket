@@ -69,7 +69,11 @@ async function runSync(): Promise<void> {
             agentId,
             type: wireTypeFor(e),
             payload: e.payload,
-            timestamp: e.lastAttemptAt ?? new Date().toISOString(),
+            // The actual edit time, not the sync-attempt time — a queued item can
+            // sit offline for a while before it gets a chance to sync, and using
+            // lastAttemptAt/now here would make a stale edit look freshly made,
+            // defeating the server's staleness check on contact_update.
+            timestamp: e.createdAt,
           })),
         });
 

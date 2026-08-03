@@ -79,7 +79,11 @@ namespace SeemanchalOutreach.Application.Handlers
                 case "shift_end":
                 {
                     string clientId = GetString(root, "clientId", item.ClientId);
-                    var existing = await _db.Shifts.FirstOrDefaultAsync(s => s.ClientId == clientId && s.DeviceId == deviceId, cancellationToken);
+                    // Matched by ClientId alone — it's the record's permanent identity
+                    // regardless of which device eventually syncs it (a reinstall/new
+                    // phone gets a fresh DeviceId, but must still find records it
+                    // already owns instead of forking a duplicate under the old one).
+                    var existing = await _db.Shifts.FirstOrDefaultAsync(s => s.ClientId == clientId, cancellationToken);
                     if (existing == null)
                     {
                         var shift = new FieldShift
@@ -114,7 +118,7 @@ namespace SeemanchalOutreach.Application.Handlers
                 case "visit_checkout":
                 {
                     string clientId = GetString(root, "clientId", item.ClientId);
-                    var existing = await _db.Visits.FirstOrDefaultAsync(v => v.ClientId == clientId && v.DeviceId == deviceId, cancellationToken);
+                    var existing = await _db.Visits.FirstOrDefaultAsync(v => v.ClientId == clientId, cancellationToken);
                     if (existing == null)
                     {
                         var visit = new FieldVisit
@@ -150,7 +154,7 @@ namespace SeemanchalOutreach.Application.Handlers
                 case "contact_update":
                 {
                     string clientId = GetString(root, "clientId", item.ClientId);
-                    var existing = await _db.Contacts.FirstOrDefaultAsync(c => c.ClientId == clientId && c.DeviceId == deviceId, cancellationToken);
+                    var existing = await _db.Contacts.FirstOrDefaultAsync(c => c.ClientId == clientId, cancellationToken);
 
                     string phone = GetString(root, "phone", "");
                     string name = GetString(root, "name", "");
@@ -231,42 +235,55 @@ namespace SeemanchalOutreach.Application.Handlers
                     {
                         if (item.Type == "contact_update")
                         {
-                            var previousStatus = existing.Status;
-                            var previousComments = existing.Comments;
-                            var previousFollowUpDate = existing.FollowUpDate;
-
                             existing.Name = name;
                             existing.Phone = phone;
                             existing.Role = role;
                             existing.WhatsappAdded = whatsapp;
                             existing.CardGiven = card;
-
-                            // Only update these fields if they are provided/changed from the client
-                            // (If Hospital Rep updated it on server, we might need bi-directional sync,
-                            // but currently agent -> server is master for these in standard sync)
-                            existing.Status = status;
-                            existing.FollowUpDate = followUpDate;
-                            if (comments != null) existing.Comments = comments;
                             if (lat.HasValue) existing.Latitude = lat.Value;
                             if (lng.HasValue) existing.Longitude = lng.Value;
 
-                            // Guard against outbox retries re-sending the same unchanged item and
-                            // spamming the audit trail with no-op entries.
-                            if (previousStatus != existing.Status || 
-                                previousComments != existing.Comments ||
-                                previousFollowUpDate != existing.FollowUpDate)
+                            // Status/FollowUpDate/Comments can also be written by an admin
+                            // (ContactsController.UpdateContact, which bumps LastModifiedAt).
+                            // An outbox item can sit queued on a device for a long time before
+                            // it gets a chance to sync, so its own edit timestamp — not "now" —
+                            // has to be newer than the server's LastModifiedAt before these
+                            // fields are allowed to overwrite a possibly-more-recent admin edit.
+                            var itemEditedAt = DateTime.TryParse(
+                                item.Timestamp, null,
+                                System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+                                out var parsed) ? parsed : DateTime.UtcNow;
+                            bool isNewerThanServer = itemEditedAt >= existing.LastModifiedAt;
+
+                            if (isNewerThanServer)
                             {
-                                _db.ContactHistory.Add(new ContactHistoryEntry
+                                var previousStatus = existing.Status;
+                                var previousComments = existing.Comments;
+                                var previousFollowUpDate = existing.FollowUpDate;
+
+                                existing.Status = status;
+                                existing.FollowUpDate = followUpDate;
+                                if (comments != null) existing.Comments = comments;
+
+                                // Guard against outbox retries re-sending the same unchanged item
+                                // and spamming the audit trail with no-op entries.
+                                if (previousStatus != existing.Status ||
+                                    previousComments != existing.Comments ||
+                                    previousFollowUpDate != existing.FollowUpDate)
                                 {
-                                    ContactClientId = clientId,
-                                    UpdatedBy = agentId,
-                                    PreviousStatus = previousStatus,
-                                    NewStatus = existing.Status,
-                                    Comments = existing.Comments,
-                                    FollowUpDate = existing.FollowUpDate,
-                                    Complaints = existing.Complaints,
-                                    Conflicts = existing.Conflicts
-                                });
+                                    existing.LastModifiedAt = DateTime.UtcNow;
+                                    _db.ContactHistory.Add(new ContactHistoryEntry
+                                    {
+                                        ContactClientId = clientId,
+                                        UpdatedBy = agentId,
+                                        PreviousStatus = previousStatus,
+                                        NewStatus = existing.Status,
+                                        Comments = existing.Comments,
+                                        FollowUpDate = existing.FollowUpDate,
+                                        Complaints = existing.Complaints,
+                                        Conflicts = existing.Conflicts
+                                    });
+                                }
                             }
                         }
                         return Result(clientId, deviceId, existing.Id, syncedAt, "already_exists");
@@ -276,7 +293,7 @@ namespace SeemanchalOutreach.Application.Handlers
                 case "referral_new":
                 {
                     string clientId = GetString(root, "clientId", item.ClientId);
-                    var existing = await _db.Referrals.FirstOrDefaultAsync(r => r.ClientId == clientId && r.DeviceId == deviceId, cancellationToken);
+                    var existing = await _db.Referrals.FirstOrDefaultAsync(r => r.ClientId == clientId, cancellationToken);
                     if (existing == null)
                     {
                         var refObj = new PatientReferral
@@ -306,7 +323,7 @@ namespace SeemanchalOutreach.Application.Handlers
                         foreach (var ptEl in pointsEl.EnumerateArray())
                         {
                             string ptClientId = GetString(ptEl, "clientId", Guid.NewGuid().ToString());
-                            var exists = await _db.TrajectoryPoints.AnyAsync(t => t.ClientId == ptClientId && t.DeviceId == deviceId, cancellationToken);
+                            var exists = await _db.TrajectoryPoints.AnyAsync(t => t.ClientId == ptClientId, cancellationToken);
                             if (!exists)
                             {
                                 _db.TrajectoryPoints.Add(new TrajectoryPoint
@@ -329,7 +346,7 @@ namespace SeemanchalOutreach.Application.Handlers
                 case "survey":
                 {
                     string clientId = GetString(root, "clientId", item.ClientId);
-                    var existing = await _db.SurveyResponses.FirstOrDefaultAsync(s => s.ClientId == clientId && s.DeviceId == deviceId, cancellationToken);
+                    var existing = await _db.SurveyResponses.FirstOrDefaultAsync(s => s.ClientId == clientId, cancellationToken);
                     if (existing == null)
                     {
                         var survey = new SurveyResponse
@@ -369,13 +386,42 @@ namespace SeemanchalOutreach.Application.Handlers
             Status = status,
         };
 
+        // Substring containment (the previous heuristic) both over- and under-flags:
+        // "Ram" is a substring of "Shyam Ram Yadav" (unrelated people, false positive)
+        // while "Md. Rajesh" vs "Mohd Rajesh" share no substring relationship at all
+        // (real near-duplicate, false negative). Levenshtein edit distance normalized
+        // to the longer string's length handles typos/spacing/abbreviation drift
+        // without either failure mode.
         private static int CalculateSimilarity(string s1, string s2)
         {
             s1 = s1.Trim().ToLowerInvariant();
             s2 = s2.Trim().ToLowerInvariant();
             if (s1 == s2) return 100;
-            if (s1.Contains(s2) || s2.Contains(s1)) return 90;
-            return 0; // Simple heuristic for now
+            if (s1.Length == 0 || s2.Length == 0) return 0;
+
+            int distance = LevenshteinDistance(s1, s2);
+            int maxLen = Math.Max(s1.Length, s2.Length);
+            return (int)Math.Round((1.0 - (double)distance / maxLen) * 100);
+        }
+
+        private static int LevenshteinDistance(string s1, string s2)
+        {
+            var prev = new int[s2.Length + 1];
+            var curr = new int[s2.Length + 1];
+            for (int j = 0; j <= s2.Length; j++) prev[j] = j;
+
+            for (int i = 1; i <= s1.Length; i++)
+            {
+                curr[0] = i;
+                for (int j = 1; j <= s2.Length; j++)
+                {
+                    int cost = s1[i - 1] == s2[j - 1] ? 0 : 1;
+                    curr[j] = Math.Min(Math.Min(curr[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+                }
+                (prev, curr) = (curr, prev);
+            }
+
+            return prev[s2.Length];
         }
 
         private static string GetString(JsonElement el, string prop, string def)

@@ -127,6 +127,12 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime CreatedAt { get; set; }
         public DateTime ServerReceivedAt { get; set; } = DateTime.UtcNow;
 
+        // When Status/FollowUpDate/Comments last actually changed (admin edit or
+        // agent sync) — lets a later-arriving sync from a stale queued outbox item
+        // detect it's older than what's already on the server and skip clobbering
+        // those fields instead of blindly overwriting them.
+        public DateTime LastModifiedAt { get; set; } = DateTime.UtcNow;
+
         // Duplicate resolution properties
         public string? PotentialDuplicateOf { get; set; } // clientId of the contact this one was flagged against
         public bool IsMerged { get; set; } = false;

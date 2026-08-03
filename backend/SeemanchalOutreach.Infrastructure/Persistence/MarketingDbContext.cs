@@ -52,30 +52,38 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.LgdCode).IsUnique();
             });
 
-            // ─── FieldShift (composite unique key for offline idempotency) ──
+            // ─── FieldShift ──────────────────────────────────────────
+            // ClientId alone is the idempotency key — it's a client-generated UUID
+            // meant to identify one specific record forever, regardless of which
+            // device eventually syncs it. Keying uniqueness on (ClientId, DeviceId)
+            // instead let a reinstall/new-phone/storage-eviction (which resets the
+            // locally-persisted DeviceId) silently fork a second row under the same
+            // ClientId the moment that device tried to update a record it already
+            // owned. DeviceId is still recorded (which device created it) but no
+            // longer part of the uniqueness constraint.
             modelBuilder.Entity<FieldShift>(entity =>
             {
                 entity.ToTable("shifts");
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => new { e.ClientId, e.DeviceId }).IsUnique();
+                entity.HasIndex(e => e.ClientId).IsUnique();
                 entity.HasIndex(e => e.AgentId);
             });
 
-            // ─── FieldVisit (composite unique key for offline idempotency) ──
+            // ─── FieldVisit ──────────────────────────────────────────
             modelBuilder.Entity<FieldVisit>(entity =>
             {
                 entity.ToTable("visits");
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => new { e.ClientId, e.DeviceId }).IsUnique();
+                entity.HasIndex(e => e.ClientId).IsUnique();
                 entity.HasIndex(e => new { e.AgentId, e.PanchayatId });
             });
 
-            // ─── OutreachContact (composite unique key for offline idempotency)
+            // ─── OutreachContact ─────────────────────────────────────
             modelBuilder.Entity<OutreachContact>(entity =>
             {
                 entity.ToTable("contacts");
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => new { e.ClientId, e.DeviceId }).IsUnique();
+                entity.HasIndex(e => e.ClientId).IsUnique();
                 entity.HasIndex(e => new { e.PanchayatId, e.Phone });
                 entity.HasIndex(e => new { e.PanchayatId, e.Name });
             });
@@ -88,30 +96,30 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => new { e.ContactClientId, e.Timestamp });
             });
 
-            // ─── PatientReferral (composite unique key for offline idempotency)
+            // ─── PatientReferral ─────────────────────────────────────
             modelBuilder.Entity<PatientReferral>(entity =>
             {
                 entity.ToTable("referrals");
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => new { e.ClientId, e.DeviceId }).IsUnique();
+                entity.HasIndex(e => e.ClientId).IsUnique();
                 entity.HasIndex(e => e.ContactId);
             });
 
-            // ─── TrajectoryPoint (composite unique key for offline idempotency)
+            // ─── TrajectoryPoint ─────────────────────────────────────
             modelBuilder.Entity<TrajectoryPoint>(entity =>
             {
                 entity.ToTable("trajectory_points");
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => new { e.ClientId, e.DeviceId }).IsUnique();
+                entity.HasIndex(e => e.ClientId).IsUnique();
                 entity.HasIndex(e => new { e.AgentId, e.RecordedAt });
             });
 
-            // ─── SurveyResponse (composite unique key for offline idempotency)
+            // ─── SurveyResponse ──────────────────────────────────────
             modelBuilder.Entity<SurveyResponse>(entity =>
             {
                 entity.ToTable("survey_responses");
                 entity.HasKey(e => e.Id);
-                entity.HasIndex(e => new { e.ClientId, e.DeviceId }).IsUnique();
+                entity.HasIndex(e => e.ClientId).IsUnique();
                 entity.HasIndex(e => e.AgentId);
                 entity.HasIndex(e => e.PanchayatId);
             });

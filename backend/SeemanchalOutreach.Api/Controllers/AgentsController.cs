@@ -365,63 +365,83 @@ namespace SeemanchalOutreach.Api.Controllers
                 _ => "AGT",
             };
 
-            var existingNumbers = await _db.Agents.AsNoTracking()
-                .Where(a => a.AgentId.StartsWith(prefix + "-"))
-                .Select(a => a.AgentId)
-                .ToListAsync(cancellationToken);
-            int nextNumber = existingNumbers
-                .Select(id => int.TryParse(id.Split('-').LastOrDefault(), out var n) ? n : 0)
-                .DefaultIfEmpty(1000)
-                .Max() + 1;
-            string agentId = $"{prefix}-{nextNumber}";
-
             var firstName = request.FirstName.Trim();
             var middleName = string.IsNullOrWhiteSpace(request.MiddleName) ? null : request.MiddleName.Trim();
             var lastName = request.LastName.Trim();
             var fullName = string.Join(" ", new[] { firstName, middleName, lastName }.Where(p => !string.IsNullOrWhiteSpace(p)));
 
-            var agent = new FieldAgent
+            // Reading "max existing number, then +1" and inserting are two separate
+            // steps with nothing locking between them — two concurrent onboards for
+            // the same role prefix (or a double-clicked submit) can both compute the
+            // same next number and race to insert the same AgentId. The unique index
+            // on AgentId catches that at the DB level; retry with a freshly-computed
+            // number instead of surfacing that as a raw 500.
+            const int maxAttempts = 5;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                Id = Guid.NewGuid(),
-                AgentId = agentId,
-                Name = fullName,
-                FirstName = firstName,
-                MiddleName = middleName,
-                LastName = lastName,
-                Phone = request.Phone,
-                Email = email,
-                Role = request.Role.Trim(),
-                District = request.District.Trim(),
-                Block = request.Block.Trim(),
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-                MustChangePassword = true,
-                IsActive = true,
-                DateOfBirth = request.DateOfBirth,
-                Gender = request.Gender,
-                Address = request.Address,
-                Pincode = request.Pincode,
-                Education = request.Education,
-                WorkExperience = request.WorkExperience,
-                EmergencyContactName = request.EmergencyContactName,
-                EmergencyContactPhone = request.EmergencyContactPhone,
-                PhotoUrl = request.PhotoUrl,
-                // The admin already collected everything the old self-onboarding wizard
-                // asked for — no need to force it again on first login.
-                ProfileCompleted = true,
-            };
+                var existingNumbers = await _db.Agents.AsNoTracking()
+                    .Where(a => a.AgentId.StartsWith(prefix + "-"))
+                    .Select(a => a.AgentId)
+                    .ToListAsync(cancellationToken);
+                int nextNumber = existingNumbers
+                    .Select(id => int.TryParse(id.Split('-').LastOrDefault(), out var n) ? n : 0)
+                    .DefaultIfEmpty(1000)
+                    .Max() + 1;
+                string agentId = $"{prefix}-{nextNumber}";
 
-            _db.Agents.Add(agent);
-            await _db.SaveChangesAsync(cancellationToken);
+                var agent = new FieldAgent
+                {
+                    Id = Guid.NewGuid(),
+                    AgentId = agentId,
+                    Name = fullName,
+                    FirstName = firstName,
+                    MiddleName = middleName,
+                    LastName = lastName,
+                    Phone = request.Phone,
+                    Email = email,
+                    Role = request.Role.Trim(),
+                    District = request.District.Trim(),
+                    Block = request.Block.Trim(),
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                    MustChangePassword = true,
+                    IsActive = true,
+                    DateOfBirth = request.DateOfBirth,
+                    Gender = request.Gender,
+                    Address = request.Address,
+                    Pincode = request.Pincode,
+                    Education = request.Education,
+                    WorkExperience = request.WorkExperience,
+                    EmergencyContactName = request.EmergencyContactName,
+                    EmergencyContactPhone = request.EmergencyContactPhone,
+                    PhotoUrl = request.PhotoUrl,
+                    // The admin already collected everything the old self-onboarding wizard
+                    // asked for — no need to force it again on first login.
+                    ProfileCompleted = true,
+                };
 
-            return Ok(new
-            {
-                agentId = agent.AgentId,
-                name = agent.Name,
-                role = agent.Role,
-                district = agent.District,
-                block = agent.Block,
-                password = request.Password, // echoed back once so the admin can copy/share it
-            });
+                _db.Agents.Add(agent);
+                try
+                {
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateException) when (attempt < maxAttempts)
+                {
+                    _db.ChangeTracker.Clear();
+                    continue;
+                }
+
+                return Ok(new
+                {
+                    agentId = agent.AgentId,
+                    name = agent.Name,
+                    role = agent.Role,
+                    district = agent.District,
+                    block = agent.Block,
+                    password = request.Password, // echoed back once so the admin can copy/share it
+                });
+            }
+
+            return Conflict("Could not allocate a unique agent ID — please try again.");
         }
 
         [HttpPut("{agentId}/profile")]
@@ -455,17 +475,21 @@ namespace SeemanchalOutreach.Api.Controllers
                 agent.Name = string.Join(" ", new[] { agent.FirstName, agent.MiddleName, agent.LastName }.Where(p => !string.IsNullOrWhiteSpace(p)));
             }
 
+            // != null (not IsNullOrEmpty) for these — an empty string is a deliberate
+            // "clear this field," distinct from omitting the property to leave it
+            // untouched. These used to only ever accept a non-empty overwrite, so an
+            // agent/admin could never actually clear Address, Education, etc. once set.
             if (!string.IsNullOrEmpty(dto.Email)) agent.Email = dto.Email;
             if (dto.DateOfBirth != null) agent.DateOfBirth = dto.DateOfBirth;
-            if (!string.IsNullOrEmpty(dto.Gender)) agent.Gender = dto.Gender;
-            if (!string.IsNullOrEmpty(dto.Address)) agent.Address = dto.Address;
-            if (!string.IsNullOrEmpty(dto.Pincode)) agent.Pincode = dto.Pincode;
-            if (!string.IsNullOrEmpty(dto.Education)) agent.Education = dto.Education;
-            if (!string.IsNullOrEmpty(dto.WorkExperience)) agent.WorkExperience = dto.WorkExperience;
-            if (!string.IsNullOrEmpty(dto.EmergencyContactName)) agent.EmergencyContactName = dto.EmergencyContactName;
-            if (!string.IsNullOrEmpty(dto.EmergencyContactPhone)) agent.EmergencyContactPhone = dto.EmergencyContactPhone;
+            if (dto.Gender != null) agent.Gender = dto.Gender;
+            if (dto.Address != null) agent.Address = dto.Address;
+            if (dto.Pincode != null) agent.Pincode = dto.Pincode;
+            if (dto.Education != null) agent.Education = dto.Education;
+            if (dto.WorkExperience != null) agent.WorkExperience = dto.WorkExperience;
+            if (dto.EmergencyContactName != null) agent.EmergencyContactName = dto.EmergencyContactName;
+            if (dto.EmergencyContactPhone != null) agent.EmergencyContactPhone = dto.EmergencyContactPhone;
             if (!string.IsNullOrEmpty(dto.PhotoUrl)) agent.PhotoUrl = dto.PhotoUrl;
-            if (!string.IsNullOrEmpty(dto.PersonalDetails)) agent.PersonalDetails = dto.PersonalDetails;
+            if (dto.PersonalDetails != null) agent.PersonalDetails = dto.PersonalDetails;
 
             // Admin-only fields — silently ignored for a self-edit so an agent can't
             // reassign their own role/district/block or reactivate themselves.
@@ -477,11 +501,19 @@ namespace SeemanchalOutreach.Api.Controllers
                 if (dto.IsActive != null) agent.IsActive = dto.IsActive.Value;
             }
 
-            agent.ProfileCompleted = true;
+            // Only a self-edit (the agent finishing their own onboarding wizard)
+            // should complete onboarding. An admin editing one field on an agent's
+            // profile before that agent has onboarded used to unconditionally flip
+            // this too, silently skipping the rest of the wizard (photo, personal
+            // details) for that agent.
+            if (!isAdmin)
+            {
+                agent.ProfileCompleted = true;
+            }
 
             await _db.SaveChangesAsync(cancellationToken);
 
-            return Ok(new { success = true, profileCompleted = true });
+            return Ok(new { success = true, profileCompleted = agent.ProfileCompleted });
         }
     }
 }

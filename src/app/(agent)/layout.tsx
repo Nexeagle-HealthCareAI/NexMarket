@@ -4,8 +4,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useOutboxCount } from '@/lib/db';
-import { startSyncPolling, registerBackgroundSync } from '@/lib/sync/engine';
+import { startSyncPolling, registerBackgroundSync, triggerManualSync } from '@/lib/sync/engine';
+import { getDeadLetterCount, retryDeadLetters } from '@/lib/sync/outbox';
+import { refreshReferenceData } from '@/lib/sync/seeder';
 import { logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useAgentStore } from '@/store/agent-store';
 import PwaInstallPrompt from '@/components/PwaInstallPrompt';
@@ -84,6 +87,21 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const outboxCount = useOutboxCount();
+  // Items that failed to sync 7 times in a row are silently excluded from all
+  // further sync attempts — previously with nothing anywhere telling the agent
+  // that data they entered is stuck and will never reach the server on its own.
+  const deadLetterCount = useLiveQuery(() => getDeadLetterCount());
+  const [retrying, setRetrying] = useState(false);
+
+  const handleRetryFailedSync = async () => {
+    setRetrying(true);
+    try {
+      await retryDeadLetters();
+      await triggerManualSync();
+    } finally {
+      setRetrying(false);
+    }
+  };
   const { agentId, name, role, profileCompleted, hasHydrated, clearAuth } = useAgentStore(
     useShallow((s) => ({
       agentId: s.agentId,
@@ -141,6 +159,19 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
     startSyncPolling();
     void registerBackgroundSync();
   }, [hasHydrated, agentId, profileCompleted, pathname, router]);
+
+  useEffect(() => {
+    // Login already refreshes reference data once, but agents commonly stay
+    // logged in for days — without this, a panchayat or questionnaire change
+    // an admin makes never reaches a device that isn't re-logging in.
+    if (!hasHydrated || !agentId) return;
+
+    void refreshReferenceData().catch(() => {});
+    const timer = setInterval(() => {
+      void refreshReferenceData().catch(() => {});
+    }, 30 * 60 * 1000); // 30 min — cheap, bounded reference tables, not per-agent data
+    return () => clearInterval(timer);
+  }, [hasHydrated, agentId]);
 
   // Close drawer on path change
   useEffect(() => {
@@ -232,6 +263,25 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
 
   const renderFooterInfo = () => (
     <div>
+      {!!deadLetterCount && deadLetterCount > 0 && (
+        <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 'var(--radius-md)', padding: '0.75rem', marginBottom: '0.75rem' }}>
+          <div style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 700, marginBottom: '0.4rem' }}>
+            ⚠️ {deadLetterCount} {deadLetterCount === 1 ? 'entry' : 'entries'} failed to sync
+          </div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+            These stopped retrying automatically. Tap retry while you have a signal.
+          </div>
+          <button
+            type="button"
+            onClick={handleRetryFailedSync}
+            disabled={retrying}
+            style={{ width: '100%', padding: '0.5rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', fontWeight: 700, fontSize: '0.8rem', cursor: retrying ? 'default' : 'pointer', opacity: retrying ? 0.7 : 1 }}
+          >
+            {retrying ? 'Retrying…' : 'Retry now'}
+          </button>
+        </div>
+      )}
+
       <div style={{ background: 'var(--surface-input)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', padding: '0.75rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: outboxCount && outboxCount > 0 ? '#f59e0b' : '#10b981', display: 'inline-block' }} />

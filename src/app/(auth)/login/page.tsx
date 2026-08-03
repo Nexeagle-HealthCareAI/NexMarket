@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { loginWithPassword, syncPull } from '@/lib/sync/api-client';
 import { setSyncStateValue, isLocalDatabaseEmpty, getOrCreateDeviceId, db } from '@/lib/db';
-import { seedPanchayatsIfEmpty } from '@/lib/sync/seeder';
+import { refreshReferenceData } from '@/lib/sync/seeder';
 import { useAgentStore } from '@/store/agent-store';
 import type { LocalContact, LocalVisit, LocalShift, LocalReferral, LocalPanchayat } from '@/lib/db/schema';
 import { motion } from 'framer-motion';
@@ -45,8 +45,10 @@ export default function LoginPage() {
         profileCompleted: auth.profileCompleted,
       });
 
-      // Seed panchayat list if empty
-      await seedPanchayatsIfEmpty();
+      // Refresh panchayats + questionnaire unconditionally (not just when
+      // empty) — every login is a chance to pick up admin-side changes that
+      // a previously-onboarded device would otherwise never see again.
+      await refreshReferenceData();
 
       // Reinstall recovery: if local DB is empty, pull down all agent data
       const isEmpty = await isLocalDatabaseEmpty();

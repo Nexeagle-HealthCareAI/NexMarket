@@ -55,6 +55,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   const [loading, setLoading] = useState(false);
   const [showSkipPrompt, setShowSkipPrompt] = useState(false);
   const [skipReason, setSkipReason] = useState<string>('');
+  const [submitError, setSubmitError] = useState('');
 
   // Fallback to URL param if prop isn't provided
   const contactId = initialContactId || searchParams.get('contactId') || undefined;
@@ -81,6 +82,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   const submitSurvey = async (isSkipped = false, reason = '') => {
     if (!agentId || !deviceId) return;
     setLoading(true);
+    setSubmitError('');
     try {
       const clientId = uuidv4();
       const responsesRecord = Object.fromEntries(
@@ -105,7 +107,11 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
       if (onClose) onClose();
       else router.push('/home');
     } catch (e) {
+      // Previously silent (console.error only) — the spinner would vanish and
+      // the question form would just reappear with no sign the save failed,
+      // easily read as "it saved" when the response was actually lost.
       console.error(e);
+      setSubmitError('Could not save this response. Please try again.');
       setLoading(false);
     }
   };
@@ -150,6 +156,12 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
         <span style={{ fontWeight: 600, opacity: 0.8 }}>{currentIdx + 1} of {QUESTIONS.length}</span>
         <button onClick={() => setShowSkipPrompt(true)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>{t.skipSurvey || 'Skip Survey'}</button>
       </div>
+
+      {submitError && (
+        <div style={{ margin: '0 1rem', padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '10px', color: 'white', fontSize: '0.85rem', fontWeight: 600, textAlign: 'center' }}>
+          ⚠️ {submitError}
+        </div>
+      )}
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
         <AnimatePresence mode="wait">

@@ -413,6 +413,20 @@ export async function syncPull(body: SyncPullRequest): Promise<SyncPullResponse>
   return post<SyncPullRequest, SyncPullResponse>('/api/v1/sync/pull', body);
 }
 
+export interface ReferenceDataResponse {
+  panchayats: PanchayatDto[];
+  surveyQuestions: SurveyQuestionDto[];
+}
+
+// Panchayats + the active questionnaire — reference data every device needs to
+// stay current. Unlike syncPull (reinstall recovery, only ever called once),
+// this is cheap enough to call on every login and periodically while the app
+// is open, so admin-side changes (new panchayat, edited/deactivated question)
+// actually reach devices that were already set up.
+export async function getReferenceData(): Promise<ReferenceDataResponse> {
+  return get<ReferenceDataResponse>('/api/v1/sync/reference-data');
+}
+
 export async function refreshToken(agentId: string, deviceId: string): Promise<AuthResponse> {
   return post<{ agentId: string; deviceId: string }, AuthResponse>(
     '/api/v1/auth/refresh',
@@ -577,6 +591,7 @@ export interface AdminContactDto {
 export interface ContactUpdateRequest {
   status?: string;
   followUpDate?: string | null;
+  clearFollowUpDate?: boolean; // explicit opt-in to clear — omitting followUpDate no longer clears it
   comments?: string;
   relation?: string;
   complaints?: string;

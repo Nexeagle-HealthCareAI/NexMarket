@@ -99,33 +99,43 @@ namespace SeemanchalOutreach.Api.Controllers
                 .ToListAsync(cancellationToken))
                 .ToDictionary(p => p.PanchayatId, p => (p.District, p.Block));
 
-            var visitedPairs = await _db.Visits.AsNoTracking()
+            // AgentId + CheckInAt (not just AgentId + PanchayatId) — progress must be
+            // scoped to visits made on/after THIS assignment's AssignedAt, otherwise
+            // reassigning an agent to a block they (or a prior assignment) already
+            // touched shows inflated progress from day one, and two assignments to
+            // the same block for the same agent can't be told apart at all.
+            var visits = await _db.Visits.AsNoTracking()
                 .Where(v => agentIds.Contains(v.AgentId))
-                .Select(v => new { v.AgentId, v.PanchayatId })
-                .Distinct()
+                .Select(v => new { v.AgentId, v.PanchayatId, v.CheckInAt })
                 .ToListAsync(cancellationToken);
 
-            var visitedCountMap = new Dictionary<(string AgentId, string District, string Block), int>();
-            foreach (var vp in visitedPairs)
+            var result = assignments.Select(a =>
             {
-                if (!panchayatBlockMap.TryGetValue(vp.PanchayatId, out var loc)) continue;
-                var key = (vp.AgentId, loc.District, loc.Block);
-                visitedCountMap[key] = visitedCountMap.GetValueOrDefault(key) + 1;
-            }
+                var blockPanchayatIds = panchayatBlockMap
+                    .Where(kv => kv.Value.District == a.District && kv.Value.Block == a.Block)
+                    .Select(kv => kv.Key)
+                    .ToHashSet();
 
-            var result = assignments.Select(a => new AssignmentSummaryDto
-            {
-                Id = a.Id,
-                AgentId = a.AgentId,
-                AgentName = agentNames.GetValueOrDefault(a.AgentId, a.AgentId),
-                District = a.District,
-                Block = a.Block,
-                Status = a.Status,
-                Notes = a.Notes,
-                AssignedAt = a.AssignedAt,
-                CompletedAt = a.CompletedAt,
-                TotalPanchayats = totalByBlock.GetValueOrDefault((a.District, a.Block), 0),
-                VisitedPanchayats = visitedCountMap.GetValueOrDefault((a.AgentId, a.District, a.Block), 0),
+                var visited = visits
+                    .Where(v => v.AgentId == a.AgentId && v.CheckInAt >= a.AssignedAt && blockPanchayatIds.Contains(v.PanchayatId))
+                    .Select(v => v.PanchayatId)
+                    .Distinct()
+                    .Count();
+
+                return new AssignmentSummaryDto
+                {
+                    Id = a.Id,
+                    AgentId = a.AgentId,
+                    AgentName = agentNames.GetValueOrDefault(a.AgentId, a.AgentId),
+                    District = a.District,
+                    Block = a.Block,
+                    Status = a.Status,
+                    Notes = a.Notes,
+                    AssignedAt = a.AssignedAt,
+                    CompletedAt = a.CompletedAt,
+                    TotalPanchayats = totalByBlock.GetValueOrDefault((a.District, a.Block), 0),
+                    VisitedPanchayats = visited,
+                };
             }).ToList();
 
             return Ok(result);
@@ -176,8 +186,11 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Where(p => p.District == district && p.Block == block)
                 .Select(p => p.PanchayatId)
                 .ToListAsync(cancellationToken);
+            // Scoped to visits on/after this brand-new assignment's AssignedAt — a
+            // fresh assignment starts at 0, not inflated by whatever the agent did
+            // under a previous assignment to the same block.
             var visitedPanchayatIds = await _db.Visits.AsNoTracking()
-                .Where(v => v.AgentId == request.AgentId)
+                .Where(v => v.AgentId == request.AgentId && v.CheckInAt >= assignment.AssignedAt)
                 .Select(v => v.PanchayatId)
                 .Distinct()
                 .ToListAsync(cancellationToken);
@@ -239,8 +252,11 @@ namespace SeemanchalOutreach.Api.Controllers
                 .OrderBy(p => p.Name)
                 .ToListAsync(cancellationToken);
 
+            // Scoped to visits on/after this assignment's AssignedAt — otherwise an
+            // agent reassigned to a block they'd previously worked (under an earlier,
+            // now-Completed assignment) sees it as already partly done.
             var visits = await _db.Visits.AsNoTracking()
-                .Where(v => v.AgentId == agentId)
+                .Where(v => v.AgentId == agentId && v.CheckInAt >= assignment.AssignedAt)
                 .GroupBy(v => v.PanchayatId)
                 .Select(g => new { PanchayatId = g.Key, LastVisitedAt = g.Max(v => v.CheckInAt) })
                 .ToListAsync(cancellationToken);

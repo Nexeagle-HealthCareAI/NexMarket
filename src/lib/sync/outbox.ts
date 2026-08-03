@@ -55,6 +55,7 @@ export async function addToOutbox<T extends object>(
     entityType,
     payload: JSON.stringify(payload),
     attemptCount: 0,
+    createdAt: new Date().toISOString(),
   };
   await db.syncOutbox.add(entry);
 }
@@ -163,6 +164,19 @@ export async function incrementRetry(
 
 export async function getDeadLetterCount(): Promise<number> {
   return db.syncOutbox.filter((e) => e.attemptCount >= MAX_RETRIES).count();
+}
+
+// Items that hit MAX_RETRIES are excluded from getPendingEntries forever —
+// silently, with nothing in the UI ever telling the agent or admin they
+// exist. This puts them back in the normal sync queue so the next poll
+// picks them up again, instead of them sitting stuck with zero visibility.
+export async function retryDeadLetters(): Promise<number> {
+  return db.syncOutbox
+    .filter((e) => e.attemptCount >= MAX_RETRIES)
+    .modify((entry) => {
+      entry.attemptCount = 0;
+      entry.errorMessage = undefined;
+    });
 }
 
 // ─── Trajectory batch helper ──────────────────────────────────────────────────
