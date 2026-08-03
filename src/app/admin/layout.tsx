@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
-import { logout as apiLogout } from '@/lib/sync/api-client';
+import { logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useAgentStore } from '@/store/agent-store';
 
 const adminNavItems = [
@@ -36,6 +36,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     clearAuth();
     router.push('/');
   };
+
+  useEffect(() => {
+    // A 401 that survives a refresh attempt means the session is genuinely
+    // gone — clear local state and bounce to /login rather than leaving the
+    // dashboard silently stuck showing stale data.
+    setSessionExpiredHandler(() => {
+      clearAuth();
+      router.replace('/login');
+    });
+    return () => setSessionExpiredHandler(null);
+  }, [clearAuth, router]);
 
   useEffect(() => {
     setCurrentTime(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));

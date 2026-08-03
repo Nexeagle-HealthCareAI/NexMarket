@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useOutboxCount } from '@/lib/db';
 import { startSyncPolling, registerBackgroundSync } from '@/lib/sync/engine';
-import { logout as apiLogout } from '@/lib/sync/api-client';
+import { logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useAgentStore } from '@/store/agent-store';
 import PwaInstallPrompt from '@/components/PwaInstallPrompt';
 import NotificationListener from '@/components/NotificationListener';
@@ -106,6 +106,18 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
     clearAuth();
     router.replace('/login');
   };
+
+  useEffect(() => {
+    // A 401 that survives a refresh attempt means the session is genuinely
+    // gone (not just an expired-but-renewable access token) — no point
+    // calling logout() against a server that already sees no session, just
+    // drop local state and send the agent back to sign in.
+    setSessionExpiredHandler(() => {
+      clearAuth();
+      router.replace('/login');
+    });
+    return () => setSessionExpiredHandler(null);
+  }, [clearAuth, router]);
 
   useEffect(() => {
     // Zustand's persist middleware rehydrates from localStorage asynchronously,

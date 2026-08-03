@@ -42,6 +42,7 @@ export default function MapClient() {
   const replayMarkerRef = useRef<maplibregl.Marker | null>(null);
 
   const [agents, setAgents] = useState<AdminAgentDto[]>([]);
+  const [agentsError, setAgentsError] = useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string>('');
   const [trajectory, setTrajectory] = useState<TrajectoryPointDto[]>([]);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -63,9 +64,14 @@ export default function MapClient() {
     try {
       const data = await getAgents();
       setAgents(data);
+      setAgentsError(null);
       setSelectedAgentId((current) => current || deepLinkAgentId || data[0]?.agentId || '');
     } catch (err) {
+      // Was previously a console.error-only failure — the map kept showing
+      // stale agent positions with no indication anything was wrong, which
+      // read as "I can't see where the agent is" once a session expired.
       console.error('Failed to load agents', err);
+      setAgentsError(err instanceof Error ? err.message : 'Failed to load agents.');
     }
   }, [agentId, deepLinkAgentId]);
 
@@ -407,6 +413,11 @@ export default function MapClient() {
     <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '1.5rem', height: 'calc(100vh - 120px)' }}>
       {/* Left Sidebar — Control Panel */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto', paddingRight: '0.5rem' }}>
+        {agentsError && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: 600 }}>
+            ⚠️ {agentsError} — agent positions may be stale.
+          </div>
+        )}
         {/* Territory Explorer */}
         <div className="card">
           <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>

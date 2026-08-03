@@ -5,6 +5,8 @@
  * All payloads match the SyncBatchRequest / SyncBatchResponse DTOs on the server.
  */
 
+import { getSyncStateValue } from '../db';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
 
 // ─── Types matching .NET DTOs ─────────────────────────────────────────────────
@@ -263,13 +265,72 @@ export interface PanchayatDto {
 // context issued the request.
 const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' };
 
-async function post<TBody, TResponse>(path: string, body: TBody): Promise<TResponse> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: JSON_HEADERS,
-    credentials: 'include',
-    body: JSON.stringify(body),
-  });
+// Fired when a 401 survives a refresh attempt — i.e. the session is truly
+// gone, not just a stale access token. Registered once by the app shell
+// (agent/admin layouts) to clear local state and bounce to /login, since
+// api-client.ts has no router access of its own.
+let sessionExpiredHandler: (() => void) | null = null;
+export function setSessionExpiredHandler(handler: (() => void) | null): void {
+  sessionExpiredHandler = handler;
+}
+
+// The access-token cookie expires (12h by default) with nothing to renew it —
+// every previously-authenticated request would otherwise start failing with
+// 401 mid-session (admin dashboards silently going stale, agents' outbox
+// sync silently failing) until the user manually logs in again. Concurrent
+// 401s share one in-flight refresh instead of each firing their own.
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function refreshSession(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const agentId = await getSyncStateValue('agentId');
+        const deviceId = await getSyncStateValue('deviceId');
+        if (!agentId || !deviceId) return false;
+
+        const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+          method: 'POST',
+          headers: JSON_HEADERS,
+          credentials: 'include',
+          body: JSON.stringify({ agentId, deviceId }),
+        });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    })();
+  }
+
+  try {
+    return await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
+}
+
+// Every request helper routes through here so the 401 → refresh → retry-once
+// logic lives in exactly one place. `isAuthEndpoint` skips that dance for
+// login/refresh/logout themselves — a 401 from /auth/login is a wrong
+// password, not an expired session, and retrying /auth/refresh on its own
+// 401 would just recurse forever.
+async function doFetch(path: string, init: RequestInit, isAuthEndpoint = false): Promise<Response> {
+  let res = await fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' });
+
+  if (res.status === 401 && !isAuthEndpoint) {
+    const refreshed = await refreshSession();
+    if (refreshed) {
+      res = await fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' });
+    } else {
+      sessionExpiredHandler?.();
+    }
+  }
+
+  return res;
+}
+
+async function post<TBody, TResponse>(path: string, body: TBody, isAuthEndpoint = false): Promise<TResponse> {
+  const res = await doFetch(path, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }, isAuthEndpoint);
 
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
@@ -280,9 +341,7 @@ async function post<TBody, TResponse>(path: string, body: TBody): Promise<TRespo
 }
 
 async function get<TResponse>(path: string): Promise<TResponse> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    credentials: 'include',
-  });
+  const res = await doFetch(path, {});
 
   if (!res.ok) {
     throw new Error(`API GET ${path} → ${res.status}`);
@@ -292,12 +351,7 @@ async function get<TResponse>(path: string): Promise<TResponse> {
 }
 
 async function put<TBody, TResponse>(path: string, body: TBody): Promise<TResponse> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'PUT',
-    headers: JSON_HEADERS,
-    credentials: 'include',
-    body: JSON.stringify(body),
-  });
+  const res = await doFetch(path, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(body) });
 
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
@@ -308,12 +362,7 @@ async function put<TBody, TResponse>(path: string, body: TBody): Promise<TRespon
 }
 
 async function patch<TBody, TResponse>(path: string, body: TBody): Promise<TResponse> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'PATCH',
-    headers: JSON_HEADERS,
-    credentials: 'include',
-    body: JSON.stringify(body),
-  });
+  const res = await doFetch(path, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(body) });
 
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
@@ -324,10 +373,7 @@ async function patch<TBody, TResponse>(path: string, body: TBody): Promise<TResp
 }
 
 async function del<TResponse>(path: string): Promise<TResponse> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'DELETE',
-    credentials: 'include',
-  });
+  const res = await doFetch(path, { method: 'DELETE' });
 
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
@@ -356,7 +402,7 @@ export async function loginWithPassword(
     userId,
     password: pass,
     deviceId,
-  });
+  }, true);
 }
 
 export async function syncBatch(body: SyncBatchRequest): Promise<SyncBatchResponse> {
@@ -371,11 +417,12 @@ export async function refreshToken(agentId: string, deviceId: string): Promise<A
   return post<{ agentId: string; deviceId: string }, AuthResponse>(
     '/api/v1/auth/refresh',
     { agentId, deviceId },
+    true,
   );
 }
 
 export async function logout(): Promise<{ message: string }> {
-  return post<Record<string, never>, { message: string }>('/api/v1/auth/logout', {});
+  return post<Record<string, never>, { message: string }>('/api/v1/auth/logout', {}, true);
 }
 
 export async function changePassword(
@@ -391,11 +438,7 @@ export async function changePassword(
 export async function uploadPhoto(file: File): Promise<{ url: string; fileName: string }> {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await fetch(`${API_BASE}/api/v1/sync/photo`, {
-    method: 'POST',
-    credentials: 'include',
-    body: formData
-  });
+  const res = await doFetch('/api/v1/sync/photo', { method: 'POST', body: formData });
   if (!res.ok) throw new Error('Failed to upload photo');
   return res.json();
 }
