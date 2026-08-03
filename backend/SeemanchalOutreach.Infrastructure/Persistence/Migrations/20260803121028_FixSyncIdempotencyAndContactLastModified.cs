@@ -20,15 +20,26 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
             // reasonable: it's the version the server saw last, and the app's general
             // last-write-wins-toward-the-server posture for these tables already leans
             // this direction elsewhere).
-            string[] dedupTables = { "contacts", "visits", "shifts", "referrals", "survey_responses", "trajectory_points" };
-            foreach (var table in dedupTables)
+            // Every dedup table uses ServerReceivedAt as its "last touched by the
+            // server" column except survey_responses, which predates that naming
+            // and calls it SyncedAt instead.
+            var dedupTables = new (string Table, string OrderColumn)[]
+            {
+                ("contacts", "ServerReceivedAt"),
+                ("visits", "ServerReceivedAt"),
+                ("shifts", "ServerReceivedAt"),
+                ("referrals", "ServerReceivedAt"),
+                ("survey_responses", "SyncedAt"),
+                ("trajectory_points", "ServerReceivedAt"),
+            };
+            foreach (var (table, orderColumn) in dedupTables)
             {
                 migrationBuilder.Sql($@"
                     DELETE FROM marketing.""{table}"" t
                     USING (
                         SELECT ""Id"", ROW_NUMBER() OVER (
                             PARTITION BY ""ClientId""
-                            ORDER BY ""ServerReceivedAt"" DESC, ""Id"" DESC
+                            ORDER BY ""{orderColumn}"" DESC, ""Id"" DESC
                         ) AS rn
                         FROM marketing.""{table}""
                     ) ranked
