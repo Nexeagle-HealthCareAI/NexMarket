@@ -12,6 +12,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 type Answer = string | number | string[];
 
+// An option literally named "Other" (any casing) is treated as a write-in —
+// selecting it reveals a text box instead of being a normal fixed choice.
+function isOtherOption(opt: unknown): boolean {
+  return typeof opt === 'string' && opt.trim().toLowerCase() === 'other';
+}
+
 interface SurveyQuestion {
   id: string;
   text: string;
@@ -52,6 +58,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
 
   const [currentIdx, setCurrentIdx] = useState(0);
   const [responses, setResponses] = useState<Record<string, Answer>>({});
+  const [otherText, setOtherText] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [showSkipPrompt, setShowSkipPrompt] = useState(false);
   const [skipReason, setSkipReason] = useState<string>('');
@@ -86,7 +93,12 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
     try {
       const clientId = uuidv4();
       const responsesRecord = Object.fromEntries(
-        Object.entries(responses).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)])
+        Object.entries(responses).map(([k, v]) => {
+          const written = otherText[k]?.trim();
+          const withWriteIn = (item: unknown) => (isOtherOption(item) && written ? `Other: ${written}` : item);
+          if (Array.isArray(v)) return [k, v.map(withWriteIn).join(', ')];
+          return [k, String(withWriteIn(v))];
+        })
       );
 
       const surveyRecord = {
@@ -179,35 +191,83 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
 
             {q.type === 'single' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {q.options!.map((opt, i) => (
-                  <motion.button
-                    key={opt}
-                    whileHover={{ scale: 1.02, background: 'rgba(255,255,255,0.2)' }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => { handleInput(opt); handleNext(); }}
-                    style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      border: '2px solid rgba(255,255,255,0.2)',
-                      padding: '1.25rem',
-                      borderRadius: '12px',
-                      color: 'white',
-                      fontSize: '1.2rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '1rem'
-                    }}
-                  >
-                    <span style={{ background: 'rgba(255,255,255,0.2)', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem' }}>
-                      {String.fromCharCode(65 + i)}
-                    </span>
-                    {opt}
-                  </motion.button>
-                ))}
+                {q.options!.map((opt, i) => {
+                  const isOther = isOtherOption(opt);
+                  const selected = responses[q.id] === opt;
+                  return (
+                    <motion.button
+                      key={opt}
+                      whileHover={{ scale: 1.02, background: 'rgba(255,255,255,0.2)' }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        handleInput(opt);
+                        // "Other" needs a moment for the agent to type before
+                        // advancing — every other option still advances instantly.
+                        if (!isOther) handleNext();
+                      }}
+                      style={{
+                        background: selected ? 'rgba(251,191,36,0.25)' : 'rgba(255,255,255,0.1)',
+                        border: selected ? '2px solid #fbbf24' : '2px solid rgba(255,255,255,0.2)',
+                        padding: '1.25rem',
+                        borderRadius: '12px',
+                        color: 'white',
+                        fontSize: '1.2rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '1rem'
+                      }}
+                    >
+                      <span style={{ background: 'rgba(255,255,255,0.2)', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem' }}>
+                        {String.fromCharCode(65 + i)}
+                      </span>
+                      {opt}
+                    </motion.button>
+                  );
+                })}
+
+                {isOtherOption(responses[q.id]) && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <textarea
+                      autoFocus
+                      value={otherText[q.id] || ''}
+                      onChange={(e) => setOtherText({ ...otherText, [q.id]: e.target.value })}
+                      placeholder="Please specify"
+                      rows={2}
+                      style={{ background: 'rgba(255,255,255,0.1)', border: '2px solid rgba(255,255,255,0.2)', borderRadius: '12px', color: 'white', fontSize: '1.1rem', padding: '1rem', outline: 'none', resize: 'none', width: '100%' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={handleNext}
+                        disabled={!otherText[q.id]?.trim()}
+                        style={{
+                          background: otherText[q.id]?.trim() ? '#fbbf24' : 'rgba(255,255,255,0.2)',
+                          color: otherText[q.id]?.trim() ? '#7c3aed' : 'rgba(255,255,255,0.5)',
+                          border: 'none',
+                          padding: '1rem 3rem',
+                          borderRadius: '30px',
+                          fontSize: '1.2rem',
+                          fontWeight: 800,
+                          cursor: otherText[q.id]?.trim() ? 'pointer' : 'not-allowed',
+                        }}
+                      >
+                        {t.okNext}
+                      </motion.button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : q.type === 'multi' ? (
+              (() => {
+                const multiSelected = Array.isArray(responses[q.id]) ? (responses[q.id] as string[]) : [];
+                const multiHasOther = multiSelected.some(isOtherOption);
+                const multiCanContinue = (q.isOptional || multiSelected.length > 0) && (!multiHasOther || !!otherText[q.id]?.trim());
+
+                return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {q.options!.map((opt) => {
                   const selected = Array.isArray(responses[q.id]) && (responses[q.id] as string[]).includes(opt);
@@ -249,27 +309,40 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
                   );
                 })}
 
+                {multiHasOther && (
+                  <textarea
+                    autoFocus
+                    value={otherText[q.id] || ''}
+                    onChange={(e) => setOtherText({ ...otherText, [q.id]: e.target.value })}
+                    placeholder="Please specify"
+                    rows={2}
+                    style={{ background: 'rgba(255,255,255,0.1)', border: '2px solid rgba(255,255,255,0.2)', borderRadius: '12px', color: 'white', fontSize: '1.1rem', padding: '1rem', outline: 'none', resize: 'none', width: '100%' }}
+                  />
+                )}
+
                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.5rem' }}>
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={handleNext}
-                    disabled={!q.isOptional && !(Array.isArray(responses[q.id]) && (responses[q.id] as string[]).length > 0)}
+                    disabled={!multiCanContinue}
                     style={{
-                      background: (q.isOptional || (Array.isArray(responses[q.id]) && (responses[q.id] as string[]).length > 0)) ? '#fbbf24' : 'rgba(255,255,255,0.2)',
-                      color: (q.isOptional || (Array.isArray(responses[q.id]) && (responses[q.id] as string[]).length > 0)) ? '#7c3aed' : 'rgba(255,255,255,0.5)',
+                      background: multiCanContinue ? '#fbbf24' : 'rgba(255,255,255,0.2)',
+                      color: multiCanContinue ? '#7c3aed' : 'rgba(255,255,255,0.5)',
                       border: 'none',
                       padding: '1rem 3rem',
                       borderRadius: '30px',
                       fontSize: '1.2rem',
                       fontWeight: 800,
-                      cursor: (q.isOptional || (Array.isArray(responses[q.id]) && (responses[q.id] as string[]).length > 0)) ? 'pointer' : 'not-allowed',
+                      cursor: multiCanContinue ? 'pointer' : 'not-allowed',
                     }}
                   >
                     {t.okNext}
                   </motion.button>
                 </div>
               </div>
+                );
+              })()
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {q.type === 'number' ? (
