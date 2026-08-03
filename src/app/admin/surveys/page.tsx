@@ -86,6 +86,27 @@ export default function AdminSurveysPage() {
 
   if (!agentId) return <div style={{ padding: '2rem' }}>Not authenticated</div>;
 
+  // Column list for the Responses table = every configured question, PLUS any
+  // answer key that shows up in actual response data but has no matching
+  // SurveyQuestionDto (e.g. responses submitted while the questionnaire had
+  // zero questions configured — the agent app falls back to a hardcoded
+  // legacy q1..q6 set in that case). Without this, those answers exist in the
+  // data but never get a column to render under, and the table looks like it
+  // only has Person Name / Added By / Date Added.
+  const knownQuestionIds = new Set(questions.map(q => q.questionId));
+  const orphanAnswerKeys = new Set<string>();
+  surveys.forEach((s) => {
+    try {
+      Object.keys(JSON.parse(s.answersJson)).forEach((k) => {
+        if (!knownQuestionIds.has(k)) orphanAnswerKeys.add(k);
+      });
+    } catch {}
+  });
+  const responseColumns: { questionId: string; text: string }[] = [
+    ...questions.map((q) => ({ questionId: q.questionId, text: q.text })),
+    ...[...orphanAnswerKeys].sort().map((k) => ({ questionId: k, text: `(unconfigured: ${k})` })),
+  ];
+
   return (
     <div style={{ padding: '2rem', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -131,6 +152,7 @@ export default function AdminSurveysPage() {
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {activeTab === 'responses' && (
           <div style={{ flex: 1, overflowY: 'auto' }}>
+            {questionsError && <p style={{ color: '#b91c1c', fontSize: '0.85rem' }}>⚠️ Question columns may be incomplete — failed to load the questionnaire: {questionsError}</p>}
             {surveysLoading && <p>Loading responses...</p>}
             {surveysError && <p style={{ color: 'red' }}>{surveysError}</p>}
             {!surveysLoading && !surveysError && surveys.length === 0 && <p>No responses yet.</p>}
@@ -142,7 +164,7 @@ export default function AdminSurveysPage() {
                       <tr>
                         <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '160px' }}>Person Name</th>
                         <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '140px' }}>Added By</th>
-                        {questions.map((q, i) => (
+                        {responseColumns.map((q, i) => (
                           <th key={q.questionId} title={q.text} style={{ padding: '1rem', fontWeight: 700, color: '#4f46e5', minWidth: '200px' }}>
                             Question {i + 1}
                             <div style={{ fontWeight: 500, color: '#64748b', fontSize: '0.75rem', marginTop: '0.2rem' }}>{q.text}</div>
@@ -160,7 +182,7 @@ export default function AdminSurveysPage() {
                           <tr key={survey.id} style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                             <td style={{ padding: '1rem', fontWeight: 600, color: '#0f172a' }}>{survey.contactName || 'Unknown'}</td>
                             <td style={{ padding: '1rem', color: '#334155' }}>{survey.agentName || survey.agentId}</td>
-                            {questions.map((q) => {
+                            {responseColumns.map((q) => {
                               const ans = answers[q.questionId];
                               const hasAnswer = ans !== undefined && ans !== null && ans !== '';
                               return (
