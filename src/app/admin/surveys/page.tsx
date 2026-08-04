@@ -30,6 +30,14 @@ export default function AdminSurveysPage() {
   const [editingQuestion, setEditingQuestion] = useState<Partial<SurveyQuestionDto> | null>(null);
   const [editingResponse, setEditingResponse] = useState<AdminSurveyDto | null>(null);
 
+  // Delete safety net — deleting a response is permanent (no undo, no trash),
+  // so a plain confirm() was too easy to click through by habit. Requires
+  // typing the exact contact name before the Delete button enables.
+  const [deletingResponse, setDeletingResponse] = useState<AdminSurveyDto | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
   useEffect(() => {
     if (!agentId) return;
     let cancelled = false;
@@ -84,13 +92,25 @@ export default function AdminSurveysPage() {
     }
   };
 
-  const handleDeleteResponse = async (id: string) => {
-    if (!window.confirm('Are you sure you want to permanently delete this survey response?')) return;
+  const confirmDeleteResponse = async () => {
+    if (!deletingResponse) return;
+    const expected = (deletingResponse.contactName || '').trim().toLowerCase();
+    if (!expected || deleteConfirmName.trim().toLowerCase() !== expected) {
+      setDeleteError('Name does not match — type it exactly as shown to confirm.');
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteError('');
     try {
-      await deleteAdminSurveyResponse(id);
-      setSurveys(prev => prev.filter(r => r.id !== id));
+      await deleteAdminSurveyResponse(deletingResponse.id);
+      setSurveys(prev => prev.filter(r => r.id !== deletingResponse.id));
+      setDeletingResponse(null);
+      setDeleteConfirmName('');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete response');
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete response');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -419,7 +439,7 @@ export default function AdminSurveysPage() {
                             <td style={{ padding: '1rem', color: '#64748b', whiteSpace: 'nowrap' }}>{new Date(survey.createdAt).toLocaleDateString('en-GB')}</td>
                             <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>
                               <button onClick={() => setEditingResponse(survey)} style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', marginRight: '0.5rem', fontSize: '0.8rem', transition: 'all 0.2s' }}>Edit</button>
-                              <button onClick={() => handleDeleteResponse(survey.id)} style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s' }}>Delete</button>
+                              <button onClick={() => { setDeletingResponse(survey); setDeleteConfirmName(''); setDeleteError(''); }} style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s' }}>Delete</button>
                             </td>
                           </tr>
                         );
@@ -515,6 +535,66 @@ export default function AdminSurveysPage() {
         onClose={() => setEditingResponse(null)}
         onSave={handleUpdateResponse}
       />
+
+      {/* Delete confirmation — type the person's name to unlock the button */}
+      <AnimatePresence>
+        {deletingResponse && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => { if (!isDeleting) { setDeletingResponse(null); setDeleteConfirmName(''); setDeleteError(''); } }}
+              style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' }}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
+              style={{ position: 'relative', background: 'white', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '440px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
+            >
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '0.5rem', color: '#0f172a' }}>Delete this response?</h2>
+              <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+                This permanently removes the survey response for{' '}
+                <strong style={{ color: '#0f172a' }}>{deletingResponse.contactName || 'Unknown'}</strong>. This cannot be undone.
+              </p>
+
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem' }}>
+                Type <strong>{deletingResponse.contactName || 'Unknown'}</strong> to confirm
+              </label>
+              <input
+                autoFocus
+                value={deleteConfirmName}
+                onChange={(e) => { setDeleteConfirmName(e.target.value); setDeleteError(''); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') confirmDeleteResponse(); }}
+                placeholder={deletingResponse.contactName || 'Unknown'}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem', marginBottom: '0.5rem' }}
+              />
+              {deleteError && <p style={{ color: '#b91c1c', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{deleteError}</p>}
+
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.25rem', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => { setDeletingResponse(null); setDeleteConfirmName(''); setDeleteError(''); }}
+                  disabled={isDeleting}
+                  style={{ background: 'transparent', color: '#64748b', fontWeight: 700, border: 'none', cursor: isDeleting ? 'not-allowed' : 'pointer', padding: '0.75rem 1.5rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteResponse}
+                  disabled={isDeleting || deleteConfirmName.trim().toLowerCase() !== (deletingResponse.contactName || '').trim().toLowerCase()}
+                  style={{
+                    background: deleteConfirmName.trim().toLowerCase() === (deletingResponse.contactName || '').trim().toLowerCase() ? '#b91c1c' : '#fca5a5',
+                    color: 'white', fontWeight: 700, border: 'none', borderRadius: '8px',
+                    cursor: (isDeleting || deleteConfirmName.trim().toLowerCase() !== (deletingResponse.contactName || '').trim().toLowerCase()) ? 'not-allowed' : 'pointer',
+                    padding: '0.75rem 1.5rem'
+                  }}
+                >
+                  {isDeleting ? 'Deleting...' : 'Delete Permanently'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
