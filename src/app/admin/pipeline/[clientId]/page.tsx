@@ -21,12 +21,6 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Edit states for engagement
-  const [editRelation, setEditRelation] = useState('Unknown');
-  const [editComplaints, setEditComplaints] = useState('');
-  const [editConflicts, setEditConflicts] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editPanchayatId, setEditPanchayatId] = useState('');
@@ -55,9 +49,6 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
         setAllPanchayats(panchayats);
         setPanchayat(panchayats.find(p => p.id === contactDto.panchayatId) ?? null);
         setHistory(historyEntries);
-        setEditRelation(loaded.relation || 'Unknown');
-        setEditComplaints(loaded.complaints || '');
-        setEditConflicts(loaded.conflicts || '');
         setEditName(loaded.name || '');
         setEditPhone(loaded.phone || '');
         setEditPanchayatId(loaded.panchayatId || '');
@@ -70,24 +61,6 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
 
     return () => { cancelled = true; };
   }, [clientId, agentId]);
-
-  const handleSave = async () => {
-    if (!contact || !agentId) return;
-    try {
-      const saved = await updateAdminContact(contact.clientId, {
-        status: contact.status,
-        followUpDate: contact.followUpDate,
-        comments: contact.comments ?? undefined,
-        relation: editRelation,
-        complaints: editComplaints,
-        conflicts: editConflicts
-      });
-      setContact({ ...contact, ...saved });
-      setIsEditing(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save engagement details.');
-    }
-  };
 
   const handleSavePersonal = async () => {
     if (!contact || !agentId) return;
@@ -177,7 +150,7 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem', alignItems: 'start' }}>
 
         {/* Left Column: Personal Info */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
@@ -236,55 +209,6 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Assigned Agent</label>
               <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>{contact.agentId}</div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Middle Column: Engagement Insights */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-          <div style={{ padding: '1.25rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>Engagement Insights</h2>
-            {!isEditing ? (
-              <button onClick={() => setIsEditing(true)} style={{ background: 'transparent', border: '1px solid #cbd5e1', padding: '0.25rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Edit</button>
-            ) : (
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => setIsEditing(false)} style={{ background: 'transparent', border: '1px solid #cbd5e1', padding: '0.25rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                <button onClick={handleSave} style={{ background: '#4f46e5', color: 'white', border: 'none', padding: '0.25rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Save</button>
-              </div>
-            )}
-          </div>
-          <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Relationship with Us</label>
-              {isEditing ? (
-                <select value={editRelation} onChange={(e) => setEditRelation(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontWeight: 600, color: '#0f172a' }}>
-                  {RELATIONS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              ) : (
-                <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>{contact.relation || 'Unknown'}</div>
-              )}
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Complaints / Issues</label>
-              {isEditing ? (
-                <textarea rows={3} value={editComplaints} onChange={(e) => setEditComplaints(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical', fontWeight: 500, color: '#0f172a' }} />
-              ) : (
-                <div style={{ fontSize: '0.95rem', fontWeight: 500, color: '#334155', minHeight: '60px', background: '#f8fafc', padding: '0.75rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                  {contact.complaints || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>No complaints recorded.</span>}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Conflicts</label>
-              {isEditing ? (
-                <textarea rows={3} value={editConflicts} onChange={(e) => setEditConflicts(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical', fontWeight: 500, color: '#0f172a' }} />
-              ) : (
-                <div style={{ fontSize: '0.95rem', fontWeight: 500, color: '#334155', minHeight: '60px', background: '#f8fafc', padding: '0.75rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                  {contact.conflicts || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>No conflicts recorded.</span>}
-                </div>
-              )}
             </div>
           </div>
         </motion.div>
