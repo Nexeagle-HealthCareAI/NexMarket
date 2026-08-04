@@ -4,7 +4,8 @@ import React, { useState, useEffect, use } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useAgentStore } from '@/store/agent-store';
-import { getAdminContact, getContactHistory, getPanchayats, updateAdminContact, uploadPhoto, type AdminContactDto, type ContactHistoryEntryDto, type PanchayatDto } from '@/lib/sync/api-client';
+import { getAdminContact, getContactHistory, getPanchayats, updateAdminContact, uploadPhoto, type AdminContactDto, type ContactHistoryEntryDto, type PanchayatDto, type ContactUpdateRequest } from '@/lib/sync/api-client';
+import EditContactDrawer from '@/components/admin/EditContactDrawer';
 
 type ContactProfile = AdminContactDto;
 
@@ -21,10 +22,7 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [editName, setEditName] = useState('');
-  const [editPhone, setEditPhone] = useState('');
-  const [editPanchayatId, setEditPanchayatId] = useState('');
-  const [isEditingPersonal, setIsEditingPersonal] = useState(false);
+  const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -49,9 +47,7 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
         setAllPanchayats(panchayats);
         setPanchayat(panchayats.find(p => p.id === contactDto.panchayatId) ?? null);
         setHistory(historyEntries);
-        setEditName(loaded.name || '');
-        setEditPhone(loaded.phone || '');
-        setEditPanchayatId(loaded.panchayatId || '');
+        setHistory(historyEntries);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load contact.');
       } finally {
@@ -62,19 +58,17 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
     return () => { cancelled = true; };
   }, [clientId, agentId]);
 
-  const handleSavePersonal = async () => {
+  const handleSaveDrawer = async (updated: ContactUpdateRequest) => {
     if (!contact || !agentId) return;
     try {
-      const saved = await updateAdminContact(contact.clientId, {
-        name: editName,
-        phone: editPhone,
-        panchayatId: editPanchayatId
-      });
+      const saved = await updateAdminContact(contact.clientId, updated);
       setContact({ ...contact, ...saved });
-      setPanchayat(allPanchayats.find(p => p.id === saved.panchayatId) ?? null);
-      setIsEditingPersonal(false);
+      if (saved.panchayatId) {
+        setPanchayat(allPanchayats.find(p => p.id === saved.panchayatId) ?? null);
+      }
+      setIsEditDrawerOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save personal details.');
+      setError(e instanceof Error ? e.message : 'Failed to save profile details.');
     }
   };
 
@@ -133,7 +127,7 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
               <img src={contact.photoUrl} alt={contact.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '1.75rem', fontWeight: 700 }}>
-                {editName ? editName.charAt(0).toUpperCase() : contact.name.charAt(0).toUpperCase()}
+                {contact.name.charAt(0).toUpperCase()}
               </div>
             )}
             {uploadingPhoto && (
@@ -147,16 +141,7 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
           <div style={{ flex: 1, minWidth: '250px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
               <div>
-                {isEditingPersonal ? (
-                  <input 
-                    value={editName} 
-                    onChange={(e) => setEditName(e.target.value)} 
-                    style={{ margin: '0 0 0.25rem 0', fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', padding: '0.25rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', width: '300px' }} 
-                    placeholder="Contact Name"
-                  />
-                ) : (
-                  <h1 style={{ margin: '0 0 0.25rem 0', fontSize: '1.75rem', fontWeight: 800, color: '#0f172a' }}>{contact.name}</h1>
-                )}
+                <h1 style={{ margin: '0 0 0.25rem 0', fontSize: '1.75rem', fontWeight: 800, color: '#0f172a' }}>{contact.name}</h1>
                 <p style={{ margin: 0, color: '#64748b', fontWeight: 500, fontSize: '0.95rem' }}>ID: {contact.clientId}</p>
               </div>
 
@@ -165,21 +150,9 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
                   {contact.status}
                 </span>
                 
-                {!isEditingPersonal ? (
-                  <button onClick={() => setIsEditingPersonal(true)} style={{ background: 'white', border: '1px solid #cbd5e1', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#475569', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                    Edit Profile
-                  </button>
-                ) : (
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button onClick={() => {
-                      setIsEditingPersonal(false);
-                      setEditName(contact.name || '');
-                      setEditPhone(contact.phone || '');
-                      setEditPanchayatId(contact.panchayatId || '');
-                    }} style={{ background: 'white', border: '1px solid #cbd5e1', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#475569', cursor: 'pointer' }}>Cancel</button>
-                    <button onClick={handleSavePersonal} style={{ background: '#4f46e5', color: 'white', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 4px rgba(79,70,229,0.3)' }}>Save</button>
-                  </div>
-                )}
+                <button onClick={() => setIsEditDrawerOpen(true)} style={{ background: 'white', border: '1px solid #cbd5e1', padding: '0.5rem 1rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, color: '#475569', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                  Edit Profile
+                </button>
               </div>
             </div>
           </div>
@@ -189,11 +162,7 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem', borderTop: '1px solid #e2e8f0', paddingTop: '1.5rem' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Phone Number</label>
-            {isEditingPersonal ? (
-              <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontWeight: 600 }} placeholder="Phone" />
-            ) : (
-              <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>{contact.phone || 'N/A'}</div>
-            )}
+            <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>{contact.phone || 'N/A'}</div>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Role</label>
@@ -201,18 +170,9 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Panchayat</label>
-            {isEditingPersonal ? (
-              <select value={editPanchayatId} onChange={(e) => setEditPanchayatId(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontWeight: 600, color: '#0f172a' }}>
-                <option value="">Select Panchayat...</option>
-                {allPanchayats.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}, {p.block} ({p.district})</option>
-                ))}
-              </select>
-            ) : (
-              <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>
-                {panchayat ? `${panchayat.name}, ${panchayat.block} (${panchayat.district})` : contact.panchayatId}
-              </div>
-            )}
+            <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>
+              {panchayat ? `${panchayat.name}, ${panchayat.block} (${panchayat.district})` : contact.panchayatId}
+            </div>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Assigned Agent</label>
@@ -278,6 +238,13 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
           )}
         </div>
       </motion.div>
+      <EditContactDrawer
+        contact={contact}
+        panchayats={allPanchayats}
+        isOpen={isEditDrawerOpen}
+        onClose={() => setIsEditDrawerOpen(false)}
+        onSave={handleSaveDrawer}
+      />
     </div>
   );
 }
