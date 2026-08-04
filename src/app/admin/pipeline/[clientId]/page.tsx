@@ -222,11 +222,11 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
       </motion.div>
 
       {/* Full Width Table */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', maxWidth: '100%' }}>
         <div style={{ padding: '1.25rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
           <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>Communication Timeline</h2>
         </div>
-        <div style={{ padding: '0', overflowX: 'auto' }}>
+        <div style={{ padding: '0', overflowX: 'auto', maxWidth: '100%' }}>
           {history.length === 0 ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', fontStyle: 'italic' }}>No history available.</div>
           ) : (
