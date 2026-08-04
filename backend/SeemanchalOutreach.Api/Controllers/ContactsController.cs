@@ -25,6 +25,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public string? Relation { get; set; }
         public string? Complaints { get; set; }
         public string? Conflicts { get; set; }
+        public string? PhotoUrl { get; set; }
     }
 
     [ApiController]
@@ -147,6 +148,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     c.Relation,
                     c.Complaints,
                     c.Conflicts,
+                    c.PhotoUrl,
                     c.CreatedAt,
                     LastHistory = _db.ContactHistory
                         .Where(h => h.ContactClientId == c.ClientId)
@@ -173,6 +175,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 c.Relation,
                 c.Complaints,
                 c.Conflicts,
+                c.PhotoUrl,
                 c.CreatedAt,
                 LastUpdatedAt = c.LastHistory?.Timestamp,
                 LastUpdatedBy = c.LastHistory?.UpdatedBy
@@ -208,6 +211,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     c.Relation,
                     c.Complaints,
                     c.Conflicts,
+                    c.PhotoUrl,
                     c.CreatedAt
                 })
                 .FirstOrDefaultAsync(cancellationToken);
@@ -242,6 +246,7 @@ namespace SeemanchalOutreach.Api.Controllers
             if (dto.Relation != null) contact.Relation = dto.Relation;
             if (dto.Complaints != null) contact.Complaints = dto.Complaints;
             if (dto.Conflicts != null) contact.Conflicts = dto.Conflicts;
+            if (dto.PhotoUrl != null) contact.PhotoUrl = dto.PhotoUrl;
 
             if (previousStatus != contact.Status ||
                 previousComments != contact.Comments ||
@@ -277,7 +282,8 @@ namespace SeemanchalOutreach.Api.Controllers
                 contact.Comments,
                 contact.Relation,
                 contact.Complaints,
-                contact.Conflicts
+                contact.Conflicts,
+                contact.PhotoUrl
             });
         }
 
@@ -321,10 +327,10 @@ namespace SeemanchalOutreach.Api.Controllers
             }
 
             // Manually cascade delete related referrals
-            var referrals = await _db.PatientReferrals.Where(r => r.ContactId == clientId).ToListAsync(cancellationToken);
+            var referrals = await _db.Referrals.Where(r => r.ContactId == clientId).ToListAsync(cancellationToken);
             if (referrals.Any())
             {
-                _db.PatientReferrals.RemoveRange(referrals);
+                _db.Referrals.RemoveRange(referrals);
             }
 
             // Finally, delete the contact

@@ -167,6 +167,7 @@ namespace SeemanchalOutreach.Application.Handlers
                     string? comments = root.TryGetProperty("comments", out var cProp) && cProp.ValueKind == JsonValueKind.String ? cProp.GetString() : null;
                     double? lat = GetOptionalDouble(root, "lat");
                     double? lng = GetOptionalDouble(root, "lng");
+                    string? photoUrl = root.TryGetProperty("photoUrl", out var pProp) && pProp.ValueKind == JsonValueKind.String ? pProp.GetString() : null;
 
                     if (existing == null)
                     {
@@ -186,6 +187,7 @@ namespace SeemanchalOutreach.Application.Handlers
                             Comments = comments,
                             Latitude = lat,
                             Longitude = lng,
+                            PhotoUrl = photoUrl,
                             CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
                             ServerReceivedAt = syncedAt
                         };
@@ -242,6 +244,7 @@ namespace SeemanchalOutreach.Application.Handlers
                             existing.CardGiven = card;
                             if (lat.HasValue) existing.Latitude = lat.Value;
                             if (lng.HasValue) existing.Longitude = lng.Value;
+                            if (!string.IsNullOrEmpty(photoUrl)) existing.PhotoUrl = photoUrl;
 
                             // Status/FollowUpDate/Comments can also be written by an admin
                             // (ContactsController.UpdateContact, which bumps LastModifiedAt).

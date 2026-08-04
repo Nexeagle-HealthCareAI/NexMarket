@@ -586,6 +586,7 @@ export interface AdminContactDto {
   createdAt: string;
   lastUpdatedAt?: string | null;
   lastUpdatedBy?: string | null;
+  photoUrl?: string | null;
 }
 
 export interface ContactUpdateRequest {
@@ -596,6 +597,7 @@ export interface ContactUpdateRequest {
   relation?: string;
   complaints?: string;
   conflicts?: string;
+  photoUrl?: string | null;
 }
 
 export interface AdminContactsQuery {

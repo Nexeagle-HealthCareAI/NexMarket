@@ -4,7 +4,7 @@ import React, { useState, useEffect, use } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useAgentStore } from '@/store/agent-store';
-import { getAdminContact, getContactHistory, getPanchayats, updateAdminContact, type AdminContactDto, type ContactHistoryEntryDto, type PanchayatDto } from '@/lib/sync/api-client';
+import { getAdminContact, getContactHistory, getPanchayats, updateAdminContact, uploadPhoto, type AdminContactDto, type ContactHistoryEntryDto, type PanchayatDto } from '@/lib/sync/api-client';
 
 type ContactProfile = AdminContactDto;
 
@@ -25,6 +25,9 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
   const [editComplaints, setEditComplaints] = useState('');
   const [editConflicts, setEditConflicts] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!agentId) return;
@@ -76,6 +79,22 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
     }
   };
 
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !contact) return;
+
+    setUploadingPhoto(true);
+    try {
+      const { url } = await uploadPhoto(file);
+      const saved = await updateAdminContact(contact.clientId, { photoUrl: url });
+      setContact({ ...contact, photoUrl: saved.photoUrl });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload photo.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#64748b' }}>
@@ -106,6 +125,21 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
         </Link>
+        <div style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '50%', border: '2px solid #e2e8f0', overflow: 'hidden', background: '#f1f5f9', flexShrink: 0, cursor: 'pointer' }} onClick={() => fileInputRef.current?.click()}>
+          {contact.photoUrl ? (
+            <img src={contact.photoUrl} alt={contact.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '1.5rem', fontWeight: 700 }}>
+              {contact.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+          {uploadingPhoto && (
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 16, height: 16, border: '2px solid #4f46e5', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+            </div>
+          )}
+          <input type="file" ref={fileInputRef} onChange={handlePhotoChange} accept="image/*" style={{ display: 'none' }} />
+        </div>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, color: '#0f172a' }}>{contact.name}</h1>
           <p style={{ margin: 0, color: '#64748b', fontWeight: 500, fontSize: '0.95rem' }}>ID: {contact.clientId} • {contact.role.replace('_', ' ').toUpperCase()}</p>

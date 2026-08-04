@@ -111,6 +111,7 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? Phone { get; set; }
         public bool WhatsappAdded { get; set; }
         public bool CardGiven { get; set; }
+        public string? PhotoUrl { get; set; }
         
         public string Status { get; set; } = "Lead"; // Lead, Contacted, FollowUp, Converted, Closed
         public DateTime? FollowUpDate { get; set; }
