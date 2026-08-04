@@ -191,17 +191,6 @@ export default function AdminSurveysPage() {
           📊 Responses
         </button>
         <button
-          onClick={() => setActiveTab('data_management')}
-          style={{
-            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
-            fontSize: '1rem', fontWeight: 700, color: activeTab === 'data_management' ? '#4f46e5' : '#64748b',
-            borderBottom: activeTab === 'data_management' ? '3px solid #4f46e5' : '3px solid transparent',
-            marginBottom: '-2px', transition: 'all 0.2s'
-          }}
-        >
-          🛠️ Data Management
-        </button>
-        <button
           onClick={() => setActiveTab('questionnaire')}
           style={{
             background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
@@ -211,6 +200,17 @@ export default function AdminSurveysPage() {
           }}
         >
           📋 Questionnaire
+        </button>
+        <button
+          onClick={() => setActiveTab('data_management')}
+          style={{
+            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
+            fontSize: '1rem', fontWeight: 700, color: activeTab === 'data_management' ? '#4f46e5' : '#64748b',
+            borderBottom: activeTab === 'data_management' ? '3px solid #4f46e5' : '3px solid transparent',
+            marginBottom: '-2px', transition: 'all 0.2s'
+          }}
+        >
+          🛠️ Data Management
         </button>
       </div>
 
