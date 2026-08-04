@@ -71,26 +71,38 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
     };
   }, []);
 
+  // Returns the merged map so a caller that needs the just-typed/just-picked
+  // value immediately (see the single-choice onClick below) doesn't have to
+  // wait a render cycle for `responses` state to catch up.
   const handleInput = (val: Answer) => {
-    setResponses({ ...responses, [QUESTIONS[currentIdx].id]: val });
+    const updated = { ...responses, [QUESTIONS[currentIdx].id]: val };
+    setResponses(updated);
+    return updated;
   };
 
-  const handleNext = async () => {
+  const handleNext = async (responsesOverride?: Record<string, Answer>) => {
     if (currentIdx < QUESTIONS.length - 1) {
       setCurrentIdx(currentIdx + 1);
     } else {
-      await submitSurvey();
+      await submitSurvey(false, '', responsesOverride);
     }
   };
 
-  const submitSurvey = async (isSkipped = false, reason = '') => {
+  const submitSurvey = async (isSkipped = false, reason = '', responsesOverride?: Record<string, Answer>) => {
     if (!agentId || !deviceId) return;
     setLoading(true);
     setSubmitError('');
     try {
       const clientId = uuidv4();
+      // On the last question, a single-choice tap calls handleInput() then
+      // handleNext() in the same synchronous click — `responses` state hasn't
+      // re-rendered yet at that point, so without this override the answer
+      // just picked for the final question would be missing from what gets
+      // saved. See the onClick below, which passes handleInput's return value
+      // straight through instead of relying on the (stale) `responses` state.
+      const effectiveResponses = responsesOverride ?? responses;
       const responsesRecord = Object.fromEntries(
-        Object.entries(responses).map(([k, v]) => {
+        Object.entries(effectiveResponses).map(([k, v]) => {
           const written = otherText[k]?.trim();
           const withWriteIn = (item: unknown) => (isOtherOption(item) && written ? `Other: ${written}` : item);
           if (Array.isArray(v)) return [k, v.map(withWriteIn).join(', ')];
@@ -218,10 +230,10 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
                       whileHover={{ scale: 1.02, background: 'rgba(255,255,255,0.2)' }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => {
-                        handleInput(opt);
+                        const updated = handleInput(opt);
                         // "Other" needs a moment for the agent to type before
                         // advancing — every other option still advances instantly.
-                        if (!isOther) handleNext();
+                        if (!isOther) handleNext(updated);
                       }}
                       style={{
                         background: selected ? 'rgba(251,191,36,0.25)' : 'rgba(255,255,255,0.1)',
@@ -260,7 +272,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
                       <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        onClick={handleNext}
+                        onClick={() => handleNext()}
                         disabled={!otherText[q.id]?.trim()}
                         style={{
                           background: otherText[q.id]?.trim() ? '#fbbf24' : 'rgba(255,255,255,0.2)',
@@ -342,7 +354,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={handleNext}
+                    onClick={() => handleNext()}
                     disabled={!multiCanContinue}
                     style={{
                       background: multiCanContinue ? '#fbbf24' : 'rgba(255,255,255,0.2)',
@@ -387,7 +399,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={handleNext}
+                    onClick={() => handleNext()}
                     disabled={!q.isOptional && !responses[q.id]}
                     style={{
                       background: (q.isOptional || responses[q.id]) ? '#fbbf24' : 'rgba(255,255,255,0.2)',

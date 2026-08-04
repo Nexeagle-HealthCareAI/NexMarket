@@ -15,8 +15,6 @@ export default function VisitPage() {
   const router = useRouter();
   const agentId = useAgentStore((s) => s.agentId);
   const deviceId = useAgentStore((s) => s.deviceId);
-  const activeShiftClientId = useAgentStore((s) => s.activeShiftClientId);
-  const activeVisitClientId = useAgentStore((s) => s.activeVisitClientId);
   const setActiveVisit = useAgentStore((s) => s.setActiveVisit);
 
   const panchayats = usePanchayats();

@@ -3,22 +3,55 @@
 import { useEffect, useState } from 'react';
 import { useAgentStore } from '@/store/agent-store';
 import { getMyAssignment, type MyAssignmentDto } from '@/lib/sync/api-client';
+import { getSyncStateValue, setSyncStateValue } from '@/lib/db';
 import TaskMap from './TaskMap';
+
+const CACHE_KEY = 'lastAssignment';
 
 export default function MyTaskPage() {
   const agentId = useAgentStore((s) => s.agentId);
   const [assignment, setAssignment] = useState<MyAssignmentDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isStale, setIsStale] = useState(false);
   const [filter, setFilter] = useState<'all' | 'visited' | 'pending'>('all');
 
   useEffect(() => {
     if (!agentId) return;
+    let cancelled = false;
     setLoading(true);
+
     getMyAssignment()
-      .then(setAssignment)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load your assignment.'))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (cancelled) return;
+        setAssignment(data);
+        setIsStale(false);
+        void setSyncStateValue(CACHE_KEY, JSON.stringify(data));
+      })
+      .catch(async (e) => {
+        if (cancelled) return;
+        // Every other page in this app is Dexie-backed and works offline —
+        // this one was a bare network call with no fallback, so it just
+        // errored out while offline instead of showing whatever was last
+        // fetched (which is exactly the situation an agent checking their
+        // task list before heading into a low-signal area needs).
+        const cached = await getSyncStateValue(CACHE_KEY);
+        if (cached) {
+          try {
+            setAssignment(JSON.parse(cached) as MyAssignmentDto);
+            setIsStale(true);
+            return;
+          } catch {
+            // fall through to the error state below
+          }
+        }
+        setError(e instanceof Error ? e.message : 'Failed to load your assignment.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, [agentId]);
 
   if (loading) {
@@ -47,6 +80,11 @@ export default function MyTaskPage() {
   return (
     <div style={{ paddingBottom: '2rem' }}>
       <h1 style={{ fontSize: '1.3rem', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>My Task</h1>
+      {isStale && (
+        <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 'var(--radius-md)', padding: '0.6rem 0.85rem', marginBottom: '0.85rem', fontSize: '0.8rem', color: '#b45309', fontWeight: 600 }}>
+          ⚠️ Offline — showing your last downloaded task list, may not reflect recent changes.
+        </div>
+      )}
       <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
         Assigned {assignment.assignedAt ? new Date(assignment.assignedAt).toLocaleDateString('en-GB') : ''}
       </p>

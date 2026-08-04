@@ -19,6 +19,7 @@ import {
   wireTypeFor,
 } from './outbox';
 import { syncBatch } from './api-client';
+import { retryPendingOnboarding } from './onboarding';
 import { getSyncStateValue } from '../db';
 import type { SyncOutboxEntry } from '../db/schema';
 
@@ -27,6 +28,11 @@ import type { SyncOutboxEntry } from '../db/schema';
 let _polling: ReturnType<typeof setInterval> | null = null;
 let _isSyncing = false;
 let _backoffMs = 5_000;
+// The doc comment above promised exponential backoff, but nothing previously
+// read _backoffMs — every poll tick (and every 'online'/foreground event)
+// retried immediately regardless, hammering a persistently-down API every
+// 30s. This timestamp is what actually gates a run against it.
+let _nextAllowedRunAt = 0;
 const MAX_BACKOFF_MS = 5 * 60 * 1_000; // 5 minutes
 
 // ─── Main sync function ───────────────────────────────────────────────────────
@@ -35,12 +41,18 @@ async function runSync(): Promise<void> {
   if (_isSyncing) return;
   if (typeof window === 'undefined') return;
   if (!navigator.onLine) return;
+  if (Date.now() < _nextAllowedRunAt) return;
 
   _isSyncing = true;
 
   try {
     const agentId = await getSyncStateValue('agentId');
     const deviceId = await getSyncStateValue('deviceId');
+
+    // Independent of the outbox — onboarding hasn't necessarily finished yet
+    // (that's exactly the case this retries), so it can't wait on agentId
+    // being fully set up the way the rest of this function does.
+    await retryPendingOnboarding().catch(() => {});
 
     if (!agentId || !deviceId) {
       _isSyncing = false;
@@ -108,6 +120,7 @@ async function runSync(): Promise<void> {
 
         // Reset backoff on success
         _backoffMs = 5_000;
+        _nextAllowedRunAt = 0;
 
         // If batch was full, there might be more
         hasMore = batch.length === 50;
@@ -118,6 +131,7 @@ async function runSync(): Promise<void> {
           if (entry.localId) await incrementRetry(entry.localId, message);
         }
         _backoffMs = Math.min(_backoffMs * 2, MAX_BACKOFF_MS);
+        _nextAllowedRunAt = Date.now() + _backoffMs;
         hasMore = false;
       }
     }
@@ -151,6 +165,7 @@ export function startSyncPolling(): void {
   // Fire immediately when connectivity returns
   window.addEventListener('online', () => {
     _backoffMs = 5_000; // reset backoff when network comes back
+    _nextAllowedRunAt = 0;
     void runSync();
   });
 }
@@ -166,6 +181,7 @@ export function stopSyncPolling(): void {
 
 export async function triggerManualSync(): Promise<void> {
   _backoffMs = 5_000;
+  _nextAllowedRunAt = 0;
   await runSync();
 }
 

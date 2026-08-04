@@ -57,6 +57,7 @@ export interface LocalContact {
   serverId?: string;
   panchayatId: string;  // LocalPanchayat.id
   agentId: string;
+  shiftId?: string;     // clientId of the shift this contact was added during
   name: string;
   role: ContactRole;
   phone?: string;
@@ -125,6 +126,7 @@ export interface LocalReferral {
   referralDate: string; // YYYY-MM-DD
   status: ReferralStatus;
   notes?: string;
+  clientPhone?: string; // referred client's mobile number
   createdAt: string;
   syncedAt?: string;
 }

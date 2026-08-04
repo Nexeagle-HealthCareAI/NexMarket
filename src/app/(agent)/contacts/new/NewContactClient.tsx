@@ -7,6 +7,7 @@ import { useAgentStore } from '@/store/agent-store';
 import { usePanchayats, useActiveVisit, db } from '@/lib/db';
 import { addToOutbox } from '@/lib/sync/outbox';
 import { useGeolocation } from '@/lib/geo/useGeolocation';
+import { compressImage } from '@/lib/image/compressImage';
 import type { ContactRole, LocalContact } from '@/lib/db/schema';
 
 
@@ -72,14 +73,14 @@ export default function NewContactPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        update('photoDataUri', reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    try {
+      update('photoDataUri', await compressImage(file));
+    } catch {
+      // Compression failing (corrupt file, canvas unavailable) shouldn't block
+      // the rest of the form — the contact can still be saved without a photo.
     }
   };
 
@@ -101,6 +102,7 @@ export default function NewContactPage() {
       deviceId,
       agentId,
       panchayatId: form.panchayatId,
+      shiftId: activeShiftClientId ?? undefined,
       name: form.name.trim(),
       role: form.role as ContactRole,
       phone: form.phone.trim() || undefined,
@@ -194,8 +196,8 @@ export default function NewContactPage() {
             required
             minLength={2}
             maxLength={50}
-            pattern="^[A-Za-z\s]+$"
-            title="Name must contain only letters and spaces"
+            pattern="^[A-Za-zऀ-ॿ.'\-\s]+$"
+            title="Name must contain only letters, spaces, periods, hyphens or apostrophes"
           />
         </div>
 

@@ -449,9 +449,9 @@ export async function changePassword(
   );
 }
 
-export async function uploadPhoto(file: File): Promise<{ url: string; fileName: string }> {
+export async function uploadPhoto(file: File | Blob, fileName = 'photo.jpg'): Promise<{ url: string; fileName: string }> {
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append('file', file, file instanceof File ? file.name : fileName);
   const res = await doFetch('/api/v1/sync/photo', { method: 'POST', body: formData });
   if (!res.ok) throw new Error('Failed to upload photo');
   return res.json();

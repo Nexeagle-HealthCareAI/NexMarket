@@ -31,27 +31,30 @@ export default function VisitDetailClient({ clientId }: { clientId: string }) {
 
   async function handleCheckOut() {
     if (!visit || !visit.localId || !deviceId) return;
-    if (!position) {
-      setError('Waiting for GPS fix to record checkout location…');
-      return;
-    }
 
     setLoading(true);
     setError('');
 
+    // GPS is best-effort here, not required — checkout used to hard-block
+    // without a live fix (and disable itself when permission was denied,
+    // which the browser never re-prompts for), leaving an agent who lost
+    // signal or denied location mid-visit permanently stuck "in progress":
+    // unable to check out, and unable to start a new visit while one is
+    // still active. Recording the location when it's available is still
+    // useful; refusing to let the agent leave when it isn't, isn't.
     const now = new Date().toISOString();
     const updated = {
       ...visit,
       checkOutAt: now,
-      checkOutLat: position.lat,
-      checkOutLng: position.lng,
+      checkOutLat: position?.lat,
+      checkOutLng: position?.lng,
     };
 
     try {
       await db.visits.update(visit.localId, {
         checkOutAt: now,
-        checkOutLat: position.lat,
-        checkOutLng: position.lng,
+        checkOutLat: position?.lat,
+        checkOutLng: position?.lng,
       });
       await addToOutbox(visit.clientId, deviceId, 'visit', updated);
       setActiveVisit(null);
@@ -159,8 +162,8 @@ export default function VisitDetailClient({ clientId }: { clientId: string }) {
             {permission === 'granted' && position
               ? `GPS locked · ±${Math.round(position.accuracyM)}m`
               : permission === 'denied'
-              ? 'GPS denied — enable location in browser settings'
-              : 'Acquiring GPS for checkout…'}
+              ? 'GPS denied — checkout will be recorded without a location'
+              : 'Acquiring GPS… checkout works without it too'}
           </div>
 
           {error && <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{error}</p>}
@@ -169,9 +172,9 @@ export default function VisitDetailClient({ clientId }: { clientId: string }) {
             id="checkout-btn"
             className="btn btn-danger btn-full btn-lg"
             onClick={handleCheckOut}
-            disabled={loading || !position}
+            disabled={loading}
           >
-            {loading ? 'Recording Checkout…' : !position ? 'Waiting for GPS…' : '📍 Check Out of Panchayat'}
+            {loading ? 'Recording Checkout…' : '📍 Check Out of Panchayat'}
           </button>
         </div>
       )}

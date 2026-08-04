@@ -106,6 +106,7 @@ namespace SeemanchalOutreach.Domain.Entities
         public string DeviceId { get; set; } = string.Empty;
         public string AgentId { get; set; } = string.Empty;
         public string PanchayatId { get; set; } = string.Empty;
+        public string? ShiftId { get; set; } // ClientId of the shift this contact was added during
         public string Role { get; set; } = string.Empty; // asha_worker, rmp_doctor, ward_member, medicine_shop
         public string Name { get; set; } = string.Empty;
         public string? Phone { get; set; }
@@ -169,6 +170,8 @@ namespace SeemanchalOutreach.Domain.Entities
         public string PatientName { get; set; } = string.Empty;
         public string Department { get; set; } = string.Empty;
         public string? Notes { get; set; }
+        public string? ClientPhone { get; set; }
+        public DateTime? ReferralDate { get; set; }
         public string Status { get; set; } = "pending"; // pending, converted, lost
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }

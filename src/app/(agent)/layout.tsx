@@ -315,18 +315,35 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
     <>
       {/* ─── Mobile Top Nav (Visible on < 768px) ───────────────────────────── */}
       <div className="mobile-top-nav">
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ fontWeight: 900, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
-            NexMarket
-          </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', fontWeight: 700, letterSpacing: '0.02em' }}>
-            {t.greeting}, {name?.split(' ')[0] ?? t.defaultAgentName} 👋
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            type="button"
+            className="mobile-menu-btn"
+            onClick={() => setIsDrawerOpen(true)}
+            aria-label="Open menu"
+          >
+            <span style={{ position: 'relative', display: 'flex' }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              {!!deadLetterCount && deadLetterCount > 0 && (
+                <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#ef4444', border: '1.5px solid white' }} />
+              )}
+            </span>
+          </button>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontWeight: 900, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
+              NexMarket
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', fontWeight: 700, letterSpacing: '0.02em' }}>
+              {t.greeting}, {name?.split(' ')[0] ?? t.defaultAgentName} 👋
+            </div>
           </div>
         </div>
-        
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <LanguageSwitcher />
-          
+
           <button
             type="button"
             onClick={handleSignOut}
@@ -339,6 +356,38 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
           </button>
         </div>
       </div>
+
+      {/* ─── Mobile Drawer (Profile/Admin links + sync status live only here on
+           mobile — the desktop sidebar below is hidden under 768px, and until
+           now nothing rendered these CSS classes at all) ───────────────────── */}
+      <AnimatePresence>
+        {isDrawerOpen && (
+          <>
+            <motion.div
+              className="mobile-drawer-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsDrawerOpen(false)}
+            />
+            <motion.div
+              className="mobile-drawer"
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
+                <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.02em' }}>NexMarket</div>
+              </div>
+              {renderUserInfo()}
+              {renderNavLinks()}
+              <div style={{ flex: 1 }} />
+              {renderFooterInfo()}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* ─── Desktop Left Sidebar (Visible on >= 768px) ────────────────────── */}
       <aside className="desktop-sidebar" aria-label="Desktop navigation">

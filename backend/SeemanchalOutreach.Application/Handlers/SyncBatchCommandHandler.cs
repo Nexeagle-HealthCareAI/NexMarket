@@ -15,10 +15,49 @@ namespace SeemanchalOutreach.Application.Handlers
     public class SyncBatchCommandHandler : IRequestHandler<SyncBatchCommand, SyncBatchResponse>
     {
         private readonly IMarketingDbContext _db;
+        private readonly IPhotoUploadService _photoUploadService;
 
-        public SyncBatchCommandHandler(IMarketingDbContext db)
+        public SyncBatchCommandHandler(IMarketingDbContext db, IPhotoUploadService photoUploadService)
         {
             _db = db;
+            _photoUploadService = photoUploadService;
+        }
+
+        // Contacts are captured offline-first, so a photo taken in the field is
+        // stored as a base64 data URI on the local device (there's no guarantee
+        // of a connection at capture time to hit the multipart /sync/photo
+        // endpoint synchronously). This finishes that upload during sync instead,
+        // once connectivity is actually available. If decoding/upload fails for
+        // any reason, the rest of the contact still saves — a bad photo shouldn't
+        // block the CRM data itself.
+        private async Task<string?> TryUploadDataUriPhotoAsync(string? dataUri, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(dataUri) || !dataUri.StartsWith("data:", StringComparison.Ordinal)) return null;
+
+            try
+            {
+                int commaIdx = dataUri.IndexOf(',');
+                if (commaIdx < 0) return null;
+
+                string header = dataUri.Substring(5, commaIdx - 5); // strip "data:"
+                string contentType = header.Split(';')[0];
+                if (string.IsNullOrEmpty(contentType)) contentType = "image/jpeg";
+
+                byte[] bytes = Convert.FromBase64String(dataUri.Substring(commaIdx + 1));
+                string extension = contentType switch
+                {
+                    "image/png" => "png",
+                    "image/webp" => "webp",
+                    _ => "jpg",
+                };
+
+                using var stream = new System.IO.MemoryStream(bytes);
+                return await _photoUploadService.UploadPhotoAsync($"{Guid.NewGuid()}.{extension}", stream, contentType, cancellationToken);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         public async Task<SyncBatchResponse> Handle(SyncBatchCommand request, CancellationToken cancellationToken)
@@ -159,6 +198,7 @@ namespace SeemanchalOutreach.Application.Handlers
                     string phone = GetString(root, "phone", "");
                     string name = GetString(root, "name", "");
                     string panchayatId = GetString(root, "panchayatId", "");
+                    string? shiftId = root.TryGetProperty("shiftId", out var shiftProp) && shiftProp.ValueKind == JsonValueKind.String ? shiftProp.GetString() : null;
                     string role = GetString(root, "role", "");
                     bool whatsapp = GetBool(root, "whatsappAdded", false);
                     bool card = GetBool(root, "cardGiven", false);
@@ -168,6 +208,15 @@ namespace SeemanchalOutreach.Application.Handlers
                     double? lat = GetOptionalDouble(root, "lat");
                     double? lng = GetOptionalDouble(root, "lng");
                     string? photoUrl = root.TryGetProperty("photoUrl", out var pProp) && pProp.ValueKind == JsonValueKind.String ? pProp.GetString() : null;
+                    // Contacts captured in the field store their photo as a base64 data URI
+                    // (no guaranteed connection at capture time) — finish that upload now
+                    // that this sync has a connection. A caller that already has a real
+                    // URL (e.g. an admin-side edit) takes priority over re-uploading.
+                    string? photoDataUri = root.TryGetProperty("photoDataUri", out var pdProp) && pdProp.ValueKind == JsonValueKind.String ? pdProp.GetString() : null;
+                    if (string.IsNullOrEmpty(photoUrl) && !string.IsNullOrEmpty(photoDataUri))
+                    {
+                        photoUrl = await TryUploadDataUriPhotoAsync(photoDataUri, cancellationToken);
+                    }
 
                     if (existing == null)
                     {
@@ -177,6 +226,7 @@ namespace SeemanchalOutreach.Application.Handlers
                             DeviceId = deviceId,
                             AgentId = agentId,
                             PanchayatId = panchayatId,
+                            ShiftId = shiftId,
                             Role = role,
                             Name = name,
                             Phone = phone,
@@ -308,6 +358,8 @@ namespace SeemanchalOutreach.Application.Handlers
                             PatientName = GetString(root, "patientName", ""),
                             Department = GetString(root, "department", ""),
                             Notes = GetString(root, "notes", ""),
+                            ClientPhone = root.TryGetProperty("clientPhone", out var refPhoneProp) && refPhoneProp.ValueKind == JsonValueKind.String ? refPhoneProp.GetString() : null,
+                            ReferralDate = GetOptionalDateTime(root, "referralDate"),
                             Status = GetString(root, "status", "pending"),
                             CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
                             ServerReceivedAt = syncedAt

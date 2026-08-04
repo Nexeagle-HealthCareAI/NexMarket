@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAgentStore } from '@/store/agent-store';
 import { getAgentDetail, updateAgentProfile, uploadPhoto, type AgentDetailDto, type UpdateAgentProfileRequest } from '@/lib/sync/api-client';
+import { compressImageToBlob } from '@/lib/image/compressImage';
 
 export default function ProfilePage() {
   const agentId = useAgentStore((s) => s.agentId);
@@ -58,7 +59,7 @@ export default function ProfilePage() {
     try {
       let photoUrl: string | undefined;
       if (photoFile) {
-        const uploaded = await uploadPhoto(photoFile);
+        const uploaded = await uploadPhoto(await compressImageToBlob(photoFile), 'profile.jpg');
         photoUrl = uploaded.url;
       }
       await updateAgentProfile(agentId, { ...form, photoUrl });

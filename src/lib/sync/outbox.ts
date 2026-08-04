@@ -27,7 +27,11 @@ export function wireTypeFor(entry: SyncOutboxEntry): string {
     case 'visit':
       return payload.checkOutAt ? 'visit_checkout' : 'visit_checkin';
     case 'contact':
-      return 'contact_new'; // no edit-existing-contact flow exists yet
+      // A contact that's already been synced once carries a serverId — editing
+      // it (e.g. the status-change UI on the contact detail page) must be sent
+      // as an update, or the server's contact_new/contact_update handler just
+      // no-ops on an existing row ("already_exists") and the edit is dropped.
+      return payload.serverId ? 'contact_update' : 'contact_new';
     case 'referral':
       return 'referral_new';
     case 'trajectory_batch':

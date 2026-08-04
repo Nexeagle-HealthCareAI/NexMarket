@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAgentStore } from '@/store/agent-store';
 import { updateAgentProfile, uploadPhoto } from '@/lib/sync/api-client';
+import { compressImage, compressImageToBlob } from '@/lib/image/compressImage';
+import { queuePendingOnboarding } from '@/lib/sync/onboarding';
 import { useTranslations } from '@/i18n/I18nProvider';
 
 export default function OnboardingPage() {
@@ -66,7 +68,7 @@ export default function OnboardingPage() {
     setError('');
 
     try {
-      const { url: photoUrl } = await uploadPhoto(photoFile);
+      const { url: photoUrl } = await uploadPhoto(await compressImageToBlob(photoFile), 'onboarding.jpg');
 
       await updateAgentProfile(agentId, {
         personalDetails,
@@ -76,8 +78,25 @@ export default function OnboardingPage() {
 
       setProfileCompleted(true);
       router.push('/home');
-
     } catch (e: unknown) {
+      // Onboarding is the one mandatory step gating the entire app — unlike
+      // every other write here, it used to require a live connection with no
+      // fallback, so an agent onboarding without signal was locked out
+      // entirely. On a genuine connectivity failure (as opposed to the server
+      // rejecting the submission, e.g. a duplicate email), queue it for the
+      // sync loop to finish once online and let the agent in now.
+      const isNetworkFailure = e instanceof TypeError || (typeof navigator !== 'undefined' && !navigator.onLine);
+      if (isNetworkFailure) {
+        try {
+          const photoDataUri = await compressImage(photoFile);
+          await queuePendingOnboarding({ agentId, personalDetails, education, photoDataUri });
+          setProfileCompleted(true);
+          router.push('/home');
+          return;
+        } catch {
+          // Fall through to the normal error path if even queuing failed.
+        }
+      }
       setError(e instanceof Error ? e.message : t.errOnboarding);
       setLoading(false);
     }

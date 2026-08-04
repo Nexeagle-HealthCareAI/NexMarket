@@ -57,6 +57,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
       referralDate,
       status,
       notes: notes.trim() || undefined,
+      clientPhone: refPhone.trim() || undefined,
       createdAt: now,
     };
 
@@ -65,6 +66,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
       await addToOutbox(refClientId, deviceId, 'referral', newReferral);
       setShowReferralForm(false);
       setNotes('');
+      setRefPhone('');
       setStatus('pending');
     } catch {
       setError('Failed to save referral outcome. Try again.');
@@ -320,6 +322,11 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
                   <p style={{ fontSize: '0.88rem', color: 'var(--text-primary)', marginTop: '0.35rem' }}>{ref.notes}</p>
                 ) : (
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '0.25rem' }}>No additional notes provided</p>
+                )}
+                {ref.clientPhone && (
+                  <p style={{ fontSize: '0.8rem', color: 'var(--color-primary-400)', fontWeight: 600, marginTop: '0.35rem' }}>
+                    📞 <a href={`tel:${ref.clientPhone}`} style={{ color: 'inherit', textDecoration: 'none' }}>+91 {ref.clientPhone}</a>
+                  </p>
                 )}
               </div>
             );
