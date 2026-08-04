@@ -26,6 +26,9 @@ namespace SeemanchalOutreach.Api.Controllers
         public string? Complaints { get; set; }
         public string? Conflicts { get; set; }
         public string? PhotoUrl { get; set; }
+        public string? Name { get; set; }
+        public string? Phone { get; set; }
+        public string? PanchayatId { get; set; }
     }
 
     [ApiController]
@@ -247,6 +250,9 @@ namespace SeemanchalOutreach.Api.Controllers
             if (dto.Complaints != null) contact.Complaints = dto.Complaints;
             if (dto.Conflicts != null) contact.Conflicts = dto.Conflicts;
             if (dto.PhotoUrl != null) contact.PhotoUrl = dto.PhotoUrl;
+            if (dto.Name != null) contact.Name = dto.Name;
+            if (dto.Phone != null) contact.Phone = dto.Phone;
+            if (dto.PanchayatId != null) contact.PanchayatId = dto.PanchayatId;
 
             if (previousStatus != contact.Status ||
                 previousComments != contact.Comments ||

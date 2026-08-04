@@ -598,6 +598,9 @@ export interface ContactUpdateRequest {
   complaints?: string;
   conflicts?: string;
   photoUrl?: string | null;
+  name?: string;
+  phone?: string;
+  panchayatId?: string;
 }
 
 export interface AdminContactsQuery {

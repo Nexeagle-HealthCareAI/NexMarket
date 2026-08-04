@@ -16,6 +16,7 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
 
   const [contact, setContact] = useState<ContactProfile | null>(null);
   const [panchayat, setPanchayat] = useState<PanchayatDto | null>(null);
+  const [allPanchayats, setAllPanchayats] = useState<PanchayatDto[]>([]);
   const [history, setHistory] = useState<ContactHistoryEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -25,6 +26,11 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
   const [editComplaints, setEditComplaints] = useState('');
   const [editConflicts, setEditConflicts] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editPanchayatId, setEditPanchayatId] = useState('');
+  const [isEditingPersonal, setIsEditingPersonal] = useState(false);
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -46,11 +52,15 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
 
         const loaded: ContactProfile = { ...contactDto };
         setContact(loaded);
+        setAllPanchayats(panchayats);
         setPanchayat(panchayats.find(p => p.id === contactDto.panchayatId) ?? null);
         setHistory(historyEntries);
         setEditRelation(loaded.relation || 'Unknown');
         setEditComplaints(loaded.complaints || '');
         setEditConflicts(loaded.conflicts || '');
+        setEditName(loaded.name || '');
+        setEditPhone(loaded.phone || '');
+        setEditPanchayatId(loaded.panchayatId || '');
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load contact.');
       } finally {
@@ -76,6 +86,22 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
       setIsEditing(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save engagement details.');
+    }
+  };
+
+  const handleSavePersonal = async () => {
+    if (!contact || !agentId) return;
+    try {
+      const saved = await updateAdminContact(contact.clientId, {
+        name: editName,
+        phone: editPhone,
+        panchayatId: editPanchayatId
+      });
+      setContact({ ...contact, ...saved });
+      setPanchayat(allPanchayats.find(p => p.id === saved.panchayatId) ?? null);
+      setIsEditingPersonal(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save personal details.');
     }
   };
 
@@ -155,13 +181,38 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
 
         {/* Left Column: Personal Info */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-          <div style={{ padding: '1.25rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+          <div style={{ padding: '1.25rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>Personal Details</h2>
+            {!isEditingPersonal ? (
+              <button onClick={() => setIsEditingPersonal(true)} style={{ background: 'transparent', border: '1px solid #cbd5e1', padding: '0.25rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Edit</button>
+            ) : (
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={() => {
+                  setIsEditingPersonal(false);
+                  setEditName(contact.name || '');
+                  setEditPhone(contact.phone || '');
+                  setEditPanchayatId(contact.panchayatId || '');
+                }} style={{ background: 'transparent', border: '1px solid #cbd5e1', padding: '0.25rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={handleSavePersonal} style={{ background: '#4f46e5', color: 'white', border: 'none', padding: '0.25rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Save</button>
+              </div>
+            )}
           </div>
           <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Name</label>
+              {isEditingPersonal ? (
+                <input value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+              ) : (
+                <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>{contact.name || 'N/A'}</div>
+              )}
+            </div>
+            <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Phone Number</label>
-              <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>{contact.phone || 'N/A'}</div>
+              {isEditingPersonal ? (
+                <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+              ) : (
+                <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>{contact.phone || 'N/A'}</div>
+              )}
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Role</label>
@@ -169,9 +220,18 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Panchayat</label>
-              <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>
-                {panchayat ? `${panchayat.name}, ${panchayat.block} (${panchayat.district})` : contact.panchayatId}
-              </div>
+              {isEditingPersonal ? (
+                <select value={editPanchayatId} onChange={(e) => setEditPanchayatId(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }}>
+                  <option value="">Select Panchayat...</option>
+                  {allPanchayats.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}, {p.block} ({p.district})</option>
+                  ))}
+                </select>
+              ) : (
+                <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>
+                  {panchayat ? `${panchayat.name}, ${panchayat.block} (${panchayat.district})` : contact.panchayatId}
+                </div>
+              )}
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Assigned Agent</label>
