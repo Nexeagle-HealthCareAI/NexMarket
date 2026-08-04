@@ -753,9 +753,9 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
           </button>
         </div>
       </td>
-      <td style={{ padding: '1rem', textAlign: 'center', minWidth: '120px' }}>
+      <td style={{ padding: '1rem', textAlign: 'center', minWidth: '220px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={onEdit} style={{ background: 'transparent', color: '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
               Update
             </button>
