@@ -20,6 +20,16 @@ export default function AdminSurveysPage() {
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
   const [selectedBlocks, setSelectedBlocks] = useState<string[]>([]);
   const [selectedPanchayats, setSelectedPanchayats] = useState<string[]>([]);
+  const [dateFilterMode, setDateFilterMode] = useState<'all' | 'custom'>('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+
+  // Sort + Pagination — shared between Responses and Data Management, since
+  // both tabs show the same underlying rows.
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   // Questionnaire State
   const [questions, setQuestions] = useState<SurveyQuestionDto[]>([]);
@@ -61,6 +71,21 @@ export default function AdminSurveysPage() {
 
     return () => { cancelled = true; };
   }, [agentId]);
+
+  // Any filter/sort/tab change invalidates the current page — jumping back
+  // to page 1 avoids landing on a now-empty page.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDistricts, selectedBlocks, selectedPanchayats, dateFilterMode, customStartDate, customEndDate, sortField, sortDirection, activeTab]);
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   const handleSaveQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,14 +197,55 @@ export default function AdminSurveysPage() {
   // Apply filters
   const filteredSurveys = surveys.filter(survey => {
     const panchayat = allPanchayats.find(p => p.id === survey.panchayatId);
-    if (!panchayat) return true; // Show items with unknown panchayat
-    
-    if (selectedDistricts.length > 0 && !selectedDistricts.includes(panchayat.district)) return false;
-    if (selectedBlocks.length > 0 && !selectedBlocks.includes(panchayat.block)) return false;
-    if (selectedPanchayats.length > 0 && !selectedPanchayats.includes(panchayat.id)) return false;
-    
+    if (panchayat) {
+      if (selectedDistricts.length > 0 && !selectedDistricts.includes(panchayat.district)) return false;
+      if (selectedBlocks.length > 0 && !selectedBlocks.includes(panchayat.block)) return false;
+      if (selectedPanchayats.length > 0 && !selectedPanchayats.includes(panchayat.id)) return false;
+    }
+    // else: unknown panchayat — never excluded by the location filters (unchanged from before)
+
+    if (dateFilterMode === 'custom') {
+      const created = new Date(survey.createdAt);
+      if (customStartDate && created < new Date(`${customStartDate}T00:00:00`)) return false;
+      if (customEndDate && created > new Date(`${customEndDate}T23:59:59.999`)) return false;
+    }
+
     return true;
   });
+
+  // Apply sort — question columns sort by that question's answer text.
+  const sortedSurveys = [...filteredSurveys].sort((a, b) => {
+    if (!sortField) return 0;
+    let aVal: string | number;
+    let bVal: string | number;
+
+    if (sortField === 'contactName') {
+      aVal = (a.contactName || 'Unknown').toLowerCase();
+      bVal = (b.contactName || 'Unknown').toLowerCase();
+    } else if (sortField === 'agentName') {
+      aVal = (a.agentName || a.agentId).toLowerCase();
+      bVal = (b.agentName || b.agentId).toLowerCase();
+    } else if (sortField === 'createdAt') {
+      aVal = new Date(a.createdAt).getTime();
+      bVal = new Date(b.createdAt).getTime();
+    } else {
+      let aAns: Record<string, unknown> = {};
+      let bAns: Record<string, unknown> = {};
+      try { aAns = JSON.parse(a.answersJson); } catch {}
+      try { bAns = JSON.parse(b.answersJson); } catch {}
+      aVal = String(aAns[sortField] ?? '').toLowerCase();
+      bVal = String(bAns[sortField] ?? '').toLowerCase();
+    }
+
+    if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  // Paginate — 10 per page, shared across both tabs.
+  const totalPages = Math.max(1, Math.ceil(sortedSurveys.length / PAGE_SIZE));
+  const pageSafe = Math.min(currentPage, totalPages);
+  const paginatedSurveys = sortedSurveys.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
 
   return (
     <div style={{ padding: '2rem', height: '100%', display: 'flex', flexDirection: 'column', minWidth: 0, width: '100%' }}>
@@ -270,6 +336,47 @@ export default function AdminSurveysPage() {
                 placeholder="All Panchayats"
               />
             </div>
+
+            <div style={{ width: 1, alignSelf: 'stretch', background: '#e2e8f0' }} />
+
+            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Date:</span>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Range</label>
+              <select
+                value={dateFilterMode}
+                onChange={(e) => {
+                  const mode = e.target.value as 'all' | 'custom';
+                  setDateFilterMode(mode);
+                  if (mode === 'all') { setCustomStartDate(''); setCustomEndDate(''); }
+                }}
+                style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontSize: '0.85rem', height: '38px' }}
+              >
+                <option value="all">All</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+            {dateFilterMode === 'custom' && (
+              <>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>From</label>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    style={{ padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem', height: '38px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>To</label>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    style={{ padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem', height: '38px' }}
+                  />
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -279,27 +386,33 @@ export default function AdminSurveysPage() {
             
             {surveysLoading && <p>Loading responses...</p>}
             {surveysError && <p style={{ color: 'red' }}>{surveysError}</p>}
-            {!surveysLoading && !surveysError && filteredSurveys.length === 0 && <p style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No responses match the selected filters.</p>}
-            {!surveysLoading && filteredSurveys.length > 0 && (
+            {!surveysLoading && !surveysError && sortedSurveys.length === 0 && <p style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No responses match the selected filters.</p>}
+            {!surveysLoading && sortedSurveys.length > 0 && (
 
                 <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden', maxWidth: '100%' }}>
                   <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '160px' }}>Person Name</th>
-                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '140px' }}>Added By</th>
+                        <SortableTh label="Person Name" field="contactName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} style={{ whiteSpace: 'nowrap', minWidth: '160px' }} />
+                        <SortableTh label="Added By" field="agentName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} style={{ whiteSpace: 'nowrap', minWidth: '140px' }} />
                         {responseColumns.map((q, i) => (
-                          <th key={q.questionId} title={q.text} style={{ padding: '1rem', fontWeight: 700, color: '#4f46e5', minWidth: '200px' }}>
-                            Question {i + 1}
-                            <div style={{ fontWeight: 500, color: '#64748b', fontSize: '0.75rem', marginTop: '0.2rem' }}>{q.text}</div>
-                          </th>
+                          <SortableTh
+                            key={q.questionId}
+                            field={q.questionId}
+                            sortField={sortField}
+                            sortDirection={sortDirection}
+                            onSort={handleSort}
+                            style={{ minWidth: '200px', color: '#4f46e5' }}
+                            title={q.text}
+                            label={<>Question {i + 1}<div style={{ fontWeight: 500, color: '#64748b', fontSize: '0.75rem', marginTop: '0.2rem' }}>{q.text}</div></>}
+                          />
                         ))}
-                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '120px' }}>Date Added</th>
+                        <SortableTh label="Date Added" field="createdAt" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} style={{ whiteSpace: 'nowrap', minWidth: '120px' }} />
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredSurveys.map((survey) => {
+                      {paginatedSurveys.map((survey) => {
                         let answers: Record<string, unknown> = {};
                         try { answers = JSON.parse(survey.answersJson); } catch {}
 
@@ -329,6 +442,7 @@ export default function AdminSurveysPage() {
                     </tbody>
                   </table>
                 </div>
+                <PaginationControls currentPage={pageSafe} totalPages={totalPages} totalItems={sortedSurveys.length} pageSize={PAGE_SIZE} onPageChange={setCurrentPage} />
               </div>
             )}
           </div>
@@ -392,26 +506,24 @@ export default function AdminSurveysPage() {
           <div style={{ flex: 1, overflowY: 'auto', minWidth: 0, width: '100%' }}>
             {surveysLoading && <p>Loading responses...</p>}
             {surveysError && <p style={{ color: 'red' }}>{surveysError}</p>}
-            {!surveysLoading && !surveysError && surveys.length === 0 && <p>No survey responses found.</p>}
-            {!surveysLoading && surveys.length > 0 && (
+            {!surveysLoading && !surveysError && sortedSurveys.length === 0 && <p style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No responses match the selected filters.</p>}
+            {!surveysLoading && sortedSurveys.length > 0 && (
               <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden', maxWidth: '100%' }}>
                 <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
                     <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155' }}>Person Name</th>
-                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155' }}>Added By</th>
+                        <SortableTh label="Person Name" field="contactName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
+                        <SortableTh label="Added By" field="agentName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
                         {responseColumns.map(q => (
-                          <th key={q.questionId} style={{ padding: '1rem', fontWeight: 700, color: '#334155', minWidth: '150px' }}>
-                            {q.text}
-                          </th>
+                          <SortableTh key={q.questionId} label={q.text} field={q.questionId} sortField={sortField} sortDirection={sortDirection} onSort={handleSort} style={{ minWidth: '150px' }} />
                         ))}
-                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155' }}>Date Added</th>
+                        <SortableTh label="Date Added" field="createdAt" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
                         <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', minWidth: '160px' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredSurveys.map((survey) => {
+                      {paginatedSurveys.map((survey) => {
                         let answers: any = {};
                         try {
                           if (survey.answersJson) answers = JSON.parse(survey.answersJson);
@@ -447,6 +559,7 @@ export default function AdminSurveysPage() {
                     </tbody>
                   </table>
                 </div>
+                <PaginationControls currentPage={pageSafe} totalPages={totalPages} totalItems={sortedSurveys.length} pageSize={PAGE_SIZE} onPageChange={setCurrentPage} />
               </div>
             )}
           </div>
@@ -595,6 +708,77 @@ export default function AdminSurveysPage() {
           </div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// Sortable column header
+interface SortableThProps {
+  label: React.ReactNode;
+  field: string;
+  sortField: string | null;
+  sortDirection: 'asc' | 'desc';
+  onSort: (field: string) => void;
+  style?: React.CSSProperties;
+  title?: string;
+}
+
+function SortableTh({ label, field, sortField, sortDirection, onSort, style, title }: SortableThProps) {
+  const isActive = sortField === field;
+  return (
+    <th
+      onClick={() => onSort(field)}
+      title={title}
+      style={{ padding: '1rem', fontWeight: 700, color: isActive ? '#4f46e5' : '#334155', cursor: 'pointer', userSelect: 'none', ...style }}
+    >
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+        {label}
+        <span style={{ fontSize: '0.7rem', opacity: isActive ? 1 : 0.35 }}>
+          {isActive ? (sortDirection === 'asc' ? '▲' : '▼') : '⇅'}
+        </span>
+      </span>
+    </th>
+  );
+}
+
+// Pagination controls
+interface PaginationControlsProps {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+}
+
+function PaginationControls({ currentPage, totalPages, totalItems, pageSize, onPageChange }: PaginationControlsProps) {
+  if (totalItems === 0) return null;
+  const startItem = (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, totalItems);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderTop: '1px solid #e2e8f0', flexWrap: 'wrap', gap: '0.75rem' }}>
+      <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
+        Showing {startItem}–{endItem} of {totalItems}
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <button
+          onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+          disabled={currentPage <= 1}
+          style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: 'white', color: currentPage <= 1 ? '#cbd5e1' : '#334155', fontWeight: 600, cursor: currentPage <= 1 ? 'not-allowed' : 'pointer', fontSize: '0.85rem' }}
+        >
+          Prev
+        </button>
+        <span style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 600, padding: '0 0.5rem' }}>
+          Page {currentPage} of {totalPages}
+        </span>
+        <button
+          onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+          disabled={currentPage >= totalPages}
+          style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#334155', fontWeight: 600, cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer', fontSize: '0.85rem' }}
+        >
+          Next
+        </button>
+      </div>
     </div>
   );
 }
