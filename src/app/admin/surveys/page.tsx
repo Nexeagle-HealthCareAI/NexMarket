@@ -142,7 +142,7 @@ export default function AdminSurveysPage() {
 
   return (
     <div style={{ padding: '2rem', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem', color: '#0f172a' }}>Surveys</h1>
           <p style={{ color: '#64748b' }}>Manage survey responses and the dynamic questionnaire</p>
@@ -157,7 +157,7 @@ export default function AdminSurveysPage() {
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: '1rem', borderBottom: '2px solid #e2e8f0', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', gap: '1rem', borderBottom: '2px solid #e2e8f0', marginBottom: '1.5rem', overflowX: 'auto', whiteSpace: 'nowrap', paddingBottom: '2px' }}>
         <button
           onClick={() => setActiveTab('responses')}
           style={{
@@ -186,40 +186,46 @@ export default function AdminSurveysPage() {
         {activeTab === 'responses' && (
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {questionsError && <p style={{ color: '#b91c1c', fontSize: '0.85rem' }}>⚠️ Question columns may be incomplete — failed to load the questionnaire: {questionsError}</p>}
+            <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', background: 'white', padding: '1rem 1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Filter By Location:</span>
+              <div style={{ flex: 1, minWidth: '180px' }}>
+                <MultiSelectDropdown
+                  label="District"
+                  options={uniqueDistricts.map(d => ({ value: d, label: d }))}
+                  selected={selectedDistricts}
+                  onChange={(val) => { setSelectedDistricts(val); setSelectedBlocks([]); setSelectedPanchayats([]); }}
+                  placeholder="All Districts"
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: '180px' }}>
+                <MultiSelectDropdown
+                  label="Block"
+                  options={uniqueBlocks.map(b => ({ value: b, label: b }))}
+                  selected={selectedBlocks}
+                  onChange={(val) => { setSelectedBlocks(val); setSelectedPanchayats([]); }}
+                  disabled={selectedDistricts.length === 0 && uniqueBlocks.length === 0}
+                  placeholder="All Blocks"
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: '180px' }}>
+                <MultiSelectDropdown
+                  label="Panchayat"
+                  options={uniquePanchayats.map(pId => {
+                    const p = allPanchayats.find(x => x.id === pId);
+                    return { value: pId, label: p ? `${p.name} (${p.district})` : pId };
+                  })}
+                  selected={selectedPanchayats}
+                  onChange={(val) => setSelectedPanchayats(val)}
+                  disabled={selectedBlocks.length === 0 && uniquePanchayats.length === 0}
+                  placeholder="All Panchayats"
+                />
+              </div>
+            </div>
+
             {surveysLoading && <p>Loading responses...</p>}
             {surveysError && <p style={{ color: 'red' }}>{surveysError}</p>}
-            {!surveysLoading && !surveysError && surveys.length === 0 && <p>No responses yet.</p>}
-            {!surveysLoading && surveys.length > 0 && (
-              <>
-                <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', background: 'white', padding: '1rem 1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Filter By Location:</span>
-                  <MultiSelectDropdown
-                    label="District"
-                    options={uniqueDistricts.map(d => ({ value: d, label: d }))}
-                    selected={selectedDistricts}
-                    onChange={(val) => { setSelectedDistricts(val); setSelectedBlocks([]); setSelectedPanchayats([]); }}
-                    placeholder="All Districts"
-                  />
-                  <MultiSelectDropdown
-                    label="Block"
-                    options={uniqueBlocks.map(b => ({ value: b, label: b }))}
-                    selected={selectedBlocks}
-                    onChange={(val) => { setSelectedBlocks(val); setSelectedPanchayats([]); }}
-                    disabled={selectedDistricts.length === 0 && uniqueBlocks.length === 0}
-                    placeholder="All Blocks"
-                  />
-                  <MultiSelectDropdown
-                    label="Panchayat"
-                    options={uniquePanchayats.map(pId => {
-                      const p = allPanchayats.find(x => x.id === pId);
-                      return { value: pId, label: p ? `${p.name} (${p.district})` : pId };
-                    })}
-                    selected={selectedPanchayats}
-                    onChange={(val) => setSelectedPanchayats(val)}
-                    disabled={selectedBlocks.length === 0 && uniquePanchayats.length === 0}
-                    placeholder="All Panchayats"
-                  />
-                </div>
+            {!surveysLoading && !surveysError && filteredSurveys.length === 0 && <p style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No responses match the selected filters.</p>}
+            {!surveysLoading && filteredSurveys.length > 0 && (
 
                 <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
                   <div style={{ overflowX: 'auto' }}>
@@ -268,7 +274,7 @@ export default function AdminSurveysPage() {
                     </tbody>
                   </table>
                 </div>
-              </>
+              </div>
             )}
           </div>
         )}
