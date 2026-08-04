@@ -324,7 +324,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         initial={false}
         animate={{ marginLeft: isMobile ? 0 : (isCollapsed ? 80 : 260) }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}
+        style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', minWidth: 0 }}
       >
         {/* Top bar */}
         <header style={{ 
@@ -381,7 +381,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </header>
 
-        <div style={{ padding: '2rem', flex: 1, maxWidth: 1600, width: '100%', margin: '0 auto' }}>
+        <div style={{ padding: isMobile ? '1rem' : '2rem', flex: 1, maxWidth: 1600, width: '100%', margin: '0 auto', minWidth: 0, overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {children}
         </div>
       </motion.main>
