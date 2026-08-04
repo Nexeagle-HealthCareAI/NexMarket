@@ -141,7 +141,7 @@ export default function AdminSurveysPage() {
   });
 
   return (
-    <div style={{ padding: '2rem', height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ padding: '2rem', height: '100%', display: 'flex', flexDirection: 'column', minWidth: 0, width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem', color: '#0f172a' }}>Surveys</h1>
