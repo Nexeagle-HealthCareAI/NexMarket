@@ -115,7 +115,7 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
   }
 
   return (
-    <div style={{ paddingBottom: '3rem' }}>
+    <div style={{ paddingBottom: '3rem', minWidth: 0, width: '100%' }}>
       {/* Unified Header Card */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem 2rem', marginBottom: '2rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
         
