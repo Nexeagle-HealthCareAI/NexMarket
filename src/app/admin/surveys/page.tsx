@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAgentStore } from '@/store/agent-store';
-import { getAdminSurveys, type AdminSurveyDto, getAdminSurveyQuestions, createAdminSurveyQuestion, updateAdminSurveyQuestion, deleteAdminSurveyQuestion, type SurveyQuestionDto } from '@/lib/sync/api-client';
+import { getAdminSurveys, type AdminSurveyDto, getAdminSurveyQuestions, createAdminSurveyQuestion, updateAdminSurveyQuestion, deleteAdminSurveyQuestion, type SurveyQuestionDto, getPanchayats, type PanchayatDto } from '@/lib/sync/api-client';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AdminSurveysPage() {
@@ -11,8 +11,14 @@ export default function AdminSurveysPage() {
 
   // Responses State
   const [surveys, setSurveys] = useState<AdminSurveyDto[]>([]);
+  const [allPanchayats, setAllPanchayats] = useState<PanchayatDto[]>([]);
   const [surveysLoading, setSurveysLoading] = useState(false);
   const [surveysError, setSurveysError] = useState<string | null>(null);
+
+  // Filter States
+  const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
+  const [selectedBlocks, setSelectedBlocks] = useState<string[]>([]);
+  const [selectedPanchayats, setSelectedPanchayats] = useState<string[]>([]);
 
   // Questionnaire State
   const [questions, setQuestions] = useState<SurveyQuestionDto[]>([]);
@@ -31,11 +37,13 @@ export default function AdminSurveysPage() {
 
     Promise.all([
       getAdminSurveys().catch(e => { if (!cancelled) setSurveysError(e.message); return []; }),
-      getAdminSurveyQuestions().catch(e => { if (!cancelled) setQuestionsError(e.message); return []; })
-    ]).then(([sData, qData]) => {
+      getAdminSurveyQuestions().catch(e => { if (!cancelled) setQuestionsError(e.message); return []; }),
+      getPanchayats().catch(() => [])
+    ]).then(([sData, qData, pData]) => {
       if (!cancelled) {
         if (sData) setSurveys(sData as AdminSurveyDto[]);
         if (qData) setQuestions(qData as SurveyQuestionDto[]);
+        if (pData) setAllPanchayats(pData as PanchayatDto[]);
         setSurveysLoading(false);
         setQuestionsLoading(false);
       }
@@ -107,6 +115,31 @@ export default function AdminSurveysPage() {
     ...[...orphanAnswerKeys].sort().map((k) => ({ questionId: k, text: `(unconfigured: ${k})` })),
   ];
 
+  // Compute unique regions for filters
+  const uniqueDistricts = Array.from(new Set(allPanchayats.map(p => p.district))).sort();
+  
+  const filteredBlocks = allPanchayats
+    .filter(p => selectedDistricts.length === 0 || selectedDistricts.includes(p.district))
+    .map(p => p.block);
+  const uniqueBlocks = Array.from(new Set(filteredBlocks)).sort();
+
+  const filteredPanchayatList = allPanchayats
+    .filter(p => (selectedDistricts.length === 0 || selectedDistricts.includes(p.district)) &&
+                 (selectedBlocks.length === 0 || selectedBlocks.includes(p.block)));
+  const uniquePanchayats = Array.from(new Set(filteredPanchayatList.map(p => p.id))).sort();
+
+  // Apply filters
+  const filteredSurveys = surveys.filter(survey => {
+    const panchayat = allPanchayats.find(p => p.id === survey.panchayatId);
+    if (!panchayat) return true; // Show items with unknown panchayat
+    
+    if (selectedDistricts.length > 0 && !selectedDistricts.includes(panchayat.district)) return false;
+    if (selectedBlocks.length > 0 && !selectedBlocks.includes(panchayat.block)) return false;
+    if (selectedPanchayats.length > 0 && !selectedPanchayats.includes(panchayat.id)) return false;
+    
+    return true;
+  });
+
   return (
     <div style={{ padding: '2rem', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -157,9 +190,40 @@ export default function AdminSurveysPage() {
             {surveysError && <p style={{ color: 'red' }}>{surveysError}</p>}
             {!surveysLoading && !surveysError && surveys.length === 0 && <p>No responses yet.</p>}
             {!surveysLoading && surveys.length > 0 && (
-              <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <>
+                <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', background: 'white', padding: '1rem 1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Filter By Location:</span>
+                  <MultiSelectDropdown
+                    label="District"
+                    options={uniqueDistricts.map(d => ({ value: d, label: d }))}
+                    selected={selectedDistricts}
+                    onChange={(val) => { setSelectedDistricts(val); setSelectedBlocks([]); setSelectedPanchayats([]); }}
+                    placeholder="All Districts"
+                  />
+                  <MultiSelectDropdown
+                    label="Block"
+                    options={uniqueBlocks.map(b => ({ value: b, label: b }))}
+                    selected={selectedBlocks}
+                    onChange={(val) => { setSelectedBlocks(val); setSelectedPanchayats([]); }}
+                    disabled={selectedDistricts.length === 0 && uniqueBlocks.length === 0}
+                    placeholder="All Blocks"
+                  />
+                  <MultiSelectDropdown
+                    label="Panchayat"
+                    options={uniquePanchayats.map(pId => {
+                      const p = allPanchayats.find(x => x.id === pId);
+                      return { value: pId, label: p ? `${p.name} (${p.district})` : pId };
+                    })}
+                    selected={selectedPanchayats}
+                    onChange={(val) => setSelectedPanchayats(val)}
+                    disabled={selectedBlocks.length === 0 && uniquePanchayats.length === 0}
+                    placeholder="All Panchayats"
+                  />
+                </div>
+
+                <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
                         <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', minWidth: '160px' }}>Person Name</th>
@@ -174,7 +238,7 @@ export default function AdminSurveysPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {surveys.map((survey) => {
+                      {filteredSurveys.map((survey) => {
                         let answers: Record<string, unknown> = {};
                         try { answers = JSON.parse(survey.answersJson); } catch {}
 
@@ -204,7 +268,7 @@ export default function AdminSurveysPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </>
             )}
           </div>
         )}
@@ -334,6 +398,86 @@ export default function AdminSurveysPage() {
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// MultiSelect Dropdown Component
+interface MultiSelectDropdownProps {
+  label: string;
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  disabled?: boolean;
+  placeholder?: string;
+}
+
+function MultiSelectDropdown({ label, options, selected, onChange, disabled, placeholder }: MultiSelectDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const toggleSelection = (opt: string) => {
+    if (selected.includes(opt)) {
+      onChange(selected.filter((o: string) => o !== opt));
+    } else {
+      onChange([...selected, opt]);
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative', opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto' }}>
+      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>{label}</label>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ 
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+          background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', 
+          padding: '0.5rem 1rem', width: '220px', cursor: 'pointer', 
+          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden' }}>
+          <span style={{ fontSize: '0.85rem', color: selected.length === 0 ? '#64748b' : '#0f172a' }}>
+            {selected.length === 0 ? (placeholder || 'Select...') : `${selected.length} Selected`}
+          </span>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            style={{ 
+              position: 'absolute', top: '100%', left: 0, marginTop: '0.25rem', width: '250px', 
+              background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', 
+              boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 50,
+              maxHeight: '300px', overflowY: 'auto'
+            }}
+          >
+            <div style={{ position: 'fixed', inset: 0, zIndex: -1 }} onClick={() => setIsOpen(false)} />
+            
+            <div style={{ padding: '0.5rem' }}>
+              {options.length === 0 ? (
+                <div style={{ padding: '0.5rem', color: '#64748b', fontSize: '0.85rem', textAlign: 'center' }}>No options available</div>
+              ) : (
+                options.map(opt => (
+                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', cursor: 'pointer', borderRadius: '4px', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <input 
+                      type="checkbox" 
+                      checked={selected.includes(opt.value)}
+                      onChange={() => toggleSelection(opt.value)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: '0.85rem', color: '#334155', fontWeight: selected.includes(opt.value) ? 600 : 400 }}>{opt.label}</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
