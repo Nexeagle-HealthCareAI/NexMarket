@@ -159,7 +159,9 @@ export default function PipelinePage() {
       const saved = await updateAdminContact(updatedContact.clientId, {
         status: updatedContact.status,
         followUpDate: updatedContact.followUpDate,
-        comments: updatedContact.comments ?? undefined
+        comments: updatedContact.comments ?? undefined,
+        complaints: updatedContact.complaints ?? undefined,
+        conflicts: updatedContact.conflicts ?? undefined
       });
 
       setContacts(prev => prev.map(c => c.clientId === updatedContact.clientId
@@ -271,7 +273,7 @@ export default function PipelinePage() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>Contact Management</h1>
           <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Manage active leads and historical contact data</p>
@@ -294,7 +296,7 @@ export default function PipelinePage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '1rem', borderBottom: '2px solid #e2e8f0', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', gap: '1rem', borderBottom: '2px solid #e2e8f0', marginBottom: '1.5rem', overflowX: 'auto', whiteSpace: 'nowrap', paddingBottom: '2px' }}>
         <button
           onClick={() => { setActiveTab('worklist'); setPage(1); }}
           style={{
