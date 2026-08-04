@@ -1,4 +1,6 @@
+using System;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,6 +9,11 @@ using SeemanchalOutreach.Application.Interfaces;
 
 namespace SeemanchalOutreach.Api.Controllers
 {
+    public class UpdateSurveyResponseDto
+    {
+        public string AnswersJson { get; set; } = "{}";
+    }
+
     [ApiController]
     [Authorize(Roles = "Admin")]
     [Route("api/v1/admin/[controller]")]
@@ -47,6 +54,60 @@ namespace SeemanchalOutreach.Api.Controllers
                                  }).ToListAsync();
 
             return Ok(surveys);
+        }
+
+        // The "Data Management" tab's Edit/Delete buttons had nothing to call —
+        // GetAllSurveys was the only action on this controller.
+        [HttpDelete("{id:guid}")]
+        public async Task<IActionResult> DeleteSurvey(Guid id)
+        {
+            var survey = await _db.SurveyResponses.FirstOrDefaultAsync(s => s.Id == id);
+            if (survey == null) return NotFound();
+
+            _db.SurveyResponses.Remove(survey);
+            await _db.SaveChangesAsync();
+            return NoContent();
+        }
+
+        [HttpPut("{id:guid}")]
+        public async Task<IActionResult> UpdateSurvey(Guid id, [FromBody] UpdateSurveyResponseDto dto)
+        {
+            var survey = await _db.SurveyResponses.FirstOrDefaultAsync(s => s.Id == id);
+            if (survey == null) return NotFound();
+
+            // A malformed value here would silently corrupt every downstream
+            // reader (admin table columns, CSV export) — validate before persisting.
+            try
+            {
+                using var _ = JsonDocument.Parse(dto.AnswersJson);
+            }
+            catch (JsonException)
+            {
+                return BadRequest("answersJson must be valid JSON.");
+            }
+
+            survey.AnswersJson = dto.AnswersJson;
+            await _db.SaveChangesAsync();
+
+            var agent = await _db.Agents.AsNoTracking().FirstOrDefaultAsync(a => a.AgentId == survey.AgentId);
+            var contact = await _db.Contacts.AsNoTracking().FirstOrDefaultAsync(c => c.ClientId == survey.ContactId);
+            var panchayat = await _db.Panchayats.AsNoTracking().FirstOrDefaultAsync(p => p.PanchayatId == survey.PanchayatId);
+
+            return Ok(new
+            {
+                survey.Id,
+                survey.ClientId,
+                survey.AgentId,
+                AgentName = agent?.Name ?? "Unknown",
+                survey.ContactId,
+                ContactName = contact?.Name ?? "Unknown",
+                ContactPhone = contact?.Phone ?? "",
+                survey.PanchayatId,
+                LocationName = panchayat?.Name ?? "Unknown",
+                survey.AnswersJson,
+                survey.CreatedAt,
+                survey.SyncedAt
+            });
         }
     }
 }
