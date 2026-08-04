@@ -280,13 +280,14 @@ export default function AdminSurveysPage() {
         )}
 
         {activeTab === 'questionnaire' && (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ flex: 1, overflowY: 'auto', minWidth: 0, width: '100%' }}>
             {questionsLoading && <p>Loading questions...</p>}
             {questionsError && <p style={{ color: 'red' }}>{questionsError}</p>}
             {!questionsLoading && !questionsError && questions.length === 0 && <p>No questions defined. Add one!</p>}
             {!questionsLoading && questions.length > 0 && (
-              <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden', maxWidth: '100%' }}>
+                <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                     <tr>
                       <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', width: '60px' }}>Order</th>
@@ -325,7 +326,8 @@ export default function AdminSurveysPage() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                  </table>
+                </div>
               </div>
             )}
           </div>
