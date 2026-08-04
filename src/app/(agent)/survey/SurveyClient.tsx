@@ -134,6 +134,27 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
     );
   }
 
+  // No admin-configured (and active) questions at all — nothing to render.
+  // Previously impossible (there was always a hardcoded fallback); now that
+  // the questionnaire is fully backend-controlled, an admin deactivating
+  // every question is a real state to handle instead of crashing on
+  // QUESTIONS[0] being undefined.
+  if (QUESTIONS.length === 0) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--color-primary-900)', padding: '2rem', textAlign: 'center' }}>
+        <span style={{ fontSize: '3rem', marginBottom: '1rem' }}>📋</span>
+        <h2 style={{ color: 'white', marginBottom: '0.5rem' }}>No survey questions configured</h2>
+        <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '2rem' }}>Ask your admin to add questions in the Surveys → Questionnaire tab.</p>
+        <button
+          onClick={() => { if (onClose) onClose(); else router.back(); }}
+          style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '0.75rem 2rem', borderRadius: '20px', fontSize: '1rem', cursor: 'pointer', fontWeight: 600 }}
+        >
+          {t.surveyCancel}
+        </button>
+      </div>
+    );
+  }
+
   const q = QUESTIONS[currentIdx];
   const progress = ((currentIdx) / QUESTIONS.length) * 100;
 
