@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AdminSurveysPage() {
   const agentId = useAgentStore((s) => s.agentId);
-  const [activeTab, setActiveTab] = useState<'responses' | 'data_management' | 'questionnaire'>('responses');
+  const [activeTab, setActiveTab] = useState<'responses' | 'data_management' | 'questionnaire' | 'insights'>('responses');
 
   // Responses State
   const [surveys, setSurveys] = useState<AdminSurveyDto[]>([]);
@@ -247,6 +247,26 @@ export default function AdminSurveysPage() {
   const pageSafe = Math.min(currentPage, totalPages);
   const paginatedSurveys = sortedSurveys.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
 
+  // Insights — aggregated per-question breakdowns over the filtered (unpaginated)
+  // response set, so admins see distributions for the whole filtered region/date
+  // range rather than just the current page.
+  const insightsByQuestion = questions
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((q) => {
+      const raw: string[] = [];
+      filteredSurveys.forEach((s) => {
+        try {
+          const parsed = JSON.parse(s.answersJson || '{}');
+          const val = parsed[q.questionId];
+          if (val === undefined || val === null || val === '') return;
+          if (Array.isArray(val)) val.forEach((v) => raw.push(String(v)));
+          else raw.push(String(val));
+        } catch {}
+      });
+      return { question: q, raw, answeredCount: raw.length };
+    });
+
   return (
     <div style={{ padding: '2rem', height: '100%', display: 'flex', flexDirection: 'column', minWidth: 0, width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -298,10 +318,21 @@ export default function AdminSurveysPage() {
         >
           🛠️ Data Management
         </button>
+        <button
+          onClick={() => setActiveTab('insights')}
+          style={{
+            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
+            fontSize: '1rem', fontWeight: 700, color: activeTab === 'insights' ? '#4f46e5' : '#64748b',
+            borderBottom: activeTab === 'insights' ? '3px solid #4f46e5' : '3px solid transparent',
+            marginBottom: '-2px', transition: 'all 0.2s'
+          }}
+        >
+          💡 Insights
+        </button>
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {(activeTab === 'responses' || activeTab === 'data_management') && (
+        {(activeTab === 'responses' || activeTab === 'data_management' || activeTab === 'insights') && (
           <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', background: 'white', padding: '1rem 1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', flexShrink: 0 }}>
             <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Filter By Location:</span>
             <div style={{ flex: 1, minWidth: '180px' }}>
@@ -498,6 +529,36 @@ export default function AdminSurveysPage() {
                   </table>
                 </div>
               </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'insights' && (
+          <div style={{ flex: 1, overflowY: 'auto', minWidth: 0, width: '100%', display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: '1rem' }}>
+            {(surveysLoading || questionsLoading) && <p>Loading insights...</p>}
+            {!surveysLoading && !questionsLoading && questions.length === 0 && <p>No questions configured yet — add some in the Questionnaire tab first.</p>}
+
+            {!surveysLoading && !questionsLoading && questions.length > 0 && (
+              <>
+                <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1rem 1.5rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                  <span style={{ fontSize: '0.9rem', color: '#64748b' }}>
+                    Showing insights for <strong style={{ color: '#0f172a' }}>{filteredSurveys.length}</strong> response{filteredSurveys.length === 1 ? '' : 's'} matching the current filters.
+                  </span>
+                </div>
+
+                {insightsByQuestion.map(({ question: q, raw, answeredCount }) => (
+                  <div key={q.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                    <h3 style={{ margin: '0 0 0.25rem', fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>{q.text}</h3>
+                    <p style={{ margin: '0 0 1rem', fontSize: '0.8rem', color: '#94a3b8' }}>{answeredCount} response{answeredCount === 1 ? '' : 's'}</p>
+
+                    {q.type === 'text' ? (
+                      <TextInsight raw={raw} />
+                    ) : (
+                      <ChoiceInsight raw={raw} />
+                    )}
+                  </div>
+                ))}
+              </>
             )}
           </div>
         )}
@@ -779,6 +840,123 @@ function PaginationControls({ currentPage, totalPages, totalItems, pageSize, onP
           Next
         </button>
       </div>
+    </div>
+  );
+}
+
+// Insights: horizontal bar list shared by choice-question and keyword breakdowns.
+function BarList({ items, total }: { items: { label: string; count: number }[]; total: number }) {
+  if (items.length === 0) return <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>No answers yet.</p>;
+  const maxCount = Math.max(...items.map((i) => i.count));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+      {items.map((item) => (
+        <div key={item.label}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+            <span style={{ color: '#334155', fontWeight: 600 }}>{item.label}</span>
+            <span style={{ color: '#64748b' }}>{item.count} ({total > 0 ? Math.round((item.count / total) * 100) : 0}%)</span>
+          </div>
+          <div style={{ background: '#f1f5f9', borderRadius: '4px', height: '8px', overflow: 'hidden' }}>
+            <div style={{ width: `${(item.count / maxCount) * 100}%`, height: '100%', background: '#4f46e5', borderRadius: '4px' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Groups single/multi-choice answers into option counts. Write-in "Other: ..."
+// answers are bucketed together under "Other" for the chart (otherwise every
+// distinct write-in becomes its own rare bar), with the raw write-ins listed
+// separately below so admins can still read what people actually typed.
+function bucketizeAnswers(rawAnswers: string[]): { counts: { label: string; count: number }[]; otherWriteIns: string[] } {
+  const counts = new Map<string, number>();
+  const otherWriteIns: string[] = [];
+
+  rawAnswers.forEach((a) => {
+    const trimmed = a.trim();
+    if (/^other\s*:/i.test(trimmed)) {
+      counts.set('Other', (counts.get('Other') || 0) + 1);
+      const writeIn = trimmed.replace(/^other\s*:\s*/i, '');
+      if (writeIn) otherWriteIns.push(writeIn);
+    } else {
+      counts.set(trimmed, (counts.get(trimmed) || 0) + 1);
+    }
+  });
+
+  return {
+    counts: Array.from(counts.entries()).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
+    otherWriteIns,
+  };
+}
+
+function ChoiceInsight({ raw }: { raw: string[] }) {
+  const { counts, otherWriteIns } = bucketizeAnswers(raw);
+  return (
+    <div>
+      <BarList items={counts} total={raw.length} />
+      {otherWriteIns.length > 0 && (
+        <details style={{ marginTop: '1rem' }}>
+          <summary style={{ cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: '#4f46e5' }}>
+            View {otherWriteIns.length} &quot;Other&quot; write-in{otherWriteIns.length === 1 ? '' : 's'}
+          </summary>
+          <ul style={{ margin: '0.75rem 0 0', paddingLeft: '1.25rem', fontSize: '0.85rem', color: '#334155', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            {otherWriteIns.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+// Very simple keyword-frequency count for free-text answers (q6-style "biggest
+// barrier / preferred hospital" questions). This is deliberately not real NLP —
+// it strips punctuation, drops common English/Hinglish stopwords, and counts
+// exact word matches. Good enough to surface recurring terms; it won't merge
+// spelling variants of the same word/hospital name, so the raw answer list
+// below it is what to check for those nuances.
+const INSIGHT_STOPWORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'is', 'are', 'to', 'of', 'in', 'on', 'for', 'with', 'this', 'that', 'it', 'at', 'as', 'be', 'by', 'we', 'they', 'has', 'have', 'not', 'no', 'do', 'does',
+  'hai', 'hain', 'ka', 'ki', 'ke', 'ko', 'se', 'me', 'mein', 'aur', 'ya', 'nahi', 'nahin', 'kya', 'koi', 'bhi', 'to', 'ho', 'jo', 'wo', 'woh', 'yeh', 'ye', 'iska', 'uska', 'unka', 'unki', 'unke',
+  'hota', 'hoti', 'hote', 'kar', 'karte', 'karta', 'karti', 'liye', 'log', 'logon', 'yahan', 'wahan', 'kahin', 'sabse', 'bade', 'bada', 'badi',
+]);
+
+function computeKeywordFrequency(rawAnswers: string[]): { label: string; count: number }[] {
+  const freq = new Map<string, number>();
+  rawAnswers.forEach((a) => {
+    a.toLowerCase()
+      .replace(/[^a-z0-9ऀ-ॿ\s]/gi, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !INSIGHT_STOPWORDS.has(w))
+      .forEach((w) => freq.set(w, (freq.get(w) || 0) + 1));
+  });
+  return Array.from(freq.entries())
+    .map(([label, count]) => ({ label, count }))
+    .filter((x) => x.count >= 2)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 15);
+}
+
+function TextInsight({ raw }: { raw: string[] }) {
+  const keywords = computeKeywordFrequency(raw);
+  return (
+    <div>
+      {keywords.length > 0 ? (
+        <BarList items={keywords} total={raw.length} />
+      ) : (
+        <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Not enough repeated wording yet to show keyword trends — check the full responses below.</p>
+      )}
+      {raw.length > 0 && (
+        <details style={{ marginTop: '1rem' }}>
+          <summary style={{ cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: '#4f46e5' }}>
+            View all {raw.length} written response{raw.length === 1 ? '' : 's'}
+          </summary>
+          <ul style={{ margin: '0.75rem 0 0', paddingLeft: '1.25rem', fontSize: '0.85rem', color: '#334155', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {raw.map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }
