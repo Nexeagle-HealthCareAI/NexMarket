@@ -6,7 +6,9 @@
       "properties": {
         "district": "Purnia",
         "block": "Kasba",
-        "code": "BR-PUR-KAS"
+        "code": "BR-PUR-KAS",
+        "total_villages": 0,
+        "total_panchayats": 0
       },
       "geometry": {
         "type": "Polygon",
@@ -41,7 +43,9 @@
       "properties": {
         "district": "Purnia",
         "block": "Dhamdaha",
-        "code": "BR-PUR-DHA"
+        "code": "BR-PUR-DHA",
+        "total_villages": 0,
+        "total_panchayats": 0
       },
       "geometry": {
         "type": "Polygon",
@@ -76,7 +80,9 @@
       "properties": {
         "district": "Katihar",
         "block": "Manihari",
-        "code": "BR-KAT-MAN"
+        "code": "BR-KAT-MAN",
+        "total_villages": 70,
+        "total_panchayats": 14
       },
       "geometry": {
         "type": "Polygon",
@@ -111,7 +117,9 @@
       "properties": {
         "district": "Araria",
         "block": "Forbesganj",
-        "code": "BR-ARA-FOR"
+        "code": "BR-ARA-FOR",
+        "total_villages": 104,
+        "total_panchayats": 31
       },
       "geometry": {
         "type": "Polygon",
@@ -146,7 +154,9 @@
       "properties": {
         "district": "Supaul",
         "block": "Birpur",
-        "code": "BR-SUP-BIR"
+        "code": "BR-SUP-BIR",
+        "total_villages": 0,
+        "total_panchayats": 0
       },
       "geometry": {
         "type": "Polygon",
@@ -181,7 +191,9 @@
       "properties": {
         "district": "Uttar Dinajpur",
         "block": "Raiganj",
-        "code": "WB-UTD-RAI"
+        "code": "WB-UTD-RAI",
+        "total_villages": 224,
+        "total_panchayats": 14
       },
       "geometry": {
         "type": "Polygon",
@@ -206,6 +218,265 @@
             [
               88,
               25.5
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district": "Kishanganj",
+        "block": "Bahadurganj",
+        "code": "BR-KIS-BAH",
+        "total_villages": 105,
+        "total_panchayats": 20
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              87.94,
+              26.079
+            ],
+            [
+              88.02,
+              26.079
+            ],
+            [
+              88.02,
+              26.159
+            ],
+            [
+              87.94,
+              26.159
+            ],
+            [
+              87.94,
+              26.079
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district": "Kishanganj",
+        "block": "Dighalbank",
+        "code": "BR-KIS-DIG",
+        "total_villages": 81,
+        "total_panchayats": 16
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              87.94,
+              26.179
+            ],
+            [
+              88.02,
+              26.179
+            ],
+            [
+              88.02,
+              26.259
+            ],
+            [
+              87.94,
+              26.259
+            ],
+            [
+              87.94,
+              26.179
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district": "Kishanganj",
+        "block": "Kishanganj",
+        "code": "BR-KIS-KIS",
+        "total_villages": 77,
+        "total_panchayats": 10
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              87.94,
+              26.279
+            ],
+            [
+              88.02,
+              26.279
+            ],
+            [
+              88.02,
+              26.359
+            ],
+            [
+              87.94,
+              26.359
+            ],
+            [
+              87.94,
+              26.279
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district": "Kishanganj",
+        "block": "Kochadhaman",
+        "code": "BR-KIS-KOC",
+        "total_villages": 150,
+        "total_panchayats": 24
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              88.04,
+              26.079
+            ],
+            [
+              88.12,
+              26.079
+            ],
+            [
+              88.12,
+              26.159
+            ],
+            [
+              88.04,
+              26.159
+            ],
+            [
+              88.04,
+              26.079
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district": "Kishanganj",
+        "block": "Pothia",
+        "code": "BR-KIS-POT",
+        "total_villages": 149,
+        "total_panchayats": 22
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              88.04,
+              26.179
+            ],
+            [
+              88.12,
+              26.179
+            ],
+            [
+              88.12,
+              26.259
+            ],
+            [
+              88.04,
+              26.259
+            ],
+            [
+              88.04,
+              26.179
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district": "Kishanganj",
+        "block": "Terhagachh",
+        "code": "BR-KIS-TER",
+        "total_villages": 82,
+        "total_panchayats": 12
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              88.04,
+              26.279
+            ],
+            [
+              88.12,
+              26.279
+            ],
+            [
+              88.12,
+              26.359
+            ],
+            [
+              88.04,
+              26.359
+            ],
+            [
+              88.04,
+              26.279
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "district": "Kishanganj",
+        "block": "Thakurganj",
+        "code": "BR-KIS-THA",
+        "total_villages": 128,
+        "total_panchayats": 21
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              88.14,
+              26.079
+            ],
+            [
+              88.22,
+              26.079
+            ],
+            [
+              88.22,
+              26.159
+            ],
+            [
+              88.14,
+              26.159
+            ],
+            [
+              88.14,
+              26.079
             ]
           ]
         ]

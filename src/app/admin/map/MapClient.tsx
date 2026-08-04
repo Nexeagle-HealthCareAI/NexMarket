@@ -14,6 +14,8 @@ interface PanchayatGeo {
   district: string;
   centroidLat: number;
   centroidLng: number;
+  villages?: string[];
+  total_villages?: number;
 }
 
 // Popup.setHTML() renders raw HTML with no escaping of its own — agent.name in
@@ -145,9 +147,51 @@ export default function MapClient() {
         type: 'fill',
         source: 'seemanchal-blocks',
         paint: {
-          'fill-color': '#4f46e5',
-          'fill-opacity': 0.08,
+          'fill-color': [
+            'interpolate',
+            ['linear'],
+            ['coalesce', ['get', 'total_villages'], 0],
+            0, '#f8fafc',
+            1, '#c7d2fe',
+            50, '#818cf8',
+            100, '#4f46e5',
+            150, '#312e81',
+          ],
+          'fill-opacity': 0.6,
         },
+      });
+
+      // Add a popup on click for blocks
+      map.on('click', 'blocks-fill', (e) => {
+        const feature = e.features?.[0];
+        if (!feature) return;
+        const props = feature.properties;
+        new maplibregl.Popup()
+          .setLngLat(e.lngLat)
+          .setHTML(`
+            <div style="padding: 6px; font-family: inherit;">
+              <strong style="color: #0f172a; font-size: 1rem;">${escapeHtml(props.block)} Block</strong><br/>
+              <span style="color: #475569; font-size: 0.85rem;">District: ${escapeHtml(props.district)}</span><br/><br/>
+              <div style="display: flex; gap: 12px; margin-top: 4px;">
+                <div>
+                  <div style="font-size: 1.1rem; font-weight: 700; color: #4f46e5;">${props.total_panchayats || 0}</div>
+                  <div style="font-size: 0.7rem; color: #64748b; text-transform: uppercase;">Panchayats</div>
+                </div>
+                <div>
+                  <div style="font-size: 1.1rem; font-weight: 700; color: #4f46e5;">${props.total_villages || 0}</div>
+                  <div style="font-size: 0.7rem; color: #64748b; text-transform: uppercase;">Villages</div>
+                </div>
+              </div>
+            </div>
+          `)
+          .addTo(mapRef.current!);
+      });
+
+      map.on('mouseenter', 'blocks-fill', () => {
+        if (mapRef.current) mapRef.current.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'blocks-fill', () => {
+        if (mapRef.current) mapRef.current.getCanvas().style.cursor = '';
       });
 
       map.addLayer({
@@ -382,9 +426,10 @@ export default function MapClient() {
         .setLngLat([p.centroidLng, p.centroidLat])
         .setPopup(
           new maplibregl.Popup({ offset: 15, closeButton: false }).setHTML(
-            `<div style="padding:6px;font-family:inherit;">
+            `<div style="padding:6px;font-family:inherit;max-width:200px;max-height:250px;overflow-y:auto;">
               <strong style="color:var(--text-primary);font-size:0.9rem">${escapeHtml(p.name)}</strong><br/>
               <span style="color:var(--text-muted);font-size:0.75rem">${escapeHtml(p.block)}, ${escapeHtml(p.district)}</span>
+              ${p.total_villages ? `<br/><br/><strong style="font-size:0.75rem;color:#4f46e5;">VILLAGES (${p.total_villages}):</strong><br/><div style="font-size:0.75rem;color:#475569;margin-top:2px;">${escapeHtml(p.villages?.join(', ') || '')}</div>` : ''}
             </div>`
           )
         )

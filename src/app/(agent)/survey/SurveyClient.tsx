@@ -40,21 +40,18 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
       .then(qs => qs.length > 0 ? qs : db.surveyQuestions.orderBy('order').filter(q => q.isActive).toArray())
   );
 
-  // Fallback to legacy translation questions if no dynamic questions exist
-  const QUESTIONS: SurveyQuestion[] = dynamicQuestions?.length ? dynamicQuestions.map(q => ({
+  // Questions are entirely backend-controlled now (SurveyQuestion rows, synced
+  // via Dexie) — no more hardcoded fallback set. A fresh deploy seeds the
+  // original 6 questions as real, admin-editable rows (SurveyQuestionSeeder),
+  // so this only ever renders empty if an admin has deliberately deactivated
+  // every question.
+  const QUESTIONS: SurveyQuestion[] = (dynamicQuestions ?? []).map(q => ({
     id: q.questionId,
     text: q.text,
     type: q.type,
     options: q.optionsJson ? (JSON.parse(q.optionsJson) as string[]) : undefined,
     isOptional: q.isOptional
-  })) : [
-    { id: 'q1', text: t.q1, type: 'single', options: [t.q1_o1, t.q1_o2, t.q1_o3, t.q1_o4] },
-    { id: 'q2', text: t.q2, type: 'single', options: [t.q2_o1, t.q2_o2, t.q2_o3, t.q2_o4] },
-    { id: 'q3', text: t.q3, type: 'single', options: [t.q3_o1, t.q3_o2, t.q3_o3, t.q3_o4] },
-    { id: 'q4', text: t.q4, type: 'single', options: [t.q4_o1, t.q4_o2, t.q4_o3, t.q4_o4] },
-    { id: 'q5', text: t.q5, type: 'single', options: [t.q5_o1, t.q5_o2, t.q5_o3, t.q5_o4] },
-    { id: 'q6', text: t.q6, type: 'text' }
-  ];
+  }));
 
   const [currentIdx, setCurrentIdx] = useState(0);
   const [responses, setResponses] = useState<Record<string, Answer>>({});

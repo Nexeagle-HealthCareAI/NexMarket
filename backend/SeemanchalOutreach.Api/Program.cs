@@ -152,6 +152,11 @@ using (var scope = app.Services.CreateScope())
     // corrected panchayats) reach the DB without a manual migration.
     await PanchayatSeeder.SyncAsync(db, app.Environment.ContentRootPath);
 
+    // The original 6-question survey used to be hardcoded into the agent app's
+    // translations — now it's real, admin-editable rows. Only fires on a
+    // completely empty table, so this never overwrites admin-configured questions.
+    await SurveyQuestionSeeder.SeedIfEmptyAsync(db);
+
     // First-run bootstrap: create the one real Admin account so there is always
     // a way to log in on a fresh database — no demo credentials in the app itself.
     var seededAdminPassword = await AdminSeeder.SeedIfEmptyAsync(db, app.Configuration);

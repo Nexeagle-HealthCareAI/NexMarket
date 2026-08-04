@@ -1,7 +1,7 @@
 /**
  * Local Government Directory (LGD) Master Data Import Script
  * 
- * Imports panchayat records for Seemanchal (Katihar, Purnia, Araria, Supaul)
+ * Imports panchayat records for Seemanchal (Katihar, Purnia, Araria, Supaul, Kishanganj)
  * into PostgreSQL 'marketing.panchayats' table or verifies JSON seed integrity.
  * 
  * Usage: node scripts/import_lgd.js
