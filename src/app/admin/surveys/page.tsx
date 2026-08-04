@@ -2,12 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAgentStore } from '@/store/agent-store';
-import { getAdminSurveys, type AdminSurveyDto, getAdminSurveyQuestions, createAdminSurveyQuestion, updateAdminSurveyQuestion, deleteAdminSurveyQuestion, type SurveyQuestionDto, getPanchayats, type PanchayatDto } from '@/lib/sync/api-client';
+import { getAdminSurveys, type AdminSurveyDto, getAdminSurveyQuestions, createAdminSurveyQuestion, updateAdminSurveyQuestion, deleteAdminSurveyQuestion, deleteAdminSurveyResponse, updateAdminSurveyResponse, type SurveyQuestionDto, getPanchayats, type PanchayatDto } from '@/lib/sync/api-client';
+import EditSurveyResponseModal from '@/components/admin/EditSurveyResponseModal';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AdminSurveysPage() {
   const agentId = useAgentStore((s) => s.agentId);
-  const [activeTab, setActiveTab] = useState<'responses' | 'questionnaire'>('responses');
+  const [activeTab, setActiveTab] = useState<'responses' | 'data_management' | 'questionnaire'>('responses');
 
   // Responses State
   const [surveys, setSurveys] = useState<AdminSurveyDto[]>([]);
@@ -27,6 +28,7 @@ export default function AdminSurveysPage() {
   
   // Editor State
   const [editingQuestion, setEditingQuestion] = useState<Partial<SurveyQuestionDto> | null>(null);
+  const [editingResponse, setEditingResponse] = useState<AdminSurveyDto | null>(null);
 
   useEffect(() => {
     if (!agentId) return;
@@ -79,6 +81,25 @@ export default function AdminSurveysPage() {
       setQuestions(data);
     } catch (e: any) {
       alert(e.message || 'Failed to save question');
+    }
+  };
+
+  const handleDeleteResponse = async (id: string) => {
+    if (!window.confirm('Are you sure you want to permanently delete this survey response?')) return;
+    try {
+      await deleteAdminSurveyResponse(id);
+      setSurveys(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete response');
+    }
+  };
+
+  const handleUpdateResponse = async (id: string, newAnswersJson: string) => {
+    try {
+      const updated = await updateAdminSurveyResponse(id, newAnswersJson);
+      setSurveys(prev => prev.map(r => r.id === id ? { ...r, answersJson: updated.answersJson } : r));
+    } catch (err) {
+      throw err;
     }
   };
 
@@ -170,6 +191,17 @@ export default function AdminSurveysPage() {
           📊 Responses
         </button>
         <button
+          onClick={() => setActiveTab('data_management')}
+          style={{
+            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
+            fontSize: '1rem', fontWeight: 700, color: activeTab === 'data_management' ? '#4f46e5' : '#64748b',
+            borderBottom: activeTab === 'data_management' ? '3px solid #4f46e5' : '3px solid transparent',
+            marginBottom: '-2px', transition: 'all 0.2s'
+          }}
+        >
+          🛠️ Data Management
+        </button>
+        <button
           onClick={() => setActiveTab('questionnaire')}
           style={{
             background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
@@ -183,45 +215,48 @@ export default function AdminSurveysPage() {
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {(activeTab === 'responses' || activeTab === 'data_management') && (
+          <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', background: 'white', padding: '1rem 1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', flexShrink: 0 }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Filter By Location:</span>
+            <div style={{ flex: 1, minWidth: '180px' }}>
+              <MultiSelectDropdown
+                label="District"
+                options={uniqueDistricts.map(d => ({ value: d, label: d }))}
+                selected={selectedDistricts}
+                onChange={(val) => { setSelectedDistricts(val); setSelectedBlocks([]); setSelectedPanchayats([]); }}
+                placeholder="All Districts"
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: '180px' }}>
+              <MultiSelectDropdown
+                label="Block"
+                options={uniqueBlocks.map(b => ({ value: b, label: b }))}
+                selected={selectedBlocks}
+                onChange={(val) => { setSelectedBlocks(val); setSelectedPanchayats([]); }}
+                disabled={selectedDistricts.length === 0 && uniqueBlocks.length === 0}
+                placeholder="All Blocks"
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: '180px' }}>
+              <MultiSelectDropdown
+                label="Panchayat"
+                options={uniquePanchayats.map(pId => {
+                  const p = allPanchayats.find(x => x.id === pId);
+                  return { value: pId, label: p ? `${p.name} (${p.district})` : pId };
+                })}
+                selected={selectedPanchayats}
+                onChange={(val) => setSelectedPanchayats(val)}
+                disabled={selectedBlocks.length === 0 && uniquePanchayats.length === 0}
+                placeholder="All Panchayats"
+              />
+            </div>
+          </div>
+        )}
+
         {activeTab === 'responses' && (
           <div style={{ flex: 1, overflowY: 'auto', width: '100%', minWidth: 0 }}>
             {questionsError && <p style={{ color: '#b91c1c', fontSize: '0.85rem' }}>⚠️ Question columns may be incomplete — failed to load the questionnaire: {questionsError}</p>}
-            <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', background: 'white', padding: '1rem 1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Filter By Location:</span>
-              <div style={{ flex: 1, minWidth: '180px' }}>
-                <MultiSelectDropdown
-                  label="District"
-                  options={uniqueDistricts.map(d => ({ value: d, label: d }))}
-                  selected={selectedDistricts}
-                  onChange={(val) => { setSelectedDistricts(val); setSelectedBlocks([]); setSelectedPanchayats([]); }}
-                  placeholder="All Districts"
-                />
-              </div>
-              <div style={{ flex: 1, minWidth: '180px' }}>
-                <MultiSelectDropdown
-                  label="Block"
-                  options={uniqueBlocks.map(b => ({ value: b, label: b }))}
-                  selected={selectedBlocks}
-                  onChange={(val) => { setSelectedBlocks(val); setSelectedPanchayats([]); }}
-                  disabled={selectedDistricts.length === 0 && uniqueBlocks.length === 0}
-                  placeholder="All Blocks"
-                />
-              </div>
-              <div style={{ flex: 1, minWidth: '180px' }}>
-                <MultiSelectDropdown
-                  label="Panchayat"
-                  options={uniquePanchayats.map(pId => {
-                    const p = allPanchayats.find(x => x.id === pId);
-                    return { value: pId, label: p ? `${p.name} (${p.district})` : pId };
-                  })}
-                  selected={selectedPanchayats}
-                  onChange={(val) => setSelectedPanchayats(val)}
-                  disabled={selectedBlocks.length === 0 && uniquePanchayats.length === 0}
-                  placeholder="All Panchayats"
-                />
-              </div>
-            </div>
-
+            
             {surveysLoading && <p>Loading responses...</p>}
             {surveysError && <p style={{ color: 'red' }}>{surveysError}</p>}
             {!surveysLoading && !surveysError && filteredSurveys.length === 0 && <p style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No responses match the selected filters.</p>}
@@ -332,6 +367,70 @@ export default function AdminSurveysPage() {
             )}
           </div>
         )}
+
+        {activeTab === 'data_management' && (
+          <div style={{ flex: 1, overflowY: 'auto', minWidth: 0, width: '100%' }}>
+            {surveysLoading && <p>Loading responses...</p>}
+            {surveysError && <p style={{ color: 'red' }}>{surveysError}</p>}
+            {!surveysLoading && !surveysError && surveys.length === 0 && <p>No survey responses found.</p>}
+            {!surveysLoading && surveys.length > 0 && (
+              <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden', maxWidth: '100%' }}>
+                <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
+                    <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                      <tr>
+                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', minWidth: '160px' }}>Actions</th>
+                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155' }}>Person Name</th>
+                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155' }}>Added By</th>
+                        {responseColumns.map(q => (
+                          <th key={q.questionId} style={{ padding: '1rem', fontWeight: 700, color: '#334155', minWidth: '150px' }}>
+                            {q.text}
+                          </th>
+                        ))}
+                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155' }}>Date Added</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredSurveys.map((survey) => {
+                        let answers: any = {};
+                        try {
+                          if (survey.answersJson) answers = JSON.parse(survey.answersJson);
+                        } catch (e) {}
+
+                        return (
+                          <tr key={survey.id} style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>
+                              <button onClick={() => setEditingResponse(survey)} style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', marginRight: '0.5rem', fontSize: '0.8rem', transition: 'all 0.2s' }}>Edit</button>
+                              <button onClick={() => handleDeleteResponse(survey.id)} style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s' }}>Delete</button>
+                            </td>
+                            <td style={{ padding: '1rem', fontWeight: 600, color: '#0f172a' }}>{survey.contactName || 'Unknown'}</td>
+                            <td style={{ padding: '1rem', color: '#334155' }}>{survey.agentName || survey.agentId}</td>
+                            {responseColumns.map((q) => {
+                              const ans = answers[q.questionId];
+                              const hasAnswer = ans !== undefined && ans !== null && ans !== '';
+                              return (
+                                <td key={q.questionId} style={{ padding: '1rem', color: '#334155' }}>
+                                  {hasAnswer ? (
+                                    <span style={{ background: '#f1f5f9', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 500, display: 'inline-block' }}>
+                                      {String(ans)}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: '#cbd5e1', fontSize: '0.85rem', fontStyle: 'italic' }}>No answer</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td style={{ padding: '1rem', color: '#64748b', whiteSpace: 'nowrap' }}>{new Date(survey.createdAt).toLocaleDateString('en-GB')}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Editor Modal */}
@@ -408,6 +507,14 @@ export default function AdminSurveysPage() {
           </div>
         )}
       </AnimatePresence>
+
+      <EditSurveyResponseModal
+        response={editingResponse}
+        questions={questions}
+        isOpen={!!editingResponse}
+        onClose={() => setEditingResponse(null)}
+        onSave={handleUpdateResponse}
+      />
     </div>
   );
 }

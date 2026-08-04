@@ -647,6 +647,13 @@ export function deleteAdminSurveyResponse(id: string): Promise<void> {
   return del<void>(`/api/v1/admin/surveys/${encodeURIComponent(id)}`);
 }
 
+export function updateAdminSurveyResponse(id: string, answersJson: string): Promise<AdminSurveyDto> {
+  return put<any, AdminSurveyDto>(
+    `/api/v1/admin/surveys/${encodeURIComponent(id)}`,
+    { answersJson }
+  );
+}
+
 // ─── Admin Survey Questions ──────────────────────────────────────────────
 
 export interface SurveyQuestionDto {
