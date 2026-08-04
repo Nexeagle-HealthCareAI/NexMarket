@@ -379,7 +379,6 @@ export default function AdminSurveysPage() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
                     <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', minWidth: '160px' }}>Actions</th>
                         <th style={{ padding: '1rem', fontWeight: 700, color: '#334155' }}>Person Name</th>
                         <th style={{ padding: '1rem', fontWeight: 700, color: '#334155' }}>Added By</th>
                         {responseColumns.map(q => (
@@ -388,6 +387,7 @@ export default function AdminSurveysPage() {
                           </th>
                         ))}
                         <th style={{ padding: '1rem', fontWeight: 700, color: '#334155' }}>Date Added</th>
+                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', minWidth: '160px' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -399,10 +399,6 @@ export default function AdminSurveysPage() {
 
                         return (
                           <tr key={survey.id} style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                            <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>
-                              <button onClick={() => setEditingResponse(survey)} style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', marginRight: '0.5rem', fontSize: '0.8rem', transition: 'all 0.2s' }}>Edit</button>
-                              <button onClick={() => handleDeleteResponse(survey.id)} style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s' }}>Delete</button>
-                            </td>
                             <td style={{ padding: '1rem', fontWeight: 600, color: '#0f172a' }}>{survey.contactName || 'Unknown'}</td>
                             <td style={{ padding: '1rem', color: '#334155' }}>{survey.agentName || survey.agentId}</td>
                             {responseColumns.map((q) => {
@@ -421,6 +417,10 @@ export default function AdminSurveysPage() {
                               );
                             })}
                             <td style={{ padding: '1rem', color: '#64748b', whiteSpace: 'nowrap' }}>{new Date(survey.createdAt).toLocaleDateString('en-GB')}</td>
+                            <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>
+                              <button onClick={() => setEditingResponse(survey)} style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', marginRight: '0.5rem', fontSize: '0.8rem', transition: 'all 0.2s' }}>Edit</button>
+                              <button onClick={() => handleDeleteResponse(survey.id)} style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s' }}>Delete</button>
+                            </td>
                           </tr>
                         );
                       })}
