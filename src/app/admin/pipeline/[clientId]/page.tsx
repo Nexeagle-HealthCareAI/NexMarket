@@ -120,7 +120,7 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem 2rem', marginBottom: '2rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
         
         {/* Top Header Row */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.5rem', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '2rem' }}>
           <Link
             href="/admin/pipeline"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', background: '#f8fafc', borderRadius: '50%', border: '1px solid #e2e8f0', color: '#64748b', cursor: 'pointer', textDecoration: 'none', transition: 'all 0.2s', flexShrink: 0 }}
@@ -144,8 +144,8 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
             <input type="file" ref={fileInputRef} onChange={handlePhotoChange} accept="image/*" style={{ display: 'none' }} />
           </div>
 
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ flex: 1, minWidth: '250px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
               <div>
                 {isEditingPersonal ? (
                   <input 

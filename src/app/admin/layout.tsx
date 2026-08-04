@@ -24,6 +24,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const agentId = useAgentStore((s) => s.agentId);
   const role = useAgentStore((s) => s.role);
   const hasHydrated = useAgentStore((s) => s.hasHydrated);
@@ -54,6 +55,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       setCurrentTime(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     }, 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) setIsCollapsed(true);
+    };
+    // Initial check
+    if (typeof window !== 'undefined') handleResize();
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
@@ -88,10 +102,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div style={{ minHeight: '100vh', display: 'flex', background: '#f8fafc', overflow: 'hidden' }}>
       
+      {/* Mobile Backdrop Overlay */}
+      <AnimatePresence>
+        {isMobile && !isCollapsed && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsCollapsed(true)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 45 }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar Navigation */}
       <motion.aside
         initial={false}
-        animate={{ width: sidebarWidth }}
+        animate={{ 
+          width: isMobile ? 260 : (isCollapsed ? 80 : 260),
+          x: isMobile && isCollapsed ? -260 : 0
+        }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
         style={{
           background: '#0f172a',
@@ -156,10 +186,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 key={item.href}
                 href={item.href}
                 title={item.label}
+                onClick={() => { if (isMobile) setIsCollapsed(true); }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: isCollapsed ? 'center' : 'flex-start',
+                  justifyContent: (!isMobile && isCollapsed) ? 'center' : 'flex-start',
                   gap: '0.75rem',
                   padding: isCollapsed ? '0.75rem' : '0.75rem 1rem',
                   borderRadius: '8px',
@@ -174,7 +205,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               >
                 <span style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{item.icon}</span>
                 <AnimatePresence>
-                  {!isCollapsed && (
+                  {(isMobile || !isCollapsed) && (
                     <motion.span 
                       initial={{ opacity: 0, width: 0 }}
                       animate={{ opacity: 1, width: 'auto' }}
@@ -265,6 +296,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
         style={{
+          display: isMobile ? 'none' : 'flex',
           position: 'fixed',
           top: '21px', // Aligns vertically with header elements
           width: '28px',
@@ -272,7 +304,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           background: 'white',
           border: '1px solid #e2e8f0',
           borderRadius: '50%',
-          display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
@@ -291,7 +322,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Main Content Area */}
       <motion.main 
         initial={false}
-        animate={{ marginLeft: sidebarWidth }}
+        animate={{ marginLeft: isMobile ? 0 : (isCollapsed ? 80 : 260) }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
         style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}
       >
@@ -311,7 +342,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
         }}>
           {/* Left Side: Time */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {isMobile && (
+              <button 
+                onClick={() => setIsCollapsed(false)} 
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.25rem', color: '#0f172a' }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+              </button>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748b' }}>
               <span style={{ fontSize: '1rem' }}>🕒</span>
               <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>
@@ -321,18 +360,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
 
           {/* Right Side: Language & Profile */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-            <div style={{ background: '#f8fafc', padding: '0.25rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.75rem' : '1.5rem' }}>
+            <div style={{ background: '#f8fafc', padding: '0.25rem', borderRadius: '6px', border: '1px solid #e2e8f0', display: isMobile ? 'none' : 'block' }}>
               <LanguageSwitcher />
             </div>
             
-            <div style={{ width: 1, height: 24, background: '#e2e8f0' }} />
+            <div style={{ width: 1, height: 24, background: '#e2e8f0', display: isMobile ? 'none' : 'block' }} />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>Admin User</p>
-                <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>admin@nexmarket.com</p>
-              </div>
+              {!isMobile && (
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>Admin User</p>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>admin@nexmarket.com</p>
+                </div>
+              )}
               <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f1f5f9', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>
                 AD
               </div>

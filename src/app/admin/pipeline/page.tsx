@@ -424,7 +424,7 @@ export default function PipelinePage() {
               No contacts found for the selected filters.
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem', paddingBottom: '1rem', overflowY: 'auto', flex: 1 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '1.25rem', paddingBottom: '1rem', overflowY: 'auto', flex: 1 }}>
               {contacts.map(c => {
                 const pInfo = panchayatsData.find(p => p.id === c.panchayatId);
                 return (
