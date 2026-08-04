@@ -709,6 +709,10 @@ export function updateAdminContact(
   );
 }
 
+export function deleteAdminContact(clientId: string): Promise<void> {
+  return del<void>(`/api/v1/admin/contacts/${encodeURIComponent(clientId)}`);
+}
+
 // ─── Admin: Surveys ─────────────────────────────────────────────────────────────
 
 export interface AdminSurveyDto {

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useAgentStore } from '@/store/agent-store';
-import { getAdminContacts, updateAdminContact, getContactHistory, getPanchayats, type AdminContactDto, type ContactHistoryEntryDto, type PanchayatDto } from '@/lib/sync/api-client';
+import { getAdminContacts, updateAdminContact, deleteAdminContact, getContactHistory, getPanchayats, type AdminContactDto, type ContactHistoryEntryDto, type PanchayatDto } from '@/lib/sync/api-client';
 
 // The columns for our statuses
 const STATUSES = ['Lead', 'Contacted', 'FollowUp', 'Converted', 'Closed'];
@@ -167,6 +167,21 @@ export default function PipelinePage() {
         : c));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save changes.');
+    }
+  };
+
+  const handleDeleteContact = async (clientId: string) => {
+    if (!agentId) return;
+    if (!window.confirm('Are you sure you want to permanently delete this contact and all its history? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await deleteAdminContact(clientId);
+      setContacts(prev => prev.filter(c => c.clientId !== clientId));
+      setTotalCount(prev => prev - 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete contact.');
     }
   };
 
@@ -483,6 +498,7 @@ export default function PipelinePage() {
                       showComments={false}
                       onEdit={() => setEditDrawerContact(c)}
                       onViewHistory={() => setHistoryModalContact(c)}
+                      onDelete={() => handleDeleteContact(c.clientId)}
                     />
                   );
                 })}
@@ -640,7 +656,7 @@ function WorklistCard({ contact, panchayatName, blockName, onEdit, onViewHistory
 // -------------------------------------------------------------------------------------------------
 // Contact Row Component (Handles inline editing state)
 // -------------------------------------------------------------------------------------------------
-function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, showComments, onEdit, onViewHistory, onQuickFollowUp, showQuickActions }: { contact: Contact, panchayatName?: string, blockName?: string, showStageAndFollowUp: boolean, showComments: boolean, onEdit: () => void, onViewHistory: () => void, onQuickFollowUp?: (days: number) => void, showQuickActions?: boolean }) {
+function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, showComments, onEdit, onViewHistory, onQuickFollowUp, showQuickActions, onDelete }: { contact: Contact, panchayatName?: string, blockName?: string, showStageAndFollowUp: boolean, showComments: boolean, onEdit: () => void, onViewHistory: () => void, onQuickFollowUp?: (days: number) => void, showQuickActions?: boolean, onDelete?: () => void }) {
   // Format last updated IST time
   const lastUpdatedTime = contact.lastUpdatedAt
     ? new Date(contact.lastUpdatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) + ' IST'
@@ -744,6 +760,11 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
             <Link href={`/admin/pipeline/${contact.clientId}`} style={{ background: '#0f172a', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
               Profile
             </Link>
+            {onDelete && (
+              <button onClick={onDelete} style={{ background: 'transparent', color: '#ef4444', border: '1px solid #fecaca', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                Delete
+              </button>
+            )}
           </div>
           {showQuickActions && onQuickFollowUp && (
             <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.25rem' }}>

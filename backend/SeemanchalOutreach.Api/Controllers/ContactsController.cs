@@ -304,5 +304,34 @@ namespace SeemanchalOutreach.Api.Controllers
 
             return Ok(history);
         }
+        [HttpDelete("{clientId}")]
+        public async Task<IActionResult> DeleteContact(string clientId, CancellationToken cancellationToken)
+        {
+            var contact = await _db.Contacts.FirstOrDefaultAsync(c => c.ClientId == clientId, cancellationToken);
+            if (contact == null)
+            {
+                return NotFound();
+            }
+
+            // Manually cascade delete related history
+            var history = await _db.ContactHistory.Where(h => h.ContactClientId == clientId).ToListAsync(cancellationToken);
+            if (history.Any())
+            {
+                _db.ContactHistory.RemoveRange(history);
+            }
+
+            // Manually cascade delete related referrals
+            var referrals = await _db.PatientReferrals.Where(r => r.ContactId == clientId).ToListAsync(cancellationToken);
+            if (referrals.Any())
+            {
+                _db.PatientReferrals.RemoveRange(referrals);
+            }
+
+            // Finally, delete the contact
+            _db.Contacts.Remove(contact);
+            await _db.SaveChangesAsync(cancellationToken);
+
+            return NoContent();
+        }
     }
 }
