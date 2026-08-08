@@ -46,8 +46,11 @@ namespace SeemanchalOutreach.Api.Controllers
                                      s.ContactId,
                                      ContactName = c != null ? c.Name : "Unknown",
                                      ContactPhone = c != null ? c.Phone : "",
+                                     ContactRole = c != null ? c.Role : null,
                                      s.PanchayatId,
                                      LocationName = p != null ? p.Name : "Unknown",
+                                     District = p != null ? p.District : null,
+                                     Block = p != null ? p.Block : null,
                                      s.AnswersJson,
                                      s.CreatedAt,
                                      s.SyncedAt
@@ -102,8 +105,11 @@ namespace SeemanchalOutreach.Api.Controllers
                 survey.ContactId,
                 ContactName = contact?.Name ?? "Unknown",
                 ContactPhone = contact?.Phone ?? "",
+                ContactRole = contact?.Role,
                 survey.PanchayatId,
                 LocationName = panchayat?.Name ?? "Unknown",
+                District = panchayat?.District,
+                Block = panchayat?.Block,
                 survey.AnswersJson,
                 survey.CreatedAt,
                 survey.SyncedAt

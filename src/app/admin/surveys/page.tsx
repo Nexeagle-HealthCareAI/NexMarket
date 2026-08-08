@@ -6,6 +6,26 @@ import { getAdminSurveys, type AdminSurveyDto, getAdminSurveyQuestions, createAd
 import EditSurveyResponseModal from '@/components/admin/EditSurveyResponseModal';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const CONTACT_ROLE_LABELS: Record<string, string> = {
+  asha_worker: 'ASHA Worker',
+  rmp_doctor: 'RMP Doctor',
+  ward_member: 'Ward Member',
+  medicine_shop: 'Medicine Shop',
+  mukhiya: 'Mukhiya',
+  prominent_person: 'Prominent Person',
+};
+
+function contactRoleLabel(role?: string | null): string | null {
+  if (!role) return null;
+  return CONTACT_ROLE_LABELS[role] ?? role.replace(/_/g, ' ');
+}
+
+function panchayatLocationLabel(survey: AdminSurveyDto): string | null {
+  if (!survey.locationName || survey.locationName === 'Unknown') return null;
+  const parts = [survey.block, survey.district].filter(Boolean);
+  return parts.length > 0 ? `${survey.locationName} (${parts.join(', ')})` : survey.locationName;
+}
+
 export default function AdminSurveysPage() {
   const agentId = useAgentStore((s) => s.agentId);
   const [activeTab, setActiveTab] = useState<'responses' | 'data_management' | 'questionnaire' | 'insights'>('responses');
@@ -449,7 +469,21 @@ export default function AdminSurveysPage() {
 
                         return (
                           <tr key={survey.id} style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                            <td style={{ padding: '1rem', fontWeight: 600, color: '#0f172a' }}>{survey.contactName || 'Unknown'}</td>
+                            <td style={{ padding: '1rem' }}>
+                              <div style={{ fontWeight: 600, color: '#0f172a' }}>{survey.contactName || 'Unknown'}</div>
+                              {contactRoleLabel(survey.contactRole) && (
+                                <div style={{ marginTop: '0.2rem' }}>
+                                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4f46e5', background: '#eef2ff', padding: '0.1rem 0.45rem', borderRadius: '10px' }}>
+                                    {contactRoleLabel(survey.contactRole)}
+                                  </span>
+                                </div>
+                              )}
+                              {panchayatLocationLabel(survey) && (
+                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
+                                  📍 {panchayatLocationLabel(survey)}
+                                </div>
+                              )}
+                            </td>
                             <td style={{ padding: '1rem', color: '#334155' }}>{survey.agentName || survey.agentId}</td>
                             {responseColumns.map((q) => {
                               const ans = answers[q.questionId];
@@ -601,7 +635,21 @@ export default function AdminSurveysPage() {
 
                         return (
                           <tr key={survey.id} style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                            <td style={{ padding: '1rem', fontWeight: 600, color: '#0f172a' }}>{survey.contactName || 'Unknown'}</td>
+                            <td style={{ padding: '1rem' }}>
+                              <div style={{ fontWeight: 600, color: '#0f172a' }}>{survey.contactName || 'Unknown'}</div>
+                              {contactRoleLabel(survey.contactRole) && (
+                                <div style={{ marginTop: '0.2rem' }}>
+                                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4f46e5', background: '#eef2ff', padding: '0.1rem 0.45rem', borderRadius: '10px' }}>
+                                    {contactRoleLabel(survey.contactRole)}
+                                  </span>
+                                </div>
+                              )}
+                              {panchayatLocationLabel(survey) && (
+                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
+                                  📍 {panchayatLocationLabel(survey)}
+                                </div>
+                              )}
+                            </td>
                             <td style={{ padding: '1rem', color: '#334155' }}>{survey.agentName || survey.agentId}</td>
                             {responseColumns.map((q) => {
                               const ans = answers[q.questionId];

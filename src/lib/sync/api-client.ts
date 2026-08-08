@@ -735,8 +735,11 @@ export interface AdminSurveyDto {
   contactId: string;
   contactName?: string;
   contactPhone?: string;
+  contactRole?: string | null;
   panchayatId: string;
   locationName?: string;
+  district?: string | null;
+  block?: string | null;
   answersJson: string;
   createdAt: string;
   syncedAt: string;
