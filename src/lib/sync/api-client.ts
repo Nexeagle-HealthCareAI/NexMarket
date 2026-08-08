@@ -507,6 +507,20 @@ export function getPanchayats(): Promise<PanchayatDto[]> {
   return get<PanchayatDto[]>('/api/v1/panchayats');
 }
 
+export interface CreatePanchayatRequest {
+  name: string;
+  district: string;
+  block: string;
+  centroidLat?: number;
+  centroidLng?: number;
+}
+
+// Admin-only, always-online create — agents get an offline-capable equivalent
+// via the sync outbox (see addToOutbox with entityType 'panchayat').
+export function createPanchayat(body: CreatePanchayatRequest): Promise<PanchayatDto> {
+  return post<CreatePanchayatRequest, PanchayatDto>('/api/v1/panchayats', body);
+}
+
 // ─── Admin: Block Assignments ──────────────────────────────────────────────────
 
 export interface AssignmentSummaryDto {

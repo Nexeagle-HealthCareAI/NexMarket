@@ -200,6 +200,7 @@ namespace SeemanchalOutreach.Application.Handlers
                     string panchayatId = GetString(root, "panchayatId", "");
                     string? shiftId = root.TryGetProperty("shiftId", out var shiftProp) && shiftProp.ValueKind == JsonValueKind.String ? shiftProp.GetString() : null;
                     string role = GetString(root, "role", "");
+                    string? profession = root.TryGetProperty("profession", out var profProp) && profProp.ValueKind == JsonValueKind.String ? profProp.GetString() : null;
                     bool whatsapp = GetBool(root, "whatsappAdded", false);
                     bool card = GetBool(root, "cardGiven", false);
                     string status = GetString(root, "status", "Lead");
@@ -228,6 +229,7 @@ namespace SeemanchalOutreach.Application.Handlers
                             PanchayatId = panchayatId,
                             ShiftId = shiftId,
                             Role = role,
+                            Profession = profession,
                             Name = name,
                             Phone = phone,
                             WhatsappAdded = whatsapp,
@@ -290,6 +292,7 @@ namespace SeemanchalOutreach.Application.Handlers
                             existing.Name = name;
                             existing.Phone = phone;
                             existing.Role = role;
+                            existing.Profession = profession;
                             existing.WhatsappAdded = whatsapp;
                             existing.CardGiven = card;
                             if (lat.HasValue) existing.Latitude = lat.Value;
@@ -368,6 +371,40 @@ namespace SeemanchalOutreach.Application.Handlers
                         return Result(clientId, deviceId, refObj.Id, syncedAt, "created");
                     }
                     return Result(clientId, deviceId, existing.Id, syncedAt, "already_exists");
+                }
+
+                case "panchayat_new":
+                {
+                    // Agent-added when the seeded LGD list is missing their actual
+                    // location — the client generates this id itself (there's no
+                    // separate ClientId/server-Guid split like the other entities;
+                    // Panchayat's own string PanchayatId already is the shared key),
+                    // so an existence check by that id alone is enough to dedupe a
+                    // retried sync.
+                    string panchayatId = GetString(root, "id", item.ClientId);
+                    var existingPanchayat = await _db.Panchayats.FirstOrDefaultAsync(p => p.PanchayatId == panchayatId, cancellationToken);
+                    if (existingPanchayat == null)
+                    {
+                        _db.Panchayats.Add(new Panchayat
+                        {
+                            PanchayatId = panchayatId,
+                            Name = GetString(root, "name", ""),
+                            District = GetString(root, "district", ""),
+                            Block = GetString(root, "block", ""),
+                            State = GetString(root, "state", "Bihar"),
+                            LgdCode = GetString(root, "lgdCode", ""),
+                            CentroidLat = GetOptionalDouble(root, "centroidLat"),
+                            CentroidLng = GetOptionalDouble(root, "centroidLng"),
+                        });
+                    }
+                    return new SyncResultDto
+                    {
+                        ClientId = item.ClientId,
+                        DeviceId = deviceId,
+                        ServerId = panchayatId,
+                        SyncedAt = syncedAt.ToString("o"),
+                        Status = existingPanchayat == null ? "created" : "already_exists",
+                    };
                 }
 
                 case "trajectory_batch":

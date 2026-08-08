@@ -60,6 +60,7 @@ export interface LocalContact {
   shiftId?: string;     // clientId of the shift this contact was added during
   name: string;
   role: ContactRole;
+  profession?: string; // free-text detail, mainly used when role === 'prominent_person'
   phone?: string;
   whatsappAdded: boolean;
   cardGiven: boolean;
@@ -156,7 +157,8 @@ export type EntityType =
   | 'visit'
   | 'trajectory_batch'
   | 'referral'
-  | 'survey';
+  | 'survey'
+  | 'panchayat';
 
 export interface SyncOutboxEntry {
   localId?: number;

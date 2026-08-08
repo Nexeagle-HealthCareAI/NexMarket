@@ -17,6 +17,7 @@ const adminNavItems = [
   { href: '/admin/reports', label: 'Reports', icon: '📊' },
   { href: '/admin/surveys', label: 'Surveys', icon: '📋' },
   { href: '/admin/pipeline', label: 'Contact Management', icon: '🗂️' },
+  { href: '/admin/panchayats', label: 'Panchayats', icon: '📍' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

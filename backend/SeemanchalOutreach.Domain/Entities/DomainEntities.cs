@@ -108,6 +108,7 @@ namespace SeemanchalOutreach.Domain.Entities
         public string PanchayatId { get; set; } = string.Empty;
         public string? ShiftId { get; set; } // ClientId of the shift this contact was added during
         public string Role { get; set; } = string.Empty; // asha_worker, rmp_doctor, ward_member, medicine_shop
+        public string? Profession { get; set; } // free-text detail, mainly used when Role == prominent_person
         public string Name { get; set; } = string.Empty;
         public string? Phone { get; set; }
         public bool WhatsappAdded { get; set; }

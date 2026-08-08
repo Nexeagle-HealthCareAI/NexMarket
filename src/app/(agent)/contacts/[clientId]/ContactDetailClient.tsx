@@ -128,8 +128,13 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
               </p>
             )}
           </div>
-          <span className="badge" style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--color-primary-400)', fontSize: '0.8rem', padding: '0.3rem 0.6rem', alignSelf: 'flex-start' }}>
-            {contact.role.replace('_', ' ').toUpperCase()}
+          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.3rem' }}>
+            <span className="badge" style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--color-primary-400)', fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}>
+              {contact.role.replace('_', ' ').toUpperCase()}
+            </span>
+            {contact.profession && (
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{contact.profession}</span>
+            )}
           </span>
         </div>
 

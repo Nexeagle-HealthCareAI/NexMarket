@@ -8,6 +8,7 @@ import { usePanchayats, useActiveShift, useActiveVisit, useVisits, db } from '@/
 import { addToOutbox } from '@/lib/sync/outbox';
 import { useGeolocation } from '@/lib/geo/useGeolocation';
 import { getMyAssignment, type MyAssignmentDto } from '@/lib/sync/api-client';
+import AddMissingPanchayatButton from '@/components/AddMissingPanchayatButton';
 import type { LocalVisit } from '@/lib/db/schema';
 import { useTranslations } from '@/i18n/I18nProvider';
 
@@ -202,6 +203,13 @@ export default function VisitPage() {
                 );
               })}
             </div>
+            <div style={{ marginTop: '0.75rem' }}>
+              <AddMissingPanchayatButton
+                deviceId={deviceId}
+                position={position}
+                onAdded={(p) => setSelectedPanchayat(p.id)}
+              />
+            </div>
           </>
         ) : (
           <>
@@ -223,6 +231,13 @@ export default function VisitPage() {
                 </optgroup>
               ))}
             </select>
+            <div style={{ marginTop: '0.5rem' }}>
+              <AddMissingPanchayatButton
+                deviceId={deviceId}
+                position={position}
+                onAdded={(p) => setSelectedPanchayat(p.id)}
+              />
+            </div>
           </>
         )}
       </div>

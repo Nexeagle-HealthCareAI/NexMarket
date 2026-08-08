@@ -8,6 +8,7 @@ import { usePanchayats, useActiveVisit, db } from '@/lib/db';
 import { addToOutbox } from '@/lib/sync/outbox';
 import { useGeolocation } from '@/lib/geo/useGeolocation';
 import { compressImage } from '@/lib/image/compressImage';
+import AddMissingPanchayatButton from '@/components/AddMissingPanchayatButton';
 import type { ContactRole, LocalContact } from '@/lib/db/schema';
 
 
@@ -28,6 +29,7 @@ const DRAFT_KEY = 'newContactDraft';
 interface ContactFormState {
   name: string;
   role: ContactRole | '';
+  profession: string; // free-text detail, shown/used only when role === 'prominent_person'
   panchayatId: string;
   phone: string;
   whatsappAdded: boolean;
@@ -40,7 +42,7 @@ interface ContactFormState {
 
 function emptyForm(panchayatId = ''): ContactFormState {
   return {
-    name: '', role: '', panchayatId, phone: '', whatsappAdded: false,
+    name: '', role: '', profession: '', panchayatId, phone: '', whatsappAdded: false,
     cardGiven: false, notes: '', status: 'Lead', followUpDate: '', photoDataUri: '',
   };
 }
@@ -168,6 +170,7 @@ export default function NewContactPage() {
       shiftId: activeShiftClientId ?? undefined,
       name: form.name.trim(),
       role: form.role as ContactRole,
+      profession: form.role === 'prominent_person' ? (form.profession.trim() || undefined) : undefined,
       phone: form.phone.trim() || undefined,
       whatsappAdded: form.whatsappAdded,
       cardGiven: form.cardGiven,
@@ -250,6 +253,20 @@ export default function NewContactPage() {
               </button>
             ))}
           </div>
+          {form.role === 'prominent_person' && (
+            <div className="field-group" style={{ marginTop: '0.5rem' }}>
+              <label className="field-label" htmlFor="contact-profession">What is their profession?</label>
+              <input
+                id="contact-profession"
+                className="field-input"
+                type="text"
+                placeholder="e.g. Teacher, Shop Owner, Retired Officer"
+                value={form.profession}
+                onChange={(e) => update('profession', e.target.value)}
+                maxLength={80}
+              />
+            </div>
+          )}
         </div>
 
         {/* Name */}
@@ -290,6 +307,13 @@ export default function NewContactPage() {
               </optgroup>
             ))}
           </select>
+          <div style={{ marginTop: '0.5rem' }}>
+            <AddMissingPanchayatButton
+              deviceId={deviceId}
+              position={position}
+              onAdded={(p) => update('panchayatId', p.id)}
+            />
+          </div>
         </div>
 
         {/* Phone */}

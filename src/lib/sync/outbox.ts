@@ -38,6 +38,8 @@ export function wireTypeFor(entry: SyncOutboxEntry): string {
       return 'trajectory_batch';
     case 'survey':
       return 'survey';
+    case 'panchayat':
+      return 'panchayat_new';
   }
 }
 
