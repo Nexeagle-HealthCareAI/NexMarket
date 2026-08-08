@@ -15,6 +15,40 @@ import type { ContactRole, LocalContact } from '@/lib/db/schema';
 import { useTranslations } from '@/i18n/I18nProvider';
 import SurveyClient from '@/app/(agent)/survey/SurveyClient';
 
+// Tapping the camera button backgrounds the browser tab to hand off to the
+// native camera app — on a lot of Android devices, a backgrounded tab gets
+// its memory reclaimed by the OS and is silently reloaded when it comes back
+// to the foreground, wiping every bit of in-memory React state, including
+// this whole unsaved form. That's not something a JS fix can prevent (it's
+// the browser/OS deciding to kill the tab), so instead the form is
+// continuously saved as a draft and restored on mount — a reload loses the
+// React state but not the draft sitting in localStorage.
+const DRAFT_KEY = 'newContactDraft';
+
+interface ContactFormState {
+  name: string;
+  role: ContactRole | '';
+  panchayatId: string;
+  phone: string;
+  whatsappAdded: boolean;
+  cardGiven: boolean;
+  notes: string;
+  status: 'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected';
+  followUpDate: string;
+  photoDataUri: string;
+}
+
+function emptyForm(panchayatId = ''): ContactFormState {
+  return {
+    name: '', role: '', panchayatId, phone: '', whatsappAdded: false,
+    cardGiven: false, notes: '', status: 'Lead', followUpDate: '', photoDataUri: '',
+  };
+}
+
+function isMeaningfulDraft(draft: Partial<ContactFormState>): boolean {
+  return !!(draft.name || draft.phone || draft.notes || draft.role || draft.photoDataUri);
+}
+
 export default function NewContactPage() {
   const router = useRouter();
   const agentId = useAgentStore((s) => s.agentId);
@@ -35,21 +69,50 @@ export default function NewContactPage() {
     { value: 'prominent_person', label: t.roleProminentPerson, emoji: '🌟', desc: t.descProminentPerson },
   ];
 
-  const [form, setForm] = useState({
-    name: '',
-    role: '' as ContactRole | '',
-    panchayatId: activeVisit?.panchayatId ?? '',
-    phone: '',
-    whatsappAdded: false,
-    cardGiven: false,
-    notes: '',
-    status: 'Lead' as 'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected',
-    followUpDate: '',
-    photoDataUri: '',
+  const [form, setForm] = useState<ContactFormState>(() => {
+    const defaults = emptyForm(activeVisit?.panchayatId ?? '');
+    if (typeof window === 'undefined') return defaults;
+    try {
+      const raw = window.localStorage.getItem(DRAFT_KEY);
+      const draft = raw ? (JSON.parse(raw) as Partial<ContactFormState>) : null;
+      if (draft && isMeaningfulDraft(draft)) return { ...defaults, ...draft };
+    } catch {
+      // Corrupt/unparseable draft — fall back to a clean form rather than crash.
+    }
+    return defaults;
+  });
+  const [draftRestored] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const raw = window.localStorage.getItem(DRAFT_KEY);
+      return !!raw && isMeaningfulDraft(JSON.parse(raw));
+    } catch {
+      return false;
+    }
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [newContactId, setNewContactId] = useState<string | null>(null);
+
+  // Continuously persist the in-progress form so it survives the tab reload
+  // above — debounced so rapid typing doesn't hit localStorage on every
+  // keystroke. Only ever written for a form with actual content; an empty
+  // draft is just removed, so a blank visit here doesn't leave a stale draft
+  // to (harmlessly, but confusingly) restore next time.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        if (isMeaningfulDraft(form)) {
+          window.localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+        } else {
+          window.localStorage.removeItem(DRAFT_KEY);
+        }
+      } catch {
+        // localStorage unavailable/full — draft persistence is best-effort.
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [form]);
 
   // useActiveVisit is an async Dexie live-query — it's still undefined on the
   // very first render, so the useState initializer above almost never actually
@@ -121,6 +184,7 @@ export default function NewContactPage() {
     try {
       await db.contacts.add(contact);
       await addToOutbox(clientId, deviceId, 'contact', contact);
+      try { window.localStorage.removeItem(DRAFT_KEY); } catch {}
       // Show survey modal instead of routing away immediately
       setNewContactId(clientId);
     } catch (err) {
@@ -151,6 +215,12 @@ export default function NewContactPage() {
           <h1>{t.newContact}</h1>
         </div>
       </div>
+
+      {draftRestored && (
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', padding: '0.6rem 0.85rem', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', fontWeight: 600, marginBottom: '1rem' }}>
+          ℹ️ Restored what you already typed — looks like the app got reloaded (this can happen when the camera opens).
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {/* Contact Type */}
