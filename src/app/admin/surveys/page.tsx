@@ -431,6 +431,21 @@ export default function AdminSurveysPage() {
           </div>
         )}
 
+        {/* KPI — respects every active filter (district/block/panchayat/date),
+            since it's just the length of the already-filtered response list
+            the table itself renders from. */}
+        {(activeTab === 'responses' || activeTab === 'data_management') && (
+          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', width: 'fit-content' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '10px', background: 'rgba(79,70,229,0.1)', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0 }}>
+              📋
+            </div>
+            <div>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Added</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>{surveysLoading ? '…' : filteredSurveys.length.toLocaleString()}</div>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'responses' && (
           <div style={{ flex: 1, overflowY: 'auto', width: '100%', minWidth: 0 }}>
             {questionsError && <p style={{ color: '#b91c1c', fontSize: '0.85rem' }}>⚠️ Question columns may be incomplete — failed to load the questionnaire: {questionsError}</p>}
