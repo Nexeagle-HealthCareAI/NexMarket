@@ -6,7 +6,7 @@ import { getMyAssignment, type MyAssignmentDto } from '@/lib/sync/api-client';
 import { getSyncStateValue, setSyncStateValue } from '@/lib/db';
 import TaskMap from './TaskMap';
 
-const CACHE_KEY = 'lastAssignment';
+const CACHE_KEY_PREFIX = 'lastAssignment_';
 
 export default function MyTaskPage() {
   const agentId = useAgentStore((s) => s.agentId);
@@ -20,13 +20,18 @@ export default function MyTaskPage() {
     if (!agentId) return;
     let cancelled = false;
     setLoading(true);
+    // Scoped per agent — devices get reused/shared between agents in the
+    // field, and an unscoped cache key would show whoever used this device
+    // last's assigned block/panchayats to the next agent if they go offline
+    // before their own first successful fetch.
+    const cacheKey = CACHE_KEY_PREFIX + agentId;
 
     getMyAssignment()
       .then((data) => {
         if (cancelled) return;
         setAssignment(data);
         setIsStale(false);
-        void setSyncStateValue(CACHE_KEY, JSON.stringify(data));
+        void setSyncStateValue(cacheKey, JSON.stringify(data));
       })
       .catch(async (e) => {
         if (cancelled) return;
@@ -35,7 +40,7 @@ export default function MyTaskPage() {
         // errored out while offline instead of showing whatever was last
         // fetched (which is exactly the situation an agent checking their
         // task list before heading into a low-signal area needs).
-        const cached = await getSyncStateValue(CACHE_KEY);
+        const cached = await getSyncStateValue(cacheKey);
         if (cached) {
           try {
             setAssignment(JSON.parse(cached) as MyAssignmentDto);
