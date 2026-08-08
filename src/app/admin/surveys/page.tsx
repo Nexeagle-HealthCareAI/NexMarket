@@ -540,24 +540,33 @@ export default function AdminSurveysPage() {
 
             {!surveysLoading && !questionsLoading && questions.length > 0 && (
               <>
-                <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1rem 1.5rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                  <span style={{ fontSize: '0.9rem', color: '#64748b' }}>
-                    Showing insights for <strong style={{ color: '#0f172a' }}>{filteredSurveys.length}</strong> response{filteredSurveys.length === 1 ? '' : 's'} matching the current filters.
-                  </span>
+                <div style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)', borderRadius: '12px', padding: '1.5rem 2rem', color: 'white', boxShadow: '0 10px 15px -3px rgba(79, 70, 229, 0.2)' }}>
+                  <h2 style={{ margin: '0 0 0.25rem', fontSize: '1.5rem', fontWeight: 800 }}>Survey Insights</h2>
+                  <p style={{ margin: 0, fontSize: '0.95rem', opacity: 0.9 }}>
+                    Aggregated data from <strong>{filteredSurveys.length}</strong> response{filteredSurveys.length === 1 ? '' : 's'} matching your current filters.
+                  </p>
                 </div>
 
-                {insightsByQuestion.map(({ question: q, raw, answeredCount }) => (
-                  <div key={q.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                    <h3 style={{ margin: '0 0 0.25rem', fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>{q.text}</h3>
-                    <p style={{ margin: '0 0 1rem', fontSize: '0.8rem', color: '#94a3b8' }}>{answeredCount} response{answeredCount === 1 ? '' : 's'}</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
+                  {insightsByQuestion.map(({ question: q, raw, answeredCount }) => (
+                    <div key={q.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                      <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '1rem', marginBottom: '1rem' }}>
+                        <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.4 }}>{q.text}</h3>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', background: '#f1f5f9', color: '#475569', padding: '0.2rem 0.6rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600 }}>
+                          {answeredCount} response{answeredCount === 1 ? '' : 's'}
+                        </div>
+                      </div>
 
-                    {q.type === 'text' ? (
-                      <TextInsight raw={raw} />
-                    ) : (
-                      <ChoiceInsight raw={raw} />
-                    )}
-                  </div>
-                ))}
+                      <div style={{ flex: 1 }}>
+                        {q.type === 'text' ? (
+                          <TextInsight raw={raw} />
+                        ) : (
+                          <ChoiceInsight raw={raw} />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </>
             )}
           </div>
@@ -846,22 +855,32 @@ function PaginationControls({ currentPage, totalPages, totalItems, pageSize, onP
 
 // Insights: horizontal bar list shared by choice-question and keyword breakdowns.
 function BarList({ items, total }: { items: { label: string; count: number }[]; total: number }) {
-  if (items.length === 0) return <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>No answers yet.</p>;
+  if (items.length === 0) return <p style={{ color: '#94a3b8', fontSize: '0.85rem', fontStyle: 'italic', margin: 0 }}>No answers yet.</p>;
   const maxCount = Math.max(...items.map((i) => i.count));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-      {items.map((item) => (
-        <div key={item.label}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-            <span style={{ color: '#334155', fontWeight: 600 }}>{item.label}</span>
-            <span style={{ color: '#64748b' }}>{item.count} ({total > 0 ? Math.round((item.count / total) * 100) : 0}%)</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+      {items.map((item, index) => {
+        const percentage = total > 0 ? Math.round((item.count / total) * 100) : 0;
+        return (
+          <div key={item.label} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', alignItems: 'flex-end' }}>
+              <span style={{ color: '#334155', fontWeight: 600 }}>{item.label}</span>
+              <span style={{ color: '#64748b', fontWeight: 500, fontSize: '0.75rem' }}>
+                <strong style={{ color: '#0f172a', fontSize: '0.85rem' }}>{percentage}%</strong> ({item.count})
+              </span>
+            </div>
+            <div style={{ background: '#f1f5f9', borderRadius: '6px', height: '10px', overflow: 'hidden', width: '100%' }}>
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${(item.count / maxCount) * 100}%` }}
+                transition={{ duration: 0.8, delay: index * 0.05, ease: 'easeOut' }}
+                style={{ height: '100%', background: 'linear-gradient(90deg, #6366f1 0%, #4f46e5 100%)', borderRadius: '6px' }} 
+              />
+            </div>
           </div>
-          <div style={{ background: '#f1f5f9', borderRadius: '4px', height: '8px', overflow: 'hidden' }}>
-            <div style={{ width: `${(item.count / maxCount) * 100}%`, height: '100%', background: '#4f46e5', borderRadius: '4px' }} />
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -897,13 +916,17 @@ function ChoiceInsight({ raw }: { raw: string[] }) {
     <div>
       <BarList items={counts} total={raw.length} />
       {otherWriteIns.length > 0 && (
-        <details style={{ marginTop: '1rem' }}>
-          <summary style={{ cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: '#4f46e5' }}>
+        <details style={{ marginTop: '1.5rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0.75rem' }}>
+          <summary style={{ cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: '#4f46e5', display: 'flex', alignItems: 'center', gap: '0.5rem', userSelect: 'none' }}>
             View {otherWriteIns.length} &quot;Other&quot; write-in{otherWriteIns.length === 1 ? '' : 's'}
           </summary>
-          <ul style={{ margin: '0.75rem 0 0', paddingLeft: '1.25rem', fontSize: '0.85rem', color: '#334155', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            {otherWriteIns.map((w, i) => <li key={i}>{w}</li>)}
-          </ul>
+          <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+            {otherWriteIns.map((w, i) => (
+              <div key={i} style={{ background: 'white', padding: '0.5rem 0.75rem', borderRadius: '6px', fontSize: '0.85rem', color: '#334155', border: '1px solid #e2e8f0', borderLeft: '3px solid #cbd5e1' }}>
+                {w}
+              </div>
+            ))}
+          </div>
         </details>
       )}
     </div>
@@ -945,16 +968,20 @@ function TextInsight({ raw }: { raw: string[] }) {
       {keywords.length > 0 ? (
         <BarList items={keywords} total={raw.length} />
       ) : (
-        <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Not enough repeated wording yet to show keyword trends — check the full responses below.</p>
+        <p style={{ color: '#94a3b8', fontSize: '0.85rem', fontStyle: 'italic', margin: 0 }}>Not enough repeated wording yet to show keyword trends — check the full responses below.</p>
       )}
       {raw.length > 0 && (
-        <details style={{ marginTop: '1rem' }}>
-          <summary style={{ cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: '#4f46e5' }}>
+        <details style={{ marginTop: '1.5rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0.75rem' }}>
+          <summary style={{ cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: '#4f46e5', display: 'flex', alignItems: 'center', gap: '0.5rem', userSelect: 'none' }}>
             View all {raw.length} written response{raw.length === 1 ? '' : 's'}
           </summary>
-          <ul style={{ margin: '0.75rem 0 0', paddingLeft: '1.25rem', fontSize: '0.85rem', color: '#334155', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {raw.map((r, i) => <li key={i}>{r}</li>)}
-          </ul>
+          <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '250px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+            {raw.map((r, i) => (
+              <div key={i} style={{ background: 'white', padding: '0.5rem 0.75rem', borderRadius: '6px', fontSize: '0.85rem', color: '#334155', border: '1px solid #e2e8f0', borderLeft: '3px solid #94a3b8' }}>
+                {r}
+              </div>
+            ))}
+          </div>
         </details>
       )}
     </div>

@@ -580,13 +580,21 @@ function WorklistCard({ contact, panchayatName, blockName, onEdit, onViewHistory
       whileHover={{ y: -2, boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)' }}
       style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', transition: 'all 0.2s' }}
     >
-       {/* Top Row: Name and Status */}
        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
-         <div>
-           <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>{contact.name}</h3>
-           <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.25rem' }}>
-             <span>{contact.role.replace('_', ' ')}</span>
-             {contact.phone && <><span style={{color: '#cbd5e1'}}>•</span><span style={{color: '#4f46e5'}}>{contact.phone}</span></>}
+         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+           <div style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+             {contact.photoUrl ? (
+               <img src={contact.photoUrl} alt={contact.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+             ) : (
+               <span style={{ fontWeight: 700, color: '#64748b', fontSize: '1.2rem' }}>{contact.name.charAt(0).toUpperCase()}</span>
+             )}
+           </div>
+           <div>
+             <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>{contact.name}</h3>
+             <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.25rem' }}>
+               <span>{contact.role.replace('_', ' ')}</span>
+               {contact.phone && <><span style={{color: '#cbd5e1'}}>•</span><span style={{color: '#4f46e5'}}>{contact.phone}</span></>}
+             </div>
            </div>
          </div>
          <span style={{ background: `${statusColor}15`, color: statusColor, padding: '0.25rem 0.6rem', borderRadius: '20px', fontWeight: 700, fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
@@ -673,15 +681,26 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
   return (
     <tr style={{ borderBottom: '1px solid #e2e8f0', background: 'white', transition: 'background 0.2s' }}>
       <td style={{ padding: '1rem' }}>
-        <div style={{ fontWeight: 700, color: '#0f172a' }}>{contact.name}</div>
-        <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'capitalize', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <span>{contact.role.replace('_', ' ')}</span>
-          {contact.phone && (
-            <>
-              <span style={{ color: '#cbd5e1' }}>•</span>
-              <span style={{ color: '#4f46e5' }}>{contact.phone}</span>
-            </>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {contact.photoUrl ? (
+              <img src={contact.photoUrl} alt={contact.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <span style={{ fontWeight: 700, color: '#64748b', fontSize: '1.2rem' }}>{contact.name.charAt(0).toUpperCase()}</span>
+            )}
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, color: '#0f172a' }}>{contact.name}</div>
+            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'capitalize', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <span>{contact.role.replace('_', ' ')}</span>
+              {contact.phone && (
+                <>
+                  <span style={{ color: '#cbd5e1' }}>•</span>
+                  <span style={{ color: '#4f46e5' }}>{contact.phone}</span>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </td>
       <td style={{ padding: '1rem' }}>
