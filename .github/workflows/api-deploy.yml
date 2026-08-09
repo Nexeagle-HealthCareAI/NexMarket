@@ -31,6 +31,12 @@
 #   DEV_S3_ACCESS_KEY   E2E Networks Object Storage access key
 #   DEV_S3_SECRET_KEY   E2E Networks Object Storage secret key
 #
+#   OPTIONAL secrets:
+#     DEV_MAPBOX_TOKEN  Same Mapbox token already used by the web deploy for
+#                       map tiles — reused here for the Directions API behind
+#                       "route to this panchayat" on My Task. Routing degrades
+#                       to a straight-line client-side estimate if unset.
+#
 #   OPTIONAL repo VARIABLES (Settings → Variables) — only needed if you want to
 #   override a default:
 #     DEV_API_PORT     default 5010
@@ -155,13 +161,14 @@ jobs:
           S3_ACCESS_KEY: ${{ secrets.DEV_S3_ACCESS_KEY }}
           S3_SECRET_KEY: ${{ secrets.DEV_S3_SECRET_KEY }}
           S3_BUCKET: ${{ vars.DEV_S3_BUCKET || 'nexmarket-dev' }}
+          MAPBOX_TOKEN: ${{ secrets.DEV_MAPBOX_TOKEN }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,API_PORT,PG_PORT,PG_PASSWORD,JWT_KEY,JWT_ISSUER,JWT_AUDIENCE,CORS_ORIGIN,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET
+          envs: IMAGE,GHCR_TOKEN,ACTOR,API_PORT,PG_PORT,PG_PASSWORD,JWT_KEY,JWT_ISSUER,JWT_AUDIENCE,CORS_ORIGIN,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,MAPBOX_TOKEN
           script: |
             set -e
             : "${PG_PASSWORD:?DEV_PG_PASSWORD is empty}"
@@ -182,6 +189,7 @@ jobs:
               printf 'S3__AccessKey=%s\n' "$S3_ACCESS_KEY"
               printf 'S3__SecretKey=%s\n' "$S3_SECRET_KEY"
               printf 'S3__BucketName=%s\n' "$S3_BUCKET"
+              printf 'Mapbox__AccessToken=%s\n' "$MAPBOX_TOKEN"
             } > "$ENVFILE"
 
             IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')

@@ -15,6 +15,7 @@ export default function MyTaskPage() {
   const [error, setError] = useState('');
   const [isStale, setIsStale] = useState(false);
   const [filter, setFilter] = useState<'all' | 'visited' | 'pending'>('all');
+  const [selectedPanchayatId, setSelectedPanchayatId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!agentId) return;
@@ -116,7 +117,11 @@ export default function MyTaskPage() {
         )}
       </div>
 
-      <TaskMap panchayats={assignment.panchayats} />
+      <TaskMap
+        panchayats={assignment.panchayats}
+        selectedPanchayatId={selectedPanchayatId}
+        onSelectPanchayat={setSelectedPanchayatId}
+      />
 
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
         {(['all', 'pending', 'visited'] as const).map((f) => (
@@ -138,31 +143,46 @@ export default function MyTaskPage() {
             Nothing to show for this filter.
           </div>
         ) : (
-          visible.map((p) => (
-            <div
-              key={p.panchayatId}
-              className="card"
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1rem' }}
-            >
-              <div>
-                <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem' }}>{p.name}</div>
-                {p.lastVisitedAt && (
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    Last visited {new Date(p.lastVisitedAt).toLocaleDateString('en-GB')}
-                  </div>
-                )}
-              </div>
-              <span
+          visible.map((p) => {
+            const isSelected = p.panchayatId === selectedPanchayatId;
+            const canRoute = p.centroidLat != null && p.centroidLng != null;
+            return (
+              <div
+                key={p.panchayatId}
+                className="card"
+                onClick={() => canRoute && setSelectedPanchayatId(isSelected ? null : p.panchayatId)}
                 style={{
-                  fontSize: '0.75rem', fontWeight: 700, padding: '0.25rem 0.6rem', borderRadius: '20px',
-                  background: p.visited ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.15)',
-                  color: p.visited ? '#10b981' : '#64748b',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1rem',
+                  cursor: canRoute ? 'pointer' : 'default',
+                  borderColor: isSelected ? '#3b82f6' : undefined,
+                  boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.25)' : undefined,
                 }}
               >
-                {p.visited ? '✅ Visited' : '⏳ Pending'}
-              </span>
-            </div>
-          ))
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem' }}>{p.name}</div>
+                  {p.lastVisitedAt && (
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      Last visited {new Date(p.lastVisitedAt).toLocaleDateString('en-GB')}
+                    </div>
+                  )}
+                  {canRoute && (
+                    <div style={{ fontSize: '0.72rem', color: '#3b82f6', fontWeight: 600, marginTop: '0.15rem' }}>
+                      {isSelected ? '🧭 Routing shown above' : '🧭 Tap to route'}
+                    </div>
+                  )}
+                </div>
+                <span
+                  style={{
+                    fontSize: '0.75rem', fontWeight: 700, padding: '0.25rem 0.6rem', borderRadius: '20px',
+                    background: p.visited ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.15)',
+                    color: p.visited ? '#10b981' : '#64748b',
+                  }}
+                >
+                  {p.visited ? '✅ Visited' : '⏳ Pending'}
+                </span>
+              </div>
+            );
+          })
         )}
       </div>
     </div>

@@ -1,3 +1,4 @@
+using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +24,13 @@ namespace SeemanchalOutreach.Infrastructure
 
             services.AddScoped<IMarketingDbContext>(provider => provider.GetRequiredService<MarketingDbContext>());
             services.AddSingleton<IPhotoUploadService, S3PhotoUploadService>();
+
+            services.AddMemoryCache();
+            services.AddHttpClient("mapbox", client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(8);
+            });
+            services.AddSingleton<IDirectionsService, MapboxDirectionsService>();
 
             return services;
         }

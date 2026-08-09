@@ -531,6 +531,23 @@ export function getPanchayats(): Promise<PanchayatDto[]> {
   return get<PanchayatDto[]>('/api/v1/panchayats');
 }
 
+// ─── Routing ────────────────────────────────────────────────────────────────
+
+export interface DirectionsDto {
+  distanceMeters: number;
+  durationSeconds: number;
+  /** [lng, lat] pairs, GeoJSON order — feeds a MapLibre LineString source directly. */
+  geometry: [number, number][];
+}
+
+export async function getDirections(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+): Promise<DirectionsDto> {
+  const qs = `fromLat=${from.lat}&fromLng=${from.lng}&toLat=${to.lat}&toLng=${to.lng}`;
+  return get<DirectionsDto>(`/api/v1/routing/directions?${qs}`);
+}
+
 export interface CreatePanchayatRequest {
   name: string;
   district: string;
