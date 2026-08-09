@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentStore } from '@/store/agent-store';
-import { getAgents, onboardAgent, uploadPhoto, type AdminAgentDto } from '@/lib/sync/api-client';
+import { getAgents, onboardAgent, updateAgentProfile, uploadPhoto, type AdminAgentDto } from '@/lib/sync/api-client';
 
 const PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
 function generatePassword(length = 12): string {
@@ -20,6 +20,16 @@ export default function AgentsClient() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'low-connectivity' | 'offline'>('all');
+  const [showDeactivated, setShowDeactivated] = useState(false);
+
+  // Remove/reactivate — "remove" deactivates (isActive: false) rather than
+  // hard-deleting, since AgentId is referenced (as a plain string, no FK
+  // cascade) by every contact/visit/shift/referral the officer ever logged —
+  // deleting the row outright would orphan all of that historical data.
+  const [removingAgent, setRemovingAgent] = useState<AdminAgentDto | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState('');
+  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
 
   // Onboarding Drawer State
   const [showOnboardModal, setShowOnboardModal] = useState(false);
@@ -78,6 +88,7 @@ export default function AgentsClient() {
 
   const filtered = useMemo(() => {
     return agentsList.filter((a) => {
+      if (!showDeactivated && !a.isActive) return false;
       if (statusFilter !== 'all' && a.status !== statusFilter) return false;
       if (!search.trim()) return true;
       const q = search.toLowerCase();
@@ -88,7 +99,7 @@ export default function AgentsClient() {
         a.phone.includes(q)
       );
     });
-  }, [search, statusFilter, agentsList]);
+  }, [search, statusFilter, showDeactivated, agentsList]);
 
   const stats = useMemo(() => {
     const total = agentsList.length;
@@ -173,6 +184,33 @@ export default function AgentsClient() {
       setOnboardError(err instanceof Error ? err.message : 'Failed to onboard agent.');
     } finally {
       setOnboarding(false);
+    }
+  }
+
+  async function handleConfirmRemove() {
+    if (!removingAgent) return;
+    setRemoving(true);
+    setRemoveError('');
+    try {
+      await updateAgentProfile(removingAgent.agentId, { isActive: false });
+      setAgentsList((prev) => prev.map((a) => (a.agentId === removingAgent.agentId ? { ...a, isActive: false } : a)));
+      setRemovingAgent(null);
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : 'Failed to remove officer.');
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  async function handleReactivate(agent: AdminAgentDto) {
+    setReactivatingId(agent.agentId);
+    try {
+      await updateAgentProfile(agent.agentId, { isActive: true });
+      setAgentsList((prev) => prev.map((a) => (a.agentId === agent.agentId ? { ...a, isActive: true } : a)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reactivate officer.');
+    } finally {
+      setReactivatingId(null);
     }
   }
 
@@ -285,6 +323,10 @@ export default function AgentsClient() {
             </button>
           ))}
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+          <input type="checkbox" checked={showDeactivated} onChange={(e) => setShowDeactivated(e.target.checked)} />
+          Show removed officers
+        </label>
       </div>
 
       {/* Agents Table */}
@@ -317,9 +359,16 @@ export default function AgentsClient() {
               </tr>
             ) : (
               filtered.map((agent) => (
-                <tr key={agent.agentId} style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                <tr key={agent.agentId} style={{ borderBottom: '1px solid var(--surface-border)', opacity: agent.isActive ? 1 : 0.6 }}>
                   <td style={{ padding: '0.85rem 1rem' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{agent.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{agent.name}</div>
+                      {!agent.isActive && (
+                        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,0.12)', padding: '0.1rem 0.4rem', borderRadius: '8px' }}>
+                          REMOVED
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>+91 {agent.phone}</div>
                   </td>
                   <td style={{ padding: '0.85rem 1rem' }}>
@@ -364,13 +413,36 @@ export default function AgentsClient() {
                     {agent.todayReferrals}
                   </td>
                   <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                    <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                       <Link href={`/admin/agents/${encodeURIComponent(agent.agentId)}`} className="btn btn-ghost btn-sm" style={{ fontSize: '0.78rem' }}>
                         👁 View
+                      </Link>
+                      <Link href={`/admin/agents/${encodeURIComponent(agent.agentId)}?edit=1`} className="btn btn-ghost btn-sm" style={{ fontSize: '0.78rem' }}>
+                        ✏️ Edit
                       </Link>
                       <Link href={`/admin/map?agentId=${encodeURIComponent(agent.agentId)}`} className="btn btn-ghost btn-sm" style={{ fontSize: '0.78rem' }}>
                         📍 Trace Route
                       </Link>
+                      {agent.isActive ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ fontSize: '0.78rem', color: '#ef4444' }}
+                          onClick={() => { setRemovingAgent(agent); setRemoveError(''); }}
+                        >
+                          🗑 Remove
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ fontSize: '0.78rem', color: '#10b981' }}
+                          onClick={() => handleReactivate(agent)}
+                          disabled={reactivatingId === agent.agentId}
+                        >
+                          {reactivatingId === agent.agentId ? '…' : '↩️ Reactivate'}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -723,6 +795,57 @@ export default function AgentsClient() {
                 </div>
               </div>
             )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Remove Officer Confirmation */}
+      <AnimatePresence>
+        {removingAgent && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !removing && setRemovingAgent(null)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(2px)', zIndex: 9998 }}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              style={{
+                position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                width: '100%', maxWidth: 440, background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)',
+                padding: '1.75rem', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)', zIndex: 9999,
+              }}
+            >
+              <h2 style={{ fontSize: '1.15rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>🗑 Remove {removingAgent.name}?</h2>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+                This deactivates their account — they&apos;ll no longer be able to log in, and they&apos;ll drop off the active
+                directory by default. Their historical contacts, visits and referrals stay intact, and you can reactivate
+                them any time from &quot;Show removed officers&quot;.
+              </p>
+
+              {removeError && (
+                <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem', marginBottom: '1rem' }}>{removeError}</p>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setRemovingAgent(null)} disabled={removing}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ flex: 1, background: '#ef4444' }}
+                  onClick={handleConfirmRemove}
+                  disabled={removing}
+                >
+                  {removing ? 'Removing…' : 'Remove Officer'}
+                </button>
+              </div>
             </motion.div>
           </>
         )}

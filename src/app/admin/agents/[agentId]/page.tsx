@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useAgentStore } from '@/store/agent-store';
 import { getAgentDetail, updateAgentProfile, type AgentDetailDto, type UpdateAgentProfileRequest } from '@/lib/sync/api-client';
 
@@ -14,11 +15,14 @@ const STATUS_LABEL: Record<AgentDetailDto['status'], string> = {
 export default function AgentDetailPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = use(params);
   const viewerAgentId = useAgentStore((s) => s.agentId);
+  // Supports the "Edit" quick-action on the agents list, which links here
+  // with ?edit=1 to land straight in edit mode instead of an extra click.
+  const searchParams = useSearchParams();
 
   const [agent, setAgent] = useState<AgentDetailDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(() => searchParams.get('edit') === '1');
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<UpdateAgentProfileRequest>({});
 
