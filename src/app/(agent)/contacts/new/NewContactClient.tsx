@@ -311,6 +311,7 @@ export default function NewContactPage() {
             <AddMissingPanchayatButton
               deviceId={deviceId}
               position={position}
+              panchayats={panchayats}
               onAdded={(p) => update('panchayatId', p.id)}
             />
           </div>

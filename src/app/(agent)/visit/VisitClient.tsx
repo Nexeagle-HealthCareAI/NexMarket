@@ -207,6 +207,7 @@ export default function VisitPage() {
               <AddMissingPanchayatButton
                 deviceId={deviceId}
                 position={position}
+                panchayats={panchayats}
                 onAdded={(p) => setSelectedPanchayat(p.id)}
               />
             </div>
@@ -235,6 +236,7 @@ export default function VisitPage() {
               <AddMissingPanchayatButton
                 deviceId={deviceId}
                 position={position}
+                panchayats={panchayats}
                 onAdded={(p) => setSelectedPanchayat(p.id)}
               />
             </div>
