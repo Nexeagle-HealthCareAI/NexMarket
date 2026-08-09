@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -252,6 +253,79 @@ namespace SeemanchalOutreach.Api.Controllers
                     isActive = q.IsActive,
                     order = q.Order
                 })
+            });
+        }
+
+        // The admin Sync Analytics page used to render entirely hardcoded/fake
+        // numbers (a literal "Mock Sync Data" array) that never reflected real
+        // activity. Everything here is computed from actual synced records —
+        // there's no server-side concept of "items still queued on a device"
+        // or "failed sync attempts" (those only ever exist client-side, before
+        // or if a sync never reaches the server), so this reports what the
+        // server actually can know: throughput and how long data sat on a
+        // device before it synced.
+        [HttpGet("analytics")]
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<object>> GetSyncAnalytics(CancellationToken cancellationToken)
+        {
+            var todayUtc = DateTime.UtcNow.Date;
+            var weekStartUtc = todayUtc.AddDays(-6);
+
+            var contacts = await _db.Contacts.AsNoTracking()
+                .Where(c => c.ServerReceivedAt >= weekStartUtc)
+                .Select(c => new { c.AgentId, Client = c.CreatedAt, Server = c.ServerReceivedAt })
+                .ToListAsync(cancellationToken);
+            var visits = await _db.Visits.AsNoTracking()
+                .Where(v => v.ServerReceivedAt >= weekStartUtc)
+                .Select(v => new { v.AgentId, Client = v.CheckInAt, Server = v.ServerReceivedAt })
+                .ToListAsync(cancellationToken);
+            var referrals = await _db.Referrals.AsNoTracking()
+                .Where(r => r.ServerReceivedAt >= weekStartUtc)
+                .Select(r => new { r.AgentId, Client = r.CreatedAt, Server = r.ServerReceivedAt })
+                .ToListAsync(cancellationToken);
+
+            // Kept to the same 3 record types as the throughput chart below —
+            // a KPI total that counts more than the chart it sits next to
+            // breaks down exactly like the report-summary role/total mismatch
+            // this same pass fixed elsewhere.
+            var allRecords = contacts.Select(c => (c.AgentId, c.Client, c.Server))
+                .Concat(visits.Select(v => (v.AgentId, v.Client, v.Server)))
+                .Concat(referrals.Select(r => (r.AgentId, r.Client, r.Server)))
+                .ToList();
+
+            var todayRecords = allRecords.Where(r => r.Server >= todayUtc).ToList();
+
+            double AvgDelayMinutes(IEnumerable<(string AgentId, DateTime Client, DateTime Server)> records)
+            {
+                var list = records.ToList();
+                if (list.Count == 0) return 0;
+                return Math.Round(list.Average(r => (r.Server - r.Client).TotalMinutes), 1);
+            }
+
+            var currentHour = DateTime.UtcNow.Hour;
+            var hourlyBreakdown = Enumerable.Range(0, currentHour + 1).Select(hour =>
+            {
+                var hourStart = todayUtc.AddHours(hour);
+                var hourEnd = hourStart.AddHours(1);
+                bool InHour(DateTime t) => t >= hourStart && t < hourEnd;
+
+                return new
+                {
+                    Hour = hourStart.ToString("HH:00"),
+                    Contacts = contacts.Count(c => InHour(c.Server)),
+                    Visits = visits.Count(v => InHour(v.Server)),
+                    Referrals = referrals.Count(r => InHour(r.Server)),
+                    AvgDelayMinutes = AvgDelayMinutes(todayRecords.Where(r => InHour(r.Server))),
+                };
+            }).ToList();
+
+            return Ok(new
+            {
+                recordsSyncedToday = todayRecords.Count,
+                activeOfficersToday = todayRecords.Select(r => r.AgentId).Distinct().Count(),
+                avgSyncDelayMinutesToday = AvgDelayMinutes(todayRecords),
+                recordsSyncedThisWeek = allRecords.Count,
+                hourlyBreakdown,
             });
         }
     }

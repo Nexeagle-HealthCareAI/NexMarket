@@ -8,10 +8,11 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 
-const COLORS = ['#10b981', '#38bdf8', '#c084fc', '#f59e0b'];
+const COLORS = ['#10b981', '#38bdf8', '#c084fc', '#f59e0b', '#f472b6', '#94a3b8'];
 
 const EMPTY_SUMMARY: ReportSummaryDto = {
   totalContacts: 0, ashaWorkers: 0, rmpDoctors: 0, wardMembers: 0, medicineShops: 0,
+  mukhiyas: 0, prominentPersons: 0,
   totalVisits: 0, totalReferrals: 0, convertedReferrals: 0, conversionRatePct: 0, blocks: [],
 };
 
@@ -47,12 +48,16 @@ export default function ReportsClient() {
     { name: 'Converted Patients', value: summary.convertedReferrals, fill: '#10b981' },
   ];
 
-  // Data for Role Pie Chart
+  // Data for Role Pie Chart — was missing Mukhiya/Prominent Person, so the
+  // slices silently added up to less than "Total Contacts" above whenever
+  // either role had any contacts.
   const roleData = [
     { name: 'ASHA Workers', value: summary.ashaWorkers },
     { name: 'RMP Doctors', value: summary.rmpDoctors },
     { name: 'Ward Members', value: summary.wardMembers },
     { name: 'Medicine Shops', value: summary.medicineShops },
+    { name: 'Mukhiya', value: summary.mukhiyas },
+    { name: 'Prominent Persons', value: summary.prominentPersons },
   ];
 
   // Data for Territory Bar Chart
@@ -76,7 +81,7 @@ export default function ReportsClient() {
         {/* District Filter Selector */}
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>District:</span>
-          {['All', 'Katihar', 'Purnia', 'Araria', 'Supaul'].map((dist) => (
+          {['All', 'Katihar', 'Purnia', 'Araria', 'Kishanganj', 'Supaul', 'Uttar Dinajpur'].map((dist) => (
             <button
               key={dist}
               onClick={() => setDistrictFilter(dist)}

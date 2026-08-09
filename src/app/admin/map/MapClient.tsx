@@ -707,7 +707,7 @@ export default function MapClient() {
         {/* Map Overlay Badge */}
         <div style={{ position: 'absolute', top: 16, left: 16, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--surface-border)', zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.05)' }}>
           <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>Seemanchal & Outreach Territories</div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--color-primary-600)' }}>Showing Katihar · Purnia · Araria · Supaul · Uttar Dinajpur</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--color-primary-600)' }}>Showing Katihar · Purnia · Araria · Kishanganj · Supaul · Uttar Dinajpur</div>
         </div>
       </div>
     </div>

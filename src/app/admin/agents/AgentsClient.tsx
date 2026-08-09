@@ -649,6 +649,7 @@ export default function AgentsClient() {
                       <option value="Katihar">Katihar</option>
                       <option value="Purnia">Purnia</option>
                       <option value="Araria">Araria</option>
+                      <option value="Kishanganj">Kishanganj</option>
                       <option value="Supaul">Supaul</option>
                       <option value="Uttar Dinajpur">Uttar Dinajpur</option>
                     </select>

@@ -225,6 +225,8 @@ export interface BlockReportDto {
   rmp: number;
   ward: number;
   med: number;
+  mukhiya: number;
+  prominent: number;
   visits: number;
   referrals: number;
   converted: number;
@@ -236,11 +238,33 @@ export interface ReportSummaryDto {
   rmpDoctors: number;
   wardMembers: number;
   medicineShops: number;
+  mukhiyas: number;
+  prominentPersons: number;
   totalVisits: number;
   totalReferrals: number;
   convertedReferrals: number;
   conversionRatePct: number;
   blocks: BlockReportDto[];
+}
+
+export interface SyncHourlyBucketDto {
+  hour: string;
+  contacts: number;
+  visits: number;
+  referrals: number;
+  avgDelayMinutes: number;
+}
+
+export interface SyncAnalyticsDto {
+  recordsSyncedToday: number;
+  activeOfficersToday: number;
+  avgSyncDelayMinutesToday: number;
+  recordsSyncedThisWeek: number;
+  hourlyBreakdown: SyncHourlyBucketDto[];
+}
+
+export function getSyncAnalytics(): Promise<SyncAnalyticsDto> {
+  return get<SyncAnalyticsDto>('/api/v1/sync/analytics');
 }
 
 // ─── Panchayats ───────────────────────────────────────────────────────────────

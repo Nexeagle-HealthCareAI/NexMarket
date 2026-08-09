@@ -206,7 +206,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ agentId:
               <textarea className="field-input" rows={2} value={form.address ?? ''} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="Address" />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
                 <select className="field-input" value={form.district ?? ''} onChange={(e) => setForm((f) => ({ ...f, district: e.target.value }))}>
-                  {['Katihar', 'Purnia', 'Araria', 'Supaul', 'Uttar Dinajpur'].map((d) => <option key={d} value={d}>{d}</option>)}
+                  {['Katihar', 'Purnia', 'Araria', 'Kishanganj', 'Supaul', 'Uttar Dinajpur'].map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
                 {editInput('block')}
                 {editInput('pincode')}

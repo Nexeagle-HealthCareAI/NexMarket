@@ -18,6 +18,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public int Rmp { get; set; }
         public int Ward { get; set; }
         public int Med { get; set; }
+        public int Mukhiya { get; set; }
+        public int Prominent { get; set; }
         public int Visits { get; set; }
         public int Referrals { get; set; }
         public int Converted { get; set; }
@@ -30,6 +32,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public int RmpDoctors { get; set; }
         public int WardMembers { get; set; }
         public int MedicineShops { get; set; }
+        public int Mukhiyas { get; set; }
+        public int ProminentPersons { get; set; }
         public int TotalVisits { get; set; }
         public int TotalReferrals { get; set; }
         public int ConvertedReferrals { get; set; }
@@ -70,11 +74,15 @@ namespace SeemanchalOutreach.Api.Controllers
             var referrals = await _db.Referrals.AsNoTracking()
                 .Where(r => contactClientIds.Contains(r.ContactId))
                 .ToListAsync(cancellationToken);
+            // Keyed by (District, Block), not Block alone — block names repeat
+            // across districts (e.g. a "Sadar" block exists in most districts),
+            // so a Block-only key was silently merging unrelated blocks' agent
+            // counts together whenever their names collided.
             var agentCountsByBlock = await _db.Agents.AsNoTracking()
                 .Where(a => district == null || a.District == district)
-                .GroupBy(a => a.Block)
-                .Select(g => new { Block = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.Block, x => x.Count, cancellationToken);
+                .GroupBy(a => new { a.District, a.Block })
+                .Select(g => new { g.Key.District, g.Key.Block, Count = g.Count() })
+                .ToDictionaryAsync(x => (x.District, x.Block), x => x.Count, cancellationToken);
 
             var summary = new ReportSummaryDto
             {
@@ -83,6 +91,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 RmpDoctors = contacts.Count(c => c.Role == "rmp_doctor"),
                 WardMembers = contacts.Count(c => c.Role == "ward_member"),
                 MedicineShops = contacts.Count(c => c.Role == "medicine_shop"),
+                // These two roles existed on every contact but were never
+                // counted anywhere in this summary — the role pie chart's
+                // slices silently added up to less than "Total Contacts"
+                // whenever any mukhiya/prominent_person contacts existed.
+                Mukhiyas = contacts.Count(c => c.Role == "mukhiya"),
+                ProminentPersons = contacts.Count(c => c.Role == "prominent_person"),
                 TotalVisits = visits.Count,
                 TotalReferrals = referrals.Count,
                 ConvertedReferrals = referrals.Count(r => r.Status == "converted"),
@@ -105,17 +119,19 @@ namespace SeemanchalOutreach.Api.Controllers
                     {
                         District = g.Key.District,
                         Block = g.Key.Block,
-                        Agents = agentCountsByBlock.GetValueOrDefault(g.Key.Block),
+                        Agents = agentCountsByBlock.GetValueOrDefault((g.Key.District, g.Key.Block)),
                         Asha = blockContacts.Count(c => c.Role == "asha_worker"),
                         Rmp = blockContacts.Count(c => c.Role == "rmp_doctor"),
                         Ward = blockContacts.Count(c => c.Role == "ward_member"),
                         Med = blockContacts.Count(c => c.Role == "medicine_shop"),
+                        Mukhiya = blockContacts.Count(c => c.Role == "mukhiya"),
+                        Prominent = blockContacts.Count(c => c.Role == "prominent_person"),
                         Visits = blockVisits,
                         Referrals = blockReferrals.Count,
                         Converted = blockReferrals.Count(r => r.Status == "converted"),
                     };
                 })
-                .OrderByDescending(b => b.Asha + b.Rmp + b.Ward + b.Med)
+                .OrderByDescending(b => b.Asha + b.Rmp + b.Ward + b.Med + b.Mukhiya + b.Prominent)
                 .ToList();
 
             return Ok(summary);
