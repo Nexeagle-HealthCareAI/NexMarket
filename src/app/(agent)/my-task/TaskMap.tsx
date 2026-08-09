@@ -125,10 +125,14 @@ export default function TaskMap({ panchayats }: TaskMapProps) {
       el.style.background = '#3b82f6';
       el.style.border = '3px solid #fff';
       el.style.boxShadow = '0 0 10px rgba(59,130,246,0.8)';
-      ownMarkerRef.current = new maplibregl.Marker({ element: el }).addTo(map);
+      // setLngLat before addTo, not after — addTo() triggers an immediate
+      // internal position update, which crashed reading .lng off the
+      // marker's default (unset) position when this was the other way
+      // around. The panchayat markers above already do it in this order.
+      ownMarkerRef.current = new maplibregl.Marker({ element: el }).setLngLat([position.lng, position.lat]).addTo(map);
+    } else {
+      ownMarkerRef.current.setLngLat([position.lng, position.lat]);
     }
-
-    ownMarkerRef.current.setLngLat([position.lng, position.lat]);
   }, [position, mapLoaded]);
 
   return (
