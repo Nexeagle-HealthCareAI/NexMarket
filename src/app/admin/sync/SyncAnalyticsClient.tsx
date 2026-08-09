@@ -151,7 +151,7 @@ export default function SyncAnalyticsClient() {
                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
                   <Tooltip
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                    formatter={(value: number) => [`${value}m`, 'Avg Delay']}
+                    formatter={(value: any) => [`${value}m`, 'Avg Delay']}
                   />
                   <Line type="monotone" dataKey="avgDelayMinutes" stroke="#ec4899" strokeWidth={3} dot={{r: 4, fill: '#ec4899', strokeWidth: 2, stroke: 'white'}} activeDot={{r: 6}} />
                 </LineChart>
