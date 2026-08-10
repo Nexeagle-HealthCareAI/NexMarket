@@ -66,6 +66,10 @@ namespace SeemanchalOutreach.Domain.Entities
         public string Name { get; set; } = string.Empty;
         public double? CentroidLat { get; set; }
         public double? CentroidLng { get; set; }
+        // Defaults true so every already-seeded/assigned panchayat keeps
+        // working exactly as before — this only matters once an admin
+        // deliberately curates a block's panchayats via "Manage Panchayat".
+        public bool IsActiveForMarketing { get; set; } = true;
     }
 
     public class FieldShift

@@ -22,6 +22,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public string State { get; set; } = string.Empty;
         public double? CentroidLat { get; set; }
         public double? CentroidLng { get; set; }
+        public bool IsActiveForMarketing { get; set; }
     }
 
     public class CreatePanchayatRequest
@@ -31,6 +32,12 @@ namespace SeemanchalOutreach.Api.Controllers
         [Required] public string Block { get; set; } = string.Empty;
         public double? CentroidLat { get; set; }
         public double? CentroidLng { get; set; }
+    }
+
+    public class UpdateMarketingStatusRequest
+    {
+        [Required] public List<string> PanchayatIds { get; set; } = new();
+        [Required] public bool IsActive { get; set; }
     }
 
     [ApiController]
@@ -60,10 +67,34 @@ namespace SeemanchalOutreach.Api.Controllers
                     State = p.State,
                     CentroidLat = p.CentroidLat,
                     CentroidLng = p.CentroidLng,
+                    IsActiveForMarketing = p.IsActiveForMarketing,
                 })
                 .ToListAsync(cancellationToken);
 
             return Ok(panchayats);
+        }
+
+        // Powers the "Manage Panchayat" tab — admin picks District -> Block,
+        // then activates/deactivates a set of panchayats in one go (typically
+        // "select all in this block"). Only active-for-marketing panchayats
+        // count toward an agent's assignment (see AssignmentsController), so
+        // this is what actually controls what a block assignment covers.
+        [HttpPatch("marketing-status")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> UpdateMarketingStatus([FromBody] UpdateMarketingStatusRequest request, CancellationToken cancellationToken)
+        {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+            if (request.PanchayatIds.Count == 0) return Ok(new { updated = 0 });
+
+            var idSet = request.PanchayatIds.ToHashSet();
+            var toUpdate = await _db.Panchayats.Where(p => idSet.Contains(p.PanchayatId)).ToListAsync(cancellationToken);
+            foreach (var p in toUpdate)
+            {
+                p.IsActiveForMarketing = request.IsActive;
+            }
+            await _db.SaveChangesAsync(cancellationToken);
+
+            return Ok(new { updated = toUpdate.Count });
         }
 
         // Agents get an offline-capable equivalent of this via the sync outbox
@@ -111,6 +142,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 State = panchayat.State,
                 CentroidLat = panchayat.CentroidLat,
                 CentroidLng = panchayat.CentroidLng,
+                IsActiveForMarketing = panchayat.IsActiveForMarketing,
             });
         }
     }

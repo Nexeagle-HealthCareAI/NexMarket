@@ -88,13 +88,18 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Where(a => agentIds.Contains(a.AgentId))
                 .ToDictionaryAsync(a => a.AgentId, a => a.Name, cancellationToken);
 
+            // Only active-for-marketing panchayats count toward a block's total —
+            // a panchayat an admin has deliberately taken out of scope shouldn't
+            // still inflate "X of Y visited" for a block assignment.
             var totalByBlock = (await _db.Panchayats.AsNoTracking()
+                .Where(p => p.IsActiveForMarketing)
                 .GroupBy(p => new { p.District, p.Block })
                 .Select(g => new { g.Key.District, g.Key.Block, Count = g.Count() })
                 .ToListAsync(cancellationToken))
                 .ToDictionary(x => (x.District, x.Block), x => x.Count);
 
             var panchayatBlockMap = (await _db.Panchayats.AsNoTracking()
+                .Where(p => p.IsActiveForMarketing)
                 .Select(p => new { p.PanchayatId, p.District, p.Block })
                 .ToListAsync(cancellationToken))
                 .ToDictionary(p => p.PanchayatId, p => (p.District, p.Block));
@@ -181,9 +186,9 @@ namespace SeemanchalOutreach.Api.Controllers
 
             await _db.SaveChangesAsync(cancellationToken);
 
-            var total = await _db.Panchayats.CountAsync(p => p.District == district && p.Block == block, cancellationToken);
+            var total = await _db.Panchayats.CountAsync(p => p.District == district && p.Block == block && p.IsActiveForMarketing, cancellationToken);
             var blockPanchayatIds = await _db.Panchayats.AsNoTracking()
-                .Where(p => p.District == district && p.Block == block)
+                .Where(p => p.District == district && p.Block == block && p.IsActiveForMarketing)
                 .Select(p => p.PanchayatId)
                 .ToListAsync(cancellationToken);
             // Scoped to visits on/after this brand-new assignment's AssignedAt — a
@@ -247,8 +252,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 return Ok(new MyAssignmentDto());
             }
 
+            // Only panchayats an admin has curated as "active for marketing" (via
+            // Manage Panchayat) show up on the agent's task list — everything
+            // defaults active, so this only changes anything once a block has
+            // actually been curated.
             var panchayats = await _db.Panchayats.AsNoTracking()
-                .Where(p => p.District == assignment.District && p.Block == assignment.Block)
+                .Where(p => p.District == assignment.District && p.Block == assignment.Block && p.IsActiveForMarketing)
                 .OrderBy(p => p.Name)
                 .ToListAsync(cancellationToken);
 

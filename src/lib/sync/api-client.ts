@@ -278,6 +278,7 @@ export interface PanchayatDto {
   state: string;
   centroidLat: number | null;
   centroidLng: number | null;
+  isActiveForMarketing: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -560,6 +561,17 @@ export interface CreatePanchayatRequest {
 // via the sync outbox (see addToOutbox with entityType 'panchayat').
 export function createPanchayat(body: CreatePanchayatRequest): Promise<PanchayatDto> {
   return post<CreatePanchayatRequest, PanchayatDto>('/api/v1/panchayats', body);
+}
+
+export interface UpdatePanchayatMarketingStatusRequest {
+  panchayatIds: string[];
+  isActive: boolean;
+}
+
+// Powers "Manage Panchayat" — only active-for-marketing panchayats are
+// included when an agent's block assignment is built (AssignmentsController).
+export function updatePanchayatMarketingStatus(body: UpdatePanchayatMarketingStatusRequest): Promise<{ updated: number }> {
+  return patch<UpdatePanchayatMarketingStatusRequest, { updated: number }>('/api/v1/panchayats/marketing-status', body);
 }
 
 // ─── Admin: Block Assignments ──────────────────────────────────────────────────
