@@ -35,7 +35,7 @@ function panchayatLocationLabel(survey: AdminSurveyDto): string | null {
 
 export default function AdminSurveysPage() {
   const agentId = useAgentStore((s) => s.agentId);
-  const [activeTab, setActiveTab] = useState<'responses' | 'data_management' | 'questionnaire' | 'insights'>('responses');
+  const [activeTab, setActiveTab] = useState<'responses' | 'history' | 'data_management' | 'questionnaire' | 'insights'>('responses');
 
   // Responses State
   const [surveys, setSurveys] = useState<AdminSurveyDto[]>([]);
@@ -203,10 +203,13 @@ export default function AdminSurveysPage() {
       });
     } catch {}
   });
-  const responseColumns: { questionId: string; text: string }[] = [
+  const currentColumns: { questionId: string; text: string }[] = questions.map((q) => ({ questionId: q.questionId, text: q.text }));
+  const historyColumns: { questionId: string; text: string }[] = [
     ...questions.map((q) => ({ questionId: q.questionId, text: q.text })),
     ...[...orphanAnswerKeys].sort().map((k) => ({ questionId: k, text: `(unconfigured: ${k})` })),
   ];
+  
+  const activeColumns = activeTab === 'history' ? historyColumns : currentColumns;
 
   // Compute unique regions for filters
   const uniqueDistricts = Array.from(new Set(allPanchayats.map(p => p.district))).sort();
@@ -324,6 +327,17 @@ export default function AdminSurveysPage() {
           📊 Responses
         </button>
         <button
+          onClick={() => setActiveTab('history')}
+          style={{
+            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
+            fontSize: '1rem', fontWeight: 700, color: activeTab === 'history' ? '#4f46e5' : '#64748b',
+            borderBottom: activeTab === 'history' ? '3px solid #4f46e5' : '3px solid transparent',
+            marginBottom: '-2px', transition: 'all 0.2s'
+          }}
+        >
+          🕰️ History
+        </button>
+        <button
           onClick={() => setActiveTab('questionnaire')}
           style={{
             background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
@@ -359,7 +373,7 @@ export default function AdminSurveysPage() {
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {(activeTab === 'responses' || activeTab === 'data_management' || activeTab === 'insights') && (
+        {(activeTab === 'responses' || activeTab === 'history' || activeTab === 'data_management' || activeTab === 'insights') && (
           <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', background: 'white', padding: '1rem 1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', flexShrink: 0 }}>
             <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Filter By Location:</span>
             <div style={{ flex: 1, minWidth: '180px' }}>
@@ -441,7 +455,7 @@ export default function AdminSurveysPage() {
         {/* KPI — respects every active filter (district/block/panchayat/date),
             since it's just the length of the already-filtered response list
             the table itself renders from. */}
-        {(activeTab === 'responses' || activeTab === 'data_management') && (
+        {(activeTab === 'responses' || activeTab === 'history' || activeTab === 'data_management') && (
           <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', width: 'fit-content' }}>
             <div style={{ width: 44, height: 44, borderRadius: '10px', background: 'rgba(79,70,229,0.1)', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0 }}>
               📋
@@ -453,7 +467,7 @@ export default function AdminSurveysPage() {
           </div>
         )}
 
-        {activeTab === 'responses' && (
+        {(activeTab === 'responses' || activeTab === 'history') && (
           <div style={{ flex: 1, overflowY: 'auto', width: '100%', minWidth: 0 }}>
             {questionsError && <p style={{ color: '#b91c1c', fontSize: '0.85rem' }}>⚠️ Question columns may be incomplete — failed to load the questionnaire: {questionsError}</p>}
             
@@ -469,7 +483,7 @@ export default function AdminSurveysPage() {
                       <tr>
                         <SortableTh label="Person Name" field="contactName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} style={{ whiteSpace: 'nowrap', minWidth: '160px' }} />
                         <SortableTh label="Added By" field="agentName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} style={{ whiteSpace: 'nowrap', minWidth: '140px' }} />
-                        {responseColumns.map((q, i) => (
+                        {activeColumns.map((q, i) => (
                           <SortableTh
                             key={q.questionId}
                             field={q.questionId}
@@ -507,7 +521,7 @@ export default function AdminSurveysPage() {
                               )}
                             </td>
                             <td style={{ padding: '1rem', color: '#334155' }}>{survey.agentName || survey.agentId}</td>
-                            {responseColumns.map((q) => {
+                            {activeColumns.map((q) => {
                               const ans = answers[q.questionId];
                               const hasAnswer = ans !== undefined && ans !== null && ans !== '';
                               return (
