@@ -64,10 +64,22 @@ async function runSync(): Promise<void> {
 
     let hasMore = true;
     while (hasMore) {
-      const batch = await getPendingEntries(50);
-      if (batch.length === 0) {
+      const allPending = await getPendingEntries(50);
+      if (allPending.length === 0) {
         hasMore = false;
         break;
+      }
+
+      const batch = [];
+      let payloadSize = 0;
+      for (const entry of allPending) {
+        const itemSize = entry.payload.length;
+        // Adaptive batching: hard limit around 2MB per request to prevent timeouts on 3G
+        if (batch.length > 0 && payloadSize + itemSize > 2_000_000) {
+          break;
+        }
+        batch.push(entry);
+        payloadSize += itemSize;
       }
 
       try {
@@ -122,8 +134,8 @@ async function runSync(): Promise<void> {
         _backoffMs = 5_000;
         _nextAllowedRunAt = 0;
 
-        // If batch was full, there might be more
-        hasMore = batch.length === 50;
+        // If batch was full, or we had to artificially truncate it due to payload size limits, there might be more
+        hasMore = allPending.length === 50 || batch.length < allPending.length;
       } catch (err: unknown) {
         // Network failure — back off and stop this run
         const message = err instanceof Error ? err.message : 'Network error';

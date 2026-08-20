@@ -128,7 +128,7 @@ export default function NewContactPage() {
 
   // Persist draft
   useEffect(() => {
-    if (isLoadingDraft) return;
+    if (isLoadingDraft || saving || showSurvey) return;
     const timer = setTimeout(() => {
       if (isMeaningfulDraft(form)) {
         db.drafts.put({ id: DRAFT_KEY, data: form, updatedAt: new Date().toISOString() }).catch(console.error);
@@ -137,7 +137,7 @@ export default function NewContactPage() {
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [form, isLoadingDraft]);
+  }, [form, isLoadingDraft, saving, showSurvey]);
 
   // Auto-fill panchayat from active visit
   useEffect(() => {

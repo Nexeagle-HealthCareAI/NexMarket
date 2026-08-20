@@ -185,8 +185,10 @@ export default function ContactsPage() {
                           {contact.cardGiven && (
                             <span className="badge" style={{ background: 'rgba(99,102,241,0.1)', color: 'var(--color-primary-600)' }}>{t.cardBadge}</span>
                           )}
-                          {!contact.syncedAt && (
-                            <span className="badge badge-pending">{t.unsyncedBadge}</span>
+                          {contact.syncedAt ? (
+                            <span style={{ fontSize: '0.9rem', color: '#10b981' }} title="Synced to Cloud">☁️</span>
+                          ) : (
+                            <span className="badge badge-pending" style={{ background: '#fef3c7', color: '#d97706' }} title="Pending Sync">🌩️ Unsynced</span>
                           )}
                         </div>
                       </div>

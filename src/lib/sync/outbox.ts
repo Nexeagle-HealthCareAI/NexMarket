@@ -152,7 +152,7 @@ export async function markSynced(
         if (ids.length > 0) {
           await db.trajectoryPoints
             .filter((p) => p.deviceId === deviceId && ids.includes(p.clientId))
-            .modify({ syncedAt });
+            .delete();
         }
         break;
       }

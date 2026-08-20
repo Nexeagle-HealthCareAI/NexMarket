@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useOutboxCount } from '@/lib/db';
+import { useOutboxCount, db } from '@/lib/db';
 import { startSyncPolling, registerBackgroundSync, triggerManualSync } from '@/lib/sync/engine';
 import { getDeadLetterCount, retryDeadLetters } from '@/lib/sync/outbox';
 import { refreshReferenceData } from '@/lib/sync/seeder';
@@ -123,7 +123,9 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
     // they expire even after the user "signs out".
     void apiLogout().catch(() => {});
     clearAuth();
-    router.replace('/login');
+    db.delete().then(() => {
+      window.location.href = '/login';
+    });
   };
 
   useEffect(() => {
@@ -133,7 +135,9 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
     // drop local state and send the agent back to sign in.
     setSessionExpiredHandler(() => {
       clearAuth();
-      router.replace('/login');
+      db.delete().then(() => {
+        window.location.href = '/login';
+      });
     });
     return () => setSessionExpiredHandler(null);
   }, [clearAuth, router]);

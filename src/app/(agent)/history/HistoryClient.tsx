@@ -100,8 +100,10 @@ export default function HistoryPage() {
                           {!visit.checkOutAt && (
                             <span className="badge badge-pending">{t.noCheckout}</span>
                           )}
-                          {!visit.syncedAt && (
-                            <span className="badge badge-pending">{t.unsyncedBadge}</span>
+                          {visit.syncedAt ? (
+                            <span style={{ fontSize: '0.9rem', color: '#10b981' }} title="Synced to Cloud">☁️</span>
+                          ) : (
+                            <span className="badge badge-pending" style={{ background: '#fef3c7', color: '#d97706' }} title="Pending Sync">🌩️ Unsynced</span>
                           )}
                         </div>
                       </div>
