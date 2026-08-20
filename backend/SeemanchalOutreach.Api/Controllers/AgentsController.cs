@@ -389,6 +389,14 @@ namespace SeemanchalOutreach.Api.Controllers
                     .Max() + 1;
                 string agentId = $"{prefix}-{nextNumber}";
 
+                // Npgsql refuses DateTime with Kind=Unspecified for a
+                // `timestamp with time zone` column — JSON deserialization
+                // of a bare date like "1995-06-15" produces exactly that.
+                // Normalize to UTC so the INSERT never throws.
+                DateTime? normalizedDob = request.DateOfBirth.HasValue
+                    ? DateTime.SpecifyKind(request.DateOfBirth.Value, DateTimeKind.Utc)
+                    : null;
+
                 var agent = new FieldAgent
                 {
                     Id = Guid.NewGuid(),
@@ -405,7 +413,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
                     MustChangePassword = true,
                     IsActive = true,
-                    DateOfBirth = request.DateOfBirth,
+                    DateOfBirth = normalizedDob,
                     Gender = request.Gender,
                     Address = request.Address,
                     Pincode = request.Pincode,
@@ -424,10 +432,19 @@ namespace SeemanchalOutreach.Api.Controllers
                 {
                     await _db.SaveChangesAsync(cancellationToken);
                 }
-                catch (DbUpdateException) when (attempt < maxAttempts)
+                catch (DbUpdateException ex)
                 {
-                    _db.ChangeTracker.Clear();
-                    continue;
+                    if (ex.InnerException != null && ex.InnerException.Message.Contains("ix_agents_phone"))
+                    {
+                        return Conflict($"An agent with phone number {request.Phone} already exists.");
+                    }
+
+                    if (attempt < maxAttempts)
+                    {
+                        _db.ChangeTracker.Clear();
+                        continue;
+                    }
+                    throw;
                 }
 
                 return Ok(new
@@ -480,7 +497,7 @@ namespace SeemanchalOutreach.Api.Controllers
             // untouched. These used to only ever accept a non-empty overwrite, so an
             // agent/admin could never actually clear Address, Education, etc. once set.
             if (!string.IsNullOrEmpty(dto.Email)) agent.Email = dto.Email;
-            if (dto.DateOfBirth != null) agent.DateOfBirth = dto.DateOfBirth;
+            if (dto.DateOfBirth != null) agent.DateOfBirth = DateTime.SpecifyKind(dto.DateOfBirth.Value, DateTimeKind.Utc);
             if (dto.Gender != null) agent.Gender = dto.Gender;
             if (dto.Address != null) agent.Address = dto.Address;
             if (dto.Pincode != null) agent.Pincode = dto.Pincode;

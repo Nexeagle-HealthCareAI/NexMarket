@@ -51,32 +51,12 @@ const navItems = (t: any) => [
     ),
   },
   {
-    href: '/history',
-    label: t.navHistory,
-    icon: (
-      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-      </svg>
-    ),
-  },
-  {
-    href: '/my-task',
-    label: t.navMyTask,
+    href: '/my-block',
+    label: t.navMyTask, // We will rename translation later if needed
     icon: (
       <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round"
           d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
-    href: '/profile',
-    label: t.navProfile,
-    icon: (
-      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
       </svg>
     ),
   },
@@ -112,6 +92,27 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
       clearAuth: s.clearAuth,
     }))
   );
+
+  const [syncing, setSyncing] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  async function handleManualSync() {
+    setSyncing(true);
+    await triggerManualSync();
+    setSyncing(false);
+  }
 
   const t = useTranslations();
 
@@ -341,19 +342,41 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <LanguageSwitcher />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          {!isOnline && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '0.3rem 0.6rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>
+              <span style={{ width: 6, height: 6, background: '#ef4444', borderRadius: '50%' }} /> Offline
+            </div>
+          )}
 
-          <button
-            type="button"
-            onClick={handleSignOut}
-            style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-full)', color: '#ef4444', cursor: 'pointer', padding: '0.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background var(--transition-fast)' }}
-            aria-label="Sign Out"
+          {syncing ? (
+            <div style={{ background: 'var(--surface-input)', padding: '0.3rem 0.6rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              <svg className="spin" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>
+              {t.syncing}
+            </div>
+          ) : outboxCount && outboxCount > 0 ? (
+            <button onClick={handleManualSync} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '0.3rem 0.6rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(245, 158, 11, 0.25)' }}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>
+              {outboxCount}
+            </button>
+          ) : (
+            <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '0.3rem 0.6rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600, color: '#059669' }}>
+              <span style={{ width: 6, height: 6, background: '#10b981', borderRadius: '50%' }} />
+            </div>
+          )}
+
+          <Link
+            href="/profile"
+            style={{ 
+              width: 32, height: 32, borderRadius: '50%', background: 'var(--color-primary-100)', color: 'var(--color-primary-700)', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.85rem', textDecoration: 'none',
+              border: '2px solid white', boxShadow: '0 0 0 1px var(--surface-border)'
+            }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-          </button>
+            {name ? name.charAt(0).toUpperCase() : 'A'}
+          </Link>
+
+          <LanguageSwitcher />
         </div>
       </div>
 

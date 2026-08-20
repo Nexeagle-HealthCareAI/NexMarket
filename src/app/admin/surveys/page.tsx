@@ -13,6 +13,11 @@ const CONTACT_ROLE_LABELS: Record<string, string> = {
   medicine_shop: 'Medicine Shop',
   mukhiya: 'Mukhiya',
   prominent_person: 'Prominent Person',
+  lab: 'Lab/Pathology',
+  nursing_home: 'Nursing Home',
+  independent_doctor: 'Independent Doctor',
+  hospital: 'Hospital',
+  other: 'Other',
 };
 
 function contactRoleLabel(role?: string | null): string | null {

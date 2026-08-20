@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SeemanchalOutreach.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using SeemanchalOutreach.Infrastructure.Persistence;
 namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MarketingDbContext))]
-    partial class MarketingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260820075208_AddContactDocuments")]
+    partial class AddContactDocuments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -121,15 +124,6 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("DeviceId")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<DateTime?>("ExifCapturedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<double?>("ExifLatitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<double?>("ExifLongitude")
-                        .HasColumnType("double precision");
 
                     b.Property<string>("Label")
                         .HasColumnType("text");
@@ -407,9 +401,6 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("AgentEscalationNote")
                         .HasColumnType("text");
 
-                    b.Property<string>("AgentEscalationResolution")
-                        .HasColumnType("text");
-
                     b.Property<string>("AgentId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -442,9 +433,6 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime?>("FollowUpDate")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsEscalationResolved")
-                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsMerged")
                         .HasColumnType("boolean");
@@ -641,10 +629,6 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("QuestionId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Section")
                         .IsRequired()
                         .HasColumnType("text");
 

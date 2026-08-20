@@ -20,6 +20,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public string AgentId { get; set; } = string.Empty;
         public string DeviceId { get; set; } = string.Empty;
         public DateTime Since { get; set; }
+        public int Page { get; set; } = 1;
+        public int PageSize { get; set; } = 500;
     }
 
     [ApiController]
@@ -112,23 +114,49 @@ namespace SeemanchalOutreach.Api.Controllers
             if (string.IsNullOrEmpty(callerAgentId)) return Unauthorized();
             request.AgentId = callerAgentId;
 
+            var skip = (request.Page - 1) * request.PageSize;
+            var take = request.PageSize;
+
             var contacts = await _db.Contacts.AsNoTracking()
                 .Where(c => c.AgentId == request.AgentId && c.ServerReceivedAt >= request.Since)
+                .OrderBy(c => c.Id)
+                .Skip(skip).Take(take)
                 .ToListAsync(cancellationToken);
             var visits = await _db.Visits.AsNoTracking()
                 .Where(v => v.AgentId == request.AgentId && v.ServerReceivedAt >= request.Since)
+                .OrderBy(v => v.Id)
+                .Skip(skip).Take(take)
                 .ToListAsync(cancellationToken);
             var shifts = await _db.Shifts.AsNoTracking()
                 .Where(s => s.AgentId == request.AgentId && s.ServerReceivedAt >= request.Since)
+                .OrderBy(s => s.Id)
+                .Skip(skip).Take(take)
                 .ToListAsync(cancellationToken);
-            var contactClientIds = contacts.Select(c => c.ClientId).ToList();
             var referrals = await _db.Referrals.AsNoTracking()
                 .Where(r => r.AgentId == request.AgentId && r.ServerReceivedAt >= request.Since)
+                .OrderBy(r => r.Id)
+                .Skip(skip).Take(take)
                 .ToListAsync(cancellationToken);
-            var panchayats = await _db.Panchayats.AsNoTracking().ToListAsync(cancellationToken);
+            var panchayats = await _db.Panchayats.AsNoTracking()
+                .OrderBy(p => p.PanchayatId)
+                .Skip(skip).Take(take)
+                .ToListAsync(cancellationToken);
+            var surveys = await _db.SurveyResponses.AsNoTracking()
+                .Where(s => s.AgentId == request.AgentId && s.SyncedAt >= request.Since)
+                .OrderBy(s => s.Id)
+                .Skip(skip).Take(take)
+                .ToListAsync(cancellationToken);
+            var surveyQuestions = await _db.SurveyQuestions.AsNoTracking()
+                .Where(q => q.CreatedAt >= request.Since || q.IsActive == true)
+                .OrderBy(q => q.Id)
+                .Skip(skip).Take(take)
+                .ToListAsync(cancellationToken);
+                
+            bool hasMore = contacts.Count == take || visits.Count == take || shifts.Count == take || referrals.Count == take || panchayats.Count == take || surveys.Count == take || surveyQuestions.Count == take;
 
             return Ok(new
             {
+                hasMore,
                 contacts = contacts.Select(c => new
                 {
                     clientId = c.ClientId,
@@ -186,10 +214,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     centroidLat = p.CentroidLat,
                     centroidLng = p.CentroidLng,
                 }),
-                surveys = (await _db.SurveyResponses.AsNoTracking()
-                    .Where(s => s.AgentId == request.AgentId && s.SyncedAt >= request.Since)
-                    .ToListAsync(cancellationToken))
-                    .Select(s => new
+                surveys = surveys.Select(s => new
                     {
                         clientId = s.ClientId,
                         deviceId = s.DeviceId,
@@ -199,16 +224,14 @@ namespace SeemanchalOutreach.Api.Controllers
                         answersJson = s.AnswersJson,
                         createdAt = s.CreatedAt.ToString("o")
                     }),
-                surveyQuestions = (await _db.SurveyQuestions.AsNoTracking()
-                    .Where(q => q.CreatedAt >= request.Since || q.IsActive == true)
-                    .ToListAsync(cancellationToken))
-                    .Select(q => new
+                surveyQuestions = surveyQuestions.Select(q => new
                     {
                         id = q.Id.ToString(),
                         questionId = q.QuestionId,
                         text = q.Text,
                         type = q.Type,
                         optionsJson = q.OptionsJson,
+                        section = q.Section,
                         isOptional = q.IsOptional,
                         isActive = q.IsActive,
                         order = q.Order
@@ -249,6 +272,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     text = q.Text,
                     type = q.Type,
                     optionsJson = q.OptionsJson,
+                    section = q.Section,
                     isOptional = q.IsOptional,
                     isActive = q.IsActive,
                     order = q.Order

@@ -73,6 +73,13 @@ export function useContact(clientId: string | undefined) {
   );
 }
 
+export function useContactDocuments(contactClientId: string | undefined) {
+  return useLiveQuery(
+    async () => (contactClientId ? db.contactDocuments.where('contactId').equals(contactClientId).toArray() : undefined),
+    [contactClientId],
+  );
+}
+
 export function useFlaggedDuplicates() {
   return useLiveQuery(() =>
     db.contacts

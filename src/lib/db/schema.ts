@@ -48,7 +48,7 @@ export interface LocalShift {
 
 // ─── Contact ──────────────────────────────────────────────────────────────────
 
-export type ContactRole = 'asha_worker' | 'rmp_doctor' | 'ward_member' | 'medicine_shop' | 'mukhiya' | 'prominent_person';
+export type ContactRole = 'asha_worker' | 'rmp_doctor' | 'ward_member' | 'medicine_shop' | 'mukhiya' | 'prominent_person' | 'lab' | 'nursing_home' | 'independent_doctor' | 'hospital' | 'other';
 
 export interface LocalContact {
   localId?: number;
@@ -64,6 +64,8 @@ export interface LocalContact {
   phone?: string;
   whatsappAdded: boolean;
   cardGiven: boolean;
+  agentEscalated?: boolean;
+  agentEscalationNote?: string;
   notes?: string;
   status: 'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected'; // Added in v2
   followUpDate?: string; // YYYY-MM-DD
@@ -73,6 +75,25 @@ export interface LocalContact {
   potentialDuplicateOf?: string[];  // server-flagged duplicate serverIds
   createdAt: string;    // ISO string — client clock
   updatedAt: string;
+  syncedAt?: string;
+}
+
+// ─── Contact Document ──────────────────────────────────────────────────────────
+
+export interface LocalContactDocument {
+  localId?: number;
+  clientId: string;
+  deviceId: string;
+  serverId?: string;
+  contactId: string;    // clientId of the contact
+  agentId: string;
+  dataUri: string;      // Base64 encoded file (image/pdf)
+  mimeType: string;
+  label?: string;       // Optional user-provided label
+  exifLat?: number | null;
+  exifLng?: number | null;
+  exifCapturedAt?: string | null;
+  createdAt: string;
   syncedAt?: string;
 }
 
@@ -134,6 +155,17 @@ export interface LocalReferral {
 
 // ─── Survey Response ──────────────────────────────────────────────────────────
 
+export interface LocalSurveyQuestion {
+  questionId: string;   // e.g. "q1"
+  text: string;
+  type: string;         // 'single' | 'multi' | 'text'
+  optionsJson?: string;
+  section?: string;     // Group/Tab the question belongs to
+  isOptional: boolean;
+  isActive: boolean;
+  order: number;
+}
+
 export interface LocalSurveyResponse {
   localId?: number;
   clientId: string;
@@ -158,7 +190,8 @@ export type EntityType =
   | 'trajectory_batch'
   | 'referral'
   | 'survey'
-  | 'panchayat';
+  | 'panchayat'
+  | 'contact_document';
 
 export interface SyncOutboxEntry {
   localId?: number;
@@ -181,6 +214,14 @@ export interface SyncState {
   value: string;
 }
 
+// ─── Draft Forms ──────────────────────────────────────────────────────────────
+
+export interface LocalDraft {
+  id: string;            // unique identifier (e.g. 'new-contact')
+  data: any;             // the full form object, including base64 images
+  updatedAt: string;     // ISO timestamp
+}
+
 // ─── Dexie Database Class ─────────────────────────────────────────────────────
 
 export class NexMarketDB extends Dexie {
@@ -192,9 +233,11 @@ export class NexMarketDB extends Dexie {
   trajectoryPoints!: EntityTable<LocalTrajectoryPoint, 'localId'>;
   referrals!: EntityTable<LocalReferral, 'localId'>;
   surveyResponses!: EntityTable<LocalSurveyResponse, 'localId'>;
+  contactDocuments!: EntityTable<LocalContactDocument, 'localId'>;
   syncOutbox!: EntityTable<SyncOutboxEntry, 'localId'>;
   syncState!: EntityTable<SyncState, 'key'>;
   surveyQuestions!: EntityTable<import('../sync/api-client').SurveyQuestionDto, 'id'>;
+  drafts!: EntityTable<LocalDraft, 'id'>;
 
   constructor() {
     super('nexmarket_db');
@@ -236,6 +279,14 @@ export class NexMarketDB extends Dexie {
         // than leaving it undefined.
         if (!entry.createdAt) entry.createdAt = entry.lastAttemptAt ?? new Date().toISOString();
       });
+    });
+
+    this.version(6).stores({
+      contactDocuments: '++localId, [clientId+deviceId], serverId, contactId, syncedAt',
+    });
+
+    this.version(7).stores({
+      drafts: 'id',
     });
   }
 }

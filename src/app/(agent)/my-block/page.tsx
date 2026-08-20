@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useAgentStore } from '@/store/agent-store';
 import { getMyAssignment, type MyAssignmentDto } from '@/lib/sync/api-client';
 import { getSyncStateValue, setSyncStateValue } from '@/lib/db';
@@ -85,21 +86,24 @@ export default function MyTaskPage() {
 
   return (
     <div style={{ paddingBottom: '2rem' }}>
-      <h1 style={{ fontSize: '1.3rem', color: 'var(--text-primary)', marginBottom: '0.25rem' }}>My Task</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+        <h1 style={{ fontSize: '1.3rem', color: 'var(--text-primary)', margin: 0 }}>My Block</h1>
+        <span style={{ background: 'var(--surface-input)', color: 'var(--text-secondary)', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Daily Checklist</span>
+      </div>
       {isStale && (
         <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 'var(--radius-md)', padding: '0.6rem 0.85rem', marginBottom: '0.85rem', fontSize: '0.8rem', color: '#b45309', fontWeight: 600 }}>
-          ⚠️ Offline — showing your last downloaded task list, may not reflect recent changes.
+          ⚠️ Offline — showing your last downloaded assignment, may not reflect recent changes.
         </div>
       )}
       <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
         Assigned {assignment.assignedAt ? new Date(assignment.assignedAt).toLocaleDateString('en-GB') : ''}
       </p>
 
-      <div className="card" style={{ marginBottom: '1.25rem' }}>
+      <div className="card" style={{ marginBottom: '1.25rem', borderTop: '4px solid var(--color-primary-500)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
           <div>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Assigned Block</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>{assignment.block}</div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary-600)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mission Briefing</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.25rem' }}>{assignment.block}</div>
             <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{assignment.district}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -152,34 +156,48 @@ export default function MyTaskPage() {
                 className="card"
                 onClick={() => canRoute && setSelectedPanchayatId(isSelected ? null : p.panchayatId)}
                 style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1rem',
+                  padding: '0.85rem 1rem',
                   cursor: canRoute ? 'pointer' : 'default',
                   borderColor: isSelected ? '#3b82f6' : undefined,
                   boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.25)' : undefined,
                 }}
               >
-                <div>
-                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem' }}>{p.name}</div>
-                  {p.lastVisitedAt && (
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                      Last visited {new Date(p.lastVisitedAt).toLocaleDateString('en-GB')}
-                    </div>
-                  )}
-                  {canRoute && (
-                    <div style={{ fontSize: '0.72rem', color: '#3b82f6', fontWeight: 600, marginTop: '0.15rem' }}>
-                      {isSelected ? '🧭 Routing shown above' : '🧭 Tap to route'}
-                    </div>
-                  )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem' }}>{p.name}</div>
+                    {p.lastVisitedAt && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        Last visited {new Date(p.lastVisitedAt).toLocaleDateString('en-GB')}
+                      </div>
+                    )}
+                    {canRoute && (
+                      <div style={{ fontSize: '0.72rem', color: '#3b82f6', fontWeight: 600, marginTop: '0.15rem' }}>
+                        {isSelected ? '🧭 Routing shown above' : '🧭 Tap to route'}
+                      </div>
+                    )}
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '0.75rem', fontWeight: 700, padding: '0.25rem 0.6rem', borderRadius: '20px',
+                      background: p.visited ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.15)',
+                      color: p.visited ? '#10b981' : '#64748b',
+                    }}
+                  >
+                    {p.visited ? '✅ Visited' : '⏳ Pending'}
+                  </span>
                 </div>
-                <span
-                  style={{
-                    fontSize: '0.75rem', fontWeight: 700, padding: '0.25rem 0.6rem', borderRadius: '20px',
-                    background: p.visited ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.15)',
-                    color: p.visited ? '#10b981' : '#64748b',
-                  }}
-                >
-                  {p.visited ? '✅ Visited' : '⏳ Pending'}
-                </span>
+                {isSelected && (
+                  <div style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--surface-border)' }}>
+                    <Link 
+                      href={`/visit?preselect=${p.panchayatId}`}
+                      className="btn btn-primary btn-sm"
+                      style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      📍 Check In Here
+                    </Link>
+                  </div>
+                )}
               </div>
             );
           })

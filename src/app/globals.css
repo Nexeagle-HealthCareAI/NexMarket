@@ -48,7 +48,7 @@
   --transition-slow:   380ms ease;
 
   /* Bottom nav height (agent PWA) */
-  --bottom-nav-height: 68px;
+  --bottom-nav-height: 76px;
 }
 
 /* ─── Reset ─────────────────────────────────────────────────────────────────── */
@@ -171,9 +171,9 @@ p { line-height: 1.6; color: var(--text-secondary); }
   border-color: var(--color-primary-500);
 }
 
-.btn-full { width: 100%; }
-.btn-lg { padding: 0.875rem 1.5rem; font-size: 1rem; border-radius: var(--radius-lg); }
-.btn-sm { padding: 0.375rem 0.75rem; font-size: 0.8rem; border-radius: var(--radius-sm); }
+.btn-full { width: 100%; min-height: 52px; font-size: 1.05rem; }
+.btn-lg { padding: 0.875rem 1.5rem; font-size: 1.05rem; border-radius: var(--radius-lg); min-height: 52px; }
+.btn-sm { padding: 0.375rem 0.75rem; font-size: 0.8rem; border-radius: var(--radius-sm); min-height: auto; }
 
 /* ─── Form Inputs ────────────────────────────────────────────────────────────── */
 .field-group {
@@ -372,6 +372,43 @@ textarea.field-input { resize: none; min-height: 80px; }
   text-align: center;
   box-shadow: 0 0 0 2px white;
 }
+
+/* ─── Center FAB (Add Contact) ───────────────────────────────────────────────── */
+.nav-fab-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  position: relative;
+  flex-shrink: 0;
+  margin-bottom: 16px; /* lifts the FAB above the bar */
+}
+
+.nav-fab {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary-500) 0%, var(--color-primary-700) 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 4px 16px rgba(99, 102, 241, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  border: 3px solid white;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav-fab-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--color-primary-600);
+  letter-spacing: 0.02em;
+}
+
 
 /* ─── Page Header ────────────────────────────────────────────────────────────── */
 .page-header {

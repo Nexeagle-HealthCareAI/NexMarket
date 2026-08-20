@@ -54,42 +54,53 @@ export default function LoginPage() {
       const isEmpty = await isLocalDatabaseEmpty();
       if (isEmpty) {
         try {
-          const pulled = await syncPull({
-            agentId: auth.agentId,
-            deviceId: auth.deviceId,
-            since: '1970-01-01T00:00:00Z',
-          });
+          let hasMore = true;
+          let page = 1;
+          const pageSize = 500;
+          
+          while (hasMore) {
+            const pulled = await syncPull({
+              agentId: auth.agentId,
+              deviceId: auth.deviceId,
+              since: '1970-01-01T00:00:00Z',
+              page,
+              pageSize
+            });
 
-          if (pulled.panchayats?.length) {
-            await db.panchayats.bulkPut(pulled.panchayats as LocalPanchayat[]);
-          }
-          if (pulled.contacts?.length) {
-            await db.contacts.bulkPut(
-              (pulled.contacts as LocalContact[]).map((c) => ({ ...c, syncedAt: new Date().toISOString() }))
-            );
-          }
-          if (pulled.visits?.length) {
-            await db.visits.bulkPut(
-              (pulled.visits as LocalVisit[]).map((v) => ({ ...v, syncedAt: new Date().toISOString() }))
-            );
-          }
-          if (pulled.shifts?.length) {
-            await db.shifts.bulkPut(
-              (pulled.shifts as LocalShift[]).map((s) => ({ ...s, syncedAt: new Date().toISOString() }))
-            );
-          }
-          if (pulled.referrals?.length) {
-            await db.referrals.bulkPut(
-              (pulled.referrals as LocalReferral[]).map((r) => ({ ...r, syncedAt: new Date().toISOString() }))
-            );
-          }
-          if (pulled.surveys?.length) {
-            await db.surveyResponses.bulkPut(
-              (pulled.surveys as import('@/lib/db/schema').LocalSurveyResponse[]).map((s) => ({ ...s, syncedAt: new Date().toISOString() }))
-            );
-          }
-          if (pulled.surveyQuestions?.length) {
-            await db.surveyQuestions.bulkPut(pulled.surveyQuestions);
+            if (pulled.panchayats?.length) {
+              await db.panchayats.bulkPut(pulled.panchayats as LocalPanchayat[]);
+            }
+            if (pulled.contacts?.length) {
+              await db.contacts.bulkPut(
+                (pulled.contacts as LocalContact[]).map((c) => ({ ...c, syncedAt: new Date().toISOString() }))
+              );
+            }
+            if (pulled.visits?.length) {
+              await db.visits.bulkPut(
+                (pulled.visits as LocalVisit[]).map((v) => ({ ...v, syncedAt: new Date().toISOString() }))
+              );
+            }
+            if (pulled.shifts?.length) {
+              await db.shifts.bulkPut(
+                (pulled.shifts as LocalShift[]).map((s) => ({ ...s, syncedAt: new Date().toISOString() }))
+              );
+            }
+            if (pulled.referrals?.length) {
+              await db.referrals.bulkPut(
+                (pulled.referrals as LocalReferral[]).map((r) => ({ ...r, syncedAt: new Date().toISOString() }))
+              );
+            }
+            if (pulled.surveys?.length) {
+              await db.surveyResponses.bulkPut(
+                (pulled.surveys as import('@/lib/db/schema').LocalSurveyResponse[]).map((s) => ({ ...s, syncedAt: new Date().toISOString() }))
+              );
+            }
+            if (pulled.surveyQuestions?.length) {
+              await db.surveyQuestions.bulkPut(pulled.surveyQuestions);
+            }
+
+            hasMore = pulled.hasMore;
+            page++;
           }
         } catch (pullErr) {
           console.warn('Reinstall recovery pull failed — continuing with an empty local DB:', pullErr);

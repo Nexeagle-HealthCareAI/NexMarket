@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SeemanchalOutreach.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using SeemanchalOutreach.Infrastructure.Persistence;
 namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MarketingDbContext))]
-    partial class MarketingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260820094923_AddExifMetadataToDocuments")]
+    partial class AddExifMetadataToDocuments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -641,10 +644,6 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("QuestionId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Section")
                         .IsRequired()
                         .HasColumnType("text");
 

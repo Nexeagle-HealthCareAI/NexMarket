@@ -29,6 +29,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public string? Name { get; set; }
         public string? Phone { get; set; }
         public string? PanchayatId { get; set; }
+        public bool? AgentEscalationResolved { get; set; }
+        public string? AgentEscalationResolution { get; set; }
     }
 
     [ApiController]
@@ -55,6 +57,7 @@ namespace SeemanchalOutreach.Api.Controllers
             [FromQuery] DateTime? endDate = null,
             [FromQuery] DateTime? maxFollowUpDate = null,
             [FromQuery] DateTime? updatedAfter = null,
+            [FromQuery] bool? agentEscalated = null,
             [FromQuery] string? sortBy = null,
             [FromQuery] string? sortOrder = null,
             CancellationToken cancellationToken = default)
@@ -114,6 +117,11 @@ namespace SeemanchalOutreach.Api.Controllers
                 contactsQuery = contactsQuery.Where(c => c.CreatedAt >= updatedAfter.Value || _db.ContactHistory.Any(h => h.ContactClientId == c.ClientId && h.Timestamp >= updatedAfter.Value));
             }
 
+            if (agentEscalated.HasValue && agentEscalated.Value)
+            {
+                contactsQuery = contactsQuery.Where(c => c.AgentEscalated);
+            }
+
             var totalCount = await contactsQuery.CountAsync(cancellationToken);
 
             bool isDesc = string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase);
@@ -153,6 +161,10 @@ namespace SeemanchalOutreach.Api.Controllers
                     c.Complaints,
                     c.Conflicts,
                     c.PhotoUrl,
+                    c.AgentEscalated,
+                    c.AgentEscalationNote,
+                    c.IsEscalationResolved,
+                    c.AgentEscalationResolution,
                     c.CreatedAt,
                     LastHistory = _db.ContactHistory
                         .Where(h => h.ContactClientId == c.ClientId)
@@ -181,6 +193,10 @@ namespace SeemanchalOutreach.Api.Controllers
                 c.Complaints,
                 c.Conflicts,
                 c.PhotoUrl,
+                c.AgentEscalated,
+                c.AgentEscalationNote,
+                c.IsEscalationResolved,
+                c.AgentEscalationResolution,
                 c.CreatedAt,
                 LastUpdatedAt = c.LastHistory?.Timestamp,
                 LastUpdatedBy = c.LastHistory?.UpdatedBy
@@ -218,7 +234,16 @@ namespace SeemanchalOutreach.Api.Controllers
                     c.Complaints,
                     c.Conflicts,
                     c.PhotoUrl,
-                    c.CreatedAt
+                    c.AgentEscalated,
+                    c.AgentEscalationNote,
+                    c.IsEscalationResolved,
+                    c.AgentEscalationResolution,
+                    c.CreatedAt,
+                    Documents = _db.ContactDocuments
+                        .Where(d => d.ContactClientId == c.ClientId)
+                        .Select(d => new { d.Id, d.Url, d.MimeType, d.Label, d.CreatedAt })
+                        .OrderBy(d => d.CreatedAt)
+                        .ToList()
                 })
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -256,12 +281,23 @@ namespace SeemanchalOutreach.Api.Controllers
             if (dto.Name != null) contact.Name = dto.Name;
             if (dto.Phone != null) contact.Phone = dto.Phone;
             if (dto.PanchayatId != null) contact.PanchayatId = dto.PanchayatId;
+            
+            if (dto.AgentEscalationResolved == true)
+            {
+                contact.AgentEscalated = false;
+                contact.IsEscalationResolved = true;
+                if (dto.AgentEscalationResolution != null)
+                {
+                    contact.AgentEscalationResolution = dto.AgentEscalationResolution;
+                }
+            }
 
             if (previousStatus != contact.Status ||
                 previousComments != contact.Comments ||
                 previousFollowUpDate != contact.FollowUpDate ||
                 previousComplaints != contact.Complaints ||
-                previousConflicts != contact.Conflicts)
+                previousConflicts != contact.Conflicts ||
+                dto.AgentEscalationResolved == true)
             {
                 // Marks this as the newest write to Status/FollowUpDate/Comments —
                 // a stale queued sync from an agent's device that later arrives
@@ -274,7 +310,9 @@ namespace SeemanchalOutreach.Api.Controllers
                     UpdatedBy = User.FindFirst(ClaimTypes.Name)?.Value ?? User.FindFirst("agentId")?.Value ?? "Unknown",
                     PreviousStatus = previousStatus,
                     NewStatus = contact.Status,
-                    Comments = contact.Comments,
+                    Comments = dto.AgentEscalationResolved == true 
+                        ? $"Escalation Resolved: {dto.AgentEscalationResolution}\n\n{contact.Comments}"
+                        : contact.Comments,
                     FollowUpDate = contact.FollowUpDate,
                     Complaints = contact.Complaints,
                     Conflicts = contact.Conflicts
@@ -340,6 +378,20 @@ namespace SeemanchalOutreach.Api.Controllers
             if (referrals.Any())
             {
                 _db.Referrals.RemoveRange(referrals);
+            }
+
+            // Manually cascade delete related documents
+            var documents = await _db.ContactDocuments.Where(d => d.ContactClientId == clientId).ToListAsync(cancellationToken);
+            if (documents.Any())
+            {
+                _db.ContactDocuments.RemoveRange(documents);
+            }
+
+            // Manually cascade delete related survey responses
+            var surveys = await _db.SurveyResponses.Where(s => s.ContactId == clientId).ToListAsync(cancellationToken);
+            if (surveys.Any())
+            {
+                _db.SurveyResponses.RemoveRange(surveys);
             }
 
             // Finally, delete the contact

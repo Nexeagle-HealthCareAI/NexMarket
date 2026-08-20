@@ -1,3 +1,5 @@
+import exifr from 'exifr';
+
 /**
  * Client-side photo compression before it goes into IndexedDB / the sync
  * outbox. Raw camera captures can be several MB — on a 2G/3G field
@@ -7,6 +9,13 @@
 interface CompressOptions {
   maxDimension?: number;
   quality?: number;
+}
+
+export interface CompressedDocument {
+  dataUri: string;
+  exifLat: number | null;
+  exifLng: number | null;
+  exifCapturedAt: string | null;
 }
 
 async function compressToCanvas(file: File, { maxDimension = 1024 }: CompressOptions): Promise<HTMLCanvasElement | null> {
@@ -55,4 +64,33 @@ function readFileAsDataUri(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
     reader.readAsDataURL(file);
   });
+}
+
+export async function compressDocumentImage(file: File, options: CompressOptions = {}): Promise<CompressedDocument> {
+  let exifLat: number | null = null;
+  let exifLng: number | null = null;
+  let exifCapturedAt: string | null = null;
+
+  try {
+    const exifData = await exifr.parse(file);
+    if (exifData) {
+      exifLat = exifData.latitude ?? null;
+      exifLng = exifData.longitude ?? null;
+      
+      if (exifData.DateTimeOriginal) {
+        exifCapturedAt = new Date(exifData.DateTimeOriginal).toISOString();
+      }
+    }
+  } catch {
+    // Ignore exif parsing errors
+  }
+
+  const dataUri = await compressImage(file, options);
+  
+  return {
+    dataUri,
+    exifLat,
+    exifLng,
+    exifCapturedAt
+  };
 }

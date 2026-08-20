@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
@@ -12,8 +12,6 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 type Answer = string | number | string[];
 
-// An option literally named "Other" (any casing) is treated as a write-in —
-// selecting it reveals a text box instead of being a normal fixed choice.
 function isOtherOption(opt: unknown): boolean {
   return typeof opt === 'string' && opt.trim().toLowerCase() === 'other';
 }
@@ -23,6 +21,7 @@ interface SurveyQuestion {
   text: string;
   type: string;
   options?: string[];
+  section?: string;
   isOptional?: boolean;
 }
 
@@ -40,20 +39,29 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
       .then(qs => qs.length > 0 ? qs : db.surveyQuestions.orderBy('order').filter(q => q.isActive).toArray())
   );
 
-  // Questions are entirely backend-controlled now (SurveyQuestion rows, synced
-  // via Dexie) — no more hardcoded fallback set. A fresh deploy seeds the
-  // original 6 questions as real, admin-editable rows (SurveyQuestionSeeder),
-  // so this only ever renders empty if an admin has deliberately deactivated
-  // every question.
-  const QUESTIONS: SurveyQuestion[] = (dynamicQuestions ?? []).map(q => ({
-    id: q.questionId,
-    text: q.text,
-    type: q.type,
-    options: q.optionsJson ? (JSON.parse(q.optionsJson) as string[]) : undefined,
-    isOptional: q.isOptional
-  }));
+  const QUESTIONS: SurveyQuestion[] = useMemo(() => {
+    return (dynamicQuestions ?? []).map(q => ({
+      id: q.questionId,
+      text: q.text,
+      type: q.type,
+      options: q.optionsJson ? (JSON.parse(q.optionsJson) as string[]) : undefined,
+      section: q.section,
+      isOptional: q.isOptional
+    }));
+  }, [dynamicQuestions]);
 
-  const [currentIdx, setCurrentIdx] = useState(0);
+  // Group questions by section
+  const sections = useMemo(() => {
+    const map = new Map<string, SurveyQuestion[]>();
+    QUESTIONS.forEach(q => {
+      const sec = q.section || 'General';
+      if (!map.has(sec)) map.set(sec, []);
+      map.get(sec)!.push(q);
+    });
+    return Array.from(map.keys());
+  }, [QUESTIONS]);
+
+  const [currentTab, setCurrentTab] = useState<number>(0);
   const [responses, setResponses] = useState<Record<string, Answer>>({});
   const [otherText, setOtherText] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -61,7 +69,6 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   const [skipReason, setSkipReason] = useState<string>('');
   const [submitError, setSubmitError] = useState('');
 
-  // Fallback to URL param if prop isn't provided
   const contactId = initialContactId || searchParams.get('contactId') || undefined;
 
   useEffect(() => {
@@ -71,38 +78,27 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
     };
   }, []);
 
-  // Returns the merged map so a caller that needs the just-typed/just-picked
-  // value immediately (see the single-choice onClick below) doesn't have to
-  // wait a render cycle for `responses` state to catch up.
-  const handleInput = (val: Answer) => {
-    const updated = { ...responses, [QUESTIONS[currentIdx].id]: val };
-    setResponses(updated);
-    return updated;
+  const handleInput = (qId: string, val: Answer) => {
+    setResponses(prev => ({ ...prev, [qId]: val }));
   };
 
-  const handleNext = async (responsesOverride?: Record<string, Answer>) => {
-    if (currentIdx < QUESTIONS.length - 1) {
-      setCurrentIdx(currentIdx + 1);
+  const handleNextSection = async () => {
+    if (currentTab < sections.length - 1) {
+      setCurrentTab(currentTab + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
-      await submitSurvey(false, '', responsesOverride);
+      await submitSurvey(false, '');
     }
   };
 
-  const submitSurvey = async (isSkipped = false, reason = '', responsesOverride?: Record<string, Answer>) => {
+  const submitSurvey = async (isSkipped = false, reason = '') => {
     if (!agentId || !deviceId) return;
     setLoading(true);
     setSubmitError('');
     try {
       const clientId = uuidv4();
-      // On the last question, a single-choice tap calls handleInput() then
-      // handleNext() in the same synchronous click — `responses` state hasn't
-      // re-rendered yet at that point, so without this override the answer
-      // just picked for the final question would be missing from what gets
-      // saved. See the onClick below, which passes handleInput's return value
-      // straight through instead of relying on the (stale) `responses` state.
-      const effectiveResponses = responsesOverride ?? responses;
       const responsesRecord = Object.fromEntries(
-        Object.entries(effectiveResponses).map(([k, v]) => {
+        Object.entries(responses).map(([k, v]) => {
           const written = otherText[k]?.trim();
           const withWriteIn = (item: unknown) => (isOtherOption(item) && written ? `Other: ${written}` : item);
           if (Array.isArray(v)) return [k, v.map(withWriteIn).join(', ')];
@@ -128,16 +124,12 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
       if (onClose) onClose();
       else router.push('/home');
     } catch (e) {
-      // Previously silent (console.error only) — the spinner would vanish and
-      // the question form would just reappear with no sign the save failed,
-      // easily read as "it saved" when the response was actually lost.
       console.error(e);
       setSubmitError('Could not save this response. Please try again.');
       setLoading(false);
     }
   };
 
-  // Wait for dynamic questions to load if they are still undefined (useLiveQuery initial state)
   if (dynamicQuestions === undefined) {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--color-primary-900)' }}>
@@ -146,11 +138,6 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
     );
   }
 
-  // No admin-configured (and active) questions at all — nothing to render.
-  // Previously impossible (there was always a hardcoded fallback); now that
-  // the questionnaire is fully backend-controlled, an admin deactivating
-  // every question is a real state to handle instead of crashing on
-  // QUESTIONS[0] being undefined.
   if (QUESTIONS.length === 0) {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--color-primary-900)', padding: '2rem', textAlign: 'center' }}>
@@ -167,9 +154,6 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
     );
   }
 
-  const q = QUESTIONS[currentIdx];
-  const progress = ((currentIdx) / QUESTIONS.length) * 100;
-
   if (loading) {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--color-primary-900)' }}>
@@ -181,247 +165,229 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
     );
   }
 
-  return (
-    <div style={{ height: '100vh', width: '100%', background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', color: 'white', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      
-      <div style={{ width: '100%', height: 6, background: 'rgba(255,255,255,0.2)' }}>
-        <motion.div 
-          initial={{ width: 0 }} 
-          animate={{ width: `${progress}%` }} 
-          transition={{ duration: 0.3 }}
-          style={{ height: '100%', background: '#fbbf24' }} 
-        />
-      </div>
+  const currentSectionName = sections[currentTab];
+  const sectionQuestions = QUESTIONS.filter(q => (q.section || 'General') === currentSectionName);
 
-      <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
-        <button onClick={() => { if (onClose) onClose(); else router.back(); }} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1rem', cursor: 'pointer', opacity: 0.7 }}>{t.surveyCancel}</button>
-        <span style={{ fontWeight: 600, opacity: 0.8 }}>{currentIdx + 1} of {QUESTIONS.length}</span>
-        <button onClick={() => setShowSkipPrompt(true)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600 }}>{t.skipSurvey || 'Skip Survey'}</button>
+  // Check if all non-optional questions in current section are answered
+  const canProceed = sectionQuestions.every(q => {
+    if (q.isOptional) return true;
+    const ans = responses[q.id];
+    if (q.type === 'multi') {
+        const arr = ans as string[];
+        if (!arr || arr.length === 0) return false;
+        if (arr.some(isOtherOption) && !otherText[q.id]?.trim()) return false;
+        return true;
+    }
+    if (!ans) return false;
+    if (isOtherOption(ans) && !otherText[q.id]?.trim()) return false;
+    return true;
+  });
+
+  return (
+    <div style={{ minHeight: '100vh', width: '100%', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+      
+      {/* Header */}
+      <div style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', color: 'white', position: 'sticky', top: 0, zIndex: 40, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+        <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button onClick={() => { if (onClose) onClose(); else router.back(); }} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1rem', cursor: 'pointer', opacity: 0.8, fontWeight: 600 }}>← Cancel</button>
+          <span style={{ fontWeight: 700 }}>Survey</span>
+          <button onClick={() => setShowSkipPrompt(true)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '0.4rem 0.8rem', borderRadius: '15px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600 }}>Skip</button>
+        </div>
+        
+        {/* Tab Bar */}
+        <div style={{ display: 'flex', overflowX: 'auto', padding: '0 0.5rem', scrollbarWidth: 'none' }}>
+          {sections.map((sec, idx) => (
+            <button
+              key={sec}
+              onClick={() => setCurrentTab(idx)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: currentTab === idx ? '#fbbf24' : 'rgba(255,255,255,0.6)',
+                borderBottom: currentTab === idx ? '3px solid #fbbf24' : '3px solid transparent',
+                padding: '0.75rem 1rem',
+                fontSize: '0.9rem',
+                fontWeight: currentTab === idx ? 800 : 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {sec.split(':')[0]} {/* E.g. "Section A" */}
+            </button>
+          ))}
+        </div>
       </div>
 
       {submitError && (
-        <div style={{ margin: '0 1rem', padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '10px', color: 'white', fontSize: '0.85rem', fontWeight: 600, textAlign: 'center' }}>
+        <div style={{ margin: '1rem', padding: '0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#b91c1c', fontSize: '0.9rem', fontWeight: 600, textAlign: 'center' }}>
           ⚠️ {submitError}
         </div>
       )}
 
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+      {/* Main Form Content */}
+      <div style={{ flex: 1, padding: '1.5rem 1rem 6rem 1rem', maxWidth: 800, margin: '0 auto', width: '100%' }}>
         <AnimatePresence mode="wait">
           <motion.div
-            key={currentIdx}
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            transition={{ duration: 0.4, ease: 'easeOut' }}
-            style={{ width: '100%', maxWidth: 600 }}
+            key={currentTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}
           >
-            <h1 style={{ fontSize: '1.8rem', fontWeight: 800, lineHeight: 1.3, marginBottom: '2rem', textAlign: 'center' }}>
-              {q.text}
-            </h1>
+            <div style={{ marginBottom: '-1rem' }}>
+                <h2 style={{ color: '#1e293b', fontSize: '1.3rem', fontWeight: 800, margin: 0 }}>{currentSectionName}</h2>
+                <div style={{ height: 3, width: 40, background: '#4f46e5', marginTop: '0.5rem', borderRadius: 2 }} />
+            </div>
 
-            {q.type === 'single' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {q.options!.map((opt, i) => {
-                  const isOther = isOtherOption(opt);
-                  const selected = responses[q.id] === opt;
-                  return (
-                    <motion.button
-                      key={opt}
-                      whileHover={{ scale: 1.02, background: 'rgba(255,255,255,0.2)' }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => {
-                        const updated = handleInput(opt);
-                        // "Other" needs a moment for the agent to type before
-                        // advancing — every other option still advances instantly.
-                        if (!isOther) handleNext(updated);
-                      }}
-                      style={{
-                        background: selected ? 'rgba(251,191,36,0.25)' : 'rgba(255,255,255,0.1)',
-                        border: selected ? '2px solid #fbbf24' : '2px solid rgba(255,255,255,0.2)',
-                        padding: '1.25rem',
-                        borderRadius: '12px',
-                        color: 'white',
-                        fontSize: '1.2rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '1rem'
-                      }}
-                    >
-                      <span style={{ background: 'rgba(255,255,255,0.2)', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem' }}>
-                        {String.fromCharCode(65 + i)}
-                      </span>
-                      {opt}
-                    </motion.button>
-                  );
-                })}
+            {sectionQuestions.map((q, qIndex) => (
+                <div key={q.id} style={{ background: 'white', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 2px 15px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#334155', marginBottom: '1.25rem', lineHeight: 1.4 }}>
+                        <span style={{ color: '#4f46e5', marginRight: '0.5rem' }}>Q{qIndex + 1}.</span> 
+                        {q.text}
+                        {q.isOptional && <span style={{ fontSize: '0.8rem', color: '#94a3b8', marginLeft: '0.5rem', fontWeight: 500 }}>(Optional)</span>}
+                    </h3>
 
-                {isOtherOption(responses[q.id]) && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <textarea
-                      autoFocus
-                      value={otherText[q.id] || ''}
-                      onChange={(e) => setOtherText({ ...otherText, [q.id]: e.target.value })}
-                      placeholder="Please specify"
-                      rows={2}
-                      style={{ background: 'rgba(255,255,255,0.1)', border: '2px solid rgba(255,255,255,0.2)', borderRadius: '12px', color: 'white', fontSize: '1.1rem', padding: '1rem', outline: 'none', resize: 'none', width: '100%' }}
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => handleNext()}
-                        disabled={!otherText[q.id]?.trim()}
-                        style={{
-                          background: otherText[q.id]?.trim() ? '#fbbf24' : 'rgba(255,255,255,0.2)',
-                          color: otherText[q.id]?.trim() ? '#7c3aed' : 'rgba(255,255,255,0.5)',
-                          border: 'none',
-                          padding: '1rem 3rem',
-                          borderRadius: '30px',
-                          fontSize: '1.2rem',
-                          fontWeight: 800,
-                          cursor: otherText[q.id]?.trim() ? 'pointer' : 'not-allowed',
-                        }}
-                      >
-                        {t.okNext}
-                      </motion.button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : q.type === 'multi' ? (
-              (() => {
-                const multiSelected = Array.isArray(responses[q.id]) ? (responses[q.id] as string[]) : [];
-                const multiHasOther = multiSelected.some(isOtherOption);
-                const multiCanContinue = (q.isOptional || multiSelected.length > 0) && (!multiHasOther || !!otherText[q.id]?.trim());
-
-                return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {q.options!.map((opt) => {
-                  const selected = Array.isArray(responses[q.id]) && (responses[q.id] as string[]).includes(opt);
-                  return (
-                    <motion.button
-                      key={opt}
-                      whileHover={{ scale: 1.02, background: 'rgba(255,255,255,0.2)' }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => {
-                        const current = Array.isArray(responses[q.id]) ? (responses[q.id] as string[]) : [];
-                        handleInput(selected ? current.filter((o) => o !== opt) : [...current, opt]);
-                      }}
-                      style={{
-                        background: selected ? 'rgba(251,191,36,0.25)' : 'rgba(255,255,255,0.1)',
-                        border: selected ? '2px solid #fbbf24' : '2px solid rgba(255,255,255,0.2)',
-                        padding: '1.25rem',
-                        borderRadius: '12px',
-                        color: 'white',
-                        fontSize: '1.2rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '1rem'
-                      }}
-                    >
-                      <span style={{
-                        width: 26, height: 26, borderRadius: 6, flexShrink: 0,
-                        border: '2px solid rgba(255,255,255,0.6)',
-                        background: selected ? '#fbbf24' : 'transparent',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '1rem', fontWeight: 800, color: '#7c3aed',
-                      }}>
-                        {selected ? '✓' : ''}
-                      </span>
-                      {opt}
-                    </motion.button>
-                  );
-                })}
-
-                {multiHasOther && (
-                  <textarea
-                    autoFocus
-                    value={otherText[q.id] || ''}
-                    onChange={(e) => setOtherText({ ...otherText, [q.id]: e.target.value })}
-                    placeholder="Please specify"
-                    rows={2}
-                    style={{ background: 'rgba(255,255,255,0.1)', border: '2px solid rgba(255,255,255,0.2)', borderRadius: '12px', color: 'white', fontSize: '1.1rem', padding: '1rem', outline: 'none', resize: 'none', width: '100%' }}
-                  />
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.5rem' }}>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => handleNext()}
-                    disabled={!multiCanContinue}
-                    style={{
-                      background: multiCanContinue ? '#fbbf24' : 'rgba(255,255,255,0.2)',
-                      color: multiCanContinue ? '#7c3aed' : 'rgba(255,255,255,0.5)',
-                      border: 'none',
-                      padding: '1rem 3rem',
-                      borderRadius: '30px',
-                      fontSize: '1.2rem',
-                      fontWeight: 800,
-                      cursor: multiCanContinue ? 'pointer' : 'not-allowed',
-                    }}
-                  >
-                    {t.okNext}
-                  </motion.button>
+                    {q.type === 'single' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {q.options!.map((opt) => {
+                          const isOther = isOtherOption(opt);
+                          const selected = responses[q.id] === opt;
+                          return (
+                              <React.Fragment key={opt}>
+                                <div 
+                                    onClick={() => handleInput(q.id, opt)}
+                                    style={{
+                                        background: selected ? '#eef2ff' : '#f8fafc',
+                                        border: selected ? '2px solid #6366f1' : '1px solid #e2e8f0',
+                                        padding: '1rem',
+                                        borderRadius: '12px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.75rem',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    <div style={{ width: 20, height: 20, borderRadius: '50%', border: selected ? '6px solid #4f46e5' : '2px solid #cbd5e1', background: 'white' }} />
+                                    <span style={{ color: selected ? '#312e81' : '#475569', fontWeight: selected ? 700 : 500, fontSize: '0.95rem' }}>{opt}</span>
+                                </div>
+                                {isOther && selected && (
+                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} style={{ paddingLeft: '2.5rem' }}>
+                                        <input 
+                                            autoFocus
+                                            type="text"
+                                            value={otherText[q.id] || ''}
+                                            onChange={(e) => setOtherText({ ...otherText, [q.id]: e.target.value })}
+                                            placeholder="Please specify..."
+                                            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', outlineColor: '#4f46e5' }}
+                                        />
+                                    </motion.div>
+                                )}
+                              </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    ) : q.type === 'multi' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '-0.75rem', marginBottom: '0.25rem' }}>Select all that apply</p>
+                        {q.options!.map((opt) => {
+                          const isOther = isOtherOption(opt);
+                          const currentArr = Array.isArray(responses[q.id]) ? (responses[q.id] as string[]) : [];
+                          const selected = currentArr.includes(opt);
+                          return (
+                              <React.Fragment key={opt}>
+                                <div 
+                                    onClick={() => {
+                                        if (selected) {
+                                            handleInput(q.id, currentArr.filter(o => o !== opt));
+                                        } else {
+                                            handleInput(q.id, [...currentArr, opt]);
+                                        }
+                                    }}
+                                    style={{
+                                        background: selected ? '#eef2ff' : '#f8fafc',
+                                        border: selected ? '2px solid #6366f1' : '1px solid #e2e8f0',
+                                        padding: '1rem',
+                                        borderRadius: '12px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.75rem',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    <div style={{ width: 22, height: 22, borderRadius: '6px', border: selected ? 'none' : '2px solid #cbd5e1', background: selected ? '#4f46e5' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        {selected && <span style={{ color: 'white', fontSize: '0.9rem', fontWeight: 800 }}>✓</span>}
+                                    </div>
+                                    <span style={{ color: selected ? '#312e81' : '#475569', fontWeight: selected ? 700 : 500, fontSize: '0.95rem' }}>{opt}</span>
+                                </div>
+                                {isOther && selected && (
+                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} style={{ paddingLeft: '2.5rem' }}>
+                                        <input 
+                                            autoFocus
+                                            type="text"
+                                            value={otherText[q.id] || ''}
+                                            onChange={(e) => setOtherText({ ...otherText, [q.id]: e.target.value })}
+                                            placeholder="Please specify..."
+                                            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.95rem', outlineColor: '#4f46e5' }}
+                                        />
+                                    </motion.div>
+                                )}
+                              </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {q.type === 'number' ? (
+                          <input 
+                            type="number"
+                            value={responses[q.id] as number || ''}
+                            onChange={(e) => handleInput(q.id, Number(e.target.value))}
+                            placeholder={t.typeNumber || "Type a number..."}
+                            style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '2px solid #e2e8f0', fontSize: '1.2rem', outlineColor: '#4f46e5', background: '#f8fafc' }}
+                          />
+                        ) : (
+                          <textarea 
+                            value={responses[q.id] as string || ''}
+                            onChange={(e) => handleInput(q.id, e.target.value)}
+                            placeholder={t.typeAnswer || "Type your answer..."}
+                            rows={3}
+                            style={{ width: '100%', padding: '1rem', borderRadius: '12px', border: '2px solid #e2e8f0', fontSize: '1rem', outlineColor: '#4f46e5', background: '#f8fafc', resize: 'vertical' }}
+                          />
+                        )}
+                      </div>
+                    )}
                 </div>
-              </div>
-                );
-              })()
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {q.type === 'number' ? (
-                  <input 
-                    type="number"
-                    autoFocus
-                    value={responses[q.id] as number || ''}
-                    onChange={(e) => handleInput(Number(e.target.value))}
-                    placeholder={t.typeNumber}
-                    style={{ background: 'transparent', border: 'none', borderBottom: '3px solid rgba(255,255,255,0.3)', color: 'white', fontSize: '2rem', padding: '1rem 0', outline: 'none', textAlign: 'center' }}
-                  />
-                ) : (
-                  <textarea 
-                    autoFocus
-                    value={responses[q.id] as string || ''}
-                    onChange={(e) => handleInput(e.target.value)}
-                    placeholder={t.typeAnswer}
-                    rows={3}
-                    style={{ background: 'rgba(255,255,255,0.1)', border: '2px solid rgba(255,255,255,0.2)', borderRadius: '12px', color: 'white', fontSize: '1.2rem', padding: '1rem', outline: 'none', resize: 'none', width: '100%' }}
-                  />
-                )}
-                
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => handleNext()}
-                    disabled={!q.isOptional && !responses[q.id]}
-                    style={{
-                      background: (q.isOptional || responses[q.id]) ? '#fbbf24' : 'rgba(255,255,255,0.2)',
-                      color: (q.isOptional || responses[q.id]) ? '#7c3aed' : 'rgba(255,255,255,0.5)',
-                      border: 'none',
-                      padding: '1rem 3rem',
-                      borderRadius: '30px',
-                      fontSize: '1.2rem',
-                      fontWeight: 800,
-                      cursor: (q.isOptional || responses[q.id]) ? 'pointer' : 'not-allowed',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem'
-                    }}
-                  >
-                    {loading ? t.savingSurvey : (q.isOptional && !responses[q.id] ? 'Skip (Optional)' : t.okNext)}
-                  </motion.button>
-                </div>
-              </div>
-            )}
+            ))}
           </motion.div>
         </AnimatePresence>
+      </div>
+
+      {/* Bottom Sticky Action Bar */}
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'white', padding: '1rem 1.5rem', boxShadow: '0 -4px 15px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'flex-end', zIndex: 40 }}>
+        <button
+          onClick={handleNextSection}
+          disabled={!canProceed}
+          style={{
+            background: canProceed ? '#4f46e5' : '#e2e8f0',
+            color: canProceed ? 'white' : '#94a3b8',
+            border: 'none',
+            padding: '1rem 2rem',
+            borderRadius: '12px',
+            fontSize: '1.1rem',
+            fontWeight: 700,
+            cursor: canProceed ? 'pointer' : 'not-allowed',
+            width: '100%',
+            maxWidth: 400,
+            transition: 'all 0.2s ease',
+            boxShadow: canProceed ? '0 4px 15px rgba(79,70,229,0.3)' : 'none'
+          }}
+        >
+          {currentTab < sections.length - 1 ? 'Next Section →' : 'Submit Survey'}
+        </button>
       </div>
 
       {/* Skip Prompt Overlay */}
@@ -429,7 +395,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
         {showSkipPrompt && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', zIndex: 50 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', zIndex: 50 }}
           >
             <motion.div 
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}

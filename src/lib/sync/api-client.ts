@@ -52,9 +52,12 @@ export interface SyncPullRequest {
   agentId: string;
   deviceId: string;
   since: string; // ISO date — '1970-01-01T00:00:00Z' for full pull
+  page?: number;
+  pageSize?: number;
 }
 
 export interface SyncPullResponse {
+  hasMore: boolean;
   contacts: unknown[];
   visits: unknown[];
   referrals: unknown[];
@@ -639,6 +642,7 @@ export interface AdminContactDto {
   name: string;
   phone: string | null;
   role: string;
+  profession?: string | null;
   panchayatId: string;
   agentId: string;
   agentName?: string;
@@ -654,6 +658,11 @@ export interface AdminContactDto {
   lastUpdatedAt?: string | null;
   lastUpdatedBy?: string | null;
   photoUrl?: string | null;
+  agentEscalated?: boolean;
+  agentEscalationNote?: string | null;
+  isEscalationResolved?: boolean;
+  agentEscalationResolution?: string | null;
+  documents?: { id: string, url: string, mimeType: string, label: string | null, createdAt: string }[];
 }
 
 export interface ContactUpdateRequest {
@@ -668,6 +677,8 @@ export interface ContactUpdateRequest {
   name?: string;
   phone?: string;
   panchayatId?: string;
+  agentEscalationResolved?: boolean;
+  agentEscalationResolution?: string | null;
 }
 
 export interface AdminContactsQuery {
@@ -681,6 +692,7 @@ export interface AdminContactsQuery {
   endDate?: string;
   maxFollowUpDate?: string;
   updatedAfter?: string;
+  agentEscalated?: boolean;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
@@ -704,6 +716,7 @@ export function getAdminContacts(query: AdminContactsQuery = {}): Promise<Pagina
   if (query.endDate) params.set('endDate', query.endDate);
   if (query.maxFollowUpDate) params.set('maxFollowUpDate', query.maxFollowUpDate);
   if (query.updatedAfter) params.set('updatedAfter', query.updatedAfter);
+  if (query.agentEscalated) params.set('agentEscalated', 'true');
   if (query.sortBy) params.set('sortBy', query.sortBy);
   if (query.sortOrder) params.set('sortOrder', query.sortOrder);
   const qs = params.toString();
@@ -724,11 +737,12 @@ export function updateAdminSurveyResponse(id: string, answersJson: string): Prom
 // ─── Admin Survey Questions ──────────────────────────────────────────────
 
 export interface SurveyQuestionDto {
-  id: string;
-  questionId: string;
+  id: string;           // Guid
+  questionId: string;   // e.g. "q1"
   text: string;
-  type: 'single' | 'multi' | 'text';
-  optionsJson?: string | null;
+  type: string;         // 'single' | 'multi' | 'text'
+  optionsJson?: string;
+  section?: string;     // Group/Tab the question belongs to
   isOptional: boolean;
   isActive: boolean;
   order: number;

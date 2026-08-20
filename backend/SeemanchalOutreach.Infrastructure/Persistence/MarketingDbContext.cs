@@ -23,6 +23,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<BlockAssignment> BlockAssignments => Set<BlockAssignment>();
         public DbSet<AgentRefreshToken> AgentRefreshTokens => Set<AgentRefreshToken>();
         public DbSet<SurveyQuestion> SurveyQuestions => Set<SurveyQuestion>();
+        public DbSet<ContactDocument> ContactDocuments { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

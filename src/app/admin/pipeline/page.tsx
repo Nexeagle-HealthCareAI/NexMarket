@@ -61,6 +61,7 @@ export default function PipelinePage() {
   const [customEndDate, setCustomEndDate] = useState('');
   const [sortBy, setSortBy] = useState<string | undefined>(undefined);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | undefined>(undefined);
+  const [showEscalatedOnly, setShowEscalatedOnly] = useState(false);
 
   // Filter States
   const [panchayatsData, setPanchayatsData] = useState<PanchayatDto[]>([]);
@@ -137,6 +138,7 @@ export default function PipelinePage() {
           endDate,
           maxFollowUpDate,
           updatedAfter,
+          agentEscalated: showEscalatedOnly ? true : undefined,
           sortBy,
           sortOrder,
         });
@@ -151,7 +153,7 @@ export default function PipelinePage() {
     })();
 
     return () => { cancelled = true; };
-  }, [agentId, page, selectedCities, selectedBlocks, selectedPanchayats, activeTab, dateFilter, customStartDate, customEndDate, sortBy, sortOrder]);
+  }, [agentId, page, selectedCities, selectedBlocks, selectedPanchayats, activeTab, dateFilter, customStartDate, customEndDate, sortBy, sortOrder, showEscalatedOnly]);
 
   const handleSaveContact = async (clientId: string, update: ContactUpdateRequest) => {
     if (!agentId) return;
@@ -385,6 +387,16 @@ export default function PipelinePage() {
             disabled={selectedBlocks.length === 0 && uniquePanchayats.length === 0}
           />
         </div>
+        
+        {/* Escalation Toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: showEscalatedOnly ? '#fef2f2' : 'white', border: `1px solid ${showEscalatedOnly ? '#fca5a5' : '#cbd5e1'}`, padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s', marginTop: 'auto' }} onClick={() => { setShowEscalatedOnly(!showEscalatedOnly); setPage(1); }}>
+          <div style={{ width: 40, height: 22, background: showEscalatedOnly ? '#ef4444' : '#cbd5e1', borderRadius: 11, position: 'relative', transition: 'background 0.2s' }}>
+            <div style={{ position: 'absolute', top: 2, left: showEscalatedOnly ? 20 : 2, width: 18, height: 18, background: 'white', borderRadius: '50%', transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
+          </div>
+          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: showEscalatedOnly ? '#b91c1c' : '#475569' }}>
+            🚨 Escalations Only
+          </span>
+        </div>
       </div>
 
       {/* KPI — respects every active filter (date/district/block/panchayat) and
@@ -573,6 +585,18 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
                 </>
               )}
             </div>
+            {contact.agentEscalated && (
+              <div style={{ marginTop: '0.35rem' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '4px' }}>
+                  🚨 ESCALATED
+                </span>
+                {contact.agentEscalationNote && (
+                  <div style={{ fontSize: '0.75rem', color: '#991b1b', marginTop: '0.25rem', background: '#fef2f2', padding: '0.35rem 0.5rem', borderRadius: '4px', borderLeft: '3px solid #ef4444' }}>
+                    {contact.agentEscalationNote}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </td>

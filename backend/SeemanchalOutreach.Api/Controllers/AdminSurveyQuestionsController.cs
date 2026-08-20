@@ -34,6 +34,7 @@ namespace SeemanchalOutreach.Api.Controllers
             public string QuestionId { get; set; } = string.Empty;
             public string Text { get; set; } = string.Empty;
             public string Type { get; set; } = "single";
+            public string Section { get; set; } = string.Empty;
             public List<string>? Options { get; set; }
             public bool IsOptional { get; set; } = false;
             public bool IsActive { get; set; } = true;
@@ -54,6 +55,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 QuestionId = dto.QuestionId,
                 Text = dto.Text,
                 Type = dto.Type,
+                Section = dto.Section,
                 OptionsJson = dto.Options != null ? JsonSerializer.Serialize(dto.Options) : null,
                 IsOptional = dto.IsOptional,
                 IsActive = dto.IsActive,
@@ -81,6 +83,7 @@ namespace SeemanchalOutreach.Api.Controllers
             question.QuestionId = dto.QuestionId;
             question.Text = dto.Text;
             question.Type = dto.Type;
+            question.Section = dto.Section;
             question.OptionsJson = dto.Options != null ? JsonSerializer.Serialize(dto.Options) : null;
             question.IsOptional = dto.IsOptional;
             question.IsActive = dto.IsActive;

@@ -25,6 +25,8 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
+  const [resolutionNote, setResolutionNote] = useState('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -72,6 +74,27 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
     }
   };
 
+  const handleResolveEscalation = async () => {
+    if (!contact || !agentId) return;
+    if (!resolutionNote.trim()) {
+      alert('Please enter a resolution note.');
+      return;
+    }
+    try {
+      const saved = await updateAdminContact(contact.clientId, { 
+        agentEscalationResolved: true, 
+        agentEscalationResolution: resolutionNote 
+      });
+      setContact({ ...contact, ...saved });
+      setIsResolving(false);
+      setResolutionNote('');
+      const historyEntries = await getContactHistory(contact.clientId);
+      setHistory(historyEntries);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to resolve escalation.');
+    }
+  };
+
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !contact) return;
@@ -113,6 +136,41 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
       {/* Unified Header Card */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1.5rem 2rem', marginBottom: '2rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
         
+        {/* Escalation Banner */}
+        {contact.agentEscalated && (
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', background: '#fef2f2', border: '1px solid #fecaca', padding: '1rem 1.5rem', borderRadius: '8px', marginBottom: '1.5rem', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+              <div style={{ fontSize: '1.75rem' }}>🚨</div>
+              <div>
+                <h3 style={{ margin: '0 0 0.25rem 0', color: '#b91c1c', fontSize: '1rem' }}>Escalated to Admin on Priority</h3>
+                {contact.agentEscalationNote && (
+                  <p style={{ margin: 0, color: '#991b1b', fontSize: '0.9rem' }}>{contact.agentEscalationNote}</p>
+                )}
+              </div>
+            </div>
+            
+            {isResolving ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '300px' }}>
+                <textarea 
+                  placeholder="Resolution Note" 
+                  value={resolutionNote} 
+                  onChange={e => setResolutionNote(e.target.value)}
+                  style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #fca5a5', width: '100%', outline: 'none' }}
+                  rows={2}
+                />
+                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                  <button onClick={() => setIsResolving(false)} style={{ background: 'transparent', border: 'none', color: '#b91c1c', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>Cancel</button>
+                  <button onClick={handleResolveEscalation} style={{ background: '#b91c1c', color: 'white', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>Resolve</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => setIsResolving(true)} style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#b91c1c', padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                ✓ Resolve Escalation
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Top Header Row */}
         <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '2rem' }}>
           <Link
@@ -178,8 +236,45 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Assigned Agent</label>
             <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>{contact.agentId}</div>
           </div>
+          {contact.isEscalationResolved && contact.agentEscalationResolution && (
+            <div style={{ gridColumn: '1 / -1', background: '#f0fdf4', borderLeft: '4px solid #22c55e', padding: '1rem', borderRadius: '4px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Escalation Resolved</label>
+              <div style={{ fontSize: '0.9rem', color: '#166534' }}>{contact.agentEscalationResolution}</div>
+            </div>
+          )}
         </div>
       </motion.div>
+
+      {/* Documents Section */}
+      {contact.documents && contact.documents.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', maxWidth: '100%', marginBottom: '2rem', padding: '1.5rem' }}>
+          <h2 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>Attached Documents ({contact.documents.length})</h2>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem' }}>
+            {contact.documents.map(doc => (
+              <div key={doc.id} style={{ display: 'flex', gap: '1rem', alignItems: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem' }}>
+                <div style={{ fontSize: '2rem' }}>{doc.mimeType.includes('pdf') ? '📄' : '🖼️'}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {doc.label || 'Attached Document'}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
+                    {new Date(doc.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+                <a
+                  href={doc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ background: '#e0e7ff', color: '#4338ca', padding: '0.5rem 0.75rem', borderRadius: '6px', textDecoration: 'none', fontSize: '0.8rem', fontWeight: 600, flexShrink: 0 }}
+                >
+                  View
+                </a>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* Full Width Table */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', maxWidth: '100%' }}>

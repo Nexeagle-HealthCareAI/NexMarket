@@ -15,6 +15,11 @@ const ROLE_CLASSES: Record<ContactRole, string> = {
   medicine_shop: 'role-medicine',
   mukhiya: 'role-mukhiya',
   prominent_person: 'role-prominent',
+  lab: 'role-medicine',
+  nursing_home: 'role-medicine',
+  independent_doctor: 'role-rmp',
+  hospital: 'role-medicine',
+  other: 'role-prominent',
 };
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -43,6 +48,11 @@ export default function ContactsPage() {
     medicine_shop: t.roleMedicineShop,
     mukhiya: t.roleMukhiya,
     prominent_person: t.roleProminentPerson,
+    lab: t.roleLab,
+    nursing_home: t.roleNursingHome,
+    independent_doctor: t.roleIndependentDoctor,
+    hospital: t.roleHospital,
+    other: t.roleOther,
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,7 +105,7 @@ export default function ContactsPage() {
 
       {/* Role filter chips */}
       <motion.div variants={itemVariants} style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-        {(['all', 'asha_worker', 'rmp_doctor', 'ward_member', 'medicine_shop', 'mukhiya', 'prominent_person'] as const).map((role) => (
+        {(['all', 'asha_worker', 'rmp_doctor', 'ward_member', 'medicine_shop', 'mukhiya', 'prominent_person', 'lab', 'nursing_home', 'independent_doctor', 'hospital', 'other'] as const).map((role) => (
           <button
             key={role}
             id={`filter-${role}`}
@@ -137,8 +147,8 @@ export default function ContactsPage() {
             <div className="empty-state-icon">👤</div>
             <h3>{t.noContactsYet}</h3>
             <p style={{ fontSize: '0.85rem' }}>{t.addContactsDesc}</p>
-            <Link href="/contacts/new" className="btn btn-primary btn-sm" style={{ marginTop: '0.5rem' }}>
-              {t.addFirstContact}
+            <Link href="/contacts/new" className="btn btn-primary btn-lg" style={{ marginTop: '1rem' }}>
+              {t.addFirstContact || 'Start by Adding a Contact'}
             </Link>
           </motion.div>
         ) : (

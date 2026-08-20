@@ -4,9 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { v4 as uuidv4 } from 'uuid';
 import { useAgentStore } from '@/store/agent-store';
-import { useActiveShift, useActiveVisit, useContacts, useVisits, useOutboxCount, db } from '@/lib/db';
+import { useActiveShift, useActiveVisit, useContacts, useVisits, db } from '@/lib/db';
 import { addToOutbox } from '@/lib/sync/outbox';
-import { triggerManualSync } from '@/lib/sync/engine';
 import { useGeolocation } from '@/lib/geo/useGeolocation';
 import { CurrentLocationBanner } from '@/components/CurrentLocationBanner';
 import type { LocalShift } from '@/lib/db/schema';
@@ -35,14 +34,11 @@ export default function HomeClient() {
   const activeVisit = useActiveVisit(agentId ?? undefined);
   const contacts = useContacts(agentId ?? undefined);
   const visits = useVisits(agentId ?? undefined);
-  const outboxCount = useOutboxCount();
-
   const { position, permission } = useGeolocation({
     shiftId: activeShift?.clientId,
     record: !!activeShift,
   });
-
-  const [syncing, setSyncing] = useState(false);
+  
   const [shiftLoading, setShiftLoading] = useState(false);
 
   const isOnShift = !!activeShift && !activeShift.endAt;
@@ -68,11 +64,7 @@ export default function HomeClient() {
     setShiftLoading(false);
   }
 
-  async function handleManualSync() {
-    setSyncing(true);
-    await triggerManualSync();
-    setSyncing(false);
-  }
+
 
   const todayContacts = contacts?.filter(
     (c) => new Date(c.createdAt).toDateString() === new Date().toDateString()
@@ -120,24 +112,6 @@ export default function HomeClient() {
             </p>
           </div>
           
-          {/* Sync Button floating on top right of hero */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
-            {syncing ? (
-              <div style={{ background: 'rgba(255,255,255,0.2)', padding: '0.4rem 0.75rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600 }}>
-                <svg className="spin" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>
-                {t.syncing}
-              </div>
-            ) : outboxCount && outboxCount > 0 ? (
-              <button onClick={handleManualSync} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '0.4rem 0.75rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)' }}>
-                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M21 12a9 9 0 11-4.219-7.64" /></svg>
-                {outboxCount} {t.pending}
-              </button>
-            ) : (
-              <div style={{ background: 'rgba(255,255,255,0.2)', padding: '0.4rem 0.75rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600 }}>
-                <span style={{ width: 6, height: 6, background: '#4ade80', borderRadius: '50%' }} /> {t.synced}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Shift Control inside Hero */}
@@ -222,6 +196,34 @@ export default function HomeClient() {
           </div>
         </div>
       </motion.div>
+      {/* ─── Recently Added Contacts Strip ───────────────────────────────── */}
+      {contacts && contacts.length > 0 && (
+        <motion.div variants={itemVariants} style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>{t.recentlyAdded || 'Recently Added'}</h3>
+            <Link href="/contacts" style={{ fontSize: '0.8rem', color: 'var(--color-primary-600)', fontWeight: 700, textDecoration: 'none' }}>
+              View All →
+            </Link>
+          </div>
+          
+          <div style={{ display: 'flex', overflowX: 'auto', gap: '1rem', paddingBottom: '0.5rem', scrollSnapType: 'x mandatory', msOverflowStyle: 'none', scrollbarWidth: 'none' }} className="hide-scrollbar">
+            {[...contacts].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5).map(contact => (
+              <Link key={contact.clientId} href={`/contacts/${contact.clientId}`} style={{ textDecoration: 'none', scrollSnapAlign: 'start', minWidth: '160px', flex: '0 0 auto' }}>
+                <div style={{ background: 'white', border: '1px solid var(--surface-border)', borderRadius: '1rem', padding: '1rem', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--surface-input)', color: 'var(--color-primary-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1rem', marginBottom: '0.75rem' }}>
+                    {contact.name.charAt(0).toUpperCase()}
+                  </div>
+                  <p style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{contact.name}</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500, marginTop: '0.2rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{contact.role === 'asha_worker' ? 'ASHA Worker' : contact.role === 'rmp_doctor' ? 'RMP Doctor' : 'Other'}</p>
+                  <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.5rem' }}>
+                    {new Date(contact.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* ─── Quick Actions Grid ──────────────────────────────────────────── */}
       <motion.div variants={itemVariants} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
@@ -293,38 +295,7 @@ export default function HomeClient() {
         </Link>
       </motion.div>
       
-      {/* ─── Recent Activity Feed (Empty State for now) ──────────────────── */}
-      <motion.div variants={itemVariants}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>{t.recentActivity}</h3>
-          <Link href="/history" style={{ fontSize: '0.8rem', color: 'var(--color-primary-600)', fontWeight: 700, textDecoration: 'none' }}>{t.viewAll}</Link>
-        </div>
-        
-        {(!visits || visits.length === 0) ? (
-          <div style={{ background: 'white', borderRadius: '1rem', border: '1px solid var(--surface-border)', padding: '2rem 1rem', textAlign: 'center' }}>
-            <div style={{ width: 48, height: 48, background: 'var(--surface-input)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: '1.25rem' }}>⏳</div>
-            <p style={{ fontWeight: 600, color: '#0f172a', marginBottom: '0.25rem' }}>{t.noRecentActivity}</p>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t.noRecentActivityDesc}</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {visits.sort((a, b) => new Date(b.checkInAt).getTime() - new Date(a.checkInAt).getTime()).slice(0, 3).map((visit) => {
-              const visitDate = new Date(visit.checkInAt);
-              return (
-                <div key={visit.clientId} style={{ background: 'white', borderRadius: '1rem', border: '1px solid var(--surface-border)', padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <div style={{ width: 40, height: 40, background: '#eff6ff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
-                    📍
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>{t.panchayatVisit}</p>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{visitDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · {visit.checkOutAt ? t.completed : t.ongoing}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </motion.div>
+
 
     </motion.div>
   );

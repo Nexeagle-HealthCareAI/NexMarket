@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SeemanchalOutreach.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using SeemanchalOutreach.Infrastructure.Persistence;
 namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MarketingDbContext))]
-    partial class MarketingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260820072117_AddAgentEscalation")]
+    partial class AddAgentEscalation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -95,59 +98,6 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.HasIndex("AgentId", "Status");
 
                     b.ToTable("block_assignments", "marketing");
-                });
-
-            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.ContactDocument", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AgentId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ClientId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ContactClientId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DeviceId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ExifCapturedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<double?>("ExifLatitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<double?>("ExifLongitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<string>("Label")
-                        .HasColumnType("text");
-
-                    b.Property<string>("MimeType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("ServerReceivedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Url")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ContactDocuments", "marketing");
                 });
 
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.ContactHistoryEntry", b =>
@@ -407,9 +357,6 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("AgentEscalationNote")
                         .HasColumnType("text");
 
-                    b.Property<string>("AgentEscalationResolution")
-                        .HasColumnType("text");
-
                     b.Property<string>("AgentId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -442,9 +389,6 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime?>("FollowUpDate")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsEscalationResolved")
-                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsMerged")
                         .HasColumnType("boolean");
@@ -641,10 +585,6 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("QuestionId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Section")
                         .IsRequired()
                         .HasColumnType("text");
 

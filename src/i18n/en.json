@@ -67,6 +67,11 @@
   "roleMedicineShop": "Medicine Shop",
   "roleMukhiya": "Mukhiya",
   "roleProminentPerson": "Prominent Person",
+  "roleLab": "Lab/Pathology",
+  "roleNursingHome": "Nursing Home",
+  "roleIndependentDoctor": "Independent Doctor",
+  "roleHospital": "Hospital",
+  "roleOther": "Other",
   "contactsPageTitle": "Contacts",
   "btnAdd": "+ Add",
   "searchPlaceholder": "Search name, phone, panchayat…",
@@ -87,6 +92,11 @@
   "descMedicineShop": "Local pharmacy or medicine store",
   "descMukhiya": "Panchayat head / village chief",
   "descProminentPerson": "Influential local community figure",
+  "descLab": "Pathology or diagnostic center",
+  "descNursingHome": "Local nursing home or small clinic",
+  "descIndependentDoctor": "Independent practicing doctor",
+  "descHospital": "Local hospital or medical center",
+  "descOther": "Other contact type",
   "newContact": "New Contact",
   "contactType": "Contact Type *",
   "fullName": "Full Name *",
@@ -208,5 +218,8 @@
   "skipReasonNotApplicable": "Not applicable to this person",
   "skipReasonOther": "Other",
   "confirmSkip": "Confirm Skip",
-  "surveyOptional": "The health survey is optional."
+  "surveyDesc": "Answer 5 quick questions about community health to earn points.",
+  "startSurvey": "Start Survey",
+  "surveyOptional": "This survey is optional and helps us map health trends.",
+  "recentlyAdded": "Recently Added"
 }

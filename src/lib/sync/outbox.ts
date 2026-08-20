@@ -40,6 +40,8 @@ export function wireTypeFor(entry: SyncOutboxEntry): string {
       return 'survey';
     case 'panchayat':
       return 'panchayat_new';
+    case 'contact_document':
+      return 'contact_document';
   }
 }
 
@@ -97,10 +99,12 @@ export async function markSynced(
   await db.transaction('rw', [
     db.syncOutbox,
     db.contacts,
+    db.contactDocuments,
     db.visits,
     db.shifts,
     db.referrals,
     db.trajectoryPoints,
+    db.surveyResponses,
   ], async () => {
     // Remove from outbox
     await db.syncOutbox.delete(localId);
@@ -132,6 +136,11 @@ export async function markSynced(
         break;
       case 'survey':
         await db.surveyResponses
+          .filter(filter)
+          .modify({ serverId, syncedAt });
+        break;
+      case 'contact_document':
+        await db.contactDocuments
           .filter(filter)
           .modify({ serverId, syncedAt });
         break;
@@ -196,6 +205,15 @@ export async function enqueueTrajectoryBatch(
   deviceId: string,
   limit = 200,
 ): Promise<void> {
+  // Prevent infinite batching loop: if there is an active (not dead-letter)
+  // trajectory_batch in the outbox, wait for it to flush. Otherwise, the sync
+  // loop will fetch these exact same unsynced points and queue another identical batch.
+  const activeBatches = await db.syncOutbox
+    .filter((e) => e.entityType === 'trajectory_batch' && e.attemptCount < MAX_RETRIES)
+    .count();
+
+  if (activeBatches > 0) return;
+
   const points = await db.trajectoryPoints
     .filter((p) => !p.syncedAt && p.agentId === agentId && p.deviceId === deviceId)
     .limit(limit)

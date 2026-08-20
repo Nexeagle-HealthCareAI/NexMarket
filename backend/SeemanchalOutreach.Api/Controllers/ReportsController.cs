@@ -20,6 +20,11 @@ namespace SeemanchalOutreach.Api.Controllers
         public int Med { get; set; }
         public int Mukhiya { get; set; }
         public int Prominent { get; set; }
+        public int Lab { get; set; }
+        public int NursingHome { get; set; }
+        public int IndependentDoctor { get; set; }
+        public int Hospital { get; set; }
+        public int Other { get; set; }
         public int Visits { get; set; }
         public int Referrals { get; set; }
         public int Converted { get; set; }
@@ -34,6 +39,11 @@ namespace SeemanchalOutreach.Api.Controllers
         public int MedicineShops { get; set; }
         public int Mukhiyas { get; set; }
         public int ProminentPersons { get; set; }
+        public int Labs { get; set; }
+        public int NursingHomes { get; set; }
+        public int IndependentDoctors { get; set; }
+        public int Hospitals { get; set; }
+        public int Others { get; set; }
         public int TotalVisits { get; set; }
         public int TotalReferrals { get; set; }
         public int ConvertedReferrals { get; set; }
@@ -64,20 +74,51 @@ namespace SeemanchalOutreach.Api.Controllers
             var panchayatList = await panchayats.ToListAsync(cancellationToken);
             var panchayatIds = panchayatList.Select(p => p.PanchayatId).ToHashSet();
 
-            var contacts = await _db.Contacts.AsNoTracking()
+            var contactStatsByPanchayat = await _db.Contacts.AsNoTracking()
                 .Where(c => !c.IsMerged && panchayatIds.Contains(c.PanchayatId))
-                .ToListAsync(cancellationToken);
-            var visits = await _db.Visits.AsNoTracking()
+                .GroupBy(c => c.PanchayatId)
+                .Select(g => new
+                {
+                    PanchayatId = g.Key,
+                    TotalContacts = g.Count(),
+                    AshaWorkers = g.Count(c => c.Role == "asha_worker"),
+                    RmpDoctors = g.Count(c => c.Role == "rmp_doctor"),
+                    WardMembers = g.Count(c => c.Role == "ward_member"),
+                    MedicineShops = g.Count(c => c.Role == "medicine_shop"),
+                    Mukhiyas = g.Count(c => c.Role == "mukhiya"),
+                    ProminentPersons = g.Count(c => c.Role == "prominent_person"),
+                    Labs = g.Count(c => c.Role == "lab"),
+                    NursingHomes = g.Count(c => c.Role == "nursing_home"),
+                    IndependentDoctors = g.Count(c => c.Role == "independent_doctor"),
+                    Hospitals = g.Count(c => c.Role == "hospital"),
+                    Others = g.Count(c => c.Role == "other")
+                })
+                .ToDictionaryAsync(x => x.PanchayatId, cancellationToken);
+
+            var visitStatsByPanchayat = await _db.Visits.AsNoTracking()
                 .Where(v => panchayatIds.Contains(v.PanchayatId))
-                .ToListAsync(cancellationToken);
-            var contactClientIds = contacts.Select(c => c.ClientId).ToHashSet();
-            var referrals = await _db.Referrals.AsNoTracking()
-                .Where(r => contactClientIds.Contains(r.ContactId))
-                .ToListAsync(cancellationToken);
-            // Keyed by (District, Block), not Block alone — block names repeat
-            // across districts (e.g. a "Sadar" block exists in most districts),
-            // so a Block-only key was silently merging unrelated blocks' agent
-            // counts together whenever their names collided.
+                .GroupBy(v => v.PanchayatId)
+                .Select(g => new
+                {
+                    PanchayatId = g.Key,
+                    TotalVisits = g.Count()
+                })
+                .ToDictionaryAsync(x => x.PanchayatId, cancellationToken);
+
+            var referralStatsByPanchayat = await _db.Referrals.AsNoTracking()
+                .Join(_db.Contacts.AsNoTracking().Where(c => !c.IsMerged && panchayatIds.Contains(c.PanchayatId)),
+                      r => r.ContactId,
+                      c => c.ClientId,
+                      (r, c) => new { c.PanchayatId, r.Status })
+                .GroupBy(x => x.PanchayatId)
+                .Select(g => new
+                {
+                    PanchayatId = g.Key,
+                    TotalReferrals = g.Count(),
+                    ConvertedReferrals = g.Count(x => x.Status == "converted")
+                })
+                .ToDictionaryAsync(x => x.PanchayatId, cancellationToken);
+
             var agentCountsByBlock = await _db.Agents.AsNoTracking()
                 .Where(a => district == null || a.District == district)
                 .GroupBy(a => new { a.District, a.Block })
@@ -86,20 +127,21 @@ namespace SeemanchalOutreach.Api.Controllers
 
             var summary = new ReportSummaryDto
             {
-                TotalContacts = contacts.Count,
-                AshaWorkers = contacts.Count(c => c.Role == "asha_worker"),
-                RmpDoctors = contacts.Count(c => c.Role == "rmp_doctor"),
-                WardMembers = contacts.Count(c => c.Role == "ward_member"),
-                MedicineShops = contacts.Count(c => c.Role == "medicine_shop"),
-                // These two roles existed on every contact but were never
-                // counted anywhere in this summary — the role pie chart's
-                // slices silently added up to less than "Total Contacts"
-                // whenever any mukhiya/prominent_person contacts existed.
-                Mukhiyas = contacts.Count(c => c.Role == "mukhiya"),
-                ProminentPersons = contacts.Count(c => c.Role == "prominent_person"),
-                TotalVisits = visits.Count,
-                TotalReferrals = referrals.Count,
-                ConvertedReferrals = referrals.Count(r => r.Status == "converted"),
+                TotalContacts = contactStatsByPanchayat.Values.Sum(x => x.TotalContacts),
+                AshaWorkers = contactStatsByPanchayat.Values.Sum(x => x.AshaWorkers),
+                RmpDoctors = contactStatsByPanchayat.Values.Sum(x => x.RmpDoctors),
+                WardMembers = contactStatsByPanchayat.Values.Sum(x => x.WardMembers),
+                MedicineShops = contactStatsByPanchayat.Values.Sum(x => x.MedicineShops),
+                Mukhiyas = contactStatsByPanchayat.Values.Sum(x => x.Mukhiyas),
+                ProminentPersons = contactStatsByPanchayat.Values.Sum(x => x.ProminentPersons),
+                Labs = contactStatsByPanchayat.Values.Sum(x => x.Labs),
+                NursingHomes = contactStatsByPanchayat.Values.Sum(x => x.NursingHomes),
+                IndependentDoctors = contactStatsByPanchayat.Values.Sum(x => x.IndependentDoctors),
+                Hospitals = contactStatsByPanchayat.Values.Sum(x => x.Hospitals),
+                Others = contactStatsByPanchayat.Values.Sum(x => x.Others),
+                TotalVisits = visitStatsByPanchayat.Values.Sum(x => x.TotalVisits),
+                TotalReferrals = referralStatsByPanchayat.Values.Sum(x => x.TotalReferrals),
+                ConvertedReferrals = referralStatsByPanchayat.Values.Sum(x => x.ConvertedReferrals),
             };
             summary.ConversionRatePct = summary.TotalReferrals > 0
                 ? System.Math.Round((double)summary.ConvertedReferrals / summary.TotalReferrals * 100, 1)
@@ -109,29 +151,46 @@ namespace SeemanchalOutreach.Api.Controllers
                 .GroupBy(p => new { p.District, p.Block })
                 .Select(g =>
                 {
-                    var blockPanchayatIds = g.Select(p => p.PanchayatId).ToHashSet();
-                    var blockContacts = contacts.Where(c => blockPanchayatIds.Contains(c.PanchayatId)).ToList();
-                    var blockVisits = visits.Count(v => blockPanchayatIds.Contains(v.PanchayatId));
-                    var blockContactIds = blockContacts.Select(c => c.ClientId).ToHashSet();
-                    var blockReferrals = referrals.Where(r => blockContactIds.Contains(r.ContactId)).ToList();
+                    var blockPanchayats = g.Select(p => p.PanchayatId).ToList();
+                    
+                    int bContacts = blockPanchayats.Sum(p => contactStatsByPanchayat.GetValueOrDefault(p)?.TotalContacts ?? 0);
+                    int bAsha = blockPanchayats.Sum(p => contactStatsByPanchayat.GetValueOrDefault(p)?.AshaWorkers ?? 0);
+                    int bRmp = blockPanchayats.Sum(p => contactStatsByPanchayat.GetValueOrDefault(p)?.RmpDoctors ?? 0);
+                    int bWard = blockPanchayats.Sum(p => contactStatsByPanchayat.GetValueOrDefault(p)?.WardMembers ?? 0);
+                    int bMed = blockPanchayats.Sum(p => contactStatsByPanchayat.GetValueOrDefault(p)?.MedicineShops ?? 0);
+                    int bMukhiya = blockPanchayats.Sum(p => contactStatsByPanchayat.GetValueOrDefault(p)?.Mukhiyas ?? 0);
+                    int bProminent = blockPanchayats.Sum(p => contactStatsByPanchayat.GetValueOrDefault(p)?.ProminentPersons ?? 0);
+                    int bLab = blockPanchayats.Sum(p => contactStatsByPanchayat.GetValueOrDefault(p)?.Labs ?? 0);
+                    int bNursingHome = blockPanchayats.Sum(p => contactStatsByPanchayat.GetValueOrDefault(p)?.NursingHomes ?? 0);
+                    int bIndDoc = blockPanchayats.Sum(p => contactStatsByPanchayat.GetValueOrDefault(p)?.IndependentDoctors ?? 0);
+                    int bHospital = blockPanchayats.Sum(p => contactStatsByPanchayat.GetValueOrDefault(p)?.Hospitals ?? 0);
+                    int bOther = blockPanchayats.Sum(p => contactStatsByPanchayat.GetValueOrDefault(p)?.Others ?? 0);
+                    int bVisits = blockPanchayats.Sum(p => visitStatsByPanchayat.GetValueOrDefault(p)?.TotalVisits ?? 0);
+                    int bReferrals = blockPanchayats.Sum(p => referralStatsByPanchayat.GetValueOrDefault(p)?.TotalReferrals ?? 0);
+                    int bConverted = blockPanchayats.Sum(p => referralStatsByPanchayat.GetValueOrDefault(p)?.ConvertedReferrals ?? 0);
 
                     return new BlockReportDto
                     {
                         District = g.Key.District,
                         Block = g.Key.Block,
                         Agents = agentCountsByBlock.GetValueOrDefault((g.Key.District, g.Key.Block)),
-                        Asha = blockContacts.Count(c => c.Role == "asha_worker"),
-                        Rmp = blockContacts.Count(c => c.Role == "rmp_doctor"),
-                        Ward = blockContacts.Count(c => c.Role == "ward_member"),
-                        Med = blockContacts.Count(c => c.Role == "medicine_shop"),
-                        Mukhiya = blockContacts.Count(c => c.Role == "mukhiya"),
-                        Prominent = blockContacts.Count(c => c.Role == "prominent_person"),
-                        Visits = blockVisits,
-                        Referrals = blockReferrals.Count,
-                        Converted = blockReferrals.Count(r => r.Status == "converted"),
+                        Asha = bAsha,
+                        Rmp = bRmp,
+                        Ward = bWard,
+                        Med = bMed,
+                        Mukhiya = bMukhiya,
+                        Prominent = bProminent,
+                        Lab = bLab,
+                        NursingHome = bNursingHome,
+                        IndependentDoctor = bIndDoc,
+                        Hospital = bHospital,
+                        Other = bOther,
+                        Visits = bVisits,
+                        Referrals = bReferrals,
+                        Converted = bConverted,
                     };
                 })
-                .OrderByDescending(b => b.Asha + b.Rmp + b.Ward + b.Med + b.Mukhiya + b.Prominent)
+                .OrderByDescending(b => b.Asha + b.Rmp + b.Ward + b.Med + b.Mukhiya + b.Prominent + b.Lab + b.NursingHome + b.IndependentDoctor + b.Hospital + b.Other)
                 .ToList();
 
             return Ok(summary);

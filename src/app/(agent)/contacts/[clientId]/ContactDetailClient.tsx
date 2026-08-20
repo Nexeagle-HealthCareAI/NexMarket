@@ -4,9 +4,10 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { useAgentStore } from '@/store/agent-store';
-import { useContact, usePanchayats, useReferrals, useActiveVisit, db } from '@/lib/db';
+import { useContact, usePanchayats, useReferrals, useActiveVisit, db, useContactDocuments } from '@/lib/db';
 import { addToOutbox } from '@/lib/sync/outbox';
-import type { ReferralStatus, LocalReferral } from '@/lib/db/schema';
+import { compressImage, compressDocumentImage } from '@/lib/image/compressImage';
+import type { ReferralStatus, LocalReferral, ContactRole, LocalContactDocument } from '@/lib/db/schema';
 
 const STATUS_LABELS: Record<ReferralStatus, { label: string; badgeClass: string; icon: string }> = {
   pending: { label: 'Pending Review', badgeClass: 'badge-pending', icon: '⏳' },
@@ -20,8 +21,10 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
   const activeVisitClientId = useAgentStore((s) => s.activeVisitClientId);
 
   const contact = useContact(clientId);
+  const documents = useContactDocuments(clientId);
   const panchayats = usePanchayats();
   const referrals = useReferrals(clientId);
+  const agentId = useAgentStore((s) => s.agentId);
 
   const [showReferralForm, setShowReferralForm] = useState(false);
   const [status, setStatus] = useState<ReferralStatus>('pending');
@@ -34,6 +37,43 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
   // CRM Status Editing
   const [isEditingStatus, setIsEditingStatus] = useState(false);
   const [newStatus, setNewStatus] = useState<'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected'>('Lead');
+
+  // Basic Profile Editing
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editRole, setEditRole] = useState<ContactRole>('asha_worker');
+  const [editAgentEscalated, setEditAgentEscalated] = useState(false);
+  const [editAgentEscalationNote, setEditAgentEscalationNote] = useState('');
+
+  function startEditingProfile() {
+    if (!contact) return;
+    setEditName(contact.name);
+    setEditPhone(contact.phone || '');
+    setEditRole(contact.role);
+    setEditAgentEscalated(contact.agentEscalated || false);
+    setEditAgentEscalationNote(contact.agentEscalationNote || '');
+    setIsEditingProfile(true);
+  }
+
+  async function handleSaveProfile() {
+    if (!contact || !deviceId) return;
+    try {
+      const updatedData = { 
+        name: editName.trim(), 
+        phone: editPhone.trim() || undefined, 
+        role: editRole, 
+        agentEscalated: editAgentEscalated,
+        agentEscalationNote: editAgentEscalationNote.trim() || undefined,
+        updatedAt: new Date().toISOString() 
+      };
+      await db.contacts.update(contact.localId!, updatedData);
+      await addToOutbox(contact.clientId, deviceId, 'contact', { ...contact, ...updatedData });
+      setIsEditingProfile(false);
+    } catch {
+      alert('Failed to update profile');
+    }
+  }
 
   const panchayat = useMemo(() => {
     return panchayats?.find((p) => p.id === contact?.panchayatId);
@@ -86,6 +126,49 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
     }
   }
 
+  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !contact || !deviceId || !agentId) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Document size must be less than 5MB');
+      return;
+    }
+    try {
+      let dataUri: string;
+      let exifLat: number | null = null;
+      let exifLng: number | null = null;
+      let exifCapturedAt: string | null = null;
+
+      if (file.type.startsWith('image/')) {
+        const compressed = await compressDocumentImage(file);
+        dataUri = compressed.dataUri;
+        exifLat = compressed.exifLat;
+        exifLng = compressed.exifLng;
+        exifCapturedAt = compressed.exifCapturedAt;
+      } else {
+        const { fileToBase64 } = await import('@/lib/image/fileToBase64');
+        dataUri = await fileToBase64(file);
+      }
+      const localDoc: LocalContactDocument = {
+        clientId: uuidv4(),
+        deviceId,
+        contactId: contact.clientId,
+        agentId,
+        dataUri,
+        mimeType: file.type || 'application/octet-stream',
+        label: file.name, // Use filename as default label if uploaded post-creation
+        exifLat,
+        exifLng,
+        exifCapturedAt,
+        createdAt: new Date().toISOString(),
+      };
+      await db.contactDocuments.add(localDoc);
+      await addToOutbox(localDoc.clientId, deviceId, 'contact_document', localDoc);
+    } catch {
+      alert('Failed to attach document');
+    }
+  };
+
   if (!contact) {
     return (
       <div className="empty-state" style={{ paddingTop: '4rem' }}>
@@ -105,10 +188,12 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <button
             onClick={() => router.back()}
-            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.25rem' }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.5rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 40, minHeight: 40 }}
             aria-label="Go back"
           >
-            ←
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
           </button>
           <h1>Contact Profile</h1>
         </div>
@@ -116,27 +201,74 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
 
       {/* Contact Main Card */}
       <div className="card" style={{ marginBottom: '1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-          <div>
-            <h2 style={{ fontSize: '1.3rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>{contact.name}</h2>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              📍 {panchayat ? `${panchayat.name} (${panchayat.block})` : 'Panchayat loading…'}
-            </p>
-            {contact.phone && (
-              <p style={{ fontSize: '0.9rem', color: 'var(--color-primary-400)', fontWeight: 600, marginTop: '0.35rem' }}>
-                📞 <a href={`tel:${contact.phone}`} style={{ color: 'inherit', textDecoration: 'none' }}>+91 {contact.phone}</a>
-              </p>
-            )}
+        {isEditingProfile ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <input value={editName} onChange={e => setEditName(e.target.value)} className="field-input" placeholder="Name" />
+            <input value={editPhone} onChange={e => setEditPhone(e.target.value)} className="field-input" placeholder="Phone (10 digits)" type="tel" maxLength={10} />
+            <select value={editRole} onChange={e => setEditRole(e.target.value as any)} className="field-input">
+              <option value="asha_worker">ASHA Worker</option>
+              <option value="rmp_doctor">RMP Doctor</option>
+              <option value="ward_member">Ward Member</option>
+              <option value="medicine_shop">Medicine Shop</option>
+              <option value="mukhiya">Mukhiya</option>
+              <option value="prominent_person">Prominent Person</option>
+              <option value="lab">Lab/Pathology</option>
+              <option value="nursing_home">Nursing Home</option>
+              <option value="independent_doctor">Independent Doctor</option>
+              <option value="hospital">Hospital</option>
+              <option value="other">Other</option>
+            </select>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.5rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: '#b91c1c', fontWeight: editAgentEscalated ? 600 : 400 }}>
+                <input 
+                  type="checkbox" 
+                  checked={editAgentEscalated} 
+                  onChange={e => setEditAgentEscalated(e.target.checked)} 
+                />
+                🚨 Escalate to Admin on Priority
+              </label>
+              {editAgentEscalated && (
+                <textarea 
+                  className="field-input"
+                  placeholder="Escalation Notes / Reason" 
+                  value={editAgentEscalationNote} 
+                  onChange={e => setEditAgentEscalationNote(e.target.value)} 
+                  rows={2}
+                  style={{ borderColor: '#fecaca', background: '#fef2f2', marginTop: '0.25rem' }}
+                />
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+              <button onClick={handleSaveProfile} className="btn btn-primary" style={{ flex: 1, padding: '0.5rem' }}>Save</button>
+              <button onClick={() => setIsEditingProfile(false)} className="btn btn-ghost" style={{ flex: 1, padding: '0.5rem' }}>Cancel</button>
+            </div>
           </div>
-          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.3rem' }}>
-            <span className="badge" style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--color-primary-400)', fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}>
-              {contact.role.replace('_', ' ').toUpperCase()}
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                <h2 style={{ fontSize: '1.3rem', color: 'var(--text-primary)', margin: 0 }}>{contact.name}</h2>
+                <button onClick={startEditingProfile} style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5 }}>✏️</button>
+              </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                📍 {panchayat ? `${panchayat.name} (${panchayat.block})` : 'Panchayat loading…'}
+              </p>
+              {contact.phone && (
+                <p style={{ fontSize: '0.9rem', color: 'var(--color-primary-400)', fontWeight: 600, marginTop: '0.35rem' }}>
+                  📞 <a href={`tel:${contact.phone}`} style={{ color: 'inherit', textDecoration: 'none' }}>+91 {contact.phone}</a>
+                </p>
+              )}
+            </div>
+            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.3rem' }}>
+              <span className="badge" style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--color-primary-400)', fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}>
+                {contact.role.replace('_', ' ').toUpperCase()}
+              </span>
+              {contact.profession && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{contact.profession}</span>
+              )}
             </span>
-            {contact.profession && (
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{contact.profession}</span>
-            )}
-          </span>
-        </div>
+          </div>
+        )}
 
         {/* CRM DETAILS (Photo, Status, Follow-up) */}
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
@@ -196,7 +328,18 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
           {contact.potentialDuplicateOf && contact.potentialDuplicateOf.length > 0 && (
             <span className="badge badge-dup">⚠️ Potential Duplicate</span>
           )}
+          {contact.agentEscalated && (
+            <span className="badge badge-dup" style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>
+              🚨 Escalated to Admin
+            </span>
+          )}
         </div>
+
+        {contact.agentEscalated && contact.agentEscalationNote && (
+          <div style={{ marginTop: '0.75rem', padding: '0.6rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: '#991b1b' }}>
+            <strong>Escalation Reason:</strong> {contact.agentEscalationNote}
+          </div>
+        )}
 
         {contact.notes && (
           <div style={{ marginTop: '0.75rem', padding: '0.6rem', background: 'var(--surface-bg)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
@@ -204,6 +347,57 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
           </div>
         )}
       </div>
+
+      {/* Documents */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <h3 style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Attached Documents ({documents?.length ?? 0})</h3>
+        <input
+          id="detail-contact-doc"
+          type="file"
+          accept="image/*,.pdf"
+          onChange={handleDocumentUpload}
+          style={{ display: 'none' }}
+        />
+        <button
+          type="button"
+          onClick={() => document.getElementById('detail-contact-doc')?.click()}
+          className="btn btn-sm"
+          style={{ background: 'white', border: '1px solid var(--color-primary-300)', color: 'var(--color-primary-600)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+        >
+          + Add Document
+        </button>
+      </div>
+
+      {documents && documents.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
+          {documents.map(doc => (
+            <div key={doc.clientId} className="card" style={{ padding: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {doc.mimeType.includes('image') && doc.dataUri ? (
+                <img src={doc.dataUri} alt="Preview" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: '4px', flexShrink: 0 }} />
+              ) : (
+                <div style={{ fontSize: '1.5rem', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {doc.mimeType.includes('pdf') ? '📄' : '🖼️'}
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {doc.label || 'Attached Document'}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {new Date(doc.createdAt).toLocaleDateString()} • {doc.syncedAt ? 'Synced' : 'Pending Sync'}
+                </div>
+              </div>
+              <a 
+                href={doc.dataUri} 
+                download={doc.label || 'document'} 
+                style={{ background: 'var(--surface-bg)', color: 'var(--color-primary-600)', padding: '0.4rem 0.6rem', borderRadius: '4px', textDecoration: 'none', fontSize: '0.8rem', fontWeight: 600 }}
+              >
+                View
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Referrals Header & Button */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>

@@ -30,7 +30,7 @@ namespace SeemanchalOutreach.Application.Handlers
         // once connectivity is actually available. If decoding/upload fails for
         // any reason, the rest of the contact still saves — a bad photo shouldn't
         // block the CRM data itself.
-        private async Task<string?> TryUploadDataUriPhotoAsync(string? dataUri, CancellationToken cancellationToken)
+        private async Task<string?> TryUploadDataUriAsync(string? dataUri, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(dataUri) || !dataUri.StartsWith("data:", StringComparison.Ordinal)) return null;
 
@@ -41,14 +41,16 @@ namespace SeemanchalOutreach.Application.Handlers
 
                 string header = dataUri.Substring(5, commaIdx - 5); // strip "data:"
                 string contentType = header.Split(';')[0];
-                if (string.IsNullOrEmpty(contentType)) contentType = "image/jpeg";
+                if (string.IsNullOrEmpty(contentType)) contentType = "application/octet-stream";
 
                 byte[] bytes = Convert.FromBase64String(dataUri.Substring(commaIdx + 1));
                 string extension = contentType switch
                 {
                     "image/png" => "png",
                     "image/webp" => "webp",
-                    _ => "jpg",
+                    "image/jpeg" => "jpg",
+                    "application/pdf" => "pdf",
+                    _ => "bin",
                 };
 
                 using var stream = new System.IO.MemoryStream(bytes);
@@ -64,12 +66,46 @@ namespace SeemanchalOutreach.Application.Handlers
         {
             var response = new SyncBatchResponse();
 
+            // 1. Concurrent Photo Uploads
+            // Pre-process all base64 images in the batch concurrently to avoid 
+            // blocking the DB loop sequentially and timing out the HTTP connection.
+            var uploadTasks = new Dictionary<string, Task<string?>>();
+            foreach (var item in request.Items)
+            {
+                using var doc = JsonDocument.Parse(item.Payload);
+                var root = doc.RootElement;
+                if (item.Type == "contact_new" || item.Type == "contact_update")
+                {
+                    string? photoUrl = root.TryGetProperty("photoUrl", out var pProp) && pProp.ValueKind == JsonValueKind.String ? pProp.GetString() : null;
+                    string? photoDataUri = root.TryGetProperty("photoDataUri", out var pdProp) && pdProp.ValueKind == JsonValueKind.String ? pdProp.GetString() : null;
+                    if (string.IsNullOrEmpty(photoUrl) && !string.IsNullOrEmpty(photoDataUri))
+                    {
+                        uploadTasks[item.Id] = TryUploadDataUriAsync(photoDataUri, cancellationToken);
+                    }
+                }
+                else if (item.Type == "contact_document")
+                {
+                    string? dataUri = root.TryGetProperty("dataUri", out var duProp) && duProp.ValueKind == JsonValueKind.String ? duProp.GetString() : null;
+                    if (!string.IsNullOrEmpty(dataUri))
+                    {
+                        uploadTasks[item.Id] = TryUploadDataUriAsync(dataUri, cancellationToken);
+                    }
+                }
+            }
+
+            await Task.WhenAll(uploadTasks.Values);
+            var preUploadedUrls = uploadTasks.ToDictionary(k => k.Key, v => v.Value.Result);
+
+            // 2. In-batch Duplicate Tracking
+            var batchPhones = new HashSet<string>();
+            var batchNames = new HashSet<string>();
+
             foreach (var item in request.Items)
             {
                 SyncResultDto result;
                 try
                 {
-                    result = await ProcessItemAsync(item, request.AgentId, request.DeviceId, response.DuplicateWarnings, cancellationToken);
+                    result = await ProcessItemAsync(item, request.AgentId, request.DeviceId, response.DuplicateWarnings, preUploadedUrls, batchPhones, batchNames, cancellationToken);
 
                     // Save per item, not once for the whole batch — otherwise a single
                     // conflict (e.g. a duplicate ClientId+DeviceId raced into the same
@@ -106,6 +142,9 @@ namespace SeemanchalOutreach.Application.Handlers
             string agentId,
             string deviceId,
             List<DuplicateWarningDto> duplicateWarnings,
+            Dictionary<string, string?> preUploadedUrls,
+            HashSet<string> batchPhones,
+            HashSet<string> batchNames,
             CancellationToken cancellationToken)
         {
             using var doc = JsonDocument.Parse(item.Payload);
@@ -208,6 +247,8 @@ namespace SeemanchalOutreach.Application.Handlers
                     string? comments = root.TryGetProperty("comments", out var cProp) && cProp.ValueKind == JsonValueKind.String ? cProp.GetString() : null;
                     double? lat = GetOptionalDouble(root, "lat");
                     double? lng = GetOptionalDouble(root, "lng");
+                    bool agentEscalated = GetBool(root, "agentEscalated", false);
+                    string? agentEscalationNote = root.TryGetProperty("agentEscalationNote", out var aenProp) && aenProp.ValueKind == JsonValueKind.String ? aenProp.GetString() : null;
                     string? photoUrl = root.TryGetProperty("photoUrl", out var pProp) && pProp.ValueKind == JsonValueKind.String ? pProp.GetString() : null;
                     // Contacts captured in the field store their photo as a base64 data URI
                     // (no guaranteed connection at capture time) — finish that upload now
@@ -216,7 +257,7 @@ namespace SeemanchalOutreach.Application.Handlers
                     string? photoDataUri = root.TryGetProperty("photoDataUri", out var pdProp) && pdProp.ValueKind == JsonValueKind.String ? pdProp.GetString() : null;
                     if (string.IsNullOrEmpty(photoUrl) && !string.IsNullOrEmpty(photoDataUri))
                     {
-                        photoUrl = await TryUploadDataUriPhotoAsync(photoDataUri, cancellationToken);
+                        preUploadedUrls.TryGetValue(item.Id, out photoUrl);
                     }
 
                     if (existing == null)
@@ -239,6 +280,8 @@ namespace SeemanchalOutreach.Application.Handlers
                             Comments = comments,
                             Latitude = lat,
                             Longitude = lng,
+                            AgentEscalated = agentEscalated,
+                            AgentEscalationNote = agentEscalationNote,
                             PhotoUrl = photoUrl,
                             CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
                             ServerReceivedAt = syncedAt
@@ -251,6 +294,7 @@ namespace SeemanchalOutreach.Application.Handlers
                                 .Where(c => c.PanchayatId == panchayatId && c.ClientId != clientId)
                                 .ToListAsync(cancellationToken);
 
+                            bool foundDup = false;
                             foreach (var dup in potentialDups)
                             {
                                 bool phoneMatch = !string.IsNullOrEmpty(phone) && !string.IsNullOrEmpty(dup.Phone) && dup.Phone == phone;
@@ -266,9 +310,32 @@ namespace SeemanchalOutreach.Application.Handlers
                                         Reason = phoneMatch ? $"Exact Phone Match ({phone}) in {panchayatId}" : $"Similar Name ({name} ≈ {dup.Name}) in {panchayatId}",
                                         MatchScore = phoneMatch ? 99 : 88
                                     });
+                                    foundDup = true;
                                     break;
                                 }
                             }
+
+                            // Check in-batch duplicates to prevent identical offline records from racing
+                            if (!foundDup)
+                            {
+                                bool batchPhoneMatch = !string.IsNullOrEmpty(phone) && batchPhones.Contains(phone);
+                                bool batchNameMatch = !string.IsNullOrEmpty(name) && batchNames.Contains(name);
+
+                                if (batchPhoneMatch || batchNameMatch)
+                                {
+                                    contact.PotentialDuplicateOf = "in_batch_duplicate";
+                                    duplicateWarnings.Add(new DuplicateWarningDto
+                                    {
+                                        ClientId = clientId,
+                                        PotentialDuplicateOf = "in_batch_duplicate",
+                                        Reason = batchPhoneMatch ? $"Exact Phone Match ({phone}) within same offline batch" : $"Exact Name Match ({name}) within same offline batch",
+                                        MatchScore = batchPhoneMatch ? 99 : 88
+                                    });
+                                }
+                            }
+
+                            if (!string.IsNullOrEmpty(phone)) batchPhones.Add(phone);
+                            if (!string.IsNullOrEmpty(name)) batchNames.Add(name);
                         }
 
                         _db.Contacts.Add(contact);
@@ -295,11 +362,12 @@ namespace SeemanchalOutreach.Application.Handlers
                             existing.Profession = profession;
                             existing.WhatsappAdded = whatsapp;
                             existing.CardGiven = card;
-                            if (lat.HasValue) existing.Latitude = lat.Value;
-                            if (lng.HasValue) existing.Longitude = lng.Value;
+                            existing.Latitude = lat ?? existing.Latitude;
+                            existing.Longitude = lng ?? existing.Longitude;
                             if (!string.IsNullOrEmpty(photoUrl)) existing.PhotoUrl = photoUrl;
 
-                            // Status/FollowUpDate/Comments can also be written by an admin
+                            // NOTE: We do NOT blindly overwrite Status, FollowUpDate, or Comments
+                            // from a delayed offline sync if the server's LastModifiedAt is newer
                             // (ContactsController.UpdateContact, which bumps LastModifiedAt).
                             // An outbox item can sit queued on a device for a long time before
                             // it gets a chance to sync, so its own edit timestamp — not "now" —
@@ -313,6 +381,9 @@ namespace SeemanchalOutreach.Application.Handlers
 
                             if (isNewerThanServer)
                             {
+                                existing.AgentEscalated = agentEscalated;
+                                existing.AgentEscalationNote = agentEscalationNote;
+
                                 var previousStatus = existing.Status;
                                 var previousComments = existing.Comments;
                                 var previousFollowUpDate = existing.FollowUpDate;
@@ -412,21 +483,35 @@ namespace SeemanchalOutreach.Application.Handlers
                     string batchClientId = GetString(root, "clientId", item.ClientId);
                     if (root.TryGetProperty("points", out var pointsEl) && pointsEl.ValueKind == JsonValueKind.Array)
                     {
-                        foreach (var ptEl in pointsEl.EnumerateArray())
+                        var points = pointsEl.EnumerateArray().Select(ptEl => new
                         {
-                            string ptClientId = GetString(ptEl, "clientId", Guid.NewGuid().ToString());
-                            var exists = await _db.TrajectoryPoints.AnyAsync(t => t.ClientId == ptClientId, cancellationToken);
-                            if (!exists)
+                            ClientId = GetString(ptEl, "clientId", Guid.NewGuid().ToString()),
+                            Lat = GetDouble(ptEl, "lat", 0),
+                            Lng = GetDouble(ptEl, "lng", 0),
+                            RecordedAt = GetDateTime(ptEl, "recordedAt", DateTime.UtcNow),
+                            AccuracyM = GetOptionalDouble(ptEl, "accuracyM"),
+                        }).ToList();
+
+                        var ptClientIds = points.Select(p => p.ClientId).ToList();
+                        var existingIds = await _db.TrajectoryPoints
+                            .Where(t => ptClientIds.Contains(t.ClientId))
+                            .Select(t => t.ClientId)
+                            .ToListAsync(cancellationToken);
+                        var existingSet = existingIds.ToHashSet();
+
+                        foreach (var pt in points)
+                        {
+                            if (!existingSet.Contains(pt.ClientId))
                             {
                                 _db.TrajectoryPoints.Add(new TrajectoryPoint
                                 {
-                                    ClientId = ptClientId,
+                                    ClientId = pt.ClientId,
                                     DeviceId = deviceId,
                                     AgentId = agentId,
-                                    Lat = GetDouble(ptEl, "lat", 0),
-                                    Lng = GetDouble(ptEl, "lng", 0),
-                                    RecordedAt = GetDateTime(ptEl, "recordedAt", DateTime.UtcNow),
-                                    AccuracyM = GetOptionalDouble(ptEl, "accuracyM"),
+                                    Lat = pt.Lat,
+                                    Lng = pt.Lng,
+                                    RecordedAt = pt.RecordedAt,
+                                    AccuracyM = pt.AccuracyM,
                                     ServerReceivedAt = syncedAt
                                 });
                             }
@@ -454,6 +539,50 @@ namespace SeemanchalOutreach.Application.Handlers
                         };
                         _db.SurveyResponses.Add(survey);
                         return Result(clientId, deviceId, survey.Id, syncedAt, "created");
+                    }
+                    return Result(clientId, deviceId, existing.Id, syncedAt, "already_exists");
+                }
+
+                case "contact_document":
+                {
+                    string clientId = GetString(root, "clientId", item.ClientId);
+                    var existing = await _db.ContactDocuments.FirstOrDefaultAsync(d => d.ClientId == clientId, cancellationToken);
+                    if (existing == null)
+                    {
+                        string? dataUri = root.TryGetProperty("dataUri", out var duProp) && duProp.ValueKind == JsonValueKind.String ? duProp.GetString() : null;
+                        preUploadedUrls.TryGetValue(item.Id, out var url);
+                        
+                        if (string.IsNullOrEmpty(url)) 
+                        {
+                            // If upload fails, mark error so it retries later
+                            return new SyncResultDto
+                            {
+                                ClientId = item.ClientId,
+                                DeviceId = deviceId,
+                                Status = "error",
+                                ErrorMessage = "Failed to upload document file.",
+                            };
+                        }
+
+                        var docItem = new ContactDocument
+                        {
+                            ClientId = clientId,
+                            DeviceId = deviceId,
+                            AgentId = agentId,
+                            ContactClientId = GetString(root, "contactId", ""),
+                            Url = url,
+                            MimeType = GetString(root, "mimeType", ""),
+                            Label = root.TryGetProperty("label", out var labelProp) && labelProp.ValueKind == JsonValueKind.String ? labelProp.GetString() : null,
+                            ExifLatitude = GetOptionalDouble(root, "exifLat"),
+                            ExifLongitude = GetOptionalDouble(root, "exifLng"),
+                            ExifCapturedAt = root.TryGetProperty("exifCapturedAt", out var exifDateProp) && exifDateProp.ValueKind == JsonValueKind.String 
+                                ? (DateTime.TryParse(exifDateProp.GetString(), out var parsedExif) ? parsedExif.ToUniversalTime() : null) 
+                                : null,
+                            CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
+                            ServerReceivedAt = syncedAt
+                        };
+                        _db.ContactDocuments.Add(docItem);
+                        return Result(clientId, deviceId, docItem.Id, syncedAt, "created");
                     }
                     return Result(clientId, deviceId, existing.Id, syncedAt, "already_exists");
                 }

@@ -119,6 +119,11 @@ namespace SeemanchalOutreach.Domain.Entities
         public bool CardGiven { get; set; }
         public string? PhotoUrl { get; set; }
         
+        public bool AgentEscalated { get; set; } = false;
+        public string? AgentEscalationNote { get; set; }
+        public bool IsEscalationResolved { get; set; } = false;
+        public string? AgentEscalationResolution { get; set; }
+        
         public string Status { get; set; } = "Lead"; // Lead, Contacted, FollowUp, Converted, Closed
         public DateTime? FollowUpDate { get; set; }
         public string? Comments { get; set; }
@@ -145,6 +150,23 @@ namespace SeemanchalOutreach.Domain.Entities
         public bool IsMerged { get; set; } = false;
         public string? MergedIntoClientId { get; set; }
         public DateTime? DuplicateReviewedAt { get; set; } // set when dismissed as "not a duplicate"; left null while merged (IsMerged carries that state)
+    }
+
+    public class ContactDocument
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string ClientId { get; set; } = string.Empty;
+        public string DeviceId { get; set; } = string.Empty;
+        public string ContactClientId { get; set; } = string.Empty;
+        public string AgentId { get; set; } = string.Empty;
+        public string Url { get; set; } = string.Empty;
+        public string MimeType { get; set; } = string.Empty;
+        public string? Label { get; set; }
+        public double? ExifLatitude { get; set; }
+        public double? ExifLongitude { get; set; }
+        public DateTime? ExifCapturedAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime ServerReceivedAt { get; set; } = DateTime.UtcNow;
     }
 
     // Audit trail for OutreachContact.Status/Comments changes — written on every
@@ -220,6 +242,7 @@ namespace SeemanchalOutreach.Domain.Entities
         public string Text { get; set; } = string.Empty; // The question text
         public string Type { get; set; } = "single"; // "single" | "multi" | "text"
         public string? OptionsJson { get; set; } // JSON array of options if Type == "single" or "multi"
+        public string Section { get; set; } = string.Empty; // Group/Tab the question belongs to
         public bool IsOptional { get; set; } = false;
         public bool IsActive { get; set; } = true;
         public int Order { get; set; } = 0; // For sorting
