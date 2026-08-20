@@ -228,13 +228,10 @@ export default function NewContactPage() {
       createdAt: now, updatedAt: now,
     };
     try {
-      // Upsert: if we already saved in Step 1, update the existing record in place;
-      // otherwise insert. put() with an existing primary key overwrites the record.
+      // Upsert: if we already saved in Step 1, update; otherwise insert
       if (savedContactId) {
         const existing = await db.contacts.where('clientId').equals(savedContactId).first();
-        if (existing?.localId) {
-          await db.contacts.put({ ...contact, localId: existing.localId });
-        }
+        if (existing?.localId) await db.contacts.update(existing.localId, contact);
       } else {
         await db.contacts.add(contact);
       }
