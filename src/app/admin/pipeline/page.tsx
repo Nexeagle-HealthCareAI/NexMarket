@@ -62,6 +62,7 @@ export default function PipelinePage() {
   const [sortBy, setSortBy] = useState<string | undefined>(undefined);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | undefined>(undefined);
   const [showEscalatedOnly, setShowEscalatedOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Filter States
   const [panchayatsData, setPanchayatsData] = useState<PanchayatDto[]>([]);
@@ -139,6 +140,7 @@ export default function PipelinePage() {
           maxFollowUpDate,
           updatedAfter,
           agentEscalated: showEscalatedOnly ? true : undefined,
+          searchQuery: searchQuery.trim() || undefined,
           sortBy,
           sortOrder,
         });
@@ -153,7 +155,7 @@ export default function PipelinePage() {
     })();
 
     return () => { cancelled = true; };
-  }, [agentId, page, selectedCities, selectedBlocks, selectedPanchayats, activeTab, dateFilter, customStartDate, customEndDate, sortBy, sortOrder, showEscalatedOnly]);
+  }, [agentId, page, selectedCities, selectedBlocks, selectedPanchayats, activeTab, dateFilter, customStartDate, customEndDate, sortBy, sortOrder, showEscalatedOnly, searchQuery]);
 
   const handleSaveContact = async (clientId: string, update: ContactUpdateRequest) => {
     if (!agentId) return;
@@ -229,6 +231,7 @@ export default function PipelinePage() {
         statuses: activeTab === 'worklist' ? ['Lead', 'Contacted', 'FollowUp'] : undefined,
         startDate,
         endDate,
+        searchQuery: searchQuery.trim() || undefined,
       });
       if (res.totalCount > EXPORT_PAGE_SIZE) {
         setError(`Export is capped at ${EXPORT_PAGE_SIZE} rows — narrow the filters to export everything matching (${res.totalCount} total).`);
@@ -365,6 +368,16 @@ export default function PipelinePage() {
             options={uniqueCities}
             selected={selectedCities}
             onChange={(val) => { setSelectedCities(val); setSelectedBlocks([]); setSelectedPanchayats([]); setPage(1); }}
+          />
+        </div>
+        <div style={{ flex: 1, minWidth: '200px' }}>
+          <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Search</label>
+          <input
+            type="search"
+            placeholder="Name or Phone..."
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setPage(1); }}
+            style={{ width: '100%', padding: '0.7rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontWeight: 600, color: '#0f172a' }}
           />
         </div>
         <div style={{ flex: 1, minWidth: '220px' }}>

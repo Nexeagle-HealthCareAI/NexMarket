@@ -58,6 +58,7 @@ namespace SeemanchalOutreach.Api.Controllers
             [FromQuery] DateTime? maxFollowUpDate = null,
             [FromQuery] DateTime? updatedAfter = null,
             [FromQuery] bool? agentEscalated = null,
+            [FromQuery] string? search = null,
             [FromQuery] string? sortBy = null,
             [FromQuery] string? sortOrder = null,
             CancellationToken cancellationToken = default)
@@ -120,6 +121,12 @@ namespace SeemanchalOutreach.Api.Controllers
             if (agentEscalated.HasValue && agentEscalated.Value)
             {
                 contactsQuery = contactsQuery.Where(c => c.AgentEscalated);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var lowerSearch = search.ToLowerInvariant();
+                contactsQuery = contactsQuery.Where(c => c.Name.ToLower().Contains(lowerSearch) || c.Phone.Contains(search));
             }
 
             var totalCount = await contactsQuery.CountAsync(cancellationToken);

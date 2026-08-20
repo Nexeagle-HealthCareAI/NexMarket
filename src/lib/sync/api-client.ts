@@ -693,6 +693,7 @@ export interface AdminContactsQuery {
   maxFollowUpDate?: string;
   updatedAfter?: string;
   agentEscalated?: boolean;
+  searchQuery?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
@@ -717,6 +718,7 @@ export function getAdminContacts(query: AdminContactsQuery = {}): Promise<Pagina
   if (query.maxFollowUpDate) params.set('maxFollowUpDate', query.maxFollowUpDate);
   if (query.updatedAfter) params.set('updatedAfter', query.updatedAfter);
   if (query.agentEscalated) params.set('agentEscalated', 'true');
+  if (query.searchQuery) params.set('search', query.searchQuery);
   if (query.sortBy) params.set('sortBy', query.sortBy);
   if (query.sortOrder) params.set('sortOrder', query.sortOrder);
   const qs = params.toString();

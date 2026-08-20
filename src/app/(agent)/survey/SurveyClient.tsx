@@ -70,6 +70,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   }, [QUESTIONS]);
 
   const [currentTab, setCurrentTab] = useState<number>(0);
+  const [searchQuery, setSearchQuery] = useState('');
   const [responses, setResponses] = useState<Record<string, Answer>>({});
   const [otherText, setOtherText] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -222,8 +223,15 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
     );
   }
 
+  const isSearching = searchQuery.trim().length > 0;
   const currentSectionName = sections[currentTab];
   const sectionQuestions = QUESTIONS.filter(q => (q.section || 'General') === currentSectionName);
+
+  const displayedQuestions = useMemo(() => {
+    if (!isSearching) return sectionQuestions;
+    const qLower = searchQuery.toLowerCase();
+    return QUESTIONS.filter(q => q.text.toLowerCase().includes(qLower));
+  }, [QUESTIONS, sectionQuestions, searchQuery, isSearching]);
 
   // Check if all non-optional questions in current section are answered
   const canProceed = sectionQuestions.every(q => {
@@ -251,29 +259,50 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
           <button onClick={() => setShowSkipPrompt(true)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '0.4rem 0.8rem', borderRadius: '15px', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600 }}>Skip</button>
         </div>
         
-        {/* Tab Bar */}
-        <div style={{ display: 'flex', overflowX: 'auto', padding: '0 0.5rem', scrollbarWidth: 'none' }}>
-          {sections.map((sec, idx) => (
-            <button
-              key={sec}
-              onClick={() => setCurrentTab(idx)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: currentTab === idx ? '#fbbf24' : 'rgba(255,255,255,0.6)',
-                borderBottom: currentTab === idx ? '3px solid #fbbf24' : '3px solid transparent',
-                padding: '0.75rem 1rem',
-                fontSize: '0.9rem',
-                fontWeight: currentTab === idx ? 800 : 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              {sec.split(':')[0]} {/* E.g. "Section A" */}
-            </button>
-          ))}
+        <div style={{ padding: '0 1rem 0.5rem 1rem' }}>
+          <div style={{ position: 'relative', width: '100%' }}>
+            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', opacity: 0.6 }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Search questions..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ width: '100%', padding: '0.6rem 1rem 0.6rem 2.2rem', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.2)', color: 'white', fontSize: '0.9rem', outline: 'none' }}
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'white', cursor: 'pointer', opacity: 0.8 }}
+              >✕</button>
+            )}
+          </div>
         </div>
+        
+        {/* Tab Bar */}
+        {!isSearching && (
+          <div style={{ display: 'flex', overflowX: 'auto', padding: '0 0.5rem', scrollbarWidth: 'none' }}>
+            {sections.map((sec, idx) => (
+              <button
+                key={sec}
+                onClick={() => setCurrentTab(idx)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: currentTab === idx ? '#fbbf24' : 'rgba(255,255,255,0.6)',
+                  borderBottom: currentTab === idx ? '3px solid #fbbf24' : '3px solid transparent',
+                  padding: '0.75rem 1rem',
+                  fontSize: '0.9rem',
+                  fontWeight: currentTab === idx ? 800 : 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                {sec.split(':')[0]} {/* E.g. "Section A" */}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {submitError && (
@@ -311,14 +340,19 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
             style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}
           >
             <div style={{ marginBottom: '-1rem' }}>
-                <h2 style={{ color: '#1e293b', fontSize: '1.3rem', fontWeight: 800, margin: 0 }}>{currentSectionName}</h2>
+                <h2 style={{ color: '#1e293b', fontSize: '1.3rem', fontWeight: 800, margin: 0 }}>
+                  {isSearching ? 'Search Results' : currentSectionName}
+                </h2>
                 <div style={{ height: 3, width: 40, background: '#4f46e5', marginTop: '0.5rem', borderRadius: 2 }} />
             </div>
 
-            {sectionQuestions.map((q, qIndex) => (
+            {displayedQuestions.length === 0 && isSearching ? (
+              <p style={{ color: '#64748b', textAlign: 'center', marginTop: '2rem' }}>No questions found for "{searchQuery}".</p>
+            ) : (
+              displayedQuestions.map((q, qIndex) => (
                 <div key={q.id} style={{ background: 'white', borderRadius: '16px', padding: '1.25rem', boxShadow: '0 2px 15px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
                     <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#334155', marginBottom: '1rem', lineHeight: 1.4 }}>
-                        <span style={{ color: '#4f46e5', marginRight: '0.5rem' }}>Q{qIndex + 1}.</span> 
+                        <span style={{ color: '#4f46e5', marginRight: '0.5rem' }}>{isSearching ? '' : `Q${qIndex + 1}.`}</span> 
                         {q.text}
                         {q.isOptional && <span style={{ fontSize: '0.8rem', color: '#94a3b8', marginLeft: '0.5rem', fontWeight: 500 }}>(Optional)</span>}
                     </h3>
@@ -435,33 +469,47 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
                       </div>
                     )}
                 </div>
-            ))}
+              ))
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
 
       {/* Bottom Sticky Action Bar */}
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'white', padding: '1rem 1.5rem', boxShadow: '0 -4px 15px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'flex-end', zIndex: 40 }}>
-        <button
-          onClick={handleNextSection}
-          disabled={!canProceed}
-          style={{
-            background: canProceed ? '#4f46e5' : '#e2e8f0',
-            color: canProceed ? 'white' : '#94a3b8',
-            border: 'none',
-            padding: '1rem 2rem',
-            borderRadius: '12px',
-            fontSize: '1.1rem',
-            fontWeight: 700,
-            cursor: canProceed ? 'pointer' : 'not-allowed',
-            width: '100%',
-            maxWidth: 400,
-            transition: 'all 0.2s ease',
-            boxShadow: canProceed ? '0 4px 15px rgba(79,70,229,0.3)' : 'none'
-          }}
-        >
-          {currentTab < sections.length - 1 ? 'Next Section →' : 'Submit Survey'}
-        </button>
+        {isSearching ? (
+          <button
+            onClick={() => setSearchQuery('')}
+            style={{
+              background: '#4f46e5', color: 'white', border: 'none', padding: '1rem 2rem',
+              borderRadius: '12px', fontSize: '1.1rem', fontWeight: 700, cursor: 'pointer',
+              width: '100%', maxWidth: 400, boxShadow: '0 4px 15px rgba(79,70,229,0.3)'
+            }}
+          >
+            Done Searching
+          </button>
+        ) : (
+          <button
+            onClick={handleNextSection}
+            disabled={!canProceed}
+            style={{
+              background: canProceed ? '#4f46e5' : '#e2e8f0',
+              color: canProceed ? 'white' : '#94a3b8',
+              border: 'none',
+              padding: '1rem 2rem',
+              borderRadius: '12px',
+              fontSize: '1.1rem',
+              fontWeight: 700,
+              cursor: canProceed ? 'pointer' : 'not-allowed',
+              width: '100%',
+              maxWidth: 400,
+              transition: 'all 0.2s ease',
+              boxShadow: canProceed ? '0 4px 15px rgba(79,70,229,0.3)' : 'none'
+            }}
+          >
+            {currentTab < sections.length - 1 ? 'Next Section →' : 'Submit Survey'}
+          </button>
+        )}
       </div>
 
       {/* Skip Prompt Overlay */}
