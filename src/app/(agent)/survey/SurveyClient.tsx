@@ -43,7 +43,9 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   );
 
   const QUESTIONS: SurveyQuestion[] = useMemo(() => {
-    return (dynamicQuestions ?? []).map(q => ({
+    return (dynamicQuestions ?? [])
+      .filter(q => q.section && q.section.trim() !== '' && q.section !== 'General')
+      .map(q => ({
       id: q.questionId ?? q.id, // fallback to id if questionId is missing
       text: q.text,
       type: q.type,
@@ -60,7 +62,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   const sections = useMemo(() => {
     const map = new Map<string, SurveyQuestion[]>();
     QUESTIONS.forEach(q => {
-      const sec = q.section || 'General';
+      const sec = q.section!; // We've filtered out missing sections above
       if (!map.has(sec)) map.set(sec, []);
       map.get(sec)!.push(q);
     });
