@@ -184,7 +184,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   });
 
   return (
-    <div style={{ minHeight: '100vh', width: '100%', background: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#f8fafc', display: 'flex', flexDirection: 'column', zIndex: 100, overflowY: 'auto' }}>
       
       {/* Header */}
       <div style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', color: 'white', position: 'sticky', top: 0, zIndex: 40, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
@@ -242,8 +242,8 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
             </div>
 
             {sectionQuestions.map((q, qIndex) => (
-                <div key={q.id} style={{ background: 'white', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 2px 15px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
-                    <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#334155', marginBottom: '1.25rem', lineHeight: 1.4 }}>
+                <div key={q.id} style={{ background: 'white', borderRadius: '16px', padding: '1.25rem', boxShadow: '0 2px 15px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#334155', marginBottom: '1rem', lineHeight: 1.4 }}>
                         <span style={{ color: '#4f46e5', marginRight: '0.5rem' }}>Q{qIndex + 1}.</span> 
                         {q.text}
                         {q.isOptional && <span style={{ fontSize: '0.8rem', color: '#94a3b8', marginLeft: '0.5rem', fontWeight: 500 }}>(Optional)</span>}
@@ -270,8 +270,8 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
                                         transition: 'all 0.2s ease'
                                     }}
                                 >
-                                    <div style={{ width: 20, height: 20, borderRadius: '50%', border: selected ? '6px solid #4f46e5' : '2px solid #cbd5e1', background: 'white' }} />
-                                    <span style={{ color: selected ? '#312e81' : '#475569', fontWeight: selected ? 700 : 500, fontSize: '0.95rem' }}>{opt}</span>
+                                    <div style={{ width: 20, height: 20, borderRadius: '50%', border: selected ? '6px solid #4f46e5' : '2px solid #cbd5e1', background: 'white', flexShrink: 0 }} />
+                                    <span style={{ color: selected ? '#312e81' : '#475569', fontWeight: selected ? 700 : 500, fontSize: '0.9rem' }}>{opt}</span>
                                 </div>
                                 {isOther && selected && (
                                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} style={{ paddingLeft: '2.5rem' }}>
@@ -318,10 +318,10 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
                                         transition: 'all 0.2s ease'
                                     }}
                                 >
-                                    <div style={{ width: 22, height: 22, borderRadius: '6px', border: selected ? 'none' : '2px solid #cbd5e1', background: selected ? '#4f46e5' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <div style={{ width: 22, height: 22, borderRadius: '6px', border: selected ? 'none' : '2px solid #cbd5e1', background: selected ? '#4f46e5' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                         {selected && <span style={{ color: 'white', fontSize: '0.9rem', fontWeight: 800 }}>✓</span>}
                                     </div>
-                                    <span style={{ color: selected ? '#312e81' : '#475569', fontWeight: selected ? 700 : 500, fontSize: '0.95rem' }}>{opt}</span>
+                                    <span style={{ color: selected ? '#312e81' : '#475569', fontWeight: selected ? 700 : 500, fontSize: '0.9rem' }}>{opt}</span>
                                 </div>
                                 {isOther && selected && (
                                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} style={{ paddingLeft: '2.5rem' }}>
