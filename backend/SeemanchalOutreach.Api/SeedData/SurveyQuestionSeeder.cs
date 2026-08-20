@@ -8,16 +8,12 @@ namespace SeemanchalOutreach.Api.SeedData
     {
         public static async Task SeedIfEmptyAsync(Infrastructure.Persistence.MarketingDbContext db)
         {
-            // Clear existing ones if they don't have Section (so we force refresh to the new structure)
+            // Force clear ALL existing questions to ensure only our new 18 questions exist
             var existing = await db.SurveyQuestions.ToListAsync();
-            if (existing.Any(q => string.IsNullOrEmpty(q.Section)))
+            if (existing.Any())
             {
                 db.SurveyQuestions.RemoveRange(existing);
                 await db.SaveChangesAsync();
-            }
-            else if (existing.Any())
-            {
-                return;
             }
 
             db.SurveyQuestions.AddRange(
