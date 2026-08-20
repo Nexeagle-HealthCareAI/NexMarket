@@ -184,7 +184,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   });
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#f8fafc', display: 'flex', flexDirection: 'column', zIndex: 100, overflowY: 'auto' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#f8fafc', display: 'flex', flexDirection: 'column', zIndex: 100 }}>
       
       {/* Header */}
       <div style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', color: 'white', position: 'sticky', top: 0, zIndex: 40, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
@@ -226,7 +226,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
       )}
 
       {/* Main Form Content */}
-      <div style={{ flex: 1, padding: '1.5rem 1rem 6rem 1rem', maxWidth: 800, margin: '0 auto', width: '100%' }}>
+      <div style={{ flex: 1, padding: '1.5rem 1rem 6rem 1rem', maxWidth: 800, margin: '0 auto', width: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <AnimatePresence mode="wait">
           <motion.div
             key={currentTab}
@@ -251,7 +251,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
 
                     {q.type === 'single' ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        {q.options!.map((opt) => {
+                        {q.options && q.options.length > 0 ? q.options.map((opt) => {
                           const isOther = isOtherOption(opt);
                           const selected = responses[q.id] === opt;
                           return (
@@ -287,12 +287,12 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
                                 )}
                               </React.Fragment>
                           );
-                        })}
+                        }) : <p style={{ color: 'red', fontSize: '0.9rem' }}>No options configured for this question.</p>}
                       </div>
                     ) : q.type === 'multi' ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                         <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '-0.75rem', marginBottom: '0.25rem' }}>Select all that apply</p>
-                        {q.options!.map((opt) => {
+                        {q.options && q.options.length > 0 ? q.options.map((opt) => {
                           const isOther = isOtherOption(opt);
                           const currentArr = Array.isArray(responses[q.id]) ? (responses[q.id] as string[]) : [];
                           const selected = currentArr.includes(opt);
@@ -337,7 +337,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
                                 )}
                               </React.Fragment>
                           );
-                        })}
+                        }) : <p style={{ color: 'red', fontSize: '0.9rem' }}>No options configured for this question.</p>}
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
