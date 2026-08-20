@@ -231,7 +231,11 @@ export default function NewContactPage() {
       // Upsert: if we already saved in Step 1, update; otherwise insert
       if (savedContactId) {
         const existing = await db.contacts.where('clientId').equals(savedContactId).first();
-        if (existing?.localId) await db.contacts.update(existing.localId, contact);
+        if (existing?.localId) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { localId: _id, ...contactUpdate } = contact;
+          await db.contacts.update(existing.localId, contactUpdate);
+        }
       } else {
         await db.contacts.add(contact);
       }

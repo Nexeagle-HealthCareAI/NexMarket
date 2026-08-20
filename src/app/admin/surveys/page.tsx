@@ -122,7 +122,7 @@ export default function AdminSurveysPage() {
       questionId: editingQuestion.questionId || '',
       text: editingQuestion.text || '',
       type: editingQuestion.type || 'single',
-      optionsJson: editingQuestion.optionsJson || null,
+      optionsJson: editingQuestion.optionsJson ?? undefined,  // null → undefined to satisfy SurveyQuestionDto
       isOptional: editingQuestion.isOptional || false,
       isActive: editingQuestion.isActive ?? true,
       order: editingQuestion.order || 0

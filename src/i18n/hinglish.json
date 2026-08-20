@@ -240,5 +240,7 @@
   "skipReasonNotApplicable": "Not applicable to this person",
   "skipReasonOther": "Other",
   "confirmSkip": "Confirm Skip",
-  "surveyOptional": "The health survey is optional."
+  "surveyOptional": "The health survey is optional.",
+  "startSurvey": "Survey Shuru Karein",
+  "recentlyAdded": "Haal Mein Jode Gaye"
 }

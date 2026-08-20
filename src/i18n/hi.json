@@ -218,5 +218,7 @@
   "skipReasonNotApplicable": "इस व्यक्ति पर लागू नहीं है",
   "skipReasonOther": "अन्य",
   "confirmSkip": "छोड़ने की पुष्टि करें",
-  "surveyOptional": "स्वास्थ्य सर्वेक्षण वैकल्पिक है।"
+  "surveyOptional": "स्वास्थ्य सर्वेक्षण वैकल्पिक है।",
+  "startSurvey": "सर्वे शुरू करें",
+  "recentlyAdded": "हाल ही में जोड़े गए"
 }
