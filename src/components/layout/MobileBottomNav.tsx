@@ -42,7 +42,7 @@ const rightItems = [
     ),
   },
   {
-    href: '/my-task',
+    href: '/my-block',
     label: 'My Block',
     icon: (
       <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
