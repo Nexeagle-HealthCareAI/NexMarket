@@ -325,8 +325,15 @@ export default function NewContactPage() {
       </div>
 
       {draftRestored && step === 1 && (
-        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', padding: '0.6rem 0.85rem', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', fontWeight: 600, marginBottom: '1rem' }}>
-          ℹ️ Draft restored — your last entry was saved automatically.
+        <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', border: '1.5px solid #f59e0b', color: '#92400e', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', fontSize: '0.82rem', fontWeight: 600, marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+          <span>📝 Draft restored — your last entry was saved automatically.</span>
+          <button
+            type="button"
+            onClick={async () => { await db.drafts.delete(DRAFT_KEY); setForm(emptyForm(activeVisit?.panchayatId ?? '')); setDraftRestored(false); }}
+            style={{ background: 'rgba(0,0,0,0.1)', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, color: '#78350f', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            Discard
+          </button>
         </div>
       )}
 

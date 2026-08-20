@@ -2,11 +2,11 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAgentStore } from '@/store/agent-store';
-import { useContacts, usePanchayats } from '@/lib/db';
+import { useContacts, usePanchayats, db } from '@/lib/db';
 import type { ContactRole } from '@/lib/db/schema';
-
-
+import { useLiveQuery } from 'dexie-react-hooks';
 
 const ROLE_CLASSES: Record<ContactRole, string> = {
   asha_worker: 'role-asha',
@@ -36,10 +36,21 @@ const itemVariants = {
 };
 
 export default function ContactsPage() {
+  const router = useRouter();
   const agentId = useAgentStore((s) => s.agentId);
   const contacts = useContacts(agentId ?? undefined);
   const panchayats = usePanchayats();
   const t = useTranslations();
+
+  // Check for unsaved draft in Dexie
+  const savedDraft = useLiveQuery(() => db.drafts.get('newContactDraft'));
+  const hasDraft = !!(savedDraft?.data?.name || savedDraft?.data?.phone || savedDraft?.data?.role);
+  const draftName = savedDraft?.data?.name as string | undefined;
+  const draftRole = savedDraft?.data?.role as string | undefined;
+
+  async function discardDraft() {
+    await db.drafts.delete('newContactDraft');
+  }
 
   const ROLE_LABELS: Record<ContactRole, string> = {
     asha_worker: t.roleAshaWorker,
@@ -91,7 +102,46 @@ export default function ContactsPage() {
         </div>
       </motion.div>
 
-      {/* Search */}
+      {/* Draft Resume Banner */}
+      {hasDraft && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{
+            background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+            border: '1.5px solid #f59e0b',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.85rem 1rem',
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.75rem',
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontWeight: 700, color: '#92400e', fontSize: '0.85rem', margin: 0 }}>📝 Unsaved draft</p>
+            <p style={{ color: '#b45309', fontSize: '0.78rem', margin: '0.15rem 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {draftName ? `"${draftName}"` : draftRole ? `Role: ${draftRole}` : 'Incomplete contact entry'}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+            <button
+              onClick={discardDraft}
+              style={{ background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '0.4rem 0.7rem', fontSize: '0.78rem', fontWeight: 600, color: '#78350f', cursor: 'pointer' }}
+            >
+              Discard
+            </button>
+            <button
+              onClick={() => router.push('/contacts/new')}
+              style={{ background: '#d97706', border: 'none', borderRadius: 'var(--radius-sm)', padding: '0.4rem 0.85rem', fontSize: '0.78rem', fontWeight: 700, color: 'white', cursor: 'pointer' }}
+            >
+              Resume →
+            </button>
+          </div>
+        </motion.div>
+      )}
+
       <motion.div variants={itemVariants} className="field-group" style={{ marginBottom: '0.75rem' }}>
         <input
           id="contact-search"
