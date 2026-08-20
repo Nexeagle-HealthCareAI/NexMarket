@@ -470,11 +470,10 @@ export default function NewContactPage() {
 
             {/* Photo — prominent one-tap button */}
             <div className="field-group">
-              <label className="field-label" htmlFor="contact-photo">{t.capturePhoto}</label>
+              <label className="field-label">{t.capturePhoto}</label>
               <input id="contact-photo" type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: 'none' }} />
-              <button
-                type="button"
-                onClick={() => document.getElementById('contact-photo')?.click()}
+              <label
+                htmlFor="contact-photo"
                 style={{
                   width: '100%', minHeight: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
                   background: form.photoDataUri ? 'rgba(16,185,129,0.08)' : 'var(--surface-input)',
@@ -489,7 +488,7 @@ export default function NewContactPage() {
                     📸 Photo attached — tap to retake
                   </>
                 ) : (<>📷 {t.btnTakePhoto}</>)}
-              </button>
+              </label>
             </div>
 
             {error && <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem', fontWeight: 600 }}>{error}</p>}
@@ -585,8 +584,18 @@ export default function NewContactPage() {
               <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b' }}>Documents</h3>
-                  <input id="contact-doc" type="file" accept="image/*,.pdf" onChange={handleDocumentUpload} style={{ display: 'none' }} />
-                  <button type="button" onClick={() => document.getElementById('contact-doc')?.click()} style={{ padding: '0.4rem 0.75rem', background: 'white', border: '1px solid var(--color-primary-300)', color: 'var(--color-primary-600)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }}>+ Add</button>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {/* Camera capture — opens camera directly on mobile */}
+                    <label htmlFor="contact-doc-camera" style={{ padding: '0.4rem 0.75rem', background: 'white', border: '1px solid #10b981', color: '#10b981', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      📷 Camera
+                    </label>
+                    <input id="contact-doc-camera" type="file" accept="image/*" capture="environment" onChange={handleDocumentUpload} style={{ display: 'none' }} />
+                    {/* File picker — opens gallery/files */}
+                    <label htmlFor="contact-doc" style={{ padding: '0.4rem 0.75rem', background: 'white', border: '1px solid var(--color-primary-300)', color: 'var(--color-primary-600)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      📁 File
+                    </label>
+                    <input id="contact-doc" type="file" accept="image/*,.pdf" onChange={handleDocumentUpload} style={{ display: 'none' }} />
+                  </div>
                 </div>
                 {form.documents.length === 0 ? (
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.5rem' }}>No documents attached.</div>
