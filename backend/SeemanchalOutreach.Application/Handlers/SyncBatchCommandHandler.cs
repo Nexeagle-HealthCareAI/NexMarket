@@ -244,7 +244,8 @@ namespace SeemanchalOutreach.Application.Handlers
                     bool card = GetBool(root, "cardGiven", false);
                     string status = GetString(root, "status", "Lead");
                     DateTime? followUpDate = GetOptionalDateTime(root, "followUpDate");
-                    string? comments = root.TryGetProperty("comments", out var cProp) && cProp.ValueKind == JsonValueKind.String ? cProp.GetString() : null;
+                    string? comments = root.TryGetProperty("notes", out var nProp) && nProp.ValueKind == JsonValueKind.String ? nProp.GetString() 
+                                     : root.TryGetProperty("comments", out var cProp) && cProp.ValueKind == JsonValueKind.String ? cProp.GetString() : null;
                     double? lat = GetOptionalDouble(root, "lat");
                     double? lng = GetOptionalDouble(root, "lng");
                     bool agentEscalated = GetBool(root, "agentEscalated", false);
@@ -354,7 +355,7 @@ namespace SeemanchalOutreach.Application.Handlers
                     }
                     else
                     {
-                        if (item.Type == "contact_update")
+                        if (item.Type == "contact_update" || item.Type == "contact_new")
                         {
                             existing.Name = name;
                             existing.Phone = phone;

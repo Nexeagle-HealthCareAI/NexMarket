@@ -68,7 +68,7 @@ export function useContactsByPanchayat(panchayatId: string | undefined) {
 
 export function useContact(clientId: string | undefined) {
   return useLiveQuery(
-    async () => (clientId ? db.contacts.where('clientId').equals(clientId).first() : undefined),
+    async () => (clientId ? (await db.contacts.toArray()).find(c => c.clientId === clientId) : undefined),
     [clientId],
   );
 }

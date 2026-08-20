@@ -230,7 +230,7 @@ export default function NewContactPage() {
     try {
       // Upsert: if we already saved in Step 1, update; otherwise insert
       if (savedContactId) {
-        const existing = await db.contacts.where('clientId').equals(savedContactId).first();
+        const existing = (await db.contacts.toArray()).find(c => c.clientId === savedContactId);
         if (existing?.localId) {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { localId: _id, ...contactUpdate } = contact;
@@ -242,8 +242,8 @@ export default function NewContactPage() {
       await addToOutbox(clientId, deviceId, 'contact', contact);
       // Save documents
       for (const doc of finalForm.documents) {
-        const exists = await db.contactDocuments.where('clientId').equals(doc.id).count();
-        if (exists === 0) {
+        const exists = (await db.contactDocuments.toArray()).some(d => d.clientId === doc.id);
+        if (!exists) {
           const localDoc: LocalContactDocument = {
             clientId: doc.id, deviceId, contactId: clientId, agentId,
             dataUri: doc.dataUri, mimeType: doc.mimeType,
