@@ -77,6 +77,47 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
 
   const contactId = initialContactId || searchParams.get('contactId') || undefined;
 
+  // Draft key scoped per contact (or 'standalone' for non-contact surveys)
+  const SURVEY_DRAFT_KEY = `surveyDraft_${contactId ?? 'standalone'}`;
+
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [isLoadingDraft, setIsLoadingDraft] = useState(true);
+
+  // Load draft on mount
+  useEffect(() => {
+    let active = true;
+    db.drafts.get(SURVEY_DRAFT_KEY).then((draft) => {
+      if (!active) return;
+      if (draft?.data?.responses && Object.keys(draft.data.responses).length > 0) {
+        setResponses(draft.data.responses as Record<string, Answer>);
+        setOtherText((draft.data.otherText as Record<string, string>) ?? {});
+        if (typeof draft.data.currentTab === 'number') setCurrentTab(draft.data.currentTab);
+        setDraftRestored(true);
+      }
+    }).catch(console.error).finally(() => { if (active) setIsLoadingDraft(false); });
+    return () => { active = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [SURVEY_DRAFT_KEY]);
+
+  // Auto-save draft every 500ms when responses change
+  useEffect(() => {
+    if (isLoadingDraft) return;
+    const timer = setTimeout(() => {
+      if (Object.keys(responses).length > 0) {
+        db.drafts.put({
+          id: SURVEY_DRAFT_KEY,
+          data: { responses, otherText, currentTab },
+          updatedAt: new Date().toISOString(),
+        }).catch(console.error);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [responses, otherText, currentTab, isLoadingDraft, SURVEY_DRAFT_KEY]);
+
+  async function clearDraft() {
+    await db.drafts.delete(SURVEY_DRAFT_KEY).catch(console.error);
+  }
+  // Survey mode body class
   useEffect(() => {
     document.body.classList.add('survey-mode');
     return () => {
@@ -126,7 +167,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
 
       await db.surveyResponses.add(surveyRecord);
       await addToOutbox(clientId, deviceId, 'survey', surveyRecord);
-      
+      await clearDraft(); // remove saved draft on successful submit
       if (onClose) onClose();
       else router.push('/home');
     } catch (e) {
@@ -237,6 +278,23 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
         <div style={{ margin: '1rem', padding: '0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#b91c1c', fontSize: '0.9rem', fontWeight: 600, textAlign: 'center' }}>
           ⚠️ {submitError}
         </div>
+      )}
+
+      {/* Draft Restored Banner */}
+      {draftRestored && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{ margin: '0.75rem 1rem 0', padding: '0.7rem 1rem', background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', border: '1.5px solid #f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}
+        >
+          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#92400e' }}>📝 Draft restored — answers from your last session.</span>
+          <button
+            onClick={async () => { await clearDraft(); setResponses({}); setOtherText({}); setCurrentTab(0); setDraftRestored(false); }}
+            style={{ background: 'rgba(0,0,0,0.1)', border: 'none', borderRadius: '6px', padding: '0.3rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, color: '#78350f', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            Start Fresh
+          </button>
+        </motion.div>
       )}
 
       {/* Main Form Content */}
