@@ -34,17 +34,23 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   const activeVisit = useActiveVisit(agentId ?? undefined);
 
   // Load dynamic questions from DB
-  const dynamicQuestions = useLiveQuery(() => 
-    db.surveyQuestions.where('isActive').equals('true').or('isActive').equals(1).sortBy('order')
-      .then(qs => qs.length > 0 ? qs : db.surveyQuestions.orderBy('order').filter(q => q.isActive).toArray())
+  // NOTE: We use .toArray() + JS filter instead of .where('isActive').equals(true)
+  // because Dexie's boolean index is unreliable — booleans can be stored as
+  // true/1/'true' depending on the JSON serialiser/browser, so a .equals() 
+  // check against a boolean frequently returns 0 results even when data is present.
+  const dynamicQuestions = useLiveQuery(() =>
+    db.surveyQuestions.orderBy('order').filter(q => Boolean(q.isActive)).toArray()
   );
 
   const QUESTIONS: SurveyQuestion[] = useMemo(() => {
     return (dynamicQuestions ?? []).map(q => ({
-      id: q.questionId,
+      id: q.questionId ?? q.id, // fallback to id if questionId is missing
       text: q.text,
       type: q.type,
-      options: q.optionsJson ? (JSON.parse(q.optionsJson) as string[]) : undefined,
+      options: (() => {
+        if (!q.optionsJson) return undefined;
+        try { return JSON.parse(q.optionsJson) as string[]; } catch { return undefined; }
+      })(),
       section: q.section,
       isOptional: q.isOptional
     }));
@@ -138,15 +144,23 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
     );
   }
 
-  if (QUESTIONS.length === 0) {
+  if (QUESTIONS.length === 0 && dynamicQuestions !== undefined) {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--color-primary-900)', padding: '2rem', textAlign: 'center' }}>
         <span style={{ fontSize: '3rem', marginBottom: '1rem' }}>📋</span>
-        <h2 style={{ color: 'white', marginBottom: '0.5rem' }}>No survey questions configured</h2>
-        <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '2rem' }}>Ask your admin to add questions in the Surveys → Questionnaire tab.</p>
+        <h2 style={{ color: 'white', marginBottom: '0.5rem' }}>Survey not yet synced</h2>
+        <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '2rem', maxWidth: 280 }}>
+          Questions haven't synced to this device yet. Make sure you have internet access, then tap <strong>Retry</strong>.
+        </p>
+        <button
+          onClick={() => { import('@/lib/sync/seeder').then(m => m.refreshReferenceData()); }}
+          style={{ background: '#4f46e5', border: 'none', color: 'white', padding: '0.85rem 2rem', borderRadius: '20px', fontSize: '1rem', cursor: 'pointer', fontWeight: 700, marginBottom: '1rem' }}
+        >
+          🔄 Retry Sync
+        </button>
         <button
           onClick={() => { if (onClose) onClose(); else router.back(); }}
-          style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '0.75rem 2rem', borderRadius: '20px', fontSize: '1rem', cursor: 'pointer', fontWeight: 600 }}
+          style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'rgba(255,255,255,0.8)', padding: '0.75rem 2rem', borderRadius: '20px', fontSize: '1rem', cursor: 'pointer', fontWeight: 600 }}
         >
           {t.surveyCancel}
         </button>
