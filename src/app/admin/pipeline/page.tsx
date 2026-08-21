@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useAgentStore } from '@/store/agent-store';
+import { Pin } from 'lucide-react';
 import { getAdminContacts, updateAdminContact, deleteAdminContact, getContactHistory, getPanchayats, type AdminContactDto, type ContactHistoryEntryDto, type PanchayatDto, type ContactUpdateRequest } from '@/lib/sync/api-client';
 import EditContactDrawer from '@/components/admin/EditContactDrawer';
 
@@ -47,6 +48,9 @@ function SortableHeader({ label, columnKey, currentSortBy, currentSortOrder, onS
 export default function PipelinePage() {
   const agentId = useAgentStore((s) => s.agentId);
   const name = useAgentStore((s) => s.name);
+  const pinnedContactIds = useAgentStore((s) => s.pinnedContactIds || []);
+  const togglePinContact = useAgentStore((s) => s.togglePinContact);
+
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -203,6 +207,16 @@ export default function PipelinePage() {
   )).filter(Boolean).sort();
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  const sortedContacts = React.useMemo(() => {
+    return [...contacts].sort((a, b) => {
+      const aPinned = pinnedContactIds.includes(a.clientId);
+      const bPinned = pinnedContactIds.includes(b.clientId);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return 0;
+    });
+  }, [contacts, pinnedContactIds]);
 
   const exportToCsv = async () => {
     if (!agentId) return;
@@ -591,7 +605,7 @@ export default function PipelinePage() {
 // -------------------------------------------------------------------------------------------------
 // Contact Row Component (Handles inline editing state)
 // -------------------------------------------------------------------------------------------------
-function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, showComments, onEdit, onViewHistory, onLogCall, showQuickActions, onDelete }: { contact: Contact, panchayatName?: string, blockName?: string, showStageAndFollowUp: boolean, showComments: boolean, onEdit: () => void, onViewHistory: () => void, onLogCall?: (reason: string) => void, showQuickActions?: boolean, onDelete?: () => void }) {
+function ContactRow({ contact, isPinned, onTogglePin, panchayatName, blockName, showStageAndFollowUp, showComments, onEdit, onViewHistory, onLogCall, showQuickActions, onDelete }: { contact: Contact, isPinned?: boolean, onTogglePin?: () => void, panchayatName?: string, blockName?: string, showStageAndFollowUp: boolean, showComments: boolean, onEdit: () => void, onViewHistory: () => void, onLogCall?: (reason: string) => void, showQuickActions?: boolean, onDelete?: () => void }) {
   const lastUpdatedTime = contact.lastUpdatedAt
     ? new Date(contact.lastUpdatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) + ' IST'
     : 'Never';
@@ -618,7 +632,16 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
             )}
           </div>
           <div>
-            <div style={{ fontWeight: 700, color: '#0f172a' }}>{contact.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ fontWeight: 700, color: '#0f172a' }}>{contact.name}</div>
+              <button 
+                onClick={onTogglePin} 
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: isPinned ? '#4f46e5' : '#cbd5e1', display: 'flex', alignItems: 'center', padding: '0.1rem' }}
+                title={isPinned ? 'Unpin' : 'Pin to top'}
+              >
+                {isPinned ? <Pin size={16} fill="currentColor" /> : <Pin size={16} />}
+              </button>
+            </div>
             <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'capitalize', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <span>{contact.role.replace('_', ' ')}</span>
               {contact.phone && (
