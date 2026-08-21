@@ -47,32 +47,7 @@ function isMeaningfulDraft(draft: Partial<ContactFormState>): boolean {
   return !!(draft.name || draft.phone || draft.notes || draft.complaints || draft.conflicts || draft.role || draft.photoDataUri || draft.agentEscalationNote || draft.documents?.length);
 }
 
-// Step indicator
-function StepIndicator({ step }: { step: 1 | 2 }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
-      {[1, 2].map((s) => (
-        <div key={s} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: '50%',
-            background: s <= step ? 'var(--color-primary-600)' : 'var(--surface-input)',
-            color: s <= step ? 'white' : 'var(--text-muted)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 700, fontSize: '0.8rem',
-            border: s === step ? '2px solid var(--color-primary-600)' : '2px solid transparent',
-            transition: 'all 0.3s ease',
-          }}>
-            {s < step ? '✓' : s}
-          </div>
-          {s === 1 && <div style={{ height: 2, width: 40, background: step >= 2 ? 'var(--color-primary-400)' : 'var(--surface-border)', borderRadius: 2, transition: 'all 0.3s ease' }} />}
-        </div>
-      ))}
-      <div style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-        {step === 1 ? 'Quick Save' : 'Add Details (optional)'}
-      </div>
-    </div>
-  );
-}
+
 
 export default function NewContactPage() {
   const router = useRouter();
@@ -86,7 +61,7 @@ export default function NewContactPage() {
   const t = useTranslations();
 
   // 2-step form state
-  const [step, setStep] = useState<1 | 2>(1);
+
   // savedContactId: when set, step 1 was saved and we're on step 2 (or showing survey)
   const [savedContactId, setSavedContactId] = useState<string | null>(null);
   const [showSurvey, setShowSurvey] = useState(false);
@@ -269,30 +244,27 @@ export default function NewContactPage() {
     }
   }
 
-  // Step 1 submit → quick save, then go to step 2
-  async function handleStep1Submit(e: React.FormEvent) {
-    e.preventDefault();
+  // Submit & Survey
+  async function handleSubmitAndSurvey() {
     if (!form.name.trim()) { setError(t.errNameRequired); return; }
     if (!form.role) { setError(t.errContactType); return; }
     if (!form.panchayatId) { setError(t.errPanchayat); return; }
     const id = await saveContact(form);
     if (id) {
       setSavedContactId(id);
-      setStep(2);
-      setError('');
+      setShowSurvey(true);
     }
   }
 
-  // Step 2 final save → show survey
-  async function handleStep2Submit(e: React.FormEvent) {
-    e.preventDefault();
+  // Submit & Close
+  async function handleSubmitAndClose() {
+    if (!form.name.trim()) { setError(t.errNameRequired); return; }
+    if (!form.role) { setError(t.errContactType); return; }
+    if (!form.panchayatId) { setError(t.errPanchayat); return; }
     const id = await saveContact(form);
-    if (id) setShowSurvey(true);
-  }
-
-  // Skip step 2 entirely → show survey
-  function handleSkipDetails() {
-    setShowSurvey(true);
+    if (id) {
+      router.push('/contacts');
+    }
   }
 
   if (showSurvey && savedContactId) {
@@ -316,7 +288,7 @@ export default function NewContactPage() {
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <button
-            onClick={() => step === 2 ? setStep(1) : router.back()}
+            onClick={() => router.back()}
             style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '0.5rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 40, minHeight: 40 }}
             aria-label="Go back"
           >
@@ -324,11 +296,11 @@ export default function NewContactPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1>{step === 1 ? t.newContact : 'Add Details'}</h1>
+          <h1>{t.newContact}</h1>
         </div>
       </div>
 
-      {draftRestored && step === 1 && (
+      {draftRestored && (
         <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', border: '1.5px solid #f59e0b', color: '#92400e', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', fontSize: '0.82rem', fontWeight: 600, marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
           <span>📝 Draft restored — your last entry was saved automatically.</span>
           <button
@@ -341,19 +313,10 @@ export default function NewContactPage() {
         </div>
       )}
 
-      <StepIndicator step={step} />
+      
 
-      <AnimatePresence mode="wait">
-        {step === 1 ? (
-          <motion.form
-            key="step1"
-            initial={{ opacity: 0, x: -16 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 16 }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
-            onSubmit={handleStep1Submit}
-            style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}
-          >
+      <div style={{ paddingBottom: '100px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {/* Contact Type */}
             <div>
               <p className="field-label" style={{ marginBottom: '0.5rem' }}>{t.contactType} <span style={{ color: 'var(--color-danger)' }}>*</span></p>
@@ -495,36 +458,13 @@ export default function NewContactPage() {
               </label>
             </div>
 
-            {error && <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem', fontWeight: 600 }}>{error}</p>}
-
-            <button
-              id="save-contact-btn"
-              type="submit"
-              className="btn btn-primary btn-full btn-lg"
-              disabled={saving}
-              style={{ minHeight: 56, fontSize: '1rem' }}
-            >
-              {saving ? t.saving : '✓ Save & Add Details →'}
-            </button>
-          </motion.form>
-        ) : (
-          <motion.div
-            key="step2"
-            initial={{ opacity: 0, x: 16 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -16 }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
-          >
-            {/* Step 2 saved banner */}
-            <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '1.2rem' }}>✅</span>
-              <div>
-                <div style={{ fontWeight: 700, color: '#065f46', fontSize: '0.9rem' }}>Contact saved!</div>
-                <div style={{ fontSize: '0.78rem', color: '#047857' }}>Add optional details below, or skip to survey.</div>
-              </div>
+            {/* Optional Details Header */}
+            <div style={{ margin: '1rem 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <h2 style={{ fontSize: '1.1rem', margin: 0, color: 'var(--text-primary)' }}>Optional Details</h2>
+              <div style={{ flex: 1, height: 1, background: 'var(--surface-border)' }} />
             </div>
 
-            <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {/* Toggles */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <div className="toggle-row" role="checkbox" aria-checked={form.whatsappAdded} tabIndex={0}
@@ -644,28 +584,40 @@ export default function NewContactPage() {
               </div>
 
               {error && <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem', fontWeight: 600 }}>{error}</p>}
+            </div>
+          </div>
+        </div>
 
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <button
-                  type="button"
-                  onClick={handleSkipDetails}
-                  style={{ flex: 1, minHeight: 52, background: 'var(--surface-input)', border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer', fontSize: '0.95rem', color: 'var(--text-secondary)' }}
-                >
-                  Skip →
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={saving}
-                  style={{ flex: 2, minHeight: 52, fontSize: '0.95rem' }}
-                >
-                  {saving ? t.saving : '✓ Save & Take Survey'}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        {/* Sticky Bottom Bar */}
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0,
+          background: 'white', padding: '1rem',
+          boxShadow: '0 -4px 12px rgba(0,0,0,0.05)',
+          borderTop: '1px solid var(--surface-border)',
+          display: 'flex', gap: '0.75rem', zIndex: 50
+        }}>
+          <button
+            type="button"
+            onClick={handleSubmitAndClose}
+            disabled={saving}
+            style={{ 
+              flex: 1, minHeight: 54, background: 'var(--surface-input)', 
+              border: '1px solid var(--surface-border)', borderRadius: 'var(--radius-md)', 
+              fontWeight: 600, cursor: 'pointer', fontSize: '0.95rem', color: 'var(--text-secondary)' 
+            }}
+          >
+            Save & Exit
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmitAndSurvey}
+            className="btn btn-primary"
+            disabled={saving}
+            style={{ flex: 2, minHeight: 54, fontSize: '1rem' }}
+          >
+            {saving ? t.saving : '✓ Save & Start Survey'}
+          </button>
+        </div>
     </div>
   );
 }

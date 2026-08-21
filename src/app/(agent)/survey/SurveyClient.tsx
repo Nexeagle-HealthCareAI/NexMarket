@@ -77,6 +77,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   const [showSkipPrompt, setShowSkipPrompt] = useState(false);
   const [skipReason, setSkipReason] = useState<string>('');
   const [submitError, setSubmitError] = useState('');
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const contactId = initialContactId || searchParams.get('contactId') || undefined;
 
@@ -171,14 +172,56 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
       await db.surveyResponses.add(surveyRecord);
       await addToOutbox(clientId, deviceId, 'survey', surveyRecord);
       await clearDraft(); // remove saved draft on successful submit
-      if (onClose) onClose();
-      else router.push('/home');
+      setShowSuccess(true);
+      setLoading(false);
     } catch (e) {
       console.error(e);
       setSubmitError('Could not save this response. Please try again.');
       setLoading(false);
     }
   };
+
+  if (showSuccess) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', zIndex: 100 }}>
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', bounce: 0.5 }}
+          style={{ width: 80, height: 80, borderRadius: '50%', background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem', boxShadow: '0 10px 25px rgba(16,185,129,0.4)' }}
+        >
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </motion.div>
+        
+        <h2 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem', textAlign: 'center' }}>Great job!</h2>
+        <p style={{ color: '#64748b', fontSize: '1rem', textAlign: 'center', marginBottom: '2.5rem', maxWidth: 300, lineHeight: 1.5 }}>
+          Contact and survey details have been securely saved.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', maxWidth: 320 }}>
+          <button
+            onClick={() => {
+              setShowSuccess(false);
+              // Instead of router.push which is slow, we use window.location.href or just router.replace to force remount
+              window.location.href = '/contacts/new';
+            }}
+            style={{ padding: '1.1rem', borderRadius: '12px', background: '#4f46e5', color: 'white', fontWeight: 700, fontSize: '1.1rem', border: 'none', cursor: 'pointer', boxShadow: '0 4px 15px rgba(79,70,229,0.3)' }}
+          >
+            ➕ Add Another Contact
+          </button>
+          
+          <button
+            onClick={() => { if (onClose) onClose(); else router.push('/contacts'); }}
+            style={{ padding: '1.1rem', borderRadius: '12px', background: 'white', color: '#475569', fontWeight: 700, fontSize: '1.1rem', border: '1px solid #cbd5e1', cursor: 'pointer' }}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (dynamicQuestions === undefined) {
     return (
@@ -345,7 +388,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
             </div>
 
             {displayedQuestions.length === 0 && isSearching ? (
-              <p style={{ color: '#64748b', textAlign: 'center', marginTop: '2rem' }}>No questions found for "{searchQuery}".</p>
+              <p style={{ color: '#64748b', textAlign: 'center', marginTop: '2rem' }}>No questions found for &quot;{searchQuery}&quot;.</p>
             ) : (
               displayedQuestions.map((q, qIndex) => (
                 <div key={q.id} style={{ background: 'white', borderRadius: '16px', padding: '1.25rem', boxShadow: '0 2px 15px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
