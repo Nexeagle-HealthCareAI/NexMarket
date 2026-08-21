@@ -346,6 +346,18 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
             <strong>Notes:</strong> {contact.notes}
           </div>
         )}
+
+        {contact.complaints && (
+          <div style={{ marginTop: '0.75rem', padding: '0.6rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: '#7f1d1d' }}>
+            <strong>Issues / Complaints:</strong> {contact.complaints}
+          </div>
+        )}
+
+        {contact.conflicts && (
+          <div style={{ marginTop: '0.75rem', padding: '0.6rem', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: '#9a3412' }}>
+            <strong>Conflicts:</strong> {contact.conflicts}
+          </div>
+        )}
       </div>
 
       {/* Documents */}

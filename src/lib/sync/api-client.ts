@@ -710,6 +710,8 @@ export interface ContactUpdateRequest {
   panchayatId?: string;
   agentEscalationResolved?: boolean;
   agentEscalationResolution?: string | null;
+  agentEscalated?: boolean;
+  agentEscalationNote?: string | null;
 }
 
 export interface AdminContactsQuery {

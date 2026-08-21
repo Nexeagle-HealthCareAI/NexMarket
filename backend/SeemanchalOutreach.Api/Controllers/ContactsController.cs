@@ -31,6 +31,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public string? PanchayatId { get; set; }
         public bool? AgentEscalationResolved { get; set; }
         public string? AgentEscalationResolution { get; set; }
+        public bool? AgentEscalated { get; set; }
+        public string? AgentEscalationNote { get; set; }
     }
 
     [ApiController]
@@ -301,13 +303,35 @@ namespace SeemanchalOutreach.Api.Controllers
             if (dto.Phone != null) contact.Phone = dto.Phone;
             if (dto.PanchayatId != null) contact.PanchayatId = dto.PanchayatId;
             
-            if (dto.AgentEscalationResolved == true)
+            if (dto.AgentEscalated.HasValue)
             {
-                contact.AgentEscalated = false;
-                contact.IsEscalationResolved = true;
-                if (dto.AgentEscalationResolution != null)
+                contact.AgentEscalated = dto.AgentEscalated.Value;
+                if (dto.AgentEscalated.Value)
                 {
-                    contact.AgentEscalationResolution = dto.AgentEscalationResolution;
+                    contact.IsEscalationResolved = false;
+                    contact.AgentEscalationResolution = null;
+                }
+            }
+
+            if (dto.AgentEscalationNote != null)
+            {
+                contact.AgentEscalationNote = string.IsNullOrWhiteSpace(dto.AgentEscalationNote) ? null : dto.AgentEscalationNote;
+            }
+
+            if (dto.AgentEscalationResolved.HasValue)
+            {
+                contact.IsEscalationResolved = dto.AgentEscalationResolved.Value;
+                if (dto.AgentEscalationResolved.Value)
+                {
+                    contact.AgentEscalated = false;
+                    if (dto.AgentEscalationResolution != null)
+                    {
+                        contact.AgentEscalationResolution = dto.AgentEscalationResolution;
+                    }
+                }
+                else
+                {
+                    contact.AgentEscalationResolution = null;
                 }
             }
 

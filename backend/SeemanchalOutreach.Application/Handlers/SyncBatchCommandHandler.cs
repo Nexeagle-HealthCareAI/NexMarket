@@ -279,6 +279,8 @@ namespace SeemanchalOutreach.Application.Handlers
                             Status = status,
                             FollowUpDate = followUpDate,
                             Comments = comments,
+                            Complaints = GetString(root, "complaints", null),
+                            Conflicts = GetString(root, "conflicts", null),
                             Latitude = lat,
                             Longitude = lng,
                             AgentEscalated = agentEscalated,
@@ -392,6 +394,8 @@ namespace SeemanchalOutreach.Application.Handlers
                                 existing.Status = status;
                                 existing.FollowUpDate = followUpDate;
                                 if (comments != null) existing.Comments = comments;
+                                if (root.TryGetProperty("complaints", out var cp) && cp.ValueKind == JsonValueKind.String) existing.Complaints = cp.GetString();
+                                if (root.TryGetProperty("conflicts", out var cf) && cf.ValueKind == JsonValueKind.String) existing.Conflicts = cf.GetString();
 
                                 // Guard against outbox retries re-sending the same unchanged item
                                 // and spamming the audit trail with no-op entries.

@@ -25,6 +25,8 @@ interface ContactFormState {
   whatsappAdded: boolean;
   cardGiven: boolean;
   notes: string;
+  complaints: string;
+  conflicts: string;
   status: 'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected';
   followUpDate: string;
   photoDataUri: string;
@@ -36,13 +38,13 @@ interface ContactFormState {
 function emptyForm(panchayatId = ''): ContactFormState {
   return {
     name: '', role: '', profession: '', panchayatId, phone: '', whatsappAdded: false,
-    cardGiven: false, notes: '', status: 'Lead', followUpDate: '', photoDataUri: '',
+    cardGiven: false, notes: '', complaints: '', conflicts: '', status: 'Lead', followUpDate: '', photoDataUri: '',
     agentEscalated: false, agentEscalationNote: '', documents: []
   };
 }
 
 function isMeaningfulDraft(draft: Partial<ContactFormState>): boolean {
-  return !!(draft.name || draft.phone || draft.notes || draft.role || draft.photoDataUri || draft.agentEscalationNote || draft.documents?.length);
+  return !!(draft.name || draft.phone || draft.notes || draft.complaints || draft.conflicts || draft.role || draft.photoDataUri || draft.agentEscalationNote || draft.documents?.length);
 }
 
 // Step indicator
@@ -219,6 +221,8 @@ export default function NewContactPage() {
       whatsappAdded: finalForm.whatsappAdded,
       cardGiven: finalForm.cardGiven,
       notes: finalForm.notes.trim() || undefined,
+      complaints: finalForm.complaints.trim() || undefined,
+      conflicts: finalForm.conflicts.trim() || undefined,
       status: finalForm.status,
       followUpDate: finalForm.followUpDate || undefined,
       photoDataUri: finalForm.photoDataUri || undefined,
@@ -561,6 +565,17 @@ export default function NewContactPage() {
                 <textarea id="contact-notes" className="field-input" placeholder={t.notesPlaceholder} value={form.notes} onChange={(e) => update('notes', e.target.value)} rows={3} />
               </div>
 
+              {/* Complaints & Conflicts */}
+              <div className="field-group">
+                <label className="field-label" htmlFor="contact-complaints" style={{ color: 'var(--color-danger)' }}>Issues / Complaints</label>
+                <textarea id="contact-complaints" className="field-input" placeholder="Record any issues..." value={form.complaints} onChange={(e) => update('complaints', e.target.value)} rows={2} style={{ borderColor: '#fecaca', background: '#fef2f2', color: '#7f1d1d' }} />
+              </div>
+
+              <div className="field-group">
+                <label className="field-label" htmlFor="contact-conflicts" style={{ color: '#ea580c' }}>Conflicts</label>
+                <textarea id="contact-conflicts" className="field-input" placeholder="Record any conflicts..." value={form.conflicts} onChange={(e) => update('conflicts', e.target.value)} rows={2} style={{ borderColor: '#fed7aa', background: '#fff7ed', color: '#9a3412' }} />
+              </div>
+
               {/* CRM Details */}
               <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b' }}>{t.crmDetails}</h3>
@@ -602,12 +617,26 @@ export default function NewContactPage() {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {form.documents.map((doc, idx) => (
-                      <div key={doc.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', background: 'white', padding: '0.5rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                        {doc.mimeType.includes('image') && doc.dataUri ? (
-                          <img src={doc.dataUri} alt="Preview" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: '4px', flexShrink: 0 }} />
-                        ) : (<div style={{ fontSize: '1.5rem', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{doc.mimeType.includes('pdf') ? '📄' : '🖼️'}</div>)}
-                        <input type="text" placeholder="Label (e.g. Aadhaar Card)" value={doc.label} onChange={(e) => { const nd = [...form.documents]; nd[idx].label = e.target.value; update('documents', nd); }} style={{ flex: 1, border: 'none', background: 'transparent', fontSize: '0.85rem', outline: 'none' }} />
-                        <button type="button" onClick={() => update('documents', form.documents.filter(d => d.id !== doc.id))} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>✕</button>
+                      <div key={doc.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'white', padding: '0.75rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          {doc.mimeType.includes('image') && doc.dataUri ? (
+                            <img src={doc.dataUri} alt="Preview" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: '4px', flexShrink: 0 }} />
+                          ) : (<div style={{ fontSize: '1.5rem', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{doc.mimeType.includes('pdf') ? '📄' : '🖼️'}</div>)}
+                          <input type="text" placeholder="Label (e.g. Aadhaar Card)" value={doc.label} onChange={(e) => { const nd = [...form.documents]; nd[idx].label = e.target.value; update('documents', nd); }} style={{ flex: 1, border: 'none', background: 'transparent', fontSize: '0.9rem', outline: 'none', fontWeight: 600 }} />
+                          <button type="button" onClick={() => update('documents', form.documents.filter(d => d.id !== doc.id))} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem' }}>✕</button>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.25rem', overflowX: 'auto', paddingBottom: '0.25rem', scrollbarWidth: 'none' }}>
+                          {['Aadhaar Card', 'Visiting Card', 'Prescription', 'Shop Board', 'Clinic Photo'].map(label => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() => { const nd = [...form.documents]; nd[idx].label = label; update('documents', nd); }}
+                              style={{ whiteSpace: 'nowrap', padding: '0.2rem 0.5rem', borderRadius: '12px', border: '1px solid #cbd5e1', background: doc.label === label ? '#e0e7ff' : '#f1f5f9', color: doc.label === label ? '#4f46e5' : '#475569', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>

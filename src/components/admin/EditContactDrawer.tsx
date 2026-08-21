@@ -26,6 +26,8 @@ export default function EditContactDrawer({ contact, panchayats, isOpen, onClose
   const [editComments, setEditComments] = useState(contact.comments || '');
   const [editComplaints, setEditComplaints] = useState(contact.complaints || '');
   const [editConflicts, setEditConflicts] = useState(contact.conflicts || '');
+  const [editAgentEscalated, setEditAgentEscalated] = useState(contact.agentEscalated || false);
+  const [editAgentEscalationNote, setEditAgentEscalationNote] = useState(contact.agentEscalationNote || '');
 
   const hasChanges = 
     editName !== (contact.name || '') ||
@@ -35,7 +37,9 @@ export default function EditContactDrawer({ contact, panchayats, isOpen, onClose
     editFollowUp !== (contact.followUpDate ? new Date(contact.followUpDate).toISOString().split('T')[0] : '') ||
     editComments !== (contact.comments || '') ||
     editComplaints !== (contact.complaints || '') ||
-    editConflicts !== (contact.conflicts || '');
+    editConflicts !== (contact.conflicts || '') ||
+    editAgentEscalated !== (contact.agentEscalated || false) ||
+    editAgentEscalationNote !== (contact.agentEscalationNote || '');
 
   const uniqueDistricts = Array.from(new Set(panchayats.map(p => p.district))).sort();
   
@@ -57,7 +61,9 @@ export default function EditContactDrawer({ contact, panchayats, isOpen, onClose
       followUpDate: editFollowUp ? new Date(editFollowUp).toISOString() : null,
       comments: editComments,
       complaints: editComplaints,
-      conflicts: editConflicts
+      conflicts: editConflicts,
+      agentEscalated: editAgentEscalated,
+      agentEscalationNote: editAgentEscalationNote
     });
   };
 
@@ -203,6 +209,33 @@ export default function EditContactDrawer({ contact, panchayats, isOpen, onClose
                   placeholder="Record any conflicts..."
                   style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #fed7aa', outline: 'none', resize: 'vertical', background: '#fff7ed', fontWeight: 500, fontSize: '0.9rem', color: '#9a3412', boxSizing: 'border-box' }}
                 />
+              </div>
+
+              <div style={{ height: '1px', background: '#e2e8f0', margin: '0.5rem 0' }} />
+
+              <div style={{ background: editAgentEscalated ? '#fef2f2' : '#f8fafc', padding: '1rem', borderRadius: '8px', border: `1px solid ${editAgentEscalated ? '#fca5a5' : '#e2e8f0'}`, transition: 'all 0.2s' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', userSelect: 'none' }}>
+                  <div style={{ width: 44, height: 24, background: editAgentEscalated ? '#ef4444' : '#cbd5e1', borderRadius: 12, position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                    <div style={{ position: 'absolute', top: 2, left: editAgentEscalated ? 22 : 2, width: 20, height: 20, background: 'white', borderRadius: '50%', transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
+                  </div>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: editAgentEscalated ? '#b91c1c' : '#475569' }}>
+                    🚨 Escalate to Admin
+                  </span>
+                </label>
+                
+                <AnimatePresence>
+                  {editAgentEscalated && (
+                    <motion.div initial={{ height: 0, opacity: 0, marginTop: 0 }} animate={{ height: 'auto', opacity: 1, marginTop: '1rem' }} exit={{ height: 0, opacity: 0, marginTop: 0 }} style={{ overflow: 'hidden' }}>
+                      <textarea
+                        rows={3}
+                        value={editAgentEscalationNote}
+                        onChange={e => setEditAgentEscalationNote(e.target.value)}
+                        placeholder="Reason for escalation..."
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #fca5a5', outline: 'none', resize: 'vertical', background: 'white', fontWeight: 500, fontSize: '0.9rem', color: '#7f1d1d', boxSizing: 'border-box' }}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 

@@ -134,7 +134,7 @@ export default function PipelinePage() {
 
         const res = await getAdminContacts({
           page,
-          pageSize: PAGE_SIZE,
+          pageSize: isWorklist ? 50 : PAGE_SIZE,
           districts: selectedCities,
           blocks: selectedBlocks,
           panchayats: selectedPanchayats,
@@ -516,10 +516,19 @@ export default function PipelinePage() {
                         showQuickActions={activeTab === 'worklist'}
                         onEdit={() => setEditDrawerContact(c)}
                         onViewHistory={() => setHistoryModalContact(c)}
-                        onQuickFollowUp={(days) => {
-                          const nextDate = new Date();
-                          nextDate.setDate(nextDate.getDate() + days);
-                          handleSaveContact(c.clientId, { followUpDate: nextDate.toISOString(), status: 'FollowUp' });
+                        onLogCall={(reason) => {
+                          const update: ContactUpdateRequest = {
+                            status: 'FollowUp',
+                            comments: `${c.comments ? c.comments + '\n' : ''}[Call Attempt: ${reason}]`
+                          };
+                          if (reason === 'Invalid Number') {
+                            update.clearFollowUpDate = true;
+                          } else {
+                            const nextDate = new Date();
+                            nextDate.setDate(nextDate.getDate() + 1);
+                            update.followUpDate = nextDate.toISOString();
+                          }
+                          handleSaveContact(c.clientId, update);
                         }}
                         onDelete={() => handleDeleteContact(c.clientId)}
                       />
@@ -585,12 +594,15 @@ export default function PipelinePage() {
 // -------------------------------------------------------------------------------------------------
 // Contact Row Component (Handles inline editing state)
 // -------------------------------------------------------------------------------------------------
-function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, showComments, onEdit, onViewHistory, onQuickFollowUp, showQuickActions, onDelete }: { contact: Contact, panchayatName?: string, blockName?: string, showStageAndFollowUp: boolean, showComments: boolean, onEdit: () => void, onViewHistory: () => void, onQuickFollowUp?: (days: number) => void, showQuickActions?: boolean, onDelete?: () => void }) {
-  // Format last updated IST time
+function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, showComments, onEdit, onViewHistory, onLogCall, showQuickActions, onDelete }: { contact: Contact, panchayatName?: string, blockName?: string, showStageAndFollowUp: boolean, showComments: boolean, onEdit: () => void, onViewHistory: () => void, onLogCall?: (reason: string) => void, showQuickActions?: boolean, onDelete?: () => void }) {
   const lastUpdatedTime = contact.lastUpdatedAt
     ? new Date(contact.lastUpdatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) + ' IST'
     : 'Never';
   const lastUpdatedBy = contact.lastUpdatedBy || 'N/A';
+
+  const gapDays = contact.lastUpdatedAt 
+    ? Math.floor((new Date().getTime() - new Date(contact.lastUpdatedAt).getTime()) / (1000 * 3600 * 24))
+    : null;
 
   const statusColor = contact.status === 'Lead' ? '#94a3b8' :
                       contact.status === 'Contacted' ? '#eab308' :
@@ -697,6 +709,11 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
           <div>
             <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>{lastUpdatedTime}</div>
             <div style={{ fontSize: '0.7rem', color: '#64748b' }}>By {lastUpdatedBy}</div>
+            {gapDays !== null && (
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: gapDays > 7 ? '#ef4444' : gapDays > 3 ? '#f59e0b' : '#10b981', marginTop: '0.25rem', background: gapDays > 7 ? '#fef2f2' : gapDays > 3 ? '#fffbeb' : '#ecfdf5', padding: '0.1rem 0.3rem', borderRadius: '4px', display: 'inline-block' }}>
+                {gapDays === 0 ? 'Updated today' : `${gapDays} days ago`}
+              </div>
+            )}
           </div>
           <button onClick={onViewHistory} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.25rem 0.5rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, color: '#4f46e5', transition: 'background 0.2s' }}>
             History
@@ -718,14 +735,15 @@ function ContactRow({ contact, panchayatName, blockName, showStageAndFollowUp, s
               </button>
             )}
           </div>
-          {showQuickActions && onQuickFollowUp && (
-            <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.25rem' }}>
-              <button onClick={() => onQuickFollowUp(1)} title="Follow up tomorrow" style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>
-                +1 Day
-              </button>
-              <button onClick={() => onQuickFollowUp(7)} title="Follow up next week" style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>
-                +1 Wk
-              </button>
+          {showQuickActions && onLogCall && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.5rem', width: '100%', background: '#f8fafc', padding: '0.5rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', textAlign: 'center' }}>Log Unanswered Call</span>
+              <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button onClick={() => onLogCall('No Answer')} title="Push follow-up to tomorrow" style={{ background: 'white', border: '1px solid #cbd5e1', padding: '0.25rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>No Answer</button>
+                <button onClick={() => onLogCall('Busy')} title="Push follow-up to tomorrow" style={{ background: 'white', border: '1px solid #cbd5e1', padding: '0.25rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>Busy</button>
+                <button onClick={() => onLogCall('Switched Off')} title="Push follow-up to tomorrow" style={{ background: 'white', border: '1px solid #cbd5e1', padding: '0.25rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>Off</button>
+                <button onClick={() => onLogCall('Invalid Number')} title="Remove follow-up date" style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '0.25rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'} onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}>Invalid</button>
+              </div>
             </div>
           )}
         </div>

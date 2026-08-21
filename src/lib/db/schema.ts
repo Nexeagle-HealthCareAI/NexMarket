@@ -67,6 +67,8 @@ export interface LocalContact {
   agentEscalated?: boolean;
   agentEscalationNote?: string;
   notes?: string;
+  complaints?: string;
+  conflicts?: string;
   status: 'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected'; // Added in v2
   followUpDate?: string; // YYYY-MM-DD
   photoDataUri?: string; // Base64 offline photo storage
