@@ -49,7 +49,6 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
         setAllPanchayats(panchayats);
         setPanchayat(panchayats.find(p => p.id === contactDto.panchayatId) ?? null);
         setHistory(historyEntries);
-        setHistory(historyEntries);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load contact.');
       } finally {

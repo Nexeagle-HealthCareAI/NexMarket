@@ -622,7 +622,7 @@ export default function AdminSurveysPage() {
                       <tr>
                         <SortableTh label="Person Name" field="contactName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
                         <SortableTh label="Added By" field="agentName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
-                        {responseColumns.map(q => (
+                        {historyColumns.map(q => (
                           <SortableTh key={q.questionId} label={q.text} field={q.questionId} sortField={sortField} sortDirection={sortDirection} onSort={handleSort} style={{ minWidth: '150px' }} />
                         ))}
                         <SortableTh label="Date Added" field="createdAt" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
@@ -654,7 +654,7 @@ export default function AdminSurveysPage() {
                               )}
                             </td>
                             <td style={{ padding: '1rem', color: '#334155' }}>{survey.agentName || survey.agentId}</td>
-                            {responseColumns.map((q) => {
+                            {historyColumns.map((q) => {
                               const ans = answers[q.questionId];
                               const hasAnswer = ans !== undefined && ans !== null && ans !== '';
                               return (

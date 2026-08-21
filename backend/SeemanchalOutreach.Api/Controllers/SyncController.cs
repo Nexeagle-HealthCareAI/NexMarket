@@ -289,7 +289,7 @@ namespace SeemanchalOutreach.Api.Controllers
         // server actually can know: throughput and how long data sat on a
         // device before it synced.
         [HttpGet("analytics")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,admin")]
         public async Task<ActionResult<object>> GetSyncAnalytics(CancellationToken cancellationToken)
         {
             var todayUtc = DateTime.UtcNow.Date;

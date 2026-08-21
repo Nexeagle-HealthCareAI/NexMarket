@@ -82,16 +82,20 @@ export default function PipelinePage() {
     let endDate: string | undefined = undefined;
     const now = new Date();
     if (dateFilter === 'today') {
-      const d = new Date(now.setHours(0,0,0,0));
-      startDate = d.toISOString();
-      const end = new Date(now.setHours(23,59,59,999));
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      startDate = start.toISOString();
+      const end = new Date(now);
+      end.setHours(23, 59, 59, 999);
       endDate = end.toISOString();
     } else if (dateFilter === 'yesterday') {
-      const y = new Date();
+      const y = new Date(now);
       y.setDate(y.getDate() - 1);
-      const d = new Date(y.setHours(0,0,0,0));
-      startDate = d.toISOString();
-      const end = new Date(y.setHours(23,59,59,999));
+      const start = new Date(y);
+      start.setHours(0, 0, 0, 0);
+      startDate = start.toISOString();
+      const end = new Date(y);
+      end.setHours(23, 59, 59, 999);
       endDate = end.toISOString();
     } else if (dateFilter === 'custom') {
       if (customStartDate) {
@@ -209,13 +213,21 @@ export default function PipelinePage() {
     let endDate: string | undefined = undefined;
     const now = new Date();
     if (dateFilter === 'today') {
-      startDate = new Date(now.setHours(0,0,0,0)).toISOString();
-      endDate = new Date(now.setHours(23,59,59,999)).toISOString();
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      startDate = start.toISOString();
+      const end = new Date(now);
+      end.setHours(23, 59, 59, 999);
+      endDate = end.toISOString();
     } else if (dateFilter === 'yesterday') {
-      const y = new Date();
+      const y = new Date(now);
       y.setDate(y.getDate() - 1);
-      startDate = new Date(y.setHours(0,0,0,0)).toISOString();
-      endDate = new Date(y.setHours(23,59,59,999)).toISOString();
+      const start = new Date(y);
+      start.setHours(0, 0, 0, 0);
+      startDate = start.toISOString();
+      const end = new Date(y);
+      end.setHours(23, 59, 59, 999);
+      endDate = end.toISOString();
     } else if (dateFilter === 'custom') {
       if (customStartDate) startDate = new Date(new Date(customStartDate).setHours(0,0,0,0)).toISOString();
       if (customEndDate) endDate = new Date(new Date(customEndDate).setHours(23,59,59,999)).toISOString();
@@ -478,6 +490,13 @@ export default function PipelinePage() {
                     )}
                     <SortableHeader label="Added By" columnKey="addedby" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
                     <SortableHeader label="Last Updated" columnKey="lastupdated" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
+                    {activeTab === 'historical' && (
+                      <>
+                        <SortableHeader label="Comments" columnKey="comments" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
+                        <SortableHeader label="Issues" columnKey="complaints" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
+                        <SortableHeader label="Conflicts" columnKey="conflicts" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
+                      </>
+                    )}
                     <th style={{ padding: '1rem', fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Actions</th>
                   </tr>
                 </thead>
@@ -491,7 +510,7 @@ export default function PipelinePage() {
                         panchayatName={pInfo?.name}
                         blockName={pInfo?.block}
                         showStageAndFollowUp={activeTab === 'recent' || activeTab === 'worklist'}
-                        showComments={false}
+                        showComments={activeTab === 'historical'}
                         showQuickActions={activeTab === 'worklist'}
                         onEdit={() => setEditDrawerContact(c)}
                         onViewHistory={() => setHistoryModalContact(c)}

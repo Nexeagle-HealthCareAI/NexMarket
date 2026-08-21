@@ -52,7 +52,7 @@ namespace SeemanchalOutreach.Api.Controllers
     }
 
     [ApiController]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,admin")]
     [Route("api/v1/[controller]")]
     public class ReportsController : ControllerBase
     {

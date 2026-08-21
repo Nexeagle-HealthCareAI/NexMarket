@@ -153,7 +153,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,admin")]
         public async Task<ActionResult<List<AgentSummaryDto>>> GetAgents(CancellationToken cancellationToken)
         {
             var agents = await _db.Agents.AsNoTracking().OrderBy(a => a.Name).ToListAsync(cancellationToken);
@@ -226,7 +226,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet("{agentId}/trajectory")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,admin")]
         public async Task<ActionResult<object>> GetTrajectory(string agentId, [FromQuery] DateOnly? date, CancellationToken cancellationToken)
         {
             var day = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
@@ -340,7 +340,7 @@ namespace SeemanchalOutreach.Api.Controllers
         /// a real login available, so no anonymous bootstrap path is needed.
         /// </summary>
         [HttpPost]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,admin")]
         public async Task<ActionResult<object>> Onboard([FromBody] OnboardAgentRequest request, CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);

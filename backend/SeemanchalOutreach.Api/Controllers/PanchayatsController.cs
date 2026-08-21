@@ -80,7 +80,7 @@ namespace SeemanchalOutreach.Api.Controllers
         // count toward an agent's assignment (see AssignmentsController), so
         // this is what actually controls what a block assignment covers.
         [HttpPatch("marketing-status")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,admin")]
         public async Task<IActionResult> UpdateMarketingStatus([FromBody] UpdateMarketingStatusRequest request, CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
@@ -101,7 +101,7 @@ namespace SeemanchalOutreach.Api.Controllers
         // (SyncBatchCommandHandler's "panchayat_new" case) — this direct, always-
         // online endpoint is for the admin panel, which has no offline concern.
         [HttpPost]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,admin")]
         public async Task<ActionResult<PanchayatDto>> CreatePanchayat([FromBody] CreatePanchayatRequest request, CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);

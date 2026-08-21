@@ -6,7 +6,7 @@ namespace SeemanchalOutreach.Api.Controllers
 {
     [ApiController]
     [Route("api/v1/[controller]")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,admin")]
     public class HealthcareDashboardController : ControllerBase
     {
         private readonly AnalyticsEngineService _analyticsService;

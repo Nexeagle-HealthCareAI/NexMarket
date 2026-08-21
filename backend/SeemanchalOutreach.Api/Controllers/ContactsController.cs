@@ -143,6 +143,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 "comments" => isDesc ? contactsQuery.OrderByDescending(c => c.Comments) : contactsQuery.OrderBy(c => c.Comments),
                 "complaints" => isDesc ? contactsQuery.OrderByDescending(c => c.Complaints) : contactsQuery.OrderBy(c => c.Complaints),
                 "conflicts" => isDesc ? contactsQuery.OrderByDescending(c => c.Conflicts) : contactsQuery.OrderBy(c => c.Conflicts),
+                "lastupdated" => isDesc ? contactsQuery.OrderByDescending(c => _db.ContactHistory.Where(h => h.ContactClientId == c.ClientId).Max(h => (DateTime?)h.Timestamp) ?? c.CreatedAt) : contactsQuery.OrderBy(c => _db.ContactHistory.Where(h => h.ContactClientId == c.ClientId).Max(h => (DateTime?)h.Timestamp) ?? c.CreatedAt),
                 _ => isDesc ? contactsQuery.OrderByDescending(c => c.CreatedAt) : contactsQuery.OrderBy(c => c.CreatedAt)
             };
 
