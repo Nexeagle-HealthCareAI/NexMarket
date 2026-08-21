@@ -6,6 +6,7 @@ import { useAgentStore } from '@/store/agent-store';
 import { getAdminSurveys, type AdminSurveyDto, getAdminSurveyQuestions, createAdminSurveyQuestion, updateAdminSurveyQuestion, deleteAdminSurveyQuestion, deleteAdminSurveyResponse, updateAdminSurveyResponse, type SurveyQuestionDto, getPanchayats, type PanchayatDto } from '@/lib/sync/api-client';
 import EditSurveyResponseModal from '@/components/admin/EditSurveyResponseModal';
 import { HealthcareDashboard } from '@/components/admin/HealthcareDashboard';
+import { HistoricalAnalyticsDashboard } from '@/components/admin/HistoricalAnalyticsDashboard';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const CONTACT_ROLE_LABELS: Record<string, string> = {
@@ -205,7 +206,6 @@ export default function AdminSurveysPage() {
   });
   const currentColumns: { questionId: string; text: string }[] = questions.map((q) => ({ questionId: q.questionId, text: q.text }));
   const historyColumns: { questionId: string; text: string }[] = [
-    ...questions.map((q) => ({ questionId: q.questionId, text: q.text })),
     ...[...orphanAnswerKeys].sort().map((k) => ({ questionId: k, text: `(unconfigured: ${k})` })),
   ];
   
@@ -469,6 +469,9 @@ export default function AdminSurveysPage() {
 
         {(activeTab === 'responses' || activeTab === 'history') && (
           <div style={{ flex: 1, overflowY: 'auto', width: '100%', minWidth: 0 }}>
+            {activeTab === 'history' && (
+              <HistoricalAnalyticsDashboard surveys={filteredSurveys} orphanAnswerKeys={Array.from(orphanAnswerKeys)} />
+            )}
             {questionsError && <p style={{ color: '#b91c1c', fontSize: '0.85rem' }}>⚠️ Question columns may be incomplete — failed to load the questionnaire: {questionsError}</p>}
             
             {surveysLoading && <p>Loading responses...</p>}

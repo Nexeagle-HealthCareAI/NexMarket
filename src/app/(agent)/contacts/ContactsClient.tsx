@@ -24,6 +24,7 @@ const ROLE_CLASSES: Record<ContactRole, string> = {
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslations } from '@/i18n/I18nProvider';
+import { Pin, PinOff } from 'lucide-react';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -68,6 +69,33 @@ export default function ContactsPage() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<ContactRole | 'all'>('all');
+  
+  const [selectedDistrict, setSelectedDistrict] = useState<string>('');
+  const [selectedBlock, setSelectedBlock] = useState<string>('');
+  const [selectedPanchayat, setSelectedPanchayat] = useState<string>('');
+
+  const pinnedContactIds = useAgentStore((s) => s.pinnedContactIds || []);
+  const togglePinContact = useAgentStore((s) => s.togglePinContact);
+
+  const uniqueDistricts = useMemo(() => {
+    if (!panchayats) return [];
+    return Array.from(new Set(panchayats.map(p => p.district))).sort();
+  }, [panchayats]);
+
+  const uniqueBlocks = useMemo(() => {
+    if (!panchayats) return [];
+    return Array.from(new Set(
+      panchayats.filter(p => !selectedDistrict || p.district === selectedDistrict).map(p => p.block)
+    )).sort();
+  }, [panchayats, selectedDistrict]);
+
+  const filteredPanchayats = useMemo(() => {
+    if (!panchayats) return [];
+    return panchayats.filter(p => 
+      (!selectedDistrict || p.district === selectedDistrict) &&
+      (!selectedBlock || p.block === selectedBlock)
+    ).sort((a,b) => a.name.localeCompare(b.name));
+  }, [panchayats, selectedDistrict, selectedBlock]);
 
   const panchayatMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -78,16 +106,32 @@ export default function ContactsPage() {
   const filtered = useMemo(() => {
     if (!contacts) return [];
     return contacts.filter((c) => {
+      const panchayat = panchayats?.find(p => p.id === c.panchayatId);
+      
+      const matchesDistrict = !selectedDistrict || panchayat?.district === selectedDistrict;
+      const matchesBlock = !selectedBlock || panchayat?.block === selectedBlock;
+      const matchesPanchayat = !selectedPanchayat || c.panchayatId === selectedPanchayat;
+
       const matchesRole = roleFilter === 'all' || c.role === roleFilter;
       const query = searchQuery.toLowerCase();
       const matchesSearch =
         !query ||
         c.name.toLowerCase().includes(query) ||
-        c.phone?.includes(query) ||
+        (c.phone && c.phone.includes(query)) ||
         (panchayatMap.get(c.panchayatId) ?? '').toLowerCase().includes(query);
-      return matchesRole && matchesSearch;
+      return matchesRole && matchesSearch && matchesDistrict && matchesBlock && matchesPanchayat;
     });
-  }, [contacts, roleFilter, searchQuery, panchayatMap]);
+  }, [contacts, roleFilter, searchQuery, panchayatMap, panchayats, selectedDistrict, selectedBlock, selectedPanchayat]);
+
+  const sortedFiltered = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const aPinned = pinnedContactIds.includes(a.clientId);
+      const bPinned = pinnedContactIds.includes(b.clientId);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [filtered, pinnedContactIds]);
 
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants}>
@@ -153,6 +197,38 @@ export default function ContactsPage() {
         />
       </motion.div>
 
+            {/* Location filters */}
+      <motion.div variants={itemVariants} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <select 
+          className="field-input" 
+          style={{ flex: '1 1 120px', padding: '0.4rem', fontSize: '0.85rem' }}
+          value={selectedDistrict} 
+          onChange={(e) => { setSelectedDistrict(e.target.value); setSelectedBlock(''); setSelectedPanchayat(''); }}
+        >
+          <option value="">All Districts</option>
+          {uniqueDistricts.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <select 
+          className="field-input" 
+          style={{ flex: '1 1 120px', padding: '0.4rem', fontSize: '0.85rem' }}
+          value={selectedBlock} 
+          onChange={(e) => { setSelectedBlock(e.target.value); setSelectedPanchayat(''); }}
+          disabled={!selectedDistrict && uniqueBlocks.length === 0}
+        >
+          <option value="">All Blocks</option>
+          {uniqueBlocks.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
+        <select 
+          className="field-input" 
+          style={{ flex: '1 1 120px', padding: '0.4rem', fontSize: '0.85rem' }}
+          value={selectedPanchayat} 
+          onChange={(e) => setSelectedPanchayat(e.target.value)}
+        >
+          <option value="">All Panchayats</option>
+          {filteredPanchayats.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </motion.div>
+
       {/* Role filter chips */}
       <motion.div variants={itemVariants} style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
         {(['all', 'asha_worker', 'rmp_doctor', 'ward_member', 'medicine_shop', 'mukhiya', 'prominent_person', 'lab', 'nursing_home', 'independent_doctor', 'hospital', 'other'] as const).map((role) => (
@@ -203,7 +279,7 @@ export default function ContactsPage() {
           </motion.div>
         ) : (
           <motion.div key="list" variants={containerVariants} initial="hidden" animate="visible" className="grid-cols-responsive-2">
-            {filtered.map((contact) => (
+            {sortedFiltered.map((contact) => (
               <motion.div variants={itemVariants} key={contact.clientId} layoutId={`contact-${contact.clientId}`}>
                 <Link
                   href={`/contacts/${contact.clientId}`}
@@ -216,6 +292,9 @@ export default function ContactsPage() {
                           <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
                             {contact.name}
                           </p>
+                          {pinnedContactIds.includes(contact.clientId) && (
+                            <Pin size={14} fill="currentColor" color="var(--color-primary-600)" />
+                          )}
                           {contact.potentialDuplicateOf?.length ? (
                             <span className="badge badge-dup">{t.dupBadge}</span>
                           ) : null}
@@ -242,9 +321,27 @@ export default function ContactsPage() {
                           )}
                         </div>
                       </div>
-                      <span className={`role-chip ${ROLE_CLASSES[contact.role]}`}>
-                        {ROLE_LABELS[contact.role]}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault(); // prevent navigation
+                            togglePinContact(contact.clientId);
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: pinnedContactIds.includes(contact.clientId) ? 'var(--color-primary-600)' : 'var(--text-muted)',
+                            cursor: 'pointer',
+                            padding: '0.2rem',
+                          }}
+                          title={pinnedContactIds.includes(contact.clientId) ? "Unpin Contact" : "Pin Contact"}
+                        >
+                          {pinnedContactIds.includes(contact.clientId) ? <Pin size={18} fill="currentColor" /> : <Pin size={18} />}
+                        </button>
+                        <span className={`role-chip ${ROLE_CLASSES[contact.role]}`}>
+                          {ROLE_LABELS[contact.role]}
+                        </span>
+                      </div>
                     </div>
                   </motion.div>
                 </Link>

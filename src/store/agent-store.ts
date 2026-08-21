@@ -40,6 +40,9 @@ interface AgentState {
   setProfileCompleted: (completed: boolean) => void;
   setActiveShift: (clientId: string | null) => void;
   setActiveVisit: (clientId: string | null) => void;
+  pinnedContactIds: string[];
+  togglePinContact: (clientId: string) => void;
+
   clearAuth: () => void;
 }
 
@@ -53,6 +56,7 @@ export const useAgentStore = create<AgentState>()(
       activeShiftClientId: null,
       activeVisitClientId: null,
       profileCompleted: false,
+      pinnedContactIds: [],
 
       hasHydrated: false,
       setHasHydrated: (state) => set({ hasHydrated: state }),
@@ -70,6 +74,15 @@ export const useAgentStore = create<AgentState>()(
       setActiveShift: (clientId) => set({ activeShiftClientId: clientId }),
       setActiveVisit: (clientId) => set({ activeVisitClientId: clientId }),
 
+      togglePinContact: (clientId) => set((state) => {
+        const isPinned = state.pinnedContactIds.includes(clientId);
+        return {
+          pinnedContactIds: isPinned 
+            ? state.pinnedContactIds.filter(id => id !== clientId)
+            : [...state.pinnedContactIds, clientId]
+        };
+      }),
+
       clearAuth: () =>
         set({
           agentId: null,
@@ -79,6 +92,7 @@ export const useAgentStore = create<AgentState>()(
           activeShiftClientId: null,
           activeVisitClientId: null,
           profileCompleted: false,
+          pinnedContactIds: [],
         }),
     }),
     {
