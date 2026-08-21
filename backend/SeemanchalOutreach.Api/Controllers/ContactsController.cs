@@ -61,6 +61,7 @@ namespace SeemanchalOutreach.Api.Controllers
             [FromQuery] string? search = null,
             [FromQuery] string? sortBy = null,
             [FromQuery] string? sortOrder = null,
+            [FromQuery] string? exactPanchayatId = null,
             CancellationToken cancellationToken = default)
         {
             page = Math.Max(page, 1);
@@ -98,6 +99,11 @@ namespace SeemanchalOutreach.Api.Controllers
                 contactsQuery = contactsQuery.Where(c => statusList.Contains(c.Status));
             }
 
+            if (!string.IsNullOrWhiteSpace(exactPanchayatId))
+            {
+                contactsQuery = contactsQuery.Where(c => c.PanchayatId == exactPanchayatId);
+            }
+
             if (startDate.HasValue)
             {
                 contactsQuery = contactsQuery.Where(c => c.CreatedAt >= startDate.Value);
@@ -126,7 +132,7 @@ namespace SeemanchalOutreach.Api.Controllers
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var lowerSearch = search.ToLowerInvariant();
-                contactsQuery = contactsQuery.Where(c => c.Name.ToLower().Contains(lowerSearch) || c.Phone.Contains(search));
+                contactsQuery = contactsQuery.Where(c => c.Name.ToLower().Contains(lowerSearch) || (c.Phone != null && c.Phone.Contains(search)));
             }
 
             var totalCount = await contactsQuery.CountAsync(cancellationToken);

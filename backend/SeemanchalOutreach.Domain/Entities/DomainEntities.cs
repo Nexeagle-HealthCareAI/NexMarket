@@ -70,6 +70,8 @@ namespace SeemanchalOutreach.Domain.Entities
         // working exactly as before — this only matters once an admin
         // deliberately curates a block's panchayats via "Manage Panchayat".
         public bool IsActiveForMarketing { get; set; } = true;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string CreatedBy { get; set; } = string.Empty;
     }
 
     public class FieldShift

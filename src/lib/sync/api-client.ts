@@ -282,6 +282,23 @@ export interface PanchayatDto {
   centroidLat: number | null;
   centroidLng: number | null;
   isActiveForMarketing: boolean;
+  createdAt?: string;
+  createdBy?: string;
+}
+
+export interface CoveredPanchayatDto {
+  id: string;
+  name: string;
+  block: string;
+  district: string;
+  contactCount: number;
+  coveredByAgents: string[];
+}
+
+export interface UpdatePanchayatRequest {
+  name: string;
+  district: string;
+  block: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -535,6 +552,10 @@ export function getPanchayats(): Promise<PanchayatDto[]> {
   return get<PanchayatDto[]>('/api/v1/panchayats');
 }
 
+export function getCoveredPanchayats(): Promise<CoveredPanchayatDto[]> {
+  return get<CoveredPanchayatDto[]>('/api/v1/panchayats/covered');
+}
+
 // ─── Routing ────────────────────────────────────────────────────────────────
 
 export interface DirectionsDto {
@@ -564,6 +585,14 @@ export interface CreatePanchayatRequest {
 // via the sync outbox (see addToOutbox with entityType 'panchayat').
 export function createPanchayat(body: CreatePanchayatRequest): Promise<PanchayatDto> {
   return post<CreatePanchayatRequest, PanchayatDto>('/api/v1/panchayats', body);
+}
+
+export function updatePanchayat(id: string, body: UpdatePanchayatRequest): Promise<PanchayatDto> {
+  return put<UpdatePanchayatRequest, PanchayatDto>(`/api/v1/panchayats/${id}`, body);
+}
+
+export function deletePanchayat(id: string): Promise<void> {
+  return del(`/api/v1/panchayats/${id}`);
 }
 
 export interface UpdatePanchayatMarketingStatusRequest {
@@ -696,6 +725,7 @@ export interface AdminContactsQuery {
   searchQuery?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  exactPanchayatId?: string;
 }
 
 export interface PaginatedContactsResponse {
@@ -721,6 +751,7 @@ export function getAdminContacts(query: AdminContactsQuery = {}): Promise<Pagina
   if (query.searchQuery) params.set('search', query.searchQuery);
   if (query.sortBy) params.set('sortBy', query.sortBy);
   if (query.sortOrder) params.set('sortOrder', query.sortOrder);
+  if (query.exactPanchayatId) params.set('exactPanchayatId', query.exactPanchayatId);
   const qs = params.toString();
   return get<PaginatedContactsResponse>(`/api/v1/admin/contacts${qs ? `?${qs}` : ''}`);
 }
