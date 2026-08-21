@@ -2,11 +2,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useAgentStore } from '@/store/agent-store';
-import { getAgentDetail, updateAgentProfile, uploadPhoto, type AgentDetailDto, type UpdateAgentProfileRequest } from '@/lib/sync/api-client';
+import { getAgentDetail, updateAgentProfile, uploadPhoto, logout as apiLogout, type AgentDetailDto, type UpdateAgentProfileRequest } from '@/lib/sync/api-client';
 import { compressImageToBlob } from '@/lib/image/compressImage';
+import { db } from '@/lib/db';
+import Link from 'next/link';
 
 export default function ProfilePage() {
   const agentId = useAgentStore((s) => s.agentId);
+  const role = useAgentStore((s) => s.role);
+  const clearAuth = useAgentStore((s) => s.clearAuth);
 
   const [agent, setAgent] = useState<AgentDetailDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -235,6 +239,44 @@ export default function ProfilePage() {
       >
         {saving ? 'Saving…' : 'Save Changes'}
       </button>
+
+      {/* Admin and Logout Options */}
+      <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        {role?.toLowerCase() === 'admin' && (
+          <Link
+            href="/admin/agents"
+            className="btn btn-full"
+            style={{ 
+              background: 'white', 
+              color: 'var(--color-primary-600)', 
+              border: '1px solid var(--color-primary-300)',
+              textAlign: 'center',
+              textDecoration: 'none'
+            }}
+          >
+            Go to Admin Dashboard
+          </Link>
+        )}
+        
+        <button
+          type="button"
+          onClick={() => {
+            void apiLogout().catch(() => {});
+            clearAuth();
+            db.delete().then(() => {
+              window.location.href = '/login';
+            });
+          }}
+          className="btn btn-full"
+          style={{ 
+            background: 'rgba(239, 68, 68, 0.1)', 
+            color: '#ef4444', 
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+          }}
+        >
+          🚪 Sign Out
+        </button>
+      </div>
     </div>
   );
 }

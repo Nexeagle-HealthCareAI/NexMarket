@@ -34,7 +34,7 @@ namespace SeemanchalOutreach.Api.Controllers
     }
 
     [ApiController]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,admin")]
     [Route("api/v1/admin/[controller]")]
     public class ContactsController : ControllerBase
     {
