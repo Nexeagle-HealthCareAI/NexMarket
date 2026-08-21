@@ -264,10 +264,16 @@ export default function CoveredPanchayatsTab() {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {drawerContacts.map(c => (
-                      <div key={c.clientId} style={{ padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#f8fafc' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                          <span style={{ fontWeight: 700, color: '#0f172a' }}>{c.name}</span>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#10b981', background: '#d1fae5', padding: '0.2rem 0.5rem', borderRadius: '12px' }}>{c.status}</span>
+                      <div key={c.clientId} style={{ padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div>
+                            <span style={{ fontWeight: 700, color: '#0f172a', display: 'block', fontSize: '1.05rem' }}>{c.name}</span>
+                            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{c.clientId}</span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#10b981', background: '#d1fae5', padding: '0.2rem 0.5rem', borderRadius: '12px' }}>{c.status}</span>
+                            <a href={`/admin/pipeline/${c.clientId}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4f46e5', textDecoration: 'none', background: '#e0e7ff', padding: '0.25rem 0.6rem', borderRadius: '6px' }}>View Profile →</a>
+                          </div>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem', color: '#475569' }}>
                           <div><strong>Role:</strong> {c.role}</div>
@@ -275,6 +281,37 @@ export default function CoveredPanchayatsTab() {
                           <div><strong>Added By:</strong> {c.agentId}</div>
                           <div><strong>Date:</strong> {new Date(c.createdAt).toLocaleDateString()}</div>
                         </div>
+                        
+                        {/* Status Indicators */}
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', paddingTop: '0.5rem', borderTop: '1px solid #e2e8f0' }}>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.5rem', borderRadius: '4px', background: c.whatsappAdded ? '#dcfce7' : '#f1f5f9', color: c.whatsappAdded ? '#166534' : '#94a3b8' }}>
+                            {c.whatsappAdded ? '🟢 WhatsApp' : '⚪ No WhatsApp'}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.5rem', borderRadius: '4px', background: c.cardGiven ? '#dcfce7' : '#f1f5f9', color: c.cardGiven ? '#166534' : '#94a3b8' }}>
+                            {c.cardGiven ? '🟢 Card Given' : '⚪ No Card'}
+                          </span>
+                          {c.agentEscalated && (
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px', background: '#fee2e2', color: '#991b1b' }}>
+                              🚨 Escalated
+                            </span>
+                          )}
+                          {c.documents && c.documents.length > 0 && (
+                            <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.5rem', borderRadius: '4px', background: '#e0e7ff', color: '#3730a3' }}>
+                              📎 {c.documents.length} Docs
+                            </span>
+                          )}
+                        </div>
+                        
+                        {c.comments && (
+                          <div style={{ fontSize: '0.8rem', color: '#475569', background: 'white', padding: '0.5rem', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                            <strong>Notes:</strong> {c.comments.length > 100 ? c.comments.substring(0, 100) + '...' : c.comments}
+                          </div>
+                        )}
+                        {c.agentEscalationNote && (
+                          <div style={{ fontSize: '0.8rem', color: '#991b1b', background: '#fef2f2', padding: '0.5rem', borderRadius: '4px', border: '1px solid #fecaca' }}>
+                            <strong>Escalation Reason:</strong> {c.agentEscalationNote}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

@@ -687,6 +687,8 @@ export interface AdminContactDto {
   lastUpdatedAt?: string | null;
   lastUpdatedBy?: string | null;
   photoUrl?: string | null;
+  whatsappAdded?: boolean;
+  cardGiven?: boolean;
   agentEscalated?: boolean;
   agentEscalationNote?: string | null;
   isEscalationResolved?: boolean;

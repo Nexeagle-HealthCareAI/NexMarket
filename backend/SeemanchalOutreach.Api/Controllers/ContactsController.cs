@@ -179,6 +179,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     c.AgentEscalationNote,
                     c.IsEscalationResolved,
                     c.AgentEscalationResolution,
+                    c.WhatsappAdded,
+                    c.CardGiven,
                     c.CreatedAt,
                     LastHistory = _db.ContactHistory
                         .Where(h => h.ContactClientId == c.ClientId)
@@ -208,9 +210,10 @@ namespace SeemanchalOutreach.Api.Controllers
                 c.Conflicts,
                 c.PhotoUrl,
                 c.AgentEscalated,
-                c.AgentEscalationNote,
                 c.IsEscalationResolved,
                 c.AgentEscalationResolution,
+                c.WhatsappAdded,
+                c.CardGiven,
                 c.CreatedAt,
                 LastUpdatedAt = c.LastHistory?.Timestamp,
                 LastUpdatedBy = c.LastHistory?.UpdatedBy
@@ -252,6 +255,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     c.AgentEscalationNote,
                     c.IsEscalationResolved,
                     c.AgentEscalationResolution,
+                    c.WhatsappAdded,
+                    c.CardGiven,
                     c.CreatedAt,
                     Documents = _db.ContactDocuments
                         .Where(d => d.ContactClientId == c.ClientId)

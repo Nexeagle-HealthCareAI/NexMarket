@@ -235,6 +235,20 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Assigned Agent</label>
             <div style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>{contact.agentId}</div>
           </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>WhatsApp Added</label>
+            <div style={{ fontSize: '1rem', fontWeight: 600, color: contact.whatsappAdded ? '#15803d' : '#64748b' }}>{contact.whatsappAdded ? 'Yes' : 'No'}</div>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Card Given</label>
+            <div style={{ fontSize: '1rem', fontWeight: 600, color: contact.cardGiven ? '#15803d' : '#64748b' }}>{contact.cardGiven ? 'Yes' : 'No'}</div>
+          </div>
+          {contact.comments && (
+            <div style={{ gridColumn: '1 / -1', background: '#f8fafc', borderLeft: '4px solid #cbd5e1', padding: '1rem', borderRadius: '4px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Agent Notes</label>
+              <div style={{ fontSize: '0.9rem', color: '#334155', whiteSpace: 'pre-wrap' }}>{contact.comments}</div>
+            </div>
+          )}
           {contact.isEscalationResolved && contact.agentEscalationResolution && (
             <div style={{ gridColumn: '1 / -1', background: '#f0fdf4', borderLeft: '4px solid #22c55e', padding: '1rem', borderRadius: '4px' }}>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Escalation Resolved</label>
