@@ -214,20 +214,20 @@ export default function NewContactPage() {
       clientId, deviceId, agentId,
       panchayatId: finalForm.panchayatId,
       shiftId: activeShiftClientId ?? undefined,
-      name: finalForm.name.trim(),
+      name: finalForm.name?.trim() || '',
       role: finalForm.role as ContactRole,
-      profession: finalForm.role === 'prominent_person' ? (finalForm.profession.trim() || undefined) : undefined,
-      phone: finalForm.phone.trim() || undefined,
+      profession: finalForm.role === 'prominent_person' ? (finalForm.profession?.trim() || undefined) : undefined,
+      phone: finalForm.phone?.trim() || undefined,
       whatsappAdded: finalForm.whatsappAdded,
       cardGiven: finalForm.cardGiven,
-      notes: finalForm.notes.trim() || undefined,
-      complaints: finalForm.complaints.trim() || undefined,
-      conflicts: finalForm.conflicts.trim() || undefined,
+      notes: finalForm.notes?.trim() || undefined,
+      complaints: finalForm.complaints?.trim() || undefined,
+      conflicts: finalForm.conflicts?.trim() || undefined,
       status: finalForm.status,
       followUpDate: finalForm.followUpDate || undefined,
       photoDataUri: finalForm.photoDataUri || undefined,
       agentEscalated: finalForm.agentEscalated,
-      agentEscalationNote: finalForm.agentEscalationNote.trim() || undefined,
+      agentEscalationNote: finalForm.agentEscalationNote?.trim() || undefined,
       lat: position?.lat, lng: position?.lng,
       createdAt: now, updatedAt: now,
     };
@@ -245,7 +245,7 @@ export default function NewContactPage() {
       }
       await addToOutbox(clientId, deviceId, 'contact', contact);
       // Save documents
-      for (const doc of finalForm.documents) {
+      for (const doc of (finalForm.documents || [])) {
         const exists = (await db.contactDocuments.toArray()).some(d => d.clientId === doc.id);
         if (!exists) {
           const localDoc: LocalContactDocument = {
