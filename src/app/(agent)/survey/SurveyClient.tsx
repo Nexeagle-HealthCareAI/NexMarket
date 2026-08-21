@@ -227,11 +227,9 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
   const currentSectionName = sections[currentTab];
   const sectionQuestions = QUESTIONS.filter(q => (q.section || 'General') === currentSectionName);
 
-  const displayedQuestions = useMemo(() => {
-    if (!isSearching) return sectionQuestions;
-    const qLower = searchQuery.toLowerCase();
-    return QUESTIONS.filter(q => q.text.toLowerCase().includes(qLower));
-  }, [QUESTIONS, sectionQuestions, searchQuery, isSearching]);
+  const displayedQuestions = isSearching
+    ? QUESTIONS.filter(q => q.text.toLowerCase().includes(searchQuery.toLowerCase()))
+    : sectionQuestions;
 
   // Check if all non-optional questions in current section are answered
   const canProceed = sectionQuestions.every(q => {
