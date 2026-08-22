@@ -96,7 +96,10 @@ export default function LoginPage() {
               );
             }
             if (pulled.surveyQuestions?.length) {
-              await db.surveyQuestions.bulkPut(pulled.surveyQuestions);
+              await db.transaction('rw', db.surveyQuestions, async () => {
+                await db.surveyQuestions.clear();
+                await db.surveyQuestions.bulkPut(pulled.surveyQuestions!);
+              });
             }
 
             hasMore = pulled.hasMore;

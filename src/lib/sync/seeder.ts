@@ -42,5 +42,8 @@ export async function refreshReferenceData(): Promise<void> {
     })),
   );
 
-  await db.surveyQuestions.bulkPut(surveyQuestions);
+  await db.transaction('rw', db.surveyQuestions, async () => {
+    await db.surveyQuestions.clear();
+    await db.surveyQuestions.bulkPut(surveyQuestions);
+  });
 }
