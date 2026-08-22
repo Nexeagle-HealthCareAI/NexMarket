@@ -517,7 +517,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
       </div>
 
       {/* Bottom Sticky Action Bar */}
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'white', padding: '1rem 1.5rem', boxShadow: '0 -4px 15px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'flex-end', zIndex: 40 }}>
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'white', padding: '1rem 1.5rem', paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))', boxShadow: '0 -4px 15px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'flex-end', zIndex: 40 }}>
         {isSearching ? (
           <button
             onClick={() => setSearchQuery('')}

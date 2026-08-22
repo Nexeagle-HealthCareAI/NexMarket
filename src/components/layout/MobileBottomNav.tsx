@@ -57,7 +57,7 @@ export default function MobileBottomNav() {
   const pathname = usePathname();
   const outboxCount = useOutboxCount();
 
-  if (pathname.startsWith('/onboarding') || pathname === '/contacts/new') {
+  if (pathname.startsWith('/onboarding') || pathname.startsWith('/contacts/new') || pathname.startsWith('/survey')) {
     return null;
   }
 
