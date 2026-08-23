@@ -15,6 +15,7 @@ const adminNavItems = [
   { href: '/admin/agents', label: 'Agents', icon: '👥' },
   { href: '/admin/duplicates', label: 'Duplicates', icon: '⚠️' },
   { href: '/admin/reports', label: 'Reports', icon: '📊' },
+  { href: '/admin/hospital-crm', label: 'Hospital CRM', icon: '🏥' },
   { href: '/admin/surveys', label: 'Surveys', icon: '📋' },
   { href: '/admin/pipeline', label: 'Contact Management', icon: '🗂️' },
   { href: '/admin/panchayats', label: 'Panchayats', icon: '📍' },

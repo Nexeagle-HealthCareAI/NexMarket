@@ -206,7 +206,14 @@ export default function PipelinePage() {
     .map(p => p.name)
   )).filter(Boolean).sort();
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const currentPageSize = activeTab === 'worklist' ? 50 : PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(totalCount / currentPageSize));
+
+  useEffect(() => {
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [totalPages, page]);
 
   const sortedContacts = React.useMemo(() => {
     return [...contacts].sort((a, b) => {
@@ -248,6 +255,24 @@ export default function PipelinePage() {
     }
 
     try {
+      const isWorklist = activeTab === 'worklist';
+      const isRecent = activeTab === 'recent';
+      
+      let maxFollowUpDate: string | undefined = undefined;
+      if (isWorklist) {
+         const d = new Date();
+         d.setHours(23,59,59,999);
+         maxFollowUpDate = d.toISOString();
+      }
+
+      let updatedAfter: string | undefined = undefined;
+      if (isRecent) {
+         const d = new Date();
+         d.setDate(d.getDate() - 1);
+         d.setHours(0,0,0,0);
+         updatedAfter = d.toISOString();
+      }
+
       const res = await getAdminContacts({
         page: 1,
         pageSize: EXPORT_PAGE_SIZE,
@@ -257,7 +282,12 @@ export default function PipelinePage() {
         statuses: activeTab === 'worklist' ? ['Lead', 'Contacted', 'FollowUp'] : undefined,
         startDate,
         endDate,
+        maxFollowUpDate,
+        updatedAfter,
+        agentEscalated: showEscalatedOnly ? true : undefined,
         searchQuery: searchQuery.trim() || undefined,
+        sortBy,
+        sortOrder,
       });
       if (res.totalCount > EXPORT_PAGE_SIZE) {
         setError(`Export is capped at ${EXPORT_PAGE_SIZE} rows — narrow the filters to export everything matching (${res.totalCount} total).`);

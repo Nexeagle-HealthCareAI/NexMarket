@@ -43,16 +43,28 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editRole, setEditRole] = useState<ContactRole>('asha_worker');
+  const [editPanchayatId, setEditPanchayatId] = useState('');
   const [editAgentEscalated, setEditAgentEscalated] = useState(false);
   const [editAgentEscalationNote, setEditAgentEscalationNote] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editComplaints, setEditComplaints] = useState('');
+  const [editConflicts, setEditConflicts] = useState('');
+  const [editWhatsappAdded, setEditWhatsappAdded] = useState(false);
+  const [editCardGiven, setEditCardGiven] = useState(false);
 
   function startEditingProfile() {
     if (!contact) return;
     setEditName(contact.name);
     setEditPhone(contact.phone || '');
     setEditRole(contact.role);
+    setEditPanchayatId(contact.panchayatId || '');
     setEditAgentEscalated(contact.agentEscalated || false);
     setEditAgentEscalationNote(contact.agentEscalationNote || '');
+    setEditNotes(contact.notes || '');
+    setEditComplaints(contact.complaints || '');
+    setEditConflicts(contact.conflicts || '');
+    setEditWhatsappAdded(contact.whatsappAdded || false);
+    setEditCardGiven(contact.cardGiven || false);
     setIsEditingProfile(true);
   }
 
@@ -63,6 +75,12 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
         name: editName.trim(), 
         phone: editPhone.trim() || undefined, 
         role: editRole, 
+        panchayatId: editPanchayatId || contact.panchayatId,
+        notes: editNotes.trim() || undefined,
+        complaints: editComplaints.trim() || undefined,
+        conflicts: editConflicts.trim() || undefined,
+        whatsappAdded: editWhatsappAdded,
+        cardGiven: editCardGiven,
         agentEscalated: editAgentEscalated,
         agentEscalationNote: editAgentEscalationNote.trim() || undefined,
         updatedAt: new Date().toISOString() 
@@ -74,6 +92,26 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
       alert('Failed to update profile');
     }
   }
+
+  const handleProfilePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !contact || !deviceId) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Photo must be less than 5MB');
+      return;
+    }
+    try {
+      const compressed = await compressImage(file);
+      const updatedData = { 
+        photoDataUri: compressed,
+        updatedAt: new Date().toISOString() 
+      };
+      await db.contacts.update(contact.localId!, updatedData);
+      await addToOutbox(contact.clientId, deviceId, 'contact', { ...contact, ...updatedData });
+    } catch {
+      alert('Failed to update photo');
+    }
+  };
 
   const panchayat = useMemo(() => {
     return panchayats?.find((p) => p.id === contact?.panchayatId);
@@ -218,8 +256,23 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
               <option value="hospital">Hospital</option>
               <option value="other">Other</option>
             </select>
+            <select value={editPanchayatId} onChange={e => setEditPanchayatId(e.target.value)} className="field-input">
+              <option value="">Select Panchayat</option>
+              {panchayats?.map(p => <option key={p.id} value={p.id}>{p.name} ({p.block})</option>)}
+            </select>
+            <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} className="field-input" placeholder="General Notes" rows={2} />
+            <textarea value={editComplaints} onChange={e => setEditComplaints(e.target.value)} className="field-input" placeholder="Issues / Complaints" rows={2} style={{ borderColor: '#fecaca', background: '#fef2f2' }} />
+            <textarea value={editConflicts} onChange={e => setEditConflicts(e.target.value)} className="field-input" placeholder="Conflicts" rows={2} style={{ borderColor: '#fed7aa', background: '#fff7ed' }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.5rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: '#b91c1c', fontWeight: editAgentEscalated ? 600 : 400 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                <input type="checkbox" checked={editWhatsappAdded} onChange={e => setEditWhatsappAdded(e.target.checked)} />
+                WhatsApp Added
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                <input type="checkbox" checked={editCardGiven} onChange={e => setEditCardGiven(e.target.checked)} />
+                Partner Card Given
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: '#b91c1c', fontWeight: editAgentEscalated ? 600 : 400, marginTop: '0.25rem' }}>
                 <input 
                   type="checkbox" 
                   checked={editAgentEscalated} 
@@ -272,17 +325,23 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
 
         {/* CRM DETAILS (Photo, Status, Follow-up) */}
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-          {contact.photoDataUri ? (
-            <img 
-              src={contact.photoDataUri} 
-              alt="Contact Photo" 
-              style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: '8px', border: '2px solid white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} 
-            />
-          ) : (
-            <div style={{ width: 80, height: 80, borderRadius: '8px', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem' }}>
-              👤
+          <label style={{ cursor: 'pointer', position: 'relative' }}>
+            <input type="file" accept="image/*" onChange={handleProfilePhotoUpload} style={{ display: 'none' }} />
+            {contact.photoDataUri ? (
+              <img 
+                src={contact.photoDataUri} 
+                alt="Contact Photo" 
+                style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: '8px', border: '2px solid white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} 
+              />
+            ) : (
+              <div style={{ width: 80, height: 80, borderRadius: '8px', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem' }}>
+                👤
+              </div>
+            )}
+            <div style={{ position: 'absolute', bottom: -5, right: -5, background: 'white', borderRadius: '50%', padding: '0.2rem', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}>
+              ✏️
             </div>
-          )}
+          </label>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Status:</div>

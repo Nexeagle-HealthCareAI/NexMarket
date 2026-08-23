@@ -83,6 +83,12 @@ export default function CoveredPanchayatsTab() {
 
   const totalPages = Math.ceil(sortedAndFiltered.length / itemsPerPage);
 
+  useEffect(() => {
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [totalPages, page]);
+
   const handleSort = (field: string) => {
     if (sortField === field) {
       setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');

@@ -89,6 +89,10 @@ export default function AdminPanchayatsPage() {
     () => Array.from(new Set(panchayats.filter((p) => p.district === manageDistrict).map((p) => p.block))).sort(),
     [panchayats, manageDistrict],
   );
+  const uniqueBlocksForEdit = useMemo(
+    () => Array.from(new Set(panchayats.filter((p) => p.district === editPanchayat?.district).map((p) => p.block))).sort(),
+    [panchayats, editPanchayat?.district]
+  );
 
 
   const sortedAndFiltered = useMemo(() => {
@@ -105,8 +109,16 @@ export default function AdminPanchayatsPage() {
     });
 
     res.sort((a, b) => {
-      let aVal = a[sortField as keyof PanchayatDto] || '';
-      let bVal = b[sortField as keyof PanchayatDto] || '';
+      let aVal = a[sortField as keyof PanchayatDto];
+      let bVal = b[sortField as keyof PanchayatDto];
+      
+      if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
+        return sortDirection === 'asc' ? (aVal === bVal ? 0 : aVal ? -1 : 1) : (aVal === bVal ? 0 : aVal ? 1 : -1);
+      }
+
+      aVal = aVal || '';
+      bVal = bVal || '';
+      
       if (typeof aVal === 'string' && typeof bVal === 'string') {
         return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       }
@@ -120,6 +132,12 @@ export default function AdminPanchayatsPage() {
   }, [sortedAndFiltered, page]);
 
   const totalPages = Math.ceil(sortedAndFiltered.length / itemsPerPage);
+
+  useEffect(() => {
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [totalPages, page]);
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -142,9 +160,12 @@ export default function AdminPanchayatsPage() {
   // selected block changes (or the underlying data reloads).
   useEffect(() => {
     setCheckedIds(new Set(managePanchayats.filter((p) => p.isActiveForMarketing).map((p) => p.id)));
+  }, [managePanchayats]);
+
+  useEffect(() => {
     setManageSuccess('');
     setManageError('');
-  }, [manageDistrict, manageBlock, panchayats]);
+  }, [manageDistrict, manageBlock]);
 
   const resetAddForm = () => {
     setShowAdd(false);
@@ -589,27 +610,31 @@ export default function AdminPanchayatsPage() {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.35rem' }}>District</label>
-                <select
+                <input
+                  list="add-district-list"
+                  placeholder="Select or type a district"
                   value={district}
                   onChange={(e) => { setDistrict(e.target.value); setBlock(''); }}
                   style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', boxSizing: 'border-box' }}
-                >
-                  <option value="">Select District...</option>
+                />
+                <datalist id="add-district-list">
                   {uniqueDistricts.map((d) => <option key={d} value={d}>{d}</option>)}
-                </select>
+                </datalist>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.35rem' }}>Block</label>
-                <select
+                <input
+                  list="add-block-list"
+                  placeholder={district ? "Select or type a block" : "Select a district first"}
                   value={block}
                   onChange={(e) => setBlock(e.target.value)}
                   disabled={!district}
                   style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: district ? 'white' : '#f1f5f9', boxSizing: 'border-box' }}
-                >
-                  <option value="">{district ? 'Select Block...' : 'Select a district first'}</option>
+                />
+                <datalist id="add-block-list">
                   {uniqueBlocksForAdd.map((b) => <option key={b} value={b}>{b}</option>)}
-                </select>
+                </datalist>
               </div>
 
               {saveError && <p style={{ color: '#b91c1c', fontSize: '0.85rem', margin: 0 }}>{saveError}</p>}
@@ -670,19 +695,29 @@ export default function AdminPanchayatsPage() {
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.35rem' }}>District</label>
                 <input
+                  list="edit-district-list"
+                  placeholder="Select or type a district"
                   value={editPanchayat.district}
                   onChange={(e) => setEditPanchayat({ ...editPanchayat, district: e.target.value })}
                   style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', boxSizing: 'border-box' }}
                 />
+                <datalist id="edit-district-list">
+                  {uniqueDistricts.map((d) => <option key={d} value={d}>{d}</option>)}
+                </datalist>
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.35rem' }}>Block</label>
                 <input
+                  list="edit-block-list"
+                  placeholder={editPanchayat.district ? "Select or type a block" : "Select a district first"}
                   value={editPanchayat.block}
                   onChange={(e) => setEditPanchayat({ ...editPanchayat, block: e.target.value })}
                   style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', boxSizing: 'border-box' }}
                 />
+                <datalist id="edit-block-list">
+                  {uniqueBlocksForEdit.map((b) => <option key={b} value={b}>{b}</option>)}
+                </datalist>
               </div>
 
               {editError && <p style={{ color: '#b91c1c', fontSize: '0.85rem', margin: 0 }}>{editError}</p>}

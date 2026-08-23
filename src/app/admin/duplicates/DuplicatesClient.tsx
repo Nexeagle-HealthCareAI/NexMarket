@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAgentStore } from '@/store/agent-store';
 import { getDuplicates, mergeDuplicate, dismissDuplicate, type DuplicatePairDto } from '@/lib/sync/api-client';
 import { useFlaggedDuplicates } from '@/lib/db';
@@ -12,6 +12,9 @@ export default function DuplicatesClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actingOn, setActingOn] = useState<string | null>(null);
+  
+  // Tabs: 'current' (pending) | 'history' (resolved)
+  const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
 
   const load = useCallback(async () => {
     if (!agentId) return;
@@ -48,25 +51,35 @@ export default function DuplicatesClient() {
     }
   }
 
-  const pendingCount = pairs.filter((p) => p.status === 'pending').length;
-  const resolvedCount = pairs.filter((p) => p.status !== 'pending').length;
+  const pendingPairs = useMemo(() => pairs.filter((p) => p.status === 'pending'), [pairs]);
+  const historyPairs = useMemo(() => pairs.filter((p) => p.status !== 'pending'), [pairs]);
+
+  const displayedPairs = activeTab === 'current' ? pendingPairs : historyPairs;
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+    <div style={{ paddingBottom: '3rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>⚠️ Duplicate Contact Resolution</h1>
+          <h1 style={{ fontSize: '1.5rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>⚠️ Duplicate Contacts</h1>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Review potential duplicate channel partners, key accounts, and local reps flagged across agents and panchayats.
+            Review and merge potential duplicate channel partners flagged in the field.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <span className="badge badge-dup" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
-            ⏳ {pendingCount} Pending Review
-          </span>
-          <span className="badge badge-online" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
-            ✅ {resolvedCount} Resolved
-          </span>
+        <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--surface-input)', padding: '0.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)' }}>
+          <button
+            className={`btn btn-sm ${activeTab === 'current' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setActiveTab('current')}
+            style={activeTab === 'current' ? {} : { color: 'var(--text-muted)' }}
+          >
+            ⏳ Current ({pendingPairs.length})
+          </button>
+          <button
+            className={`btn btn-sm ${activeTab === 'history' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setActiveTab('history')}
+            style={activeTab === 'history' ? {} : { color: 'var(--text-muted)' }}
+          >
+            ✅ History ({historyPairs.length})
+          </button>
         </div>
       </div>
 
@@ -76,13 +89,13 @@ export default function DuplicatesClient() {
         </div>
       )}
 
-      {localFlagged.length > 0 && (
+      {localFlagged.length > 0 && activeTab === 'current' && (
         <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '4px solid var(--color-warning)', background: 'rgba(245, 158, 11, 0.05)' }}>
           <h3 style={{ fontSize: '1rem', color: '#f59e0b', marginBottom: '0.25rem' }}>
             📱 Local Device Flagged Contacts ({localFlagged.length})
           </h3>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-            You have {localFlagged.length} contact(s) on this device marked with <code>potential_duplicate_of</code> during offline field collection. They will merge cleanly on server push.
+            You have {localFlagged.length} contact(s) on this device marked as duplicates during offline collection. They will merge on server push.
           </p>
         </div>
       )}
@@ -91,120 +104,95 @@ export default function DuplicatesClient() {
         <div className="empty-state" style={{ padding: '3rem' }}>
           <p style={{ color: 'var(--text-muted)' }}>Loading duplicates…</p>
         </div>
-      ) : pairs.length === 0 ? (
+      ) : displayedPairs.length === 0 ? (
         <div className="empty-state" style={{ padding: '3rem' }}>
-          <p style={{ color: 'var(--text-muted)' }}>No duplicate contacts flagged yet.</p>
+          <div className="empty-state-icon">{activeTab === 'current' ? '🎉' : '📭'}</div>
+          <h2>{activeTab === 'current' ? 'All clear!' : 'No History'}</h2>
+          <p style={{ color: 'var(--text-muted)' }}>
+            {activeTab === 'current' ? 'No duplicate contacts pending review.' : 'No resolved duplicates yet.'}
+          </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {pairs.map((pair) => {
-            const isPending = pair.status === 'pending';
-            const isActing = actingOn === pair.id;
-            return (
-              <div
-                key={pair.id}
-                className="card"
-                style={{
-                  borderTop: `4px solid ${isPending ? 'var(--color-danger)' : pair.status === 'merged' ? '#10b981' : '#64748b'}`,
-                  opacity: isPending ? 1 : 0.75,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--surface-border)' }}>
-                  <div>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                      Flagged as a potential duplicate
-                    </span>
-                  </div>
-                  <div>
-                    {!isPending ? (
-                      <span className="badge" style={{ background: pair.status === 'merged' ? 'rgba(16,185,129,0.2)' : 'rgba(100,116,139,0.2)', color: pair.status === 'merged' ? '#10b981' : '#94a3b8', padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
-                        {pair.status === 'merged' ? '✅ MERGED AS PRIMARY / ALIAS' : '✕ MARKED AS DISTINCT RECORDS'}
-                      </span>
-                    ) : (
-                      <span className="badge badge-pending">⏳ ACTION REQUIRED</span>
-                    )}
-                  </div>
-                </div>
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ background: 'var(--surface-hover)', borderBottom: '1px solid var(--surface-border)' }}>
+                  <th style={{ padding: '1rem', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', width: '40%' }}>Original Record (A)</th>
+                  <th style={{ padding: '1rem', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', width: '40%' }}>Duplicate Candidate (B)</th>
+                  <th style={{ padding: '1rem', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'right', width: '20%' }}>
+                    {activeTab === 'current' ? 'Quick Actions' : 'Resolution'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayedPairs.map((pair) => {
+                  const isActing = actingOn === pair.id;
+                  return (
+                    <tr key={pair.id} style={{ borderBottom: '1px solid var(--surface-border)', opacity: isActing ? 0.6 : 1, transition: 'opacity 0.2s' }}>
+                      {/* Record A */}
+                      <td style={{ padding: '1rem', verticalAlign: 'top', borderRight: '1px dashed var(--surface-border)' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem', fontSize: '0.95rem' }}>{pair.recordA.name}</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--color-primary-600)', marginBottom: '0.5rem', fontWeight: 500 }}>
+                          {pair.recordA.role.replace('_', ' ').toUpperCase()}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          <div>📞 {pair.recordA.phone || 'No phone'}</div>
+                          <div>📍 {pair.recordA.panchayatName}</div>
+                          <div>👤 {pair.recordA.agentName}</div>
+                        </div>
+                      </td>
 
-                {/* Side by Side Comparison Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
-                  {/* Record A */}
-                  <div style={{ padding: '1rem', borderRadius: 'var(--radius-sm)', background: 'var(--surface-card-hover)', border: '1px solid var(--surface-border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', fontWeight: 700 }}>RECORD A (ORIGINAL)</span>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: {pair.recordA.clientId.slice(0, 8)}</span>
-                    </div>
-                    <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '0.35rem' }}>{pair.recordA.name}</h3>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                      Role: <strong style={{ color: 'var(--color-primary-600)' }}>{pair.recordA.role.replace('_', ' ').toUpperCase()}</strong>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)', background: 'var(--surface-input)', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--surface-border)' }}>
-                      <div>📞 Phone: <strong>{pair.recordA.phone || 'None'}</strong></div>
-                      <div>📍 Panchayat: <strong>{pair.recordA.panchayatName}</strong></div>
-                      <div>👤 Logged by: <strong>{pair.recordA.agentName}</strong></div>
-                      <div>📅 Time: <strong>{new Date(pair.recordA.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</strong></div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-                      <span className={`badge ${pair.recordA.whatsappAdded ? 'badge-online' : 'badge-pending'}`} style={{ fontSize: '0.7rem' }}>
-                        {pair.recordA.whatsappAdded ? '🟢 WhatsApp' : '⚪ No WhatsApp'}
-                      </span>
-                      <span className={`badge ${pair.recordA.cardGiven ? 'badge-online' : 'badge-pending'}`} style={{ fontSize: '0.7rem' }}>
-                        {pair.recordA.cardGiven ? '🟢 Card Given' : '⚪ No Card'}
-                      </span>
-                    </div>
-                  </div>
+                      {/* Record B */}
+                      <td style={{ padding: '1rem', verticalAlign: 'top' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem', fontSize: '0.95rem' }}>{pair.recordB.name}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#f59e0b', marginBottom: '0.5rem', fontWeight: 500 }}>
+                          {pair.recordB.role.replace('_', ' ').toUpperCase()}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          <div>📞 {pair.recordB.phone || 'No phone'}</div>
+                          <div>📍 {pair.recordB.panchayatName}</div>
+                          <div>👤 {pair.recordB.agentName}</div>
+                        </div>
+                      </td>
 
-                  {/* Record B */}
-                  <div style={{ padding: '1rem', borderRadius: 'var(--radius-sm)', background: 'var(--surface-card-hover)', border: '1px solid var(--surface-border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 700 }}>RECORD B (DUPLICATE CANDIDATE)</span>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: {pair.recordB.clientId.slice(0, 8)}</span>
-                    </div>
-                    <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '0.35rem' }}>{pair.recordB.name}</h3>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                      Role: <strong style={{ color: '#f59e0b' }}>{pair.recordB.role.replace('_', ' ').toUpperCase()}</strong>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)', background: 'var(--surface-input)', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--surface-border)' }}>
-                      <div>📞 Phone: <strong>{pair.recordB.phone || 'None'}</strong></div>
-                      <div>📍 Panchayat: <strong>{pair.recordB.panchayatName}</strong></div>
-                      <div>👤 Logged by: <strong>{pair.recordB.agentName}</strong></div>
-                      <div>📅 Time: <strong>{new Date(pair.recordB.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</strong></div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-                      <span className={`badge ${pair.recordB.whatsappAdded ? 'badge-online' : 'badge-pending'}`} style={{ fontSize: '0.7rem' }}>
-                        {pair.recordB.whatsappAdded ? '🟢 WhatsApp' : '⚪ No WhatsApp'}
-                      </span>
-                      <span className={`badge ${pair.recordB.cardGiven ? 'badge-online' : 'badge-pending'}`} style={{ fontSize: '0.7rem' }}>
-                        {pair.recordB.cardGiven ? '🟢 Card Given' : '⚪ No Card'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                {isPending && (
-                  <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', paddingTop: '0.75rem', borderTop: '1px solid var(--surface-border)' }}>
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => handleAction(pair.id, 'dismissed')}
-                      disabled={isActing}
-                      style={{ borderColor: 'var(--surface-border)', fontSize: '0.85rem' }}
-                    >
-                      ✕ Mark as Distinct (Not a Duplicate)
-                    </button>
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => handleAction(pair.id, 'merged')}
-                      disabled={isActing}
-                      style={{ background: '#10b981', borderColor: '#10b981', fontSize: '0.85rem' }}
-                    >
-                      {isActing ? 'Working…' : '🔗 Merge Records (Keep A as Primary, link B as alias)'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                      {/* Actions */}
+                      <td style={{ padding: '1rem', verticalAlign: 'middle', textAlign: 'right' }}>
+                        {activeTab === 'current' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+                            <button
+                              className="btn btn-sm btn-primary"
+                              style={{ width: '100%', background: '#10b981', borderColor: '#10b981' }}
+                              onClick={() => handleAction(pair.id, 'merged')}
+                              disabled={isActing}
+                            >
+                              🔗 Merge (Keep A)
+                            </button>
+                            <button
+                              className="btn btn-sm btn-ghost"
+                              style={{ width: '100%', fontSize: '0.75rem' }}
+                              onClick={() => handleAction(pair.id, 'dismissed')}
+                              disabled={isActing}
+                            >
+                              ✕ Dismiss
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="badge" style={{ 
+                            background: pair.status === 'merged' ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)', 
+                            color: pair.status === 'merged' ? '#10b981' : '#64748b',
+                            fontSize: '0.8rem'
+                          }}>
+                            {pair.status === 'merged' ? '✅ Merged' : '✕ Dismissed'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

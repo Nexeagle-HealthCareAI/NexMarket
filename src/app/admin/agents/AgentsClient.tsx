@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentStore } from '@/store/agent-store';
-import { getAgents, onboardAgent, updateAgentProfile, uploadPhoto, type AdminAgentDto } from '@/lib/sync/api-client';
+import { getAgents, onboardAgent, updateAgentProfile, uploadPhoto, getPanchayats, type AdminAgentDto, type PanchayatDto } from '@/lib/sync/api-client';
 
 const PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
 function generatePassword(length = 12): string {
@@ -16,6 +16,7 @@ function generatePassword(length = 12): string {
 export default function AgentsClient() {
   const agentId = useAgentStore((s) => s.agentId);
   const [agentsList, setAgentsList] = useState<AdminAgentDto[]>([]);
+  const [panchayats, setPanchayats] = useState<PanchayatDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -81,10 +82,20 @@ export default function AgentsClient() {
 
   useEffect(() => {
     void loadAgents();
+    getPanchayats().then(setPanchayats).catch(console.error);
     // Live-ish refresh — cheap poll rather than a full presence/WebSocket system.
     const timer = setInterval(() => void loadAgents(), 30_000);
     return () => clearInterval(timer);
   }, [loadAgents]);
+
+  const uniqueDistricts = useMemo(() => {
+    const d = Array.from(new Set(panchayats.map(p => p.district))).sort();
+    return d.length > 0 ? d : ['Katihar', 'Purnia', 'Araria', 'Kishanganj', 'Supaul', 'Uttar Dinajpur'];
+  }, [panchayats]);
+
+  const uniqueBlocks = useMemo(() => {
+    return Array.from(new Set(panchayats.filter(p => p.district === newDistrict).map(p => p.block))).sort();
+  }, [panchayats, newDistrict]);
 
   const filtered = useMemo(() => {
     return agentsList.filter((a) => {
@@ -643,30 +654,41 @@ export default function AgentsClient() {
                     <select
                       className="field-input"
                       value={newDistrict}
-                      onChange={(e) => setNewDistrict(e.target.value)}
+                      onChange={(e) => {
+                        setNewDistrict(e.target.value);
+                        setNewBlock('');
+                      }}
                       style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
                     >
-                      <option value="Katihar">Katihar</option>
-                      <option value="Purnia">Purnia</option>
-                      <option value="Araria">Araria</option>
-                      <option value="Kishanganj">Kishanganj</option>
-                      <option value="Supaul">Supaul</option>
-                      <option value="Uttar Dinajpur">Uttar Dinajpur</option>
+                      {uniqueDistricts.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
                   </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div className="field-group" style={{ margin: 0 }}>
                     <label className="field-label">Assigned Block / Council</label>
-                    <input
-                      type="text"
-                      className="field-input"
-                      placeholder="e.g. Kasba, Forbesganj"
-                      value={newBlock}
-                      onChange={(e) => setNewBlock(e.target.value)}
-                      required
-                      maxLength={50}
-                    />
+                    {uniqueBlocks.length > 0 ? (
+                      <select
+                        className="field-input"
+                        value={newBlock}
+                        onChange={(e) => setNewBlock(e.target.value)}
+                        required
+                        style={{ background: 'var(--surface-input)', color: 'var(--text-primary)' }}
+                      >
+                        <option value="">Select Block…</option>
+                        {uniqueBlocks.map(b => <option key={b} value={b}>{b}</option>)}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        className="field-input"
+                        placeholder="e.g. Kasba, Forbesganj"
+                        value={newBlock}
+                        onChange={(e) => setNewBlock(e.target.value)}
+                        required
+                        maxLength={50}
+                      />
+                    )}
                   </div>
                   <div className="field-group" style={{ margin: 0 }}>
                     <label className="field-label">Pincode</label>

@@ -1,10 +1,10 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useAgentStore } from '@/store/agent-store';
-import { getAgentDetail, updateAgentProfile, type AgentDetailDto, type UpdateAgentProfileRequest } from '@/lib/sync/api-client';
+import { getAgentDetail, updateAgentProfile, getPanchayats, type AgentDetailDto, type UpdateAgentProfileRequest, type PanchayatDto } from '@/lib/sync/api-client';
 
 const STATUS_LABEL: Record<AgentDetailDto['status'], string> = {
   online: '🟢 Online',
@@ -25,6 +25,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ agentId:
   const [isEditing, setIsEditing] = useState(() => searchParams.get('edit') === '1');
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<UpdateAgentProfileRequest>({});
+  const [panchayats, setPanchayats] = useState<PanchayatDto[]>([]);
 
   const load = () => {
     if (!viewerAgentId) return;
@@ -58,6 +59,19 @@ export default function AgentDetailPage({ params }: { params: Promise<{ agentId:
   };
 
   useEffect(load, [viewerAgentId, agentId]);
+  
+  useEffect(() => {
+    getPanchayats().then(setPanchayats).catch(console.error);
+  }, []);
+
+  const uniqueDistricts = useMemo(() => {
+    const d = Array.from(new Set(panchayats.map(p => p.district))).sort();
+    return d.length > 0 ? d : ['Katihar', 'Purnia', 'Araria', 'Kishanganj', 'Supaul', 'Uttar Dinajpur'];
+  }, [panchayats]);
+
+  const uniqueBlocks = useMemo(() => {
+    return Array.from(new Set(panchayats.filter(p => p.district === form.district).map(p => p.block))).sort();
+  }, [panchayats, form.district]);
 
   const handleSave = async () => {
     if (!viewerAgentId) return;
@@ -205,10 +219,17 @@ export default function AgentDetailPage({ params }: { params: Promise<{ agentId:
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               <textarea className="field-input" rows={2} value={form.address ?? ''} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="Address" />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
-                <select className="field-input" value={form.district ?? ''} onChange={(e) => setForm((f) => ({ ...f, district: e.target.value }))}>
-                  {['Katihar', 'Purnia', 'Araria', 'Kishanganj', 'Supaul', 'Uttar Dinajpur'].map((d) => <option key={d} value={d}>{d}</option>)}
+                <select className="field-input" value={form.district ?? ''} onChange={(e) => setForm((f) => ({ ...f, district: e.target.value, block: '' }))}>
+                  {uniqueDistricts.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
-                {editInput('block')}
+                {uniqueBlocks.length > 0 ? (
+                  <select className="field-input" value={form.block ?? ''} onChange={(e) => setForm((f) => ({ ...f, block: e.target.value }))}>
+                    <option value="">Select Block…</option>
+                    {uniqueBlocks.map(b => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                ) : (
+                  editInput('block')
+                )}
                 {editInput('pincode')}
               </div>
             </div>

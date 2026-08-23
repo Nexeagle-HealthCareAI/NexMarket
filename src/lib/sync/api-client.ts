@@ -512,6 +512,38 @@ export async function updateAgentProfile(
   );
 }
 
+// ─── Admin: Hospital CRM ───────────────────────────────────────────────────────
+
+export interface HospitalReferralDto {
+  id: string;
+  clientId: string;
+  contactId: string;
+  contactName: string;
+  agentId: string;
+  agentName: string;
+  patientName: string;
+  department: string;
+  notes?: string;
+  clientPhone?: string;
+  referralDate?: string;
+  status: 'pending' | 'converted' | 'lost';
+  createdAt: string;
+}
+
+export interface UpdateReferralStatusDto {
+  status: 'pending' | 'converted' | 'lost';
+  notes?: string;
+}
+
+export async function getHospitalReferrals(status?: string): Promise<HospitalReferralDto[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  return get<HospitalReferralDto[]>(`/api/v1/referrals${qs}`);
+}
+
+export async function updateReferralStatus(clientId: string, dto: UpdateReferralStatusDto): Promise<{ message: string }> {
+  return put<UpdateReferralStatusDto, { message: string }>(`/api/v1/referrals/${encodeURIComponent(clientId)}/status`, dto);
+}
+
 // ─── Admin API ────────────────────────────────────────────────────────────────
 
 export function getAgents(): Promise<AdminAgentDto[]> {
