@@ -157,17 +157,18 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
         })
       );
 
-      const surveyRecord = {
+      const surveyRecord: any = {
         clientId,
         deviceId,
         agentId,
-        contactId,
-        panchayatId: activeVisit?.panchayatId,
         isSkipped,
-        skipReason: reason || undefined,
         answersJson: JSON.stringify(responsesRecord),
         createdAt: new Date().toISOString(),
       };
+
+      if (contactId) surveyRecord.contactId = contactId;
+      if (activeVisit?.panchayatId) surveyRecord.panchayatId = activeVisit.panchayatId;
+      if (reason) surveyRecord.skipReason = reason;
 
       await db.surveyResponses.add(surveyRecord);
       await addToOutbox(clientId, deviceId, 'survey', surveyRecord);
