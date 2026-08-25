@@ -230,6 +230,11 @@ export interface BlockReportDto {
   med: number;
   mukhiya: number;
   prominent: number;
+  lab: number;
+  nursingHome: number;
+  independentDoctor: number;
+  hospital: number;
+  other: number;
   visits: number;
   referrals: number;
   converted: number;
@@ -243,6 +248,11 @@ export interface ReportSummaryDto {
   medicineShops: number;
   mukhiyas: number;
   prominentPersons: number;
+  labs: number;
+  nursingHomes: number;
+  independentDoctors: number;
+  hospitals: number;
+  others: number;
   totalVisits: number;
   totalReferrals: number;
   convertedReferrals: number;
@@ -501,7 +511,6 @@ export async function uploadPhoto(file: File | Blob, fileName = 'photo.jpg'): Pr
   if (!res.ok) throw new Error('Failed to upload photo');
   return res.json();
 }
-
 export async function updateAgentProfile(
   agentId: string,
   body: UpdateAgentProfileRequest
@@ -509,6 +518,13 @@ export async function updateAgentProfile(
   return put<UpdateAgentProfileRequest, { success: boolean; profileCompleted: boolean }>(
     `/api/v1/agents/${encodeURIComponent(agentId)}/profile`,
     body,
+  );
+}
+
+export async function resetAgentPassword(userId: string, newPassword: string): Promise<{ message: string }> {
+  return patch<{ userId: string; password: string }, { message: string }>(
+    `/api/v1/auth/user/password?scope=reset-password`,
+    { userId, password: newPassword }
   );
 }
 
@@ -563,8 +579,9 @@ export function getAgentTrajectory(agentId: string, date?: string): Promise<Traj
   return get<TrajectoryPointDto[]>(`/api/v1/agents/${encodeURIComponent(agentId)}/trajectory${qs}`);
 }
 
-export function getDuplicates(): Promise<DuplicatePairDto[]> {
-  return get<DuplicatePairDto[]>('/api/v1/duplicates');
+export function getDuplicates(status?: string): Promise<DuplicatePairDto[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  return get<DuplicatePairDto[]>(`/api/v1/duplicates${qs}`);
 }
 
 export function mergeDuplicate(clientId: string): Promise<unknown> {

@@ -63,10 +63,11 @@ export default function PipelinePage() {
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
-  const [sortBy, setSortBy] = useState<string | undefined>(undefined);
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | undefined>(undefined);
+  const [sortBy, setSortBy] = useState<string | undefined>('followupdate');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | undefined>('asc');
   const [showEscalatedOnly, setShowEscalatedOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [draggedContactId, setDraggedContactId] = useState<string | null>(null);
 
   // Filter States
   const [panchayatsData, setPanchayatsData] = useState<PanchayatDto[]>([]);
@@ -103,13 +104,11 @@ export default function PipelinePage() {
       endDate = end.toISOString();
     } else if (dateFilter === 'custom') {
       if (customStartDate) {
-        const d = new Date(customStartDate);
-        d.setHours(0,0,0,0);
+        const d = new Date(customStartDate + 'T00:00:00');
         startDate = d.toISOString();
       }
       if (customEndDate) {
-        const d = new Date(customEndDate);
-        d.setHours(23,59,59,999);
+        const d = new Date(customEndDate + 'T23:59:59.999');
         endDate = d.toISOString();
       }
     }
@@ -138,7 +137,7 @@ export default function PipelinePage() {
 
         const res = await getAdminContacts({
           page,
-          pageSize: isWorklist ? 50 : PAGE_SIZE,
+          pageSize: isWorklist ? 200 : PAGE_SIZE,
           districts: selectedCities,
           blocks: selectedBlocks,
           panchayats: selectedPanchayats,
@@ -206,7 +205,7 @@ export default function PipelinePage() {
     .map(p => p.name)
   )).filter(Boolean).sort();
 
-  const currentPageSize = activeTab === 'worklist' ? 50 : PAGE_SIZE;
+  const currentPageSize = activeTab === 'worklist' ? 200 : PAGE_SIZE;
   const totalPages = Math.max(1, Math.ceil(totalCount / currentPageSize));
 
   useEffect(() => {
@@ -250,8 +249,8 @@ export default function PipelinePage() {
       end.setHours(23, 59, 59, 999);
       endDate = end.toISOString();
     } else if (dateFilter === 'custom') {
-      if (customStartDate) startDate = new Date(new Date(customStartDate).setHours(0,0,0,0)).toISOString();
-      if (customEndDate) endDate = new Date(new Date(customEndDate).setHours(23,59,59,999)).toISOString();
+      if (customStartDate) startDate = new Date(customStartDate + 'T00:00:00').toISOString();
+      if (customEndDate) endDate = new Date(customEndDate + 'T23:59:59.999').toISOString();
     }
 
     try {
@@ -327,6 +326,93 @@ export default function PipelinePage() {
     }
   };
 
+  const handleDragStart = (e: React.DragEvent, contactId: string) => {
+    e.dataTransfer.setData('text/plain', contactId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedContactId(contactId);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, newStatus: string) => {
+    e.preventDefault();
+    const contactId = e.dataTransfer.getData('text/plain');
+    setDraggedContactId(null);
+    
+    const contact = contacts.find(c => c.clientId === contactId);
+    if (!contact || contact.status === newStatus) return;
+
+    // Optimistic update
+    setContacts(prev => prev.map(c => c.clientId === contactId ? { ...c, status: newStatus } : c));
+
+    try {
+      await updateAdminContact(contactId, { status: newStatus });
+    } catch (err) {
+      setError('Failed to update status. Reverting change.');
+      setContacts(prev => prev.map(c => c.clientId === contactId ? { ...c, status: contact.status } : c));
+    }
+  };
+
+  const renderKanbanBoard = () => {
+    const columns = [
+      { id: 'Lead', title: 'Leads', color: '#94a3b8' },
+      { id: 'Contacted', title: 'Contacted', color: '#eab308' },
+      { id: 'FollowUp', title: 'Follow-Up', color: '#3b82f6' }
+    ];
+
+    return (
+      <div style={{ display: 'flex', gap: '1.5rem', flex: 1, overflowX: 'auto', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', minHeight: '600px' }}>
+        {columns.map(col => (
+          <div 
+            key={col.id} 
+            style={{ 
+              flex: '0 0 320px', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              background: '#f1f5f9', 
+              borderRadius: '12px',
+              height: '100%',
+              border: '1px solid #e2e8f0'
+            }}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, col.id)}
+          >
+            <div style={{ padding: '1rem', borderBottom: '2px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', background: col.color }} />
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#1e293b' }}>{col.title}</h3>
+              </div>
+              <span style={{ background: '#e2e8f0', color: '#64748b', fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '12px' }}>
+                {contacts.filter(c => c.status === col.id).length}
+              </span>
+            </div>
+            <div style={{ padding: '0.75rem', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {contacts.filter(c => c.status === col.id).map(c => (
+                <KanbanCard 
+                  key={c.clientId} 
+                  contact={c} 
+                  panchayatsData={panchayatsData}
+                  isDragging={draggedContactId === c.clientId}
+                  onDragStart={(e: any) => handleDragStart(e, c.clientId)}
+                  onDragEnd={() => setDraggedContactId(null)}
+                  onEdit={() => setEditDrawerContact(c)}
+                />
+              ))}
+              {contacts.filter(c => c.status === col.id).length === 0 && (
+                <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '0.85rem', fontWeight: 600, border: '2px dashed #cbd5e1', borderRadius: '8px' }}>
+                  Drop contacts here
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minWidth: 0, width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -366,7 +452,7 @@ export default function PipelinePage() {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '1rem', borderBottom: '2px solid #e2e8f0', marginBottom: '1.5rem', overflowX: 'auto', whiteSpace: 'nowrap', paddingBottom: '2px' }}>
         <button
-          onClick={() => { setActiveTab('worklist'); setPage(1); }}
+          onClick={() => { setActiveTab('worklist'); setPage(1); setSortBy('followupdate'); setSortOrder('asc'); }}
           style={{
             background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
             fontSize: '1rem', fontWeight: 700, color: activeTab === 'worklist' ? '#4f46e5' : '#64748b',
@@ -377,7 +463,7 @@ export default function PipelinePage() {
           📝 Worklist
         </button>
         <button
-          onClick={() => { setActiveTab('recent'); setPage(1); }}
+          onClick={() => { setActiveTab('recent'); setPage(1); setSortBy('lastupdated'); setSortOrder('desc'); }}
           style={{
             background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
             fontSize: '1rem', fontWeight: 700, color: activeTab === 'recent' ? '#4f46e5' : '#64748b',
@@ -388,7 +474,7 @@ export default function PipelinePage() {
           🕒 Recent Activity
         </button>
         <button
-          onClick={() => { setActiveTab('historical'); setPage(1); }}
+          onClick={() => { setActiveTab('historical'); setPage(1); setSortBy('lastupdated'); setSortOrder('desc'); }}
           style={{
             background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
             fontSize: '1rem', fontWeight: 700, color: activeTab === 'historical' ? '#4f46e5' : '#64748b',
@@ -509,6 +595,8 @@ export default function PipelinePage() {
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: 40, height: 40, border: '3px solid #e2e8f0', borderTopColor: '#4f46e5', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
         </div>
+      ) : activeTab === 'worklist' ? (
+        renderKanbanBoard()
       ) : (
         <div style={{ flex: 1, background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px rgba(0,0,0,0.02)', overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: '100%' }}>
           {contacts.length === 0 ? (
@@ -516,16 +604,13 @@ export default function PipelinePage() {
               No contacts found for the selected filters.
             </div>
           ) : (
-            // Tabular on desktop and tablet — scrolls horizontally rather than
-            // reflowing into cards below that width, same as Recent/Historical
-            // always did; Worklist previously had its own separate card-grid UI.
             <div style={{ overflowX: 'auto', flex: 1, maxWidth: '100%' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 10 }}>
                   <tr>
                     <SortableHeader label="Contact Details" columnKey="name" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
                     <SortableHeader label="Location (Village)" columnKey="location" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
-                    {(activeTab === 'recent' || activeTab === 'worklist') && (
+                    {activeTab === 'recent' && (
                       <>
                         <SortableHeader label="Stage (Result)" columnKey="status" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} width="160px" />
                         <SortableHeader label="Follow-up Date" columnKey="followupdate" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
@@ -552,9 +637,9 @@ export default function PipelinePage() {
                         contact={c}
                         panchayatName={pInfo?.name}
                         blockName={pInfo?.block}
-                        showStageAndFollowUp={activeTab === 'recent' || activeTab === 'worklist'}
+                        showStageAndFollowUp={activeTab === 'recent'}
                         showComments={activeTab === 'historical'}
-                        showQuickActions={activeTab === 'worklist'}
+                        showQuickActions={false}
                         onEdit={() => setEditDrawerContact(c)}
                         onViewHistory={() => setHistoryModalContact(c)}
                         onLogCall={(reason) => {
@@ -580,7 +665,7 @@ export default function PipelinePage() {
             </div>
           )}
 
-          {/* Pagination — 10 per page, shared across all three tabs */}
+          {/* Pagination — shared across all three tabs */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1.25rem', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
             <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
               {totalCount === 0 ? 'No contacts' : `Page ${page} of ${totalPages} · ${totalCount} total`}
@@ -1009,6 +1094,80 @@ function MultiSelectDropdown({ label, options, selected, onChange, disabled, pla
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------------------------------------
+// Kanban Card Component
+// -------------------------------------------------------------------------------------------------
+function KanbanCard({ contact, panchayatsData, isDragging, onDragStart, onDragEnd, onEdit, onLogCall }: any) {
+  const pInfo = panchayatsData.find((p: any) => p.id === contact.panchayatId);
+  const isEscalated = contact.agentEscalated;
+  
+  return (
+    <div 
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      style={{ 
+        background: 'white', 
+        borderRadius: '8px', 
+        padding: '1rem', 
+        boxShadow: isDragging ? '0 8px 16px rgba(0,0,0,0.1)' : '0 1px 3px rgba(0,0,0,0.1)', 
+        border: '1px solid #e2e8f0',
+        borderLeft: isEscalated ? '4px solid #ef4444' : '1px solid #e2e8f0',
+        cursor: 'grab',
+        opacity: isDragging ? 0.5 : 1,
+        transition: 'box-shadow 0.2s',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.75rem'
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>{contact.name}</h4>
+          <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'capitalize' }}>{contact.role.replace('_', ' ')}</span>
+        </div>
+        {contact.photoUrl ? (
+          <img src={contact.photoUrl} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+        ) : (
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8' }}>
+            {contact.name.charAt(0)}
+          </div>
+        )}
+      </div>
+
+      <div style={{ fontSize: '0.8rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+          <span>📞</span> {contact.phone || 'No Phone'}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+          <span>📍</span> {pInfo ? pInfo.name : 'Unknown Village'}
+        </div>
+      </div>
+
+      {contact.followUpDate && (
+        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#f8fafc', padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid #e2e8f0', width: 'fit-content' }}>
+          🗓️ Due: {new Date(contact.followUpDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+        </div>
+      )}
+
+      {isEscalated && (
+        <div style={{ fontSize: '0.7rem', color: '#b91c1c', background: '#fef2f2', padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid #fecaca' }}>
+          🚨 {contact.agentEscalationNote || 'Escalated'}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+        <button onClick={onEdit} style={{ flex: 1, padding: '0.35rem', background: 'transparent', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, color: '#334155', cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+          Edit
+        </button>
+        <Link href={`/admin/pipeline/${contact.clientId}`} style={{ flex: 1, padding: '0.35rem', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, color: '#0f172a', textAlign: 'center', textDecoration: 'none', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'} onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}>
+          Profile
+        </Link>
       </div>
     </div>
   );

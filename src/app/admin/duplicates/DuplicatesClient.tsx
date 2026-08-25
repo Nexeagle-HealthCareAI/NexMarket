@@ -16,12 +16,12 @@ export default function DuplicatesClient() {
   // Tabs: 'current' (pending) | 'history' (resolved)
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (tab: 'current' | 'history') => {
     if (!agentId) return;
     setLoading(true);
     setError('');
     try {
-      setPairs(await getDuplicates());
+      setPairs(await getDuplicates(tab === 'current' ? 'pending' : 'history'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load duplicates.');
     } finally {
@@ -30,8 +30,8 @@ export default function DuplicatesClient() {
   }, [agentId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(activeTab);
+  }, [load, activeTab]);
 
   async function handleAction(id: string, action: 'merged' | 'dismissed') {
     if (!agentId) return;
@@ -51,10 +51,7 @@ export default function DuplicatesClient() {
     }
   }
 
-  const pendingPairs = useMemo(() => pairs.filter((p) => p.status === 'pending'), [pairs]);
-  const historyPairs = useMemo(() => pairs.filter((p) => p.status !== 'pending'), [pairs]);
-
-  const displayedPairs = activeTab === 'current' ? pendingPairs : historyPairs;
+  const displayedPairs = pairs;
 
   return (
     <div style={{ paddingBottom: '3rem' }}>
@@ -71,14 +68,14 @@ export default function DuplicatesClient() {
             onClick={() => setActiveTab('current')}
             style={activeTab === 'current' ? {} : { color: 'var(--text-muted)' }}
           >
-            ⏳ Current ({pendingPairs.length})
+            ⏳ Current
           </button>
           <button
             className={`btn btn-sm ${activeTab === 'history' ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setActiveTab('history')}
             style={activeTab === 'history' ? {} : { color: 'var(--text-muted)' }}
           >
-            ✅ History ({historyPairs.length})
+            ✅ History
           </button>
         </div>
       </div>
@@ -158,7 +155,7 @@ export default function DuplicatesClient() {
 
                       {/* Actions */}
                       <td style={{ padding: '1rem', verticalAlign: 'middle', textAlign: 'right' }}>
-                        {activeTab === 'current' ? (
+                        {activeTab === 'current' && pair.status === 'pending' ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
                             <button
                               className="btn btn-sm btn-primary"

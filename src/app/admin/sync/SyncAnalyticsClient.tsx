@@ -122,9 +122,9 @@ export default function SyncAnalyticsClient() {
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                   />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '1rem' }} />
-                  <Bar dataKey="visits" stackId="a" fill="#6366f1" radius={[0, 0, 4, 4]} />
-                  <Bar dataKey="contacts" stackId="a" fill="#10b981" />
-                  <Bar dataKey="referrals" stackId="a" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="visits" name="Visits" stackId="a" fill="#6366f1" radius={[0, 0, 4, 4]} />
+                  <Bar dataKey="contacts" name="Contacts" stackId="a" fill="#10b981" />
+                  <Bar dataKey="referrals" name="Referrals" stackId="a" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

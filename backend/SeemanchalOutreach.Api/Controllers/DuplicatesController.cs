@@ -46,11 +46,23 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<DuplicatePairDto>>> GetDuplicates(CancellationToken cancellationToken)
+        public async Task<ActionResult<List<DuplicatePairDto>>> GetDuplicates([FromQuery] string? status, CancellationToken cancellationToken)
         {
-            var flagged = await _db.Contacts.AsNoTracking()
-                .Where(c => c.PotentialDuplicateOf != null && c.PotentialDuplicateOf != "")
-                .ToListAsync(cancellationToken);
+            var query = _db.Contacts.AsNoTracking()
+                .Where(c => c.PotentialDuplicateOf != null && c.PotentialDuplicateOf != "");
+
+            if (status == "pending")
+            {
+                query = query.Where(c => !c.IsMerged && c.DuplicateReviewedAt == null);
+            }
+            else if (status == "history")
+            {
+                query = query.Where(c => c.IsMerged || c.DuplicateReviewedAt != null)
+                             .OrderByDescending(c => c.DuplicateReviewedAt ?? c.LastModifiedAt ?? c.CreatedAt)
+                             .Take(100);
+            }
+
+            var flagged = await query.ToListAsync(cancellationToken);
 
             if (flagged.Count == 0) return Ok(new List<DuplicatePairDto>());
 
@@ -88,18 +100,39 @@ namespace SeemanchalOutreach.Api.Controllers
             var result = new List<DuplicatePairDto>();
             foreach (var candidate in flagged)
             {
-                if (!originalsByClientId.TryGetValue(candidate.PotentialDuplicateOf!, out var original)) continue;
+                DuplicateRecordDto recordA;
 
-                string status = candidate.IsMerged ? "merged"
+                if (candidate.PotentialDuplicateOf == "in_batch_duplicate")
+                {
+                    recordA = new DuplicateRecordDto
+                    {
+                        ClientId = "in_batch_duplicate",
+                        Name = "In-Batch Duplicate",
+                        Role = candidate.Role,
+                        Phone = candidate.Phone,
+                        AgentId = candidate.AgentId,
+                        AgentName = agentNames.GetValueOrDefault(candidate.AgentId, "Unknown"),
+                        PanchayatId = candidate.PanchayatId,
+                        PanchayatName = panchayatNames.GetValueOrDefault(candidate.PanchayatId, "Unknown"),
+                        CreatedAt = candidate.CreatedAt.ToString("o")
+                    };
+                }
+                else
+                {
+                    if (!originalsByClientId.TryGetValue(candidate.PotentialDuplicateOf!, out var original)) continue;
+                    recordA = ToDto(original);
+                }
+
+                string currentStatus = candidate.IsMerged ? "merged"
                     : candidate.DuplicateReviewedAt != null ? "dismissed"
                     : "pending";
 
                 result.Add(new DuplicatePairDto
                 {
                     Id = candidate.ClientId,
-                    RecordA = ToDto(original),
+                    RecordA = recordA,
                     RecordB = ToDto(candidate),
-                    Status = status,
+                    Status = currentStatus,
                 });
             }
 

@@ -2,17 +2,17 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAgentStore } from '@/store/agent-store';
-import { getReportsSummary, type ReportSummaryDto } from '@/lib/sync/api-client';
+import { getReportsSummary, getSyncAnalytics, type ReportSummaryDto, type SyncAnalyticsDto } from '@/lib/sync/api-client';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
 
 const COLORS = ['#10b981', '#38bdf8', '#c084fc', '#f59e0b', '#f472b6', '#94a3b8'];
 
 const EMPTY_SUMMARY: ReportSummaryDto = {
   totalContacts: 0, ashaWorkers: 0, rmpDoctors: 0, wardMembers: 0, medicineShops: 0,
-  mukhiyas: 0, prominentPersons: 0,
+  mukhiyas: 0, prominentPersons: 0, labs: 0, nursingHomes: 0, independentDoctors: 0, hospitals: 0, others: 0,
   totalVisits: 0, totalReferrals: 0, convertedReferrals: 0, conversionRatePct: 0, blocks: [],
 };
 
@@ -20,6 +20,7 @@ export default function ReportsClient() {
   const agentId = useAgentStore((s) => s.agentId);
   const [districtFilter, setDistrictFilter] = useState<string>('All');
   const [summary, setSummary] = useState<ReportSummaryDto>(EMPTY_SUMMARY);
+  const [syncAnalytics, setSyncAnalytics] = useState<SyncAnalyticsDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -28,9 +29,22 @@ export default function ReportsClient() {
     setLoading(true);
     setError('');
     try {
-      setSummary(await getReportsSummary(districtFilter));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load reports.');
+      const [summaryResult, analyticsResult] = await Promise.allSettled([
+        getReportsSummary(districtFilter),
+        getSyncAnalytics()
+      ]);
+
+      if (summaryResult.status === 'fulfilled') {
+        setSummary(summaryResult.value);
+      } else {
+        setError(summaryResult.reason instanceof Error ? summaryResult.reason.message : 'Failed to load summary reports.');
+      }
+
+      if (analyticsResult.status === 'fulfilled') {
+        setSyncAnalytics(analyticsResult.value);
+      } else {
+        console.warn('Analytics load failed:', analyticsResult.reason);
+      }
     } finally {
       setLoading(false);
     }
@@ -48,9 +62,7 @@ export default function ReportsClient() {
     { name: 'Converted Patients', value: summary.convertedReferrals, fill: '#10b981' },
   ];
 
-  // Data for Role Pie Chart — was missing Mukhiya/Prominent Person, so the
-  // slices silently added up to less than "Total Contacts" above whenever
-  // either role had any contacts.
+  // Data for Role Pie Chart
   const roleData = [
     { name: 'ASHA Workers', value: summary.ashaWorkers },
     { name: 'RMP Doctors', value: summary.rmpDoctors },
@@ -58,12 +70,17 @@ export default function ReportsClient() {
     { name: 'Medicine Shops', value: summary.medicineShops },
     { name: 'Mukhiya', value: summary.mukhiyas },
     { name: 'Prominent Persons', value: summary.prominentPersons },
+    { name: 'Labs', value: summary.labs },
+    { name: 'Nursing Homes', value: summary.nursingHomes },
+    { name: 'Independent Doctors', value: summary.independentDoctors },
+    { name: 'Hospitals', value: summary.hospitals },
+    { name: 'Others', value: summary.others },
   ];
 
   // Data for Territory Bar Chart
   const territoryData = summary.blocks.map((b) => ({
     name: b.block,
-    Contacts: b.asha + b.rmp + b.ward + b.med,
+    Contacts: b.asha + b.rmp + b.ward + b.med + b.mukhiya + b.prominent + b.lab + b.nursingHome + b.independentDoctor + b.hospital + b.other,
     Referrals: b.referrals,
     Converted: b.converted,
   }));
@@ -170,6 +187,31 @@ export default function ReportsClient() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
+            </div>
+
+            {/* Time-Series Trends */}
+            <div className="card" style={{ padding: '1.25rem', gridColumn: '1 / -1' }}>
+              <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '1rem' }}>📈 Today's Hourly Trends (System-wide)</h3>
+              {!syncAnalytics || syncAnalytics.hourlyBreakdown.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '2rem' }}>
+                  No hourly data available yet.
+                </p>
+              ) : (
+                <div style={{ width: '100%', height: 350 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={syncAnalytics.hourlyBreakdown} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--surface-border)" />
+                      <XAxis dataKey="hour" stroke="var(--text-muted)" fontSize={12} />
+                      <YAxis stroke="var(--text-muted)" fontSize={12} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: 'var(--shadow-md)' }} />
+                      <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                      <Line type="monotone" dataKey="visits" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} name="Visits" />
+                      <Line type="monotone" dataKey="contacts" stroke="#38bdf8" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} name="Contacts" />
+                      <Line type="monotone" dataKey="referrals" stroke="#a855f7" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} name="Referrals" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
           </div>
 

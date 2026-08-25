@@ -9,9 +9,11 @@ import {
   createAssignment,
   updateAssignmentStatus,
   getPanchayats,
+  getCoveredPanchayats,
   type AdminAgentDto,
   type AssignmentSummaryDto,
   type PanchayatDto,
+  type CoveredPanchayatDto,
 } from '@/lib/sync/api-client';
 
 export default function AssignmentsClient() {
@@ -20,6 +22,7 @@ export default function AssignmentsClient() {
   const [agents, setAgents] = useState<AdminAgentDto[]>([]);
   const [assignments, setAssignments] = useState<AssignmentSummaryDto[]>([]);
   const [panchayats, setPanchayats] = useState<PanchayatDto[]>([]);
+  const [coveredPanchayats, setCoveredPanchayats] = useState<CoveredPanchayatDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Active' | 'Completed' | 'Cancelled'>('all');
@@ -37,14 +40,16 @@ export default function AssignmentsClient() {
     setLoading(true);
     setError('');
     try {
-      const [agentsData, assignmentsData, panchayatsData] = await Promise.all([
+      const [agentsData, assignmentsData, panchayatsData, coveredData] = await Promise.all([
         getAgents(),
         getAssignments(),
         getPanchayats(),
+        getCoveredPanchayats(),
       ]);
       setAgents(agentsData);
       setAssignments(assignmentsData);
       setPanchayats(panchayatsData);
+      setCoveredPanchayats(coveredData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load assignments.');
     } finally {
@@ -60,6 +65,22 @@ export default function AssignmentsClient() {
     () => Array.from(new Set(panchayats.map((p) => p.district))).filter(Boolean).sort(),
     [panchayats]
   );
+  
+  const blockCoverage = useMemo(() => {
+    const coverage: Record<string, { total: number; covered: number }> = {};
+    for (const p of panchayats) {
+      if (!coverage[p.block]) coverage[p.block] = { total: 0, covered: 0 };
+      coverage[p.block].total++;
+    }
+    for (const cp of coveredPanchayats) {
+      // getCoveredPanchayats returns panchayats that have contacts, we count them as covered
+      if (coverage[cp.block]) {
+        coverage[cp.block].covered++;
+      }
+    }
+    return coverage;
+  }, [panchayats, coveredPanchayats]);
+
   const availableBlocks = useMemo(
     () => Array.from(new Set(panchayats.filter((p) => !formDistrict || p.district === formDistrict).map((p) => p.block))).filter(Boolean).sort(),
     [panchayats, formDistrict]
@@ -150,7 +171,15 @@ export default function AssignmentsClient() {
             <label className="field-label">Block</label>
             <select className="field-input" value={formBlock} onChange={(e) => setFormBlock(e.target.value)} required disabled={!formDistrict}>
               <option value="">Select block…</option>
-              {availableBlocks.map((b) => <option key={b} value={b}>{b}</option>)}
+              {availableBlocks.map((b) => {
+                const cov = blockCoverage[b];
+                const pct = cov && cov.total > 0 ? Math.round((cov.covered / cov.total) * 100) : 0;
+                return (
+                  <option key={b} value={b}>
+                    {b} — {pct}% Covered ({cov?.covered || 0}/{cov?.total || 0})
+                  </option>
+                );
+              })}
             </select>
           </div>
 

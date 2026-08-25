@@ -8,6 +8,10 @@ import EditSurveyResponseModal from '@/components/admin/EditSurveyResponseModal'
 import { HealthcareDashboard } from '@/components/admin/HealthcareDashboard';
 import { HistoricalAnalyticsDashboard } from '@/components/admin/HistoricalAnalyticsDashboard';
 import { motion, AnimatePresence } from 'framer-motion';
+import { MultiSelectDropdown, PaginationControls } from './components/SharedComponents';
+import { SurveyResponsesTab } from './components/SurveyResponsesTab';
+import { SurveyDataManagementTab } from './components/SurveyDataManagementTab';
+import { SurveyQuestionnaireTab } from './components/SurveyQuestionnaireTab';
 
 const CONTACT_ROLE_LABELS: Record<string, string> = {
   asha_worker: 'ASHA Worker',
@@ -479,75 +483,22 @@ export default function AdminSurveysPage() {
             {!surveysLoading && !surveysError && sortedSurveys.length === 0 && <p style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No responses match the selected filters.</p>}
             {!surveysLoading && sortedSurveys.length > 0 && (
 
-                <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden', maxWidth: '100%' }}>
-                  <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                    <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                      <tr>
-                        <SortableTh label="Person Name" field="contactName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} style={{ whiteSpace: 'nowrap', minWidth: '160px' }} />
-                        <SortableTh label="Added By" field="agentName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} style={{ whiteSpace: 'nowrap', minWidth: '140px' }} />
-                        {activeColumns.map((q, i) => (
-                          <SortableTh
-                            key={q.questionId}
-                            field={q.questionId}
-                            sortField={sortField}
-                            sortDirection={sortDirection}
-                            onSort={handleSort}
-                            style={{ minWidth: '200px', color: '#4f46e5' }}
-                            title={q.text}
-                            label={<>Question {i + 1}<div style={{ fontWeight: 500, color: '#64748b', fontSize: '0.75rem', marginTop: '0.2rem' }}>{q.text}</div></>}
-                          />
-                        ))}
-                        <SortableTh label="Date Added" field="createdAt" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} style={{ whiteSpace: 'nowrap', minWidth: '120px' }} />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedSurveys.map((survey) => {
-                        let answers: Record<string, unknown> = {};
-                        try { answers = JSON.parse(survey.answersJson); } catch {}
-
-                        return (
-                          <tr key={survey.id} style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                            <td style={{ padding: '1rem' }}>
-                              <div style={{ fontWeight: 600, color: '#0f172a' }}>{survey.contactName || 'Unknown'}</div>
-                              {contactRoleLabel(survey.contactRole) && (
-                                <div style={{ marginTop: '0.2rem' }}>
-                                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4f46e5', background: '#eef2ff', padding: '0.1rem 0.45rem', borderRadius: '10px' }}>
-                                    {contactRoleLabel(survey.contactRole)}
-                                  </span>
-                                </div>
-                              )}
-                              {panchayatLocationLabel(survey) && (
-                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
-                                  📍 {panchayatLocationLabel(survey)}
-                                </div>
-                              )}
-                            </td>
-                            <td style={{ padding: '1rem', color: '#334155' }}>{survey.agentName || survey.agentId}</td>
-                            {activeColumns.map((q) => {
-                              const ans = answers[q.questionId];
-                              const hasAnswer = ans !== undefined && ans !== null && ans !== '';
-                              return (
-                                <td key={q.questionId} style={{ padding: '1rem', color: '#334155' }}>
-                                  {hasAnswer ? (
-                                    <span style={{ background: '#f1f5f9', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 500, display: 'inline-block' }}>
-                                      {String(ans)}
-                                    </span>
-                                  ) : (
-                                    <span style={{ color: '#cbd5e1', fontSize: '0.85rem', fontStyle: 'italic' }}>No answer</span>
-                                  )}
-                                </td>
-                              );
-                            })}
-                            <td style={{ padding: '1rem', color: '#64748b', whiteSpace: 'nowrap' }}>{new Date(survey.createdAt).toLocaleDateString('en-GB')}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <PaginationControls currentPage={pageSafe} totalPages={totalPages} totalItems={sortedSurveys.length} pageSize={PAGE_SIZE} onPageChange={setCurrentPage} />
-              </div>
+              <SurveyResponsesTab
+                surveysLoading={surveysLoading}
+                surveysError={surveysError}
+                sortedSurveys={sortedSurveys}
+                activeColumns={activeColumns}
+                sortField={sortField}
+                sortDirection={sortDirection}
+                handleSort={handleSort}
+                paginatedSurveys={paginatedSurveys}
+                pageSafe={pageSafe}
+                totalPages={totalPages}
+                setCurrentPage={setCurrentPage}
+                PAGE_SIZE={PAGE_SIZE}
+                contactRoleLabel={contactRoleLabel}
+                panchayatLocationLabel={panchayatLocationLabel}
+              />
             )}
           </div>
         )}
@@ -557,52 +508,13 @@ export default function AdminSurveysPage() {
             {questionsLoading && <p>Loading questions...</p>}
             {questionsError && <p style={{ color: 'red' }}>{questionsError}</p>}
             {!questionsLoading && !questionsError && questions.length === 0 && <p>No questions defined. Add one!</p>}
-            {!questionsLoading && questions.length > 0 && (
-              <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden', maxWidth: '100%' }}>
-                <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                    <tr>
-                      <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', width: '60px' }}>Order</th>
-                      <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', width: '120px' }}>Key (ID)</th>
-                      <th style={{ padding: '1rem', fontWeight: 700, color: '#334155' }}>Question Text</th>
-                      <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', width: '120px' }}>Type</th>
-                      <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', width: '100px' }}>Required</th>
-                      <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', width: '140px', textAlign: 'right' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {questions.map((q) => (
-                      <tr key={q.id} style={{ borderBottom: '1px solid #e2e8f0', opacity: q.isActive ? 1 : 0.5, transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        <td style={{ padding: '1rem', color: '#64748b', fontWeight: 600, textAlign: 'center' }}>{q.order}</td>
-                        <td style={{ padding: '1rem', color: '#4f46e5', fontWeight: 600 }}>{q.questionId}</td>
-                        <td style={{ padding: '1rem', color: '#0f172a' }}>
-                          <div style={{ fontWeight: 600 }}>{q.text}</div>
-                          {(q.type === 'single' || q.type === 'multi') && q.optionsJson && (
-                            <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.4rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                              {JSON.parse(q.optionsJson).map((opt: string) => (
-                                <span key={opt} style={{ background: '#f1f5f9', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #e2e8f0' }}>{opt}</span>
-                              ))}
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ padding: '1rem', color: '#475569', textTransform: 'capitalize', fontWeight: 500 }}>{q.type}</td>
-                        <td style={{ padding: '1rem' }}>
-                          <span style={{ padding: '0.3rem 0.6rem', background: q.isOptional ? '#f1f5f9' : '#fee2e2', color: q.isOptional ? '#64748b' : '#b91c1c', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 700 }}>
-                            {q.isOptional ? 'Optional' : 'Required'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '1rem', textAlign: 'right' }}>
-                          <button onClick={() => setEditingQuestion(q)} style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', marginRight: '0.5rem', fontSize: '0.8rem', transition: 'all 0.2s' }}>Edit</button>
-                          <button onClick={() => handleDeleteQuestion(q.id)} style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s' }}>Delete</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+            <SurveyQuestionnaireTab
+              questionsLoading={questionsLoading}
+              questionsError={questionsError}
+              questions={questions}
+              setEditingQuestion={setEditingQuestion}
+              handleDeleteQuestion={handleDeleteQuestion}
+            />
           </div>
         )}
 
@@ -617,75 +529,26 @@ export default function AdminSurveysPage() {
             {surveysLoading && <p>Loading responses...</p>}
             {surveysError && <p style={{ color: 'red' }}>{surveysError}</p>}
             {!surveysLoading && !surveysError && sortedSurveys.length === 0 && <p style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No responses match the selected filters.</p>}
-            {!surveysLoading && sortedSurveys.length > 0 && (
-              <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden', maxWidth: '100%' }}>
-                <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
-                    <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                      <tr>
-                        <SortableTh label="Person Name" field="contactName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
-                        <SortableTh label="Added By" field="agentName" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
-                        {historyColumns.map(q => (
-                          <SortableTh key={q.questionId} label={q.text} field={q.questionId} sortField={sortField} sortDirection={sortDirection} onSort={handleSort} style={{ minWidth: '150px' }} />
-                        ))}
-                        <SortableTh label="Date Added" field="createdAt" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
-                        <th style={{ padding: '1rem', fontWeight: 700, color: '#334155', minWidth: '160px' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedSurveys.map((survey) => {
-                        let answers: any = {};
-                        try {
-                          if (survey.answersJson) answers = JSON.parse(survey.answersJson);
-                        } catch (e) {}
-
-                        return (
-                          <tr key={survey.id} style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                            <td style={{ padding: '1rem' }}>
-                              <div style={{ fontWeight: 600, color: '#0f172a' }}>{survey.contactName || 'Unknown'}</div>
-                              {contactRoleLabel(survey.contactRole) && (
-                                <div style={{ marginTop: '0.2rem' }}>
-                                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4f46e5', background: '#eef2ff', padding: '0.1rem 0.45rem', borderRadius: '10px' }}>
-                                    {contactRoleLabel(survey.contactRole)}
-                                  </span>
-                                </div>
-                              )}
-                              {panchayatLocationLabel(survey) && (
-                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
-                                  📍 {panchayatLocationLabel(survey)}
-                                </div>
-                              )}
-                            </td>
-                            <td style={{ padding: '1rem', color: '#334155' }}>{survey.agentName || survey.agentId}</td>
-                            {historyColumns.map((q) => {
-                              const ans = answers[q.questionId];
-                              const hasAnswer = ans !== undefined && ans !== null && ans !== '';
-                              return (
-                                <td key={q.questionId} style={{ padding: '1rem', color: '#334155' }}>
-                                  {hasAnswer ? (
-                                    <span style={{ background: '#f1f5f9', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 500, display: 'inline-block' }}>
-                                      {String(ans)}
-                                    </span>
-                                  ) : (
-                                    <span style={{ color: '#cbd5e1', fontSize: '0.85rem', fontStyle: 'italic' }}>No answer</span>
-                                  )}
-                                </td>
-                              );
-                            })}
-                            <td style={{ padding: '1rem', color: '#64748b', whiteSpace: 'nowrap' }}>{new Date(survey.createdAt).toLocaleDateString('en-GB')}</td>
-                            <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>
-                              <button onClick={() => setEditingResponse(survey)} style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', marginRight: '0.5rem', fontSize: '0.8rem', transition: 'all 0.2s' }}>Edit</button>
-                              <button onClick={() => { setDeletingResponse(survey); setDeleteConfirmName(''); setDeleteError(''); }} style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s' }}>Delete</button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <PaginationControls currentPage={pageSafe} totalPages={totalPages} totalItems={sortedSurveys.length} pageSize={PAGE_SIZE} onPageChange={setCurrentPage} />
-              </div>
-            )}
+            <SurveyDataManagementTab
+              surveysLoading={surveysLoading}
+              surveysError={surveysError}
+              sortedSurveys={sortedSurveys}
+              historyColumns={historyColumns}
+              sortField={sortField}
+              sortDirection={sortDirection}
+              handleSort={handleSort}
+              paginatedSurveys={paginatedSurveys}
+              pageSafe={pageSafe}
+              totalPages={totalPages}
+              setCurrentPage={setCurrentPage}
+              PAGE_SIZE={PAGE_SIZE}
+              contactRoleLabel={contactRoleLabel}
+              panchayatLocationLabel={panchayatLocationLabel}
+              setEditingResponse={setEditingResponse}
+              setDeletingResponse={setDeletingResponse}
+              setDeleteConfirmName={setDeleteConfirmName}
+              setDeleteError={setDeleteError}
+            />
           </div>
         )}
       </div>
@@ -836,154 +699,3 @@ export default function AdminSurveysPage() {
   );
 }
 
-// Sortable column header
-interface SortableThProps {
-  label: React.ReactNode;
-  field: string;
-  sortField: string | null;
-  sortDirection: 'asc' | 'desc';
-  onSort: (field: string) => void;
-  style?: React.CSSProperties;
-  title?: string;
-}
-
-function SortableTh({ label, field, sortField, sortDirection, onSort, style, title }: SortableThProps) {
-  const isActive = sortField === field;
-  return (
-    <th
-      onClick={() => onSort(field)}
-      title={title}
-      style={{ padding: '1rem', fontWeight: 700, color: isActive ? '#4f46e5' : '#334155', cursor: 'pointer', userSelect: 'none', ...style }}
-    >
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-        {label}
-        <span style={{ fontSize: '0.7rem', opacity: isActive ? 1 : 0.35 }}>
-          {isActive ? (sortDirection === 'asc' ? '▲' : '▼') : '⇅'}
-        </span>
-      </span>
-    </th>
-  );
-}
-
-// Pagination controls
-interface PaginationControlsProps {
-  currentPage: number;
-  totalPages: number;
-  totalItems: number;
-  pageSize: number;
-  onPageChange: (page: number) => void;
-}
-
-function PaginationControls({ currentPage, totalPages, totalItems, pageSize, onPageChange }: PaginationControlsProps) {
-  if (totalItems === 0) return null;
-  const startItem = (currentPage - 1) * pageSize + 1;
-  const endItem = Math.min(currentPage * pageSize, totalItems);
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderTop: '1px solid #e2e8f0', flexWrap: 'wrap', gap: '0.75rem' }}>
-      <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
-        Showing {startItem}–{endItem} of {totalItems}
-      </span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <button
-          onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-          disabled={currentPage <= 1}
-          style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: 'white', color: currentPage <= 1 ? '#cbd5e1' : '#334155', fontWeight: 600, cursor: currentPage <= 1 ? 'not-allowed' : 'pointer', fontSize: '0.85rem' }}
-        >
-          Prev
-        </button>
-        <span style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 600, padding: '0 0.5rem' }}>
-          Page {currentPage} of {totalPages}
-        </span>
-        <button
-          onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-          disabled={currentPage >= totalPages}
-          style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: 'white', color: currentPage >= totalPages ? '#cbd5e1' : '#334155', fontWeight: 600, cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer', fontSize: '0.85rem' }}
-        >
-          Next
-        </button>
-      </div>
-    </div>
-  );
-}
-
-
-// MultiSelect Dropdown Component
-interface MultiSelectDropdownProps {
-  label: string;
-  options: { value: string; label: string }[];
-  selected: string[];
-  onChange: (selected: string[]) => void;
-  disabled?: boolean;
-  placeholder?: string;
-}
-
-function MultiSelectDropdown({ label, options, selected, onChange, disabled, placeholder }: MultiSelectDropdownProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  
-  const toggleSelection = (opt: string) => {
-    if (selected.includes(opt)) {
-      onChange(selected.filter((o: string) => o !== opt));
-    } else {
-      onChange([...selected, opt]);
-    }
-  };
-
-  return (
-    <div style={{ position: 'relative', opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto' }}>
-      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>{label}</label>
-      <div 
-        onClick={() => setIsOpen(!isOpen)}
-        style={{ 
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
-          background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', 
-          padding: '0.5rem 1rem', width: '220px', cursor: 'pointer', 
-          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden' }}>
-          <span style={{ fontSize: '0.85rem', color: selected.length === 0 ? '#64748b' : '#0f172a' }}>
-            {selected.length === 0 ? (placeholder || 'Select...') : `${selected.length} Selected`}
-          </span>
-        </div>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-      </div>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            style={{ 
-              position: 'absolute', top: '100%', left: 0, marginTop: '0.25rem', width: '250px', 
-              background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', 
-              boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 50,
-              maxHeight: '300px', overflowY: 'auto'
-            }}
-          >
-            <div style={{ position: 'fixed', inset: 0, zIndex: -1 }} onClick={() => setIsOpen(false)} />
-            
-            <div style={{ padding: '0.5rem' }}>
-              {options.length === 0 ? (
-                <div style={{ padding: '0.5rem', color: '#64748b', fontSize: '0.85rem', textAlign: 'center' }}>No options available</div>
-              ) : (
-                options.map(opt => (
-                  <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem', cursor: 'pointer', borderRadius: '4px', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <input 
-                      type="checkbox" 
-                      checked={selected.includes(opt.value)}
-                      onChange={() => toggleSelection(opt.value)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    <span style={{ fontSize: '0.85rem', color: '#334155', fontWeight: selected.includes(opt.value) ? 600 : 400 }}>{opt.label}</span>
-                  </label>
-                ))
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}

@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentStore } from '@/store/agent-store';
-import { getAgents, onboardAgent, updateAgentProfile, uploadPhoto, getPanchayats, type AdminAgentDto, type PanchayatDto } from '@/lib/sync/api-client';
+import { getAgents, onboardAgent, updateAgentProfile, uploadPhoto, getPanchayats, resetAgentPassword, type AdminAgentDto, type PanchayatDto } from '@/lib/sync/api-client';
 
 const PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
 function generatePassword(length = 12): string {
@@ -31,6 +31,11 @@ export default function AgentsClient() {
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState('');
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
+
+  const [resettingAgent, setResettingAgent] = useState<AdminAgentDto | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [newGeneratedPassword, setNewGeneratedPassword] = useState<string | null>(null);
 
   // Onboarding Drawer State
   const [showOnboardModal, setShowOnboardModal] = useState(false);
@@ -225,6 +230,28 @@ export default function AgentsClient() {
     }
   }
 
+  async function handleResetPassword() {
+    if (!resettingAgent) return;
+    setIsResetting(true);
+    setResetError('');
+    try {
+      const newPass = generatePassword();
+      await resetAgentPassword(resettingAgent.agentId, newPass);
+      setNewGeneratedPassword(newPass);
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : 'Failed to reset password.');
+    } finally {
+      setIsResetting(false);
+    }
+  }
+
+  function handleCopyResetCredentials() {
+    if (!resettingAgent || !newGeneratedPassword) return;
+    const text = `🏢 NexMarket — Field Outreach & Marketing Portal\n\nHello ${resettingAgent.name},\nYour password has been reset by an administrator.\n\nHere are your new login credentials:\nUser ID: ${resettingAgent.agentId}\nPassword: ${newGeneratedPassword}\n\nPlease change this password after you log in.`;
+    navigator.clipboard.writeText(text);
+    alert('✅ Credentials copied to clipboard!');
+  }
+
   function handleCopyCredentials() {
     if (!generatedCreds) return;
     const text = `🏢 NexMarket — Field Outreach & Marketing Portal\n\nWelcome ${generatedCreds.name} (${generatedCreds.role})!\nYour field territory: ${generatedCreds.district} · ${generatedCreds.block}\n\nHere are your login credentials:\nUser ID: ${generatedCreds.userId}\nPassword: ${generatedCreds.pass}\n\nThis password is shown only once — please save it now.`;
@@ -336,7 +363,7 @@ export default function AgentsClient() {
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', cursor: 'pointer' }}>
           <input type="checkbox" checked={showDeactivated} onChange={(e) => setShowDeactivated(e.target.checked)} />
-          Show removed officers
+          Show deactivated officers
         </label>
       </div>
 
@@ -376,7 +403,7 @@ export default function AgentsClient() {
                       <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{agent.name}</div>
                       {!agent.isActive && (
                         <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,0.12)', padding: '0.1rem 0.4rem', borderRadius: '8px' }}>
-                          REMOVED
+                          DEACTIVATED
                         </span>
                       )}
                     </div>
@@ -434,6 +461,14 @@ export default function AgentsClient() {
                       <Link href={`/admin/map?agentId=${encodeURIComponent(agent.agentId)}`} className="btn btn-ghost btn-sm" style={{ fontSize: '0.78rem' }}>
                         📍 Trace Route
                       </Link>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: '0.78rem', color: '#8b5cf6' }}
+                        onClick={() => { setResettingAgent(agent); setResetError(''); setNewGeneratedPassword(null); }}
+                      >
+                        🔑 Reset Password
+                      </button>
                       {agent.isActive ? (
                         <button
                           type="button"
@@ -441,7 +476,7 @@ export default function AgentsClient() {
                           style={{ fontSize: '0.78rem', color: '#ef4444' }}
                           onClick={() => { setRemovingAgent(agent); setRemoveError(''); }}
                         >
-                          🗑 Remove
+                          🚫 Deactivate
                         </button>
                       ) : (
                         <button
@@ -868,6 +903,94 @@ export default function AgentsClient() {
                 >
                   {removing ? 'Removing…' : 'Remove Officer'}
                 </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Reset Password Modal */}
+      <AnimatePresence>
+        {resettingAgent && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { if (!isResetting) { setResettingAgent(null); setNewGeneratedPassword(null); } }}
+              style={{
+                position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+                backdropFilter: 'blur(2px)', zIndex: 9998
+              }}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              style={{
+                position: 'fixed', top: '50%', left: '50%', x: '-50%', y: '-50%',
+                background: 'white', borderRadius: '12px', padding: '1.5rem',
+                width: '90%', maxWidth: '400px', zIndex: 9999,
+                boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+              }}
+            >
+              <h3 style={{ fontSize: '1.25rem', color: '#0f172a', marginBottom: '0.5rem' }}>
+                Reset Password
+              </h3>
+              <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+                {!newGeneratedPassword
+                  ? `Are you sure you want to generate a new password for ${resettingAgent.name}? They will be forced to change it upon their next login.`
+                  : `Password has been reset for ${resettingAgent.name}.`}
+              </p>
+
+              {resetError && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>{resetError}</p>}
+
+              {newGeneratedPassword ? (
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem', marginBottom: '1.25rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>New Password</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#10b981', marginTop: '0.25rem', letterSpacing: '0.05em' }}>{newGeneratedPassword}</div>
+                </div>
+              ) : null}
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                {!newGeneratedPassword ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setResettingAgent(null)}
+                      disabled={isResetting}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ background: '#8b5cf6' }}
+                      onClick={handleResetPassword}
+                      disabled={isResetting}
+                    >
+                      {isResetting ? 'Resetting...' : 'Yes, Reset Password'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => { setResettingAgent(null); setNewGeneratedPassword(null); }}
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={handleCopyResetCredentials}
+                    >
+                      📋 Copy
+                    </button>
+                  </>
+                )}
               </div>
             </motion.div>
           </>
