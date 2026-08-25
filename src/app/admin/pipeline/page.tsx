@@ -4,9 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useAgentStore } from '@/store/agent-store';
-import { Pin } from 'lucide-react';
+import { Pin, FilterIcon } from 'lucide-react';
 import { getAdminContacts, updateAdminContact, deleteAdminContact, getContactHistory, getPanchayats, type AdminContactDto, type ContactHistoryEntryDto, type PanchayatDto, type ContactUpdateRequest } from '@/lib/sync/api-client';
 import EditContactDrawer from '@/components/admin/EditContactDrawer';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 // The columns for our statuses
 const STATUSES = ['Lead', 'Contacted', 'FollowUp', 'Converted', 'Closed'];
@@ -51,15 +52,13 @@ export default function PipelinePage() {
   const pinnedContactIds = useAgentStore((s) => s.pinnedContactIds || []);
   const togglePinContact = useAgentStore((s) => s.togglePinContact);
 
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
+  const queryClient = useQueryClient();
+
+  const [activeTab, setActiveTab] = useState<'worklist' | 'recent' | 'historical'>('worklist');
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [historyModalContact, setHistoryModalContact] = useState<Contact | null>(null);
   const [editDrawerContact, setEditDrawerContact] = useState<Contact | null>(null);
-  const [activeTab, setActiveTab] = useState<'worklist' | 'recent' | 'historical'>('worklist');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -68,129 +67,109 @@ export default function PipelinePage() {
   const [showEscalatedOnly, setShowEscalatedOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [draggedContactId, setDraggedContactId] = useState<string | null>(null);
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
   // Filter States
-  const [panchayatsData, setPanchayatsData] = useState<PanchayatDto[]>([]);
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [selectedBlocks, setSelectedBlocks] = useState<string[]>([]);
   const [selectedPanchayats, setSelectedPanchayats] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (agentId) getPanchayats().then(setPanchayatsData).catch(() => {});
-  }, [agentId]);
+  const { data: panchayatsData = [] } = useQuery({
+    queryKey: ['panchayats'],
+    queryFn: () => getPanchayats() as Promise<PanchayatDto[]>,
+    enabled: !!agentId,
+    staleTime: 1000 * 60 * 60,
+  });
 
-  useEffect(() => {
-    if (!agentId) return;
-    let cancelled = false;
-
+  const queryFilters = React.useMemo(() => {
     let startDate: string | undefined = undefined;
     let endDate: string | undefined = undefined;
     const now = new Date();
     if (dateFilter === 'today') {
-      const start = new Date(now);
-      start.setHours(0, 0, 0, 0);
-      startDate = start.toISOString();
-      const end = new Date(now);
-      end.setHours(23, 59, 59, 999);
-      endDate = end.toISOString();
+      const start = new Date(now); start.setHours(0, 0, 0, 0); startDate = start.toISOString();
+      const end = new Date(now); end.setHours(23, 59, 59, 999); endDate = end.toISOString();
     } else if (dateFilter === 'yesterday') {
-      const y = new Date(now);
-      y.setDate(y.getDate() - 1);
-      const start = new Date(y);
-      start.setHours(0, 0, 0, 0);
-      startDate = start.toISOString();
-      const end = new Date(y);
-      end.setHours(23, 59, 59, 999);
-      endDate = end.toISOString();
+      const y = new Date(now); y.setDate(y.getDate() - 1);
+      const start = new Date(y); start.setHours(0, 0, 0, 0); startDate = start.toISOString();
+      const end = new Date(y); end.setHours(23, 59, 59, 999); endDate = end.toISOString();
     } else if (dateFilter === 'custom') {
-      if (customStartDate) {
-        const d = new Date(customStartDate + 'T00:00:00');
-        startDate = d.toISOString();
-      }
-      if (customEndDate) {
-        const d = new Date(customEndDate + 'T23:59:59.999');
-        endDate = d.toISOString();
-      }
+      if (customStartDate) startDate = new Date(customStartDate + 'T00:00:00').toISOString();
+      if (customEndDate) endDate = new Date(customEndDate + 'T23:59:59.999').toISOString();
     }
 
-    (async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const isWorklist = activeTab === 'worklist';
-        const isRecent = activeTab === 'recent';
-        
-        let maxFollowUpDate: string | undefined = undefined;
-        if (isWorklist) {
-           const d = new Date();
-           d.setHours(23,59,59,999);
-           maxFollowUpDate = d.toISOString();
-        }
+    const isWorklist = activeTab === 'worklist';
+    const isRecent = activeTab === 'recent';
+    
+    let maxFollowUpDate: string | undefined = undefined;
+    if (isWorklist) {
+       const d = new Date(); d.setHours(23,59,59,999); maxFollowUpDate = d.toISOString();
+    }
 
-        let updatedAfter: string | undefined = undefined;
-        if (isRecent) {
-           const d = new Date();
-           d.setDate(d.getDate() - 1);
-           d.setHours(0,0,0,0);
-           updatedAfter = d.toISOString();
-        }
+    let updatedAfter: string | undefined = undefined;
+    if (isRecent) {
+       const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(0,0,0,0); updatedAfter = d.toISOString();
+    }
 
-        const res = await getAdminContacts({
-          page,
-          pageSize: isWorklist ? 200 : PAGE_SIZE,
-          districts: selectedCities,
-          blocks: selectedBlocks,
-          panchayats: selectedPanchayats,
-          statuses: isWorklist ? ['Lead', 'Contacted', 'FollowUp'] : undefined,
-          startDate,
-          endDate,
-          maxFollowUpDate,
-          updatedAfter,
-          agentEscalated: showEscalatedOnly ? true : undefined,
-          searchQuery: searchQuery.trim() || undefined,
-          sortBy,
-          sortOrder,
-        });
-        if (cancelled) return;
-        setContacts(res.items);
-        setTotalCount(res.totalCount);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load pipeline data.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+    return {
+      page,
+      pageSize: isWorklist ? 200 : PAGE_SIZE,
+      districts: selectedCities,
+      blocks: selectedBlocks,
+      panchayats: selectedPanchayats,
+      statuses: isWorklist ? ['Lead', 'Contacted', 'FollowUp'] : undefined,
+      startDate,
+      endDate,
+      maxFollowUpDate,
+      updatedAfter,
+      agentEscalated: showEscalatedOnly ? true : undefined,
+      searchQuery: searchQuery.trim() || undefined,
+      sortBy,
+      sortOrder,
+    };
+  }, [page, activeTab, dateFilter, customStartDate, customEndDate, selectedCities, selectedBlocks, selectedPanchayats, showEscalatedOnly, searchQuery, sortBy, sortOrder]);
 
-    return () => { cancelled = true; };
-  }, [agentId, page, selectedCities, selectedBlocks, selectedPanchayats, activeTab, dateFilter, customStartDate, customEndDate, sortBy, sortOrder, showEscalatedOnly, searchQuery]);
+  const { data, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['admin-contacts', queryFilters],
+    queryFn: () => getAdminContacts(queryFilters),
+    enabled: !!agentId,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const contacts = data?.items || [];
+  const totalCount = data?.totalCount || 0;
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (queryError) setError(queryError.message);
+    else setError('');
+  }, [queryError]);
+
+  const saveContactMutation = useMutation({
+    mutationFn: ({ clientId, update }: { clientId: string, update: ContactUpdateRequest }) => updateAdminContact(clientId, update),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-contacts'] });
+    },
+    onError: (err: any) => setError(err.message || 'Failed to save changes.')
+  });
 
   const handleSaveContact = async (clientId: string, update: ContactUpdateRequest) => {
     if (!agentId) return;
-
-    try {
-      const saved = await updateAdminContact(clientId, update);
-
-      setContacts(prev => prev.map(c => c.clientId === clientId
-        ? { ...c, ...saved, lastUpdatedAt: new Date().toISOString(), lastUpdatedBy: name || 'Admin' }
-        : c));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save changes.');
-    }
+    saveContactMutation.mutate({ clientId, update });
   };
+
+  const deleteContactMutation = useMutation({
+    mutationFn: (clientId: string) => deleteAdminContact(clientId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-contacts'] });
+    },
+    onError: (err: any) => setError(err.message || 'Failed to delete contact.')
+  });
 
   const handleDeleteContact = async (clientId: string) => {
     if (!agentId) return;
     if (!window.confirm('Are you sure you want to permanently delete this contact and all its history? This cannot be undone.')) {
       return;
     }
-
-    try {
-      await deleteAdminContact(clientId);
-      setContacts(prev => prev.filter(c => c.clientId !== clientId));
-      setTotalCount(prev => prev - 1);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete contact.');
-    }
+    deleteContactMutation.mutate(clientId);
   };
 
   // Derive Location filters based on available data
@@ -337,7 +316,7 @@ export default function PipelinePage() {
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDrop = async (e: React.DragEvent, newStatus: string) => {
+  const handleDrop = (e: React.DragEvent, newStatus: string) => {
     e.preventDefault();
     const contactId = e.dataTransfer.getData('text/plain');
     setDraggedContactId(null);
@@ -345,15 +324,11 @@ export default function PipelinePage() {
     const contact = contacts.find(c => c.clientId === contactId);
     if (!contact || contact.status === newStatus) return;
 
-    // Optimistic update
-    setContacts(prev => prev.map(c => c.clientId === contactId ? { ...c, status: newStatus } : c));
+    saveContactMutation.mutate({ clientId: contactId, update: { status: newStatus } });
+  };
 
-    try {
-      await updateAdminContact(contactId, { status: newStatus });
-    } catch (err) {
-      setError('Failed to update status. Reverting change.');
-      setContacts(prev => prev.map(c => c.clientId === contactId ? { ...c, status: contact.status } : c));
-    }
+  const handleStatusChange = (contactId: string, newStatus: string) => {
+    saveContactMutation.mutate({ clientId: contactId, update: { status: newStatus } });
   };
 
   const renderKanbanBoard = () => {
@@ -399,6 +374,7 @@ export default function PipelinePage() {
                   onDragStart={(e: any) => handleDragStart(e, c.clientId)}
                   onDragEnd={() => setDraggedContactId(null)}
                   onEdit={() => setEditDrawerContact(c)}
+                  onStatusChange={handleStatusChange}
                 />
               ))}
               {contacts.filter(c => c.status === col.id).length === 0 && (
@@ -415,6 +391,50 @@ export default function PipelinePage() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minWidth: 0, width: '100%' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .mobile-only {
+            display: block !important;
+          }
+          .filters-container {
+            display: none !important;
+          }
+          .filters-container.open {
+            display: flex !important;
+          }
+          .responsive-table, .responsive-table thead, .responsive-table tbody, .responsive-table th, .responsive-table td, .responsive-table tr {
+            display: block;
+          }
+          .responsive-table thead tr {
+            display: none;
+          }
+          .responsive-table tr {
+            margin-bottom: 1rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            padding: 0.5rem;
+          }
+          .responsive-table td {
+            border: none !important;
+            border-bottom: 1px solid #f1f5f9 !important;
+            position: relative;
+            padding: 0.75rem 1rem !important;
+          }
+          .responsive-table td::before {
+            content: attr(data-label);
+            display: block;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+          }
+          .responsive-table td:last-child {
+            border-bottom: none !important;
+          }
+        }
+      `}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>Contact Management</h1>
@@ -486,8 +506,19 @@ export default function PipelinePage() {
         </button>
       </div>
 
+      {/* Mobile Filter Toggle */}
+      <div className="mobile-only" style={{ marginBottom: '1rem', display: 'none' }}>
+        <button
+          onClick={() => setIsFilterDrawerOpen(!isFilterDrawerOpen)}
+          style={{ width: '100%', padding: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: 600, color: '#334155' }}
+        >
+          <FilterIcon size={16} />
+          {isFilterDrawerOpen ? 'Hide Filters' : 'Show Filters'}
+        </button>
+      </div>
+
       {/* Filters Section */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', zIndex: 20, position: 'relative' }}>
+      <div className={`filters-container ${isFilterDrawerOpen ? 'open' : ''}`} style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', zIndex: 20, position: 'relative' }}>
         <div style={{ flex: 1, minWidth: '180px' }}>
           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date Filter</label>
           <select 
@@ -605,7 +636,7 @@ export default function PipelinePage() {
             </div>
           ) : (
             <div style={{ overflowX: 'auto', flex: 1, maxWidth: '100%' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 10 }}>
                   <tr>
                     <SortableHeader label="Contact Details" columnKey="name" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
@@ -737,7 +768,7 @@ function ContactRow({ contact, isPinned, onTogglePin, panchayatName, blockName, 
 
   return (
     <tr style={{ borderBottom: '1px solid #e2e8f0', background: 'white', transition: 'background 0.2s' }}>
-      <td style={{ padding: '1rem' }}>
+      <td data-label="Contact Details" style={{ padding: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             {contact.photoUrl ? (
@@ -781,7 +812,7 @@ function ContactRow({ contact, isPinned, onTogglePin, panchayatName, blockName, 
           </div>
         </div>
       </td>
-      <td style={{ padding: '1rem' }}>
+      <td data-label="Location (Village)" style={{ padding: '1rem' }}>
         <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.85rem' }}>{panchayatName || '-'}</div>
         <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.25rem' }}>{blockName || '-'} Block</div>
         {contact.latitude && contact.longitude && (
@@ -801,7 +832,7 @@ function ContactRow({ contact, isPinned, onTogglePin, panchayatName, blockName, 
       </td>
       {showStageAndFollowUp && (
         <>
-          <td style={{ padding: '1rem' }}>
+          <td data-label="Stage (Result)" style={{ padding: '1rem' }}>
             <span style={{ 
               background: `${statusColor}20`, color: statusColor, 
               padding: '0.25rem 0.75rem', borderRadius: '20px', fontWeight: 700, fontSize: '0.8rem' 
@@ -809,37 +840,37 @@ function ContactRow({ contact, isPinned, onTogglePin, panchayatName, blockName, 
               {contact.status}
             </span>
           </td>
-          <td style={{ padding: '1rem' }}>
+          <td data-label="Follow-up Date" style={{ padding: '1rem' }}>
             <div style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 600 }}>
               {contact.followUpDate ? new Date(contact.followUpDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
             </div>
           </td>
         </>
       )}
-      <td style={{ padding: '1rem' }}>
+      <td data-label="Added By" style={{ padding: '1rem' }}>
         <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.85rem' }}>{contact.agentName || contact.agentId || 'Agent'}</div>
         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(contact.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
       </td>
       {showComments && (
         <>
-          <td style={{ padding: '1rem' }}>
+          <td data-label="Comments" style={{ padding: '1rem' }}>
             <div style={{ fontSize: '0.85rem', color: '#475569', maxWidth: '250px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={contact.comments || ''}>
               {contact.comments || '-'}
             </div>
           </td>
-          <td style={{ padding: '1rem' }}>
+          <td data-label="Issues" style={{ padding: '1rem' }}>
             <div style={{ fontSize: '0.85rem', color: '#ef4444', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={contact.complaints || ''}>
               {contact.complaints || '-'}
             </div>
           </td>
-          <td style={{ padding: '1rem' }}>
+          <td data-label="Conflicts" style={{ padding: '1rem' }}>
             <div style={{ fontSize: '0.85rem', color: '#f97316', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={contact.conflicts || ''}>
               {contact.conflicts || '-'}
             </div>
           </td>
         </>
       )}
-      <td style={{ padding: '1rem' }}>
+      <td data-label="Last Updated" style={{ padding: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <div>
             <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>{lastUpdatedTime}</div>
@@ -855,7 +886,7 @@ function ContactRow({ contact, isPinned, onTogglePin, panchayatName, blockName, 
           </button>
         </div>
       </td>
-      <td style={{ padding: '1rem', textAlign: 'center', minWidth: '220px' }}>
+      <td data-label="Actions" style={{ padding: '1rem', textAlign: 'center', minWidth: '220px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
             <button onClick={onEdit} style={{ background: 'transparent', color: '#0f172a', border: '1px solid #e2e8f0', padding: '0.4rem 0.8rem', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -1102,7 +1133,7 @@ function MultiSelectDropdown({ label, options, selected, onChange, disabled, pla
 // -------------------------------------------------------------------------------------------------
 // Kanban Card Component
 // -------------------------------------------------------------------------------------------------
-function KanbanCard({ contact, panchayatsData, isDragging, onDragStart, onDragEnd, onEdit, onLogCall }: any) {
+function KanbanCard({ contact, panchayatsData, isDragging, onDragStart, onDragEnd, onEdit, onStatusChange }: any) {
   const pInfo = panchayatsData.find((p: any) => p.id === contact.panchayatId);
   const isEscalated = contact.agentEscalated;
   
@@ -1158,6 +1189,28 @@ function KanbanCard({ contact, panchayatsData, isDragging, onDragStart, onDragEn
       {isEscalated && (
         <div style={{ fontSize: '0.7rem', color: '#b91c1c', background: '#fef2f2', padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid #fecaca' }}>
           🚨 {contact.agentEscalationNote || 'Escalated'}
+        </div>
+      )}
+
+      {/* MOBILE ONLY QUICK ACTIONS */}
+      <style>{`
+        .kanban-mobile-actions { display: none; }
+        @media (max-width: 768px) {
+          .kanban-mobile-actions { display: flex; }
+        }
+      `}</style>
+      {onStatusChange && (
+        <div className="kanban-mobile-actions" style={{ gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+          <span style={{ width: '100%', fontSize: '0.7rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Move to:</span>
+          {contact.status !== 'Lead' && (
+            <button onClick={() => onStatusChange(contact.clientId, 'Lead')} style={{ flex: 1, padding: '0.35rem', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 600, color: '#475569', cursor: 'pointer' }}>Lead</button>
+          )}
+          {contact.status !== 'Contacted' && (
+            <button onClick={() => onStatusChange(contact.clientId, 'Contacted')} style={{ flex: 1, padding: '0.35rem', background: '#fef9c3', border: '1px solid #fde047', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 600, color: '#854d0e', cursor: 'pointer' }}>Contacted</button>
+          )}
+          {contact.status !== 'FollowUp' && (
+            <button onClick={() => onStatusChange(contact.clientId, 'FollowUp')} style={{ flex: 1, padding: '0.35rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 600, color: '#1d4ed8', cursor: 'pointer' }}>Follow-Up</button>
+          )}
         </div>
       )}
 

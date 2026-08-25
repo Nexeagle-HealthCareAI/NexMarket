@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { PencilIcon, TrashIcon, PlusIcon, FileDownIcon } from 'lucide-react';
+import { PencilIcon, TrashIcon, PlusIcon, FileDownIcon, FilterIcon, XIcon } from 'lucide-react';
 import { useAgentStore } from '@/store/agent-store';
 import { getAdminSurveys, type AdminSurveyDto, getAdminSurveyQuestions, createAdminSurveyQuestion, updateAdminSurveyQuestion, deleteAdminSurveyQuestion, deleteAdminSurveyResponse, updateAdminSurveyResponse, type SurveyQuestionDto, getPanchayats, type PanchayatDto } from '@/lib/sync/api-client';
 import EditSurveyResponseModal from '@/components/admin/EditSurveyResponseModal';
 import { HealthcareDashboard } from '@/components/admin/HealthcareDashboard';
 import { HistoricalAnalyticsDashboard } from '@/components/admin/HistoricalAnalyticsDashboard';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MultiSelectDropdown, PaginationControls } from './components/SharedComponents';
 import { SurveyResponsesTab } from './components/SurveyResponsesTab';
 import { SurveyDataManagementTab } from './components/SurveyDataManagementTab';
@@ -42,13 +43,26 @@ export default function AdminSurveysPage() {
   const agentId = useAgentStore((s) => s.agentId);
   const [activeTab, setActiveTab] = useState<'responses' | 'history' | 'data_management' | 'questionnaire' | 'insights'>('responses');
 
+  const queryClient = useQueryClient();
+
   // Responses State
-  const [surveys, setSurveys] = useState<AdminSurveyDto[]>([]);
-  const [allPanchayats, setAllPanchayats] = useState<PanchayatDto[]>([]);
-  const [surveysLoading, setSurveysLoading] = useState(false);
-  const [surveysError, setSurveysError] = useState<string | null>(null);
+  const { data: surveys = [], isLoading: surveysLoading, error: surveysQueryError } = useQuery({
+    queryKey: ['surveys'],
+    queryFn: () => getAdminSurveys() as Promise<AdminSurveyDto[]>,
+    enabled: !!agentId,
+    staleTime: 1000 * 60 * 5,
+  });
+  const surveysError = surveysQueryError?.message || null;
+
+  const { data: allPanchayats = [] } = useQuery({
+    queryKey: ['panchayats'],
+    queryFn: () => getPanchayats() as Promise<PanchayatDto[]>,
+    enabled: !!agentId,
+    staleTime: 1000 * 60 * 60, // Panchayats rarely change
+  });
 
   // Filter States
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
   const [selectedBlocks, setSelectedBlocks] = useState<string[]>([]);
   const [selectedPanchayats, setSelectedPanchayats] = useState<string[]>([]);
@@ -56,53 +70,30 @@ export default function AdminSurveysPage() {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
-  // Sort + Pagination — shared between Responses and Data Management, since
-  // both tabs show the same underlying rows.
+  // Sort + Pagination
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
 
   // Questionnaire State
-  const [questions, setQuestions] = useState<SurveyQuestionDto[]>([]);
-  const [questionsLoading, setQuestionsLoading] = useState(false);
-  const [questionsError, setQuestionsError] = useState<string | null>(null);
+  const { data: questions = [], isLoading: questionsLoading, error: questionsQueryError } = useQuery({
+    queryKey: ['survey-questions'],
+    queryFn: () => getAdminSurveyQuestions() as Promise<SurveyQuestionDto[]>,
+    enabled: !!agentId,
+    staleTime: 1000 * 60 * 5,
+  });
+  const questionsError = questionsQueryError?.message || null;
   
   // Editor State
   const [editingQuestion, setEditingQuestion] = useState<Partial<SurveyQuestionDto> | null>(null);
   const [editingResponse, setEditingResponse] = useState<AdminSurveyDto | null>(null);
 
-  // Delete safety net — deleting a response is permanent (no undo, no trash),
-  // so a plain confirm() was too easy to click through by habit. Requires
-  // typing the exact contact name before the Delete button enables.
+  // Delete safety net
   const [deletingResponse, setDeletingResponse] = useState<AdminSurveyDto | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
-
-  useEffect(() => {
-    if (!agentId) return;
-    let cancelled = false;
-
-    setSurveysLoading(true);
-    setQuestionsLoading(true);
-
-    Promise.all([
-      getAdminSurveys().catch(e => { if (!cancelled) setSurveysError(e.message); return []; }),
-      getAdminSurveyQuestions().catch(e => { if (!cancelled) setQuestionsError(e.message); return []; }),
-      getPanchayats().catch(() => [])
-    ]).then(([sData, qData, pData]) => {
-      if (!cancelled) {
-        if (sData) setSurveys(sData as AdminSurveyDto[]);
-        if (qData) setQuestions(qData as SurveyQuestionDto[]);
-        if (pData) setAllPanchayats(pData as PanchayatDto[]);
-        setSurveysLoading(false);
-        setQuestionsLoading(false);
-      }
-    });
-
-    return () => { cancelled = true; };
-  }, [agentId]);
 
   // Any filter/sort/tab change invalidates the current page — jumping back
   // to page 1 avoids landing on a now-empty page.
@@ -119,7 +110,19 @@ export default function AdminSurveysPage() {
     }
   };
 
-  const handleSaveQuestion = async (e: React.FormEvent) => {
+  const saveQuestionMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      if (editingQuestion?.id) return updateAdminSurveyQuestion(editingQuestion.id, payload);
+      return createAdminSurveyQuestion(payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['survey-questions'] });
+      setEditingQuestion(null);
+    },
+    onError: (err: any) => alert(err.message || 'Failed to save question')
+  });
+
+  const handleSaveQuestion = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingQuestion) return;
     
@@ -127,67 +130,58 @@ export default function AdminSurveysPage() {
       questionId: editingQuestion.questionId || '',
       text: editingQuestion.text || '',
       type: editingQuestion.type || 'single',
-      optionsJson: editingQuestion.optionsJson ?? undefined,  // null → undefined to satisfy SurveyQuestionDto
+      optionsJson: editingQuestion.optionsJson ?? undefined,
       isOptional: editingQuestion.isOptional || false,
       isActive: editingQuestion.isActive ?? true,
       order: editingQuestion.order || 0
     };
-
-    try {
-      if (editingQuestion.id) {
-        await updateAdminSurveyQuestion(editingQuestion.id, payload);
-      } else {
-        await createAdminSurveyQuestion(payload);
-      }
-      setEditingQuestion(null);
-      
-      // Refresh list
-      const data = await getAdminSurveyQuestions();
-      setQuestions(data);
-    } catch (e: any) {
-      alert(e.message || 'Failed to save question');
-    }
+    saveQuestionMutation.mutate(payload);
   };
 
-  const confirmDeleteResponse = async () => {
+  const deleteResponseMutation = useMutation({
+    mutationFn: (id: string) => deleteAdminSurveyResponse(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['surveys'] });
+      setDeletingResponse(null);
+      setDeleteConfirmName('');
+      setIsDeleting(false);
+    },
+    onError: (err: any) => {
+      setDeleteError(err.message || 'Failed to delete response');
+      setIsDeleting(false);
+    }
+  });
+
+  const confirmDeleteResponse = () => {
     if (!deletingResponse) return;
     const expected = (deletingResponse.contactName || '').trim().toLowerCase();
     if (!expected || deleteConfirmName.trim().toLowerCase() !== expected) {
       setDeleteError('Name does not match — type it exactly as shown to confirm.');
       return;
     }
-
     setIsDeleting(true);
     setDeleteError('');
-    try {
-      await deleteAdminSurveyResponse(deletingResponse.id);
-      setSurveys(prev => prev.filter(r => r.id !== deletingResponse.id));
-      setDeletingResponse(null);
-      setDeleteConfirmName('');
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Failed to delete response');
-    } finally {
-      setIsDeleting(false);
-    }
+    deleteResponseMutation.mutate(deletingResponse.id);
   };
+
+  const updateResponseMutation = useMutation({
+    mutationFn: ({ id, newAnswersJson }: { id: string, newAnswersJson: string }) => updateAdminSurveyResponse(id, newAnswersJson),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['surveys'] })
+  });
 
   const handleUpdateResponse = async (id: string, newAnswersJson: string) => {
-    try {
-      const updated = await updateAdminSurveyResponse(id, newAnswersJson);
-      setSurveys(prev => prev.map(r => r.id === id ? { ...r, answersJson: updated.answersJson } : r));
-    } catch (err) {
-      throw err;
-    }
+    await updateResponseMutation.mutateAsync({ id, newAnswersJson });
   };
 
-  const handleDeleteQuestion = async (id: string) => {
+  const deleteQuestionMutation = useMutation({
+    mutationFn: (id: string) => deleteAdminSurveyQuestion(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['survey-questions'] }),
+    onError: (err: any) => alert(err.message || 'Failed to delete question')
+  });
+
+  const handleDeleteQuestion = (id: string) => {
     if (!confirm('Are you sure you want to delete this question?')) return;
-    try {
-      await deleteAdminSurveyQuestion(id);
-      setQuestions(q => q.filter(x => x.id !== id));
-    } catch (e: any) {
-      alert(e.message || 'Failed to delete question');
-    }
+    deleteQuestionMutation.mutate(id);
   };
 
   if (!agentId) return <div style={{ padding: '2rem' }}>Not authenticated</div>;
@@ -377,83 +371,100 @@ export default function AdminSurveysPage() {
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <style>{`
+          .survey-filters-desktop { display: flex; }
+          .survey-filters-mobile-toggle { display: none; }
+          @media (max-width: 768px) {
+            .survey-filters-desktop.closed { display: none; }
+            .survey-filters-mobile-toggle { display: flex; }
+          }
+        `}</style>
         {(activeTab === 'responses' || activeTab === 'history' || activeTab === 'data_management' || activeTab === 'insights') && (
-          <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', background: 'white', padding: '1rem 1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', flexShrink: 0 }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Filter By Location:</span>
-            <div style={{ flex: 1, minWidth: '180px' }}>
-              <MultiSelectDropdown
-                label="District"
-                options={uniqueDistricts.map(d => ({ value: d, label: d }))}
-                selected={selectedDistricts}
-                onChange={(val) => { setSelectedDistricts(val); setSelectedBlocks([]); setSelectedPanchayats([]); }}
-                placeholder="All Districts"
-              />
-            </div>
-            <div style={{ flex: 1, minWidth: '180px' }}>
-              <MultiSelectDropdown
-                label="Block"
-                options={uniqueBlocks.map(b => ({ value: b, label: b }))}
-                selected={selectedBlocks}
-                onChange={(val) => { setSelectedBlocks(val); setSelectedPanchayats([]); }}
-                disabled={selectedDistricts.length === 0 && uniqueBlocks.length === 0}
-                placeholder="All Blocks"
-              />
-            </div>
-            <div style={{ flex: 1, minWidth: '180px' }}>
-              <MultiSelectDropdown
-                label="Panchayat"
-                options={uniquePanchayats.map(pId => {
-                  const p = allPanchayats.find(x => x.id === pId);
-                  return { value: pId, label: p ? `${p.name} (${p.district})` : pId };
-                })}
-                selected={selectedPanchayats}
-                onChange={(val) => setSelectedPanchayats(val)}
-                disabled={selectedBlocks.length === 0 && uniquePanchayats.length === 0}
-                placeholder="All Panchayats"
-              />
-            </div>
+          <>
+            <button 
+              className="survey-filters-mobile-toggle"
+              onClick={() => setIsFilterDrawerOpen(!isFilterDrawerOpen)}
+              style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontWeight: 600, color: '#334155', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <FilterIcon size={18} /> {isFilterDrawerOpen ? 'Hide Filters' : 'Show Filters'}
+            </button>
+            <div className={`survey-filters-desktop ${!isFilterDrawerOpen ? 'closed' : ''}`} style={{ marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', background: 'white', padding: '1rem 1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Filter By Location:</span>
+              <div style={{ flex: 1, minWidth: '180px' }}>
+                <MultiSelectDropdown
+                  label="District"
+                  options={uniqueDistricts.map(d => ({ value: d, label: d }))}
+                  selected={selectedDistricts}
+                  onChange={(val) => { setSelectedDistricts(val); setSelectedBlocks([]); setSelectedPanchayats([]); }}
+                  placeholder="All Districts"
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: '180px' }}>
+                <MultiSelectDropdown
+                  label="Block"
+                  options={uniqueBlocks.map(b => ({ value: b, label: b }))}
+                  selected={selectedBlocks}
+                  onChange={(val) => { setSelectedBlocks(val); setSelectedPanchayats([]); }}
+                  disabled={selectedDistricts.length === 0 && uniqueBlocks.length === 0}
+                  placeholder="All Blocks"
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: '180px' }}>
+                <MultiSelectDropdown
+                  label="Panchayat"
+                  options={uniquePanchayats.map(pId => {
+                    const p = allPanchayats.find(x => x.id === pId);
+                    return { value: pId, label: p ? `${p.name} (${p.district})` : pId };
+                  })}
+                  selected={selectedPanchayats}
+                  onChange={(val) => setSelectedPanchayats(val)}
+                  disabled={selectedBlocks.length === 0 && uniquePanchayats.length === 0}
+                  placeholder="All Panchayats"
+                />
+              </div>
 
-            <div style={{ width: 1, alignSelf: 'stretch', background: '#e2e8f0' }} />
+              <div style={{ width: 1, alignSelf: 'stretch', background: '#e2e8f0' }} />
 
-            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Date:</span>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Range</label>
-              <select
-                value={dateFilterMode}
-                onChange={(e) => {
-                  const mode = e.target.value as 'all' | 'custom';
-                  setDateFilterMode(mode);
-                  if (mode === 'all') { setCustomStartDate(''); setCustomEndDate(''); }
-                }}
-                style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontSize: '0.85rem', height: '38px' }}
-              >
-                <option value="all">All</option>
-                <option value="custom">Custom Range</option>
-              </select>
+              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Date:</span>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Range</label>
+                <select
+                  value={dateFilterMode}
+                  onChange={(e) => {
+                    const mode = e.target.value as 'all' | 'custom';
+                    setDateFilterMode(mode);
+                    if (mode === 'all') { setCustomStartDate(''); setCustomEndDate(''); }
+                  }}
+                  style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontSize: '0.85rem', height: '38px' }}
+                >
+                  <option value="all">All</option>
+                  <option value="custom">Custom Range</option>
+                </select>
+              </div>
+              {dateFilterMode === 'custom' && (
+                <>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>From</label>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      style={{ padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem', height: '38px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>To</label>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      style={{ padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem', height: '38px' }}
+                    />
+                  </div>
+                </>
+              )}
             </div>
-            {dateFilterMode === 'custom' && (
-              <>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>From</label>
-                  <input
-                    type="date"
-                    value={customStartDate}
-                    onChange={(e) => setCustomStartDate(e.target.value)}
-                    style={{ padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem', height: '38px' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>To</label>
-                  <input
-                    type="date"
-                    value={customEndDate}
-                    onChange={(e) => setCustomEndDate(e.target.value)}
-                    style={{ padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem', height: '38px' }}
-                  />
-                </div>
-              </>
-            )}
-          </div>
+          </>
         )}
 
         {/* KPI — respects every active filter (district/block/panchayat/date),
