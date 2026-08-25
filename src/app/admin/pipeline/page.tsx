@@ -64,6 +64,17 @@ export default function PipelinePage() {
   const [customEndDate, setCustomEndDate] = useState('');
   const [sortBy, setSortBy] = useState<string | undefined>('followupdate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | undefined>('asc');
+
+  useEffect(() => {
+    if (activeTab === 'worklist') {
+      setSortBy('followupdate');
+      setSortOrder('asc');
+    } else {
+      setSortBy('lastupdated');
+      setSortOrder('desc');
+    }
+    setPage(1);
+  }, [activeTab]);
   const [showEscalatedOnly, setShowEscalatedOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [draggedContactId, setDraggedContactId] = useState<string | null>(null);
