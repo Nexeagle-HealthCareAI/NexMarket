@@ -17,7 +17,7 @@ const adminNavItems = [
   { href: '/admin/reports', label: 'Reports', icon: '📊' },
   { href: '/admin/hospital-crm', label: 'Hospital CRM', icon: '🏥' },
   { href: '/admin/surveys', label: 'Surveys', icon: '📋' },
-  { href: '/admin/pipeline', label: 'Contact Management', icon: '🗂️' },
+  { href: '/admin/pipeline', label: 'CRM', icon: '🗂️' }, // shortened label
   { href: '/admin/panchayats', label: 'Panchayats', icon: '📍' },
 ];
 
@@ -27,6 +27,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  
   const agentId = useAgentStore((s) => s.agentId);
   const role = useAgentStore((s) => s.role);
   const hasHydrated = useAgentStore((s) => s.hasHydrated);
@@ -63,7 +65,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
-      if (mobile) setIsCollapsed(true);
+      if (mobile) {
+        setIsCollapsed(true);
+      }
     };
     // Initial check
     if (typeof window !== 'undefined') handleResize();
@@ -93,6 +97,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const sidebarWidth = isCollapsed ? 80 : 260;
 
+  const bottomNavItems = adminNavItems.slice(0, 4);
+  const moreNavItems = adminNavItems.slice(4);
+
   if (!hasHydrated) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f8fafc' }}>
@@ -104,31 +111,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div style={{ minHeight: '100vh', display: 'flex', background: '#f8fafc', overflow: 'hidden' }}>
       
-      {/* Mobile Backdrop Overlay */}
-      <AnimatePresence>
-        {isMobile && !isCollapsed && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsCollapsed(true)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 45 }}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Sidebar Navigation */}
+      {/* Sidebar Navigation (Hidden on Mobile) */}
       <motion.aside
         initial={false}
         animate={{ 
-          width: isMobile ? 260 : (isCollapsed ? 80 : 260),
-          x: isMobile && isCollapsed ? -260 : 0
+          width: isCollapsed ? 80 : 260
         }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
         style={{
+          display: isMobile ? 'none' : 'flex',
           background: '#0f172a',
           color: 'white',
-          display: 'flex',
           flexDirection: 'column',
           position: 'fixed',
           top: 0,
@@ -148,7 +141,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           gap: '1rem', 
           borderBottom: '1px solid rgba(255,255,255,0.05)' 
         }}>
-
           <AnimatePresence>
             {!isCollapsed && (
               <motion.div 
@@ -188,11 +180,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 key={item.href}
                 href={item.href}
                 title={item.label}
-                onClick={() => { if (isMobile) setIsCollapsed(true); }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: (!isMobile && isCollapsed) ? 'center' : 'flex-start',
+                  justifyContent: isCollapsed ? 'center' : 'flex-start',
                   gap: '0.75rem',
                   padding: isCollapsed ? '0.75rem' : '0.75rem 1rem',
                   borderRadius: '8px',
@@ -207,7 +198,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               >
                 <span style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{item.icon}</span>
                 <AnimatePresence>
-                  {(isMobile || !isCollapsed) && (
+                  {!isCollapsed && (
                     <motion.span 
                       initial={{ opacity: 0, width: 0 }}
                       animate={{ opacity: 1, width: 'auto' }}
@@ -289,7 +280,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </motion.aside>
 
-      {/* Sidebar Toggle Button (Premium Edge Button) */}
+      {/* Sidebar Toggle Button (Hidden on Mobile) */}
       <motion.button
         initial={false}
         animate={{ left: sidebarWidth - 14 }}
@@ -343,16 +334,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           padding: '0 1.5rem',
           boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
         }}>
-          {/* Left Side: Time */}
+          {/* Left Side: Time (Hamburger menu removed for mobile) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            {isMobile && (
-              <button 
-                onClick={() => setIsCollapsed(false)} 
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.25rem', color: '#0f172a' }}
-              >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-              </button>
-            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748b' }}>
               <span style={{ fontSize: '1rem' }}>🕒</span>
               <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>
@@ -376,17 +359,190 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>admin@nexmarket.com</p>
                 </div>
               )}
-              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f1f5f9', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f1f5f9', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justify-content: 'center', fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>
                 AD
               </div>
             </div>
           </div>
         </header>
 
-        <div style={{ padding: isMobile ? '1rem' : '2rem', flex: 1, maxWidth: 1600, width: '100%', margin: '0 auto', minWidth: 0, overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {/* Added paddingBottom on mobile to account for fixed bottom nav */}
+        <div style={{ padding: isMobile ? '1rem' : '2rem', paddingBottom: isMobile ? '85px' : '2rem', flex: 1, maxWidth: 1600, width: '100%', margin: '0 auto', minWidth: 0, overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {children}
         </div>
       </motion.main>
+
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      {isMobile && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '65px',
+            background: 'white',
+            borderTop: '1px solid #e2e8f0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-around',
+            zIndex: 60,
+            boxShadow: '0 -2px 10px rgba(0,0,0,0.05)',
+            paddingBottom: 'env(safe-area-inset-bottom)'
+          }}
+        >
+          {bottomNavItems.map((item) => {
+            const isActive = pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px',
+                  textDecoration: 'none',
+                  color: isActive ? '#0f172a' : '#64748b',
+                  flex: 1,
+                  height: '100%'
+                }}
+                onClick={() => setIsMoreMenuOpen(false)}
+              >
+                <span style={{ fontSize: '1.25rem', opacity: isActive ? 1 : 0.7 }}>{item.icon}</span>
+                <span style={{ fontSize: '10px', fontWeight: isActive ? 700 : 500 }}>{item.label}</span>
+              </Link>
+            );
+          })}
+          
+          <button
+            onClick={() => setIsMoreMenuOpen(true)}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+              border: 'none',
+              background: 'transparent',
+              color: isMoreMenuOpen ? '#0f172a' : '#64748b',
+              flex: 1,
+              height: '100%',
+              padding: 0
+            }}
+          >
+            <span style={{ fontSize: '1.25rem', opacity: isMoreMenuOpen ? 1 : 0.7 }}>☰</span>
+            <span style={{ fontSize: '10px', fontWeight: isMoreMenuOpen ? 700 : 500 }}>Menu</span>
+          </button>
+        </div>
+      )}
+
+      {/* MOBILE BOTTOM SHEET FOR "MORE" MENU */}
+      <AnimatePresence>
+        {isMobile && isMoreMenuOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMoreMenuOpen(false)}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(15, 23, 42, 0.4)',
+                backdropFilter: 'blur(4px)',
+                zIndex: 55
+              }}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              style={{
+                position: 'fixed',
+                bottom: '65px', // Sit right above bottom nav
+                left: 0,
+                right: 0,
+                background: '#ffffff',
+                borderTopLeftRadius: '24px',
+                borderTopRightRadius: '24px',
+                padding: '1.5rem',
+                zIndex: 60,
+                boxShadow: '0 -4px 20px rgba(0,0,0,0.1)',
+                maxHeight: '70vh',
+                overflowY: 'auto'
+              }}
+            >
+              <div style={{ width: '40px', height: '4px', background: '#e2e8f0', borderRadius: '4px', margin: '0 auto 1.5rem' }} />
+              
+              <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem' }}>
+                More Options
+              </h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+                {moreNavItems.map((item) => {
+                  const isActive = pathname.startsWith(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setIsMoreMenuOpen(false)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        padding: '1rem',
+                        borderRadius: '12px',
+                        background: isActive ? '#f1f5f9' : 'transparent',
+                        border: '1px solid',
+                        borderColor: isActive ? '#e2e8f0' : '#f1f5f9',
+                        textDecoration: 'none',
+                        color: isActive ? '#0f172a' : '#334155'
+                      }}
+                    >
+                      <span style={{ fontSize: '1.25rem' }}>{item.icon}</span>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+
+              <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <Link
+                  href="/home"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem',
+                    borderRadius: '12px', background: '#0f172a', color: '#fff',
+                    textDecoration: 'none', fontWeight: 600
+                  }}
+                  onClick={() => setIsMoreMenuOpen(false)}
+                >
+                  <span style={{ fontSize: '1.25rem' }}>📱</span> Agent App
+                </Link>
+                
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                    padding: '1rem', borderRadius: '12px', background: '#fef2f2', color: '#ef4444',
+                    border: '1px solid #fecaca', fontWeight: 600, fontSize: '0.95rem'
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                  </svg>
+                  Sign Out
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
