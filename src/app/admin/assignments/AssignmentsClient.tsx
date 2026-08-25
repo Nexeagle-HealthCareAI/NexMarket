@@ -144,7 +144,20 @@ export default function AssignmentsClient() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '1.5rem', alignItems: 'start' }}>
+      <style>{`
+        .tasks-grid {
+          display: grid;
+          grid-template-columns: 360px 1fr;
+          gap: 1.5rem;
+          align-items: start;
+        }
+        @media (max-width: 768px) {
+          .tasks-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+      <div className="tasks-grid">
         {/* Create Assignment */}
         <form onSubmit={handleCreate} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <h2 style={{ fontSize: '1.05rem', color: 'var(--text-primary)', margin: 0 }}>➕ Assign a Block</h2>
@@ -200,7 +213,7 @@ export default function AssignmentsClient() {
 
         {/* Assignments List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             {(['all', 'Active', 'Completed', 'Cancelled'] as const).map((s) => (
               <button
                 key={s}
@@ -259,13 +272,13 @@ export default function AssignmentsClient() {
 
                     {a.notes && <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>{a.notes}</p>}
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                         Assigned {new Date(a.assignedAt).toLocaleDateString('en-GB')}
                         {a.completedAt ? ` · Completed ${new Date(a.completedAt).toLocaleDateString('en-GB')}` : ''}
                       </span>
                       {a.status === 'Active' && (
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                           <button className="btn btn-ghost btn-sm" onClick={() => handleStatusChange(a.id, 'Completed')}>✅ Mark Complete</button>
                           <button className="btn btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => handleStatusChange(a.id, 'Cancelled')}>✖ Cancel</button>
                         </div>
