@@ -1,198 +1,216 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useAgentStore } from '@/store/agent-store';
 import { getMyAssignment, type MyAssignmentDto } from '@/lib/sync/api-client';
 import { getSyncStateValue, setSyncStateValue } from '@/lib/db';
+import { useQuery } from '@tanstack/react-query';
+import { useGeolocation } from '@/lib/geo/useGeolocation';
+import { haversineDistanceMeters } from '@/lib/geo/distance';
 import TaskMap from './TaskMap';
 
 const CACHE_KEY_PREFIX = 'lastAssignment_';
 
 export default function MyTaskPage() {
   const agentId = useAgentStore((s) => s.agentId);
-  const [assignment, setAssignment] = useState<MyAssignmentDto | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [isStale, setIsStale] = useState(false);
   const [filter, setFilter] = useState<'all' | 'visited' | 'pending'>('all');
   const [selectedPanchayatId, setSelectedPanchayatId] = useState<string | null>(null);
+  
+  const { position } = useGeolocation({ record: false });
 
-  useEffect(() => {
-    if (!agentId) return;
-    let cancelled = false;
-    setLoading(true);
-    // Scoped per agent — devices get reused/shared between agents in the
-    // field, and an unscoped cache key would show whoever used this device
-    // last's assigned block/panchayats to the next agent if they go offline
-    // before their own first successful fetch.
-    const cacheKey = CACHE_KEY_PREFIX + agentId;
-
-    getMyAssignment()
-      .then((data) => {
-        if (cancelled) return;
-        setAssignment(data);
-        setIsStale(false);
-        void setSyncStateValue(cacheKey, JSON.stringify(data));
-      })
-      .catch(async (e) => {
-        if (cancelled) return;
-        // Every other page in this app is Dexie-backed and works offline —
-        // this one was a bare network call with no fallback, so it just
-        // errored out while offline instead of showing whatever was last
-        // fetched (which is exactly the situation an agent checking their
-        // task list before heading into a low-signal area needs).
+  const { data: assignment, isLoading, error, isError } = useQuery({
+    queryKey: ['my-assignment', agentId],
+    queryFn: async () => {
+      if (!agentId) throw new Error('No agent ID');
+      try {
+        const data = await getMyAssignment();
+        const cacheKey = CACHE_KEY_PREFIX + agentId;
+        await setSyncStateValue(cacheKey, JSON.stringify(data));
+        return { data, isStale: false };
+      } catch (err) {
+        const cacheKey = CACHE_KEY_PREFIX + agentId;
         const cached = await getSyncStateValue(cacheKey);
         if (cached) {
           try {
-            setAssignment(JSON.parse(cached) as MyAssignmentDto);
-            setIsStale(true);
-            return;
+            return { data: JSON.parse(cached) as MyAssignmentDto, isStale: true };
           } catch {
-            // fall through to the error state below
+            // fall through
           }
         }
-        setError(e instanceof Error ? e.message : 'Failed to load your assignment.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+        throw err;
+      }
+    },
+    enabled: !!agentId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
-    return () => { cancelled = true; };
-  }, [agentId]);
+  const { total, visited, pct, visible } = useMemo(() => {
+    if (!assignment?.data?.panchayats) {
+      return { total: 0, visited: 0, pct: 0, visible: [] };
+    }
+    const panchs = assignment.data.panchayats;
+    const t = panchs.length;
+    let v = 0;
+    const vis = [];
+    for (const p of panchs) {
+      if (p.visited) v++;
+      if (filter === 'all' || (filter === 'visited') === p.visited) {
+        vis.push(p);
+      }
+    }
+    return {
+      total: t,
+      visited: v,
+      pct: t > 0 ? Math.round((v / t) * 100) : 0,
+      visible: vis,
+    };
+  }, [assignment?.data?.panchayats, filter]);
 
-  if (loading) {
-    return <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading your task…</div>;
+  // Fix Ghost Selection Bug
+  useEffect(() => {
+    if (selectedPanchayatId && !visible.find((p) => p.panchayatId === selectedPanchayatId)) {
+      setSelectedPanchayatId(null);
+    }
+  }, [visible, selectedPanchayatId]);
+
+  if (isLoading) {
+    return <div className="p-12 text-center text-[var(--text-muted)]">Loading your task…</div>;
   }
 
-  if (error) {
-    return <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-danger)' }}>{error}</div>;
+  if (isError) {
+    return <div className="p-12 text-center text-[var(--color-danger)]">{error instanceof Error ? error.message : 'Failed to load your assignment.'}</div>;
   }
 
-  if (!assignment || !assignment.block) {
+  if (!assignment?.data || !assignment.data.block) {
     return (
-      <div style={{ padding: '3rem', textAlign: 'center' }}>
-        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📋</div>
-        <h2 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>No active task assigned</h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Your admin hasn't assigned you a block yet.</p>
+      <div className="p-12 text-center">
+        <div className="text-3xl mb-3">📋</div>
+        <h2 className="text-lg text-[var(--text-primary)] mb-2 font-semibold">No active task assigned</h2>
+        <p className="text-sm text-[var(--text-muted)]">Your admin hasn&apos;t assigned you a block yet.</p>
       </div>
     );
   }
 
-  const total = assignment.panchayats.length;
-  const visited = assignment.panchayats.filter((p) => p.visited).length;
-  const pct = total > 0 ? Math.round((visited / total) * 100) : 0;
-  const visible = assignment.panchayats.filter((p) => filter === 'all' || (filter === 'visited') === p.visited);
-
   return (
-    <div style={{ paddingBottom: '2rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-        <h1 style={{ fontSize: '1.3rem', color: 'var(--text-primary)', margin: 0 }}>My Block</h1>
-        <span style={{ background: 'var(--surface-input)', color: 'var(--text-secondary)', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>Daily Checklist</span>
+    <div className="pb-8">
+      <div className="flex items-center gap-2 mb-1">
+        <h1 className="text-xl text-[var(--text-primary)] font-bold m-0">My Block</h1>
+        <span className="bg-[var(--surface-input)] text-[var(--text-secondary)] px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider">Daily Checklist</span>
       </div>
-      {isStale && (
-        <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 'var(--radius-md)', padding: '0.6rem 0.85rem', marginBottom: '0.85rem', fontSize: '0.8rem', color: '#b45309', fontWeight: 600 }}>
+      
+      {assignment.isStale && (
+        <div className="bg-amber-100/50 border border-amber-300/50 rounded-md px-3 py-2 mb-3 text-xs text-amber-700 font-semibold">
           ⚠️ Offline — showing your last downloaded assignment, may not reflect recent changes.
         </div>
       )}
-      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
-        Assigned {assignment.assignedAt ? new Date(assignment.assignedAt).toLocaleDateString('en-GB') : ''}
+      
+      <p className="text-sm text-[var(--text-muted)] mb-5">
+        Assigned {assignment.data.assignedAt ? new Date(assignment.data.assignedAt).toLocaleDateString('en-GB') : ''}
       </p>
 
-      <div className="card" style={{ marginBottom: '1.25rem', borderTop: '4px solid var(--color-primary-500)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-          <div>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary-600)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mission Briefing</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.25rem' }}>{assignment.block}</div>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{assignment.district}</div>
+      {total > 0 && (
+        <div className="card mb-5 border-t-4 border-[var(--color-primary-500)]">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <div className="text-xs font-bold text-[var(--color-primary-600)] uppercase tracking-wider">Mission Briefing</div>
+              <div className="text-xl font-extrabold text-[var(--text-primary)] mt-1">{assignment.data.block}</div>
+              <div className="text-sm text-[var(--text-muted)]">{assignment.data.district}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold text-[var(--color-primary-600)]">{pct}%</div>
+              <div className="text-xs text-[var(--text-muted)]">{visited} / {total} visited</div>
+            </div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-primary-600)' }}>{pct}%</div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{visited} / {total} visited</div>
+          <div className="h-2 rounded-full bg-[var(--surface-input)] overflow-hidden">
+            <div className="h-full bg-[var(--color-primary-500)] transition-all duration-300" style={{ width: `${pct}%` }} />
           </div>
+          {assignment.data.notes && (
+            <p className="mt-3 text-sm text-[var(--text-secondary)] bg-[var(--surface-input)] p-3 rounded-md">
+              📝 {assignment.data.notes}
+            </p>
+          )}
         </div>
-        <div style={{ height: 8, borderRadius: 4, background: 'var(--surface-input)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: 'var(--color-primary-500)', transition: 'width 0.3s' }} />
-        </div>
-        {assignment.notes && (
-          <p style={{ marginTop: '0.85rem', fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'var(--surface-input)', padding: '0.65rem', borderRadius: 'var(--radius-sm)' }}>
-            📝 {assignment.notes}
-          </p>
-        )}
-      </div>
+      )}
 
       <TaskMap
-        panchayats={assignment.panchayats}
+        panchayats={assignment.data.panchayats}
         selectedPanchayatId={selectedPanchayatId}
         onSelectPanchayat={setSelectedPanchayatId}
+        position={position}
       />
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+      <div className="flex gap-2 mb-4">
         {(['all', 'pending', 'visited'] as const).map((f) => (
           <button
             key={f}
             type="button"
-            className={`btn btn-sm ${filter === f ? 'btn-primary' : 'btn-ghost'}`}
+            className={`btn btn-sm capitalize ${filter === f ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setFilter(f)}
-            style={{ textTransform: 'capitalize' }}
           >
             {f}
           </button>
         ))}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+      <div className="flex flex-col gap-2.5">
         {visible.length === 0 ? (
-          <div className="card" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+          <div className="card text-center p-8 text-[var(--text-muted)]">
             Nothing to show for this filter.
           </div>
         ) : (
           visible.map((p) => {
             const isSelected = p.panchayatId === selectedPanchayatId;
             const canRoute = p.centroidLat != null && p.centroidLng != null;
+            
+            // Geofence checking
+            let distanceToTarget = null;
+            if (position && canRoute) {
+              distanceToTarget = haversineDistanceMeters(position, { lat: p.centroidLat!, lng: p.centroidLng! });
+            }
+            const isWithinGeofence = distanceToTarget !== null && distanceToTarget <= 200;
+            
             return (
               <div
                 key={p.panchayatId}
-                className="card"
+                className={`card p-3 sm:p-4 ${canRoute ? 'cursor-pointer' : 'cursor-default'} ${isSelected ? 'border-blue-500 ring-2 ring-blue-500/25' : ''}`}
                 onClick={() => canRoute && setSelectedPanchayatId(isSelected ? null : p.panchayatId)}
-                style={{
-                  padding: '0.85rem 1rem',
-                  cursor: canRoute ? 'pointer' : 'default',
-                  borderColor: isSelected ? '#3b82f6' : undefined,
-                  boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.25)' : undefined,
-                }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="flex justify-between items-center">
                   <div>
-                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem' }}>{p.name}</div>
+                    <div className="font-semibold text-[var(--text-primary)] text-sm sm:text-base">{p.name}</div>
                     {p.lastVisitedAt && (
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      <div className="text-xs text-[var(--text-muted)] mt-0.5">
                         Last visited {new Date(p.lastVisitedAt).toLocaleDateString('en-GB')}
                       </div>
                     )}
                     {canRoute && (
-                      <div style={{ fontSize: '0.72rem', color: '#3b82f6', fontWeight: 600, marginTop: '0.15rem' }}>
+                      <div className="text-xs text-blue-500 font-semibold mt-1">
                         {isSelected ? '🧭 Routing shown above' : '🧭 Tap to route'}
                       </div>
                     )}
                   </div>
                   <span
-                    style={{
-                      fontSize: '0.75rem', fontWeight: 700, padding: '0.25rem 0.6rem', borderRadius: '20px',
-                      background: p.visited ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.15)',
-                      color: p.visited ? '#10b981' : '#64748b',
-                    }}
+                    className={`text-xs font-bold px-2.5 py-1 rounded-full ${p.visited ? 'bg-emerald-100/50 text-emerald-600' : 'bg-slate-200/50 text-slate-500'}`}
                   >
                     {p.visited ? '✅ Visited' : '⏳ Pending'}
                   </span>
                 </div>
                 {isSelected && (
-                  <div style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--surface-border)' }}>
+                  <div className="mt-3 pt-3 border-t border-[var(--surface-border)]">
+                    {!isWithinGeofence && !p.visited ? (
+                       <div className="text-center text-xs text-red-500 mb-2 font-semibold">
+                         You must be within 200m of the location to check in. 
+                         {distanceToTarget && ` (Currently ${Math.round(distanceToTarget)}m away)`}
+                       </div>
+                    ) : null}
                     <Link 
-                      href={`/visit?preselect=${p.panchayatId}`}
-                      className="btn btn-primary btn-sm"
-                      style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
-                      onClick={(e) => e.stopPropagation()}
+                      href={isWithinGeofence || p.visited ? `/visit?preselect=${p.panchayatId}` : '#'}
+                      className={`btn btn-sm w-full flex justify-center ${isWithinGeofence || p.visited ? 'btn-primary' : 'btn-disabled opacity-50 cursor-not-allowed'}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isWithinGeofence && !p.visited) e.preventDefault();
+                      }}
                     >
                       📍 Check In Here
                     </Link>
