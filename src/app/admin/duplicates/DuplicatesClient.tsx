@@ -1,195 +1,210 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState } from 'react';
 import { useAgentStore } from '@/store/agent-store';
 import { getDuplicates, mergeDuplicate, dismissDuplicate, type DuplicatePairDto } from '@/lib/sync/api-client';
 import { useFlaggedDuplicates } from '@/lib/db';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export default function DuplicatesClient() {
   const agentId = useAgentStore((s) => s.agentId);
   const localFlagged = useFlaggedDuplicates() || [];
-  const [pairs, setPairs] = useState<DuplicatePairDto[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [actingOn, setActingOn] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   
   // Tabs: 'current' (pending) | 'history' (resolved)
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
 
-  const load = useCallback(async (tab: 'current' | 'history') => {
-    if (!agentId) return;
-    setLoading(true);
-    setError('');
-    try {
-      setPairs(await getDuplicates(tab === 'current' ? 'pending' : 'history'));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load duplicates.');
-    } finally {
-      setLoading(false);
-    }
-  }, [agentId]);
+  const { data: pairs = [], isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['duplicates', activeTab],
+    queryFn: () => getDuplicates(activeTab === 'current' ? 'pending' : 'history'),
+    enabled: !!agentId,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
 
-  useEffect(() => {
-    void load(activeTab);
-  }, [load, activeTab]);
-
-  async function handleAction(id: string, action: 'merged' | 'dismissed') {
-    if (!agentId) return;
-    setActingOn(id);
-    setError('');
-    try {
-      if (action === 'merged') {
-        await mergeDuplicate(id);
-      } else {
-        await dismissDuplicate(id);
+  const mergeMutation = useMutation({
+    mutationFn: (id: string) => mergeDuplicate(id),
+    onSuccess: (_, id) => {
+      // Optimistically update: remove it from current pending list or mark as merged
+      if (activeTab === 'current') {
+        queryClient.setQueryData(['duplicates', 'current'], (old: DuplicatePairDto[] | undefined) => 
+          old ? old.filter((p) => p.id !== id) : []
+        );
       }
-      setPairs((prev) => prev.map((p) => (p.id === id ? { ...p, status: action } : p)));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to ${action === 'merged' ? 'merge' : 'dismiss'} record.`);
-    } finally {
-      setActingOn(null);
-    }
-  }
+      queryClient.invalidateQueries({ queryKey: ['duplicates', 'history'] });
+    },
+  });
 
-  const displayedPairs = pairs;
+  const dismissMutation = useMutation({
+    mutationFn: (id: string) => dismissDuplicate(id),
+    onSuccess: (_, id) => {
+      // Optimistically update: remove it from current pending list
+      if (activeTab === 'current') {
+        queryClient.setQueryData(['duplicates', 'current'], (old: DuplicatePairDto[] | undefined) => 
+          old ? old.filter((p) => p.id !== id) : []
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: ['duplicates', 'history'] });
+    },
+  });
+
+  const error = queryError?.message || mergeMutation.error?.message || dismissMutation.error?.message;
+  const isActing = mergeMutation.isPending || dismissMutation.isPending;
+  const actingOn = mergeMutation.variables || dismissMutation.variables;
 
   return (
     <div style={{ paddingBottom: '3rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>⚠️ Duplicate Contacts</h1>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Review and merge potential duplicate channel partners flagged in the field.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--surface-input)', padding: '0.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)' }}>
-          <button
-            className={`btn btn-sm ${activeTab === 'current' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setActiveTab('current')}
-            style={activeTab === 'current' ? {} : { color: 'var(--text-muted)' }}
-          >
-            ⏳ Current
-          </button>
-          <button
-            className={`btn btn-sm ${activeTab === 'history' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setActiveTab('history')}
-            style={activeTab === 'history' ? {} : { color: 'var(--text-muted)' }}
-          >
-            ✅ History
-          </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h1 style={{ fontSize: '1.5rem', color: 'var(--text-primary)', marginBottom: '0.2rem', fontWeight: 700 }}>⚠️ Duplicate Contacts</h1>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Review and merge potential duplicate channel partners flagged in the field.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--surface-input)', padding: '0.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--surface-border)' }}>
+            <button
+              className={`btn btn-sm ${activeTab === 'current' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setActiveTab('current')}
+              style={activeTab === 'current' ? {} : { color: 'var(--text-muted)' }}
+            >
+              ⏳ Current
+            </button>
+            <button
+              className={`btn btn-sm ${activeTab === 'history' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setActiveTab('history')}
+              style={activeTab === 'history' ? {} : { color: 'var(--text-muted)' }}
+            >
+              ✅ History
+            </button>
+          </div>
         </div>
       </div>
 
       {error && (
         <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '4px solid var(--color-danger)', background: 'rgba(239,68,68,0.05)' }}>
-          <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem' }}>{error}</p>
+          <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem', fontWeight: 600 }}>{error}</p>
         </div>
       )}
 
       {localFlagged.length > 0 && activeTab === 'current' && (
         <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '4px solid var(--color-warning)', background: 'rgba(245, 158, 11, 0.05)' }}>
-          <h3 style={{ fontSize: '1rem', color: '#f59e0b', marginBottom: '0.25rem' }}>
-            📱 Local Device Flagged Contacts ({localFlagged.length})
+          <h3 style={{ fontSize: '1rem', color: '#f59e0b', marginBottom: '0.25rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>📱</span> Local Device Flagged Contacts ({localFlagged.length})
           </h3>
-          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-            You have {localFlagged.length} contact(s) on this device marked as duplicates during offline collection. They will merge on server push.
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            You have {localFlagged.length} contact(s) on this device marked as duplicates during offline collection. They will appear for review upon server sync.
           </p>
         </div>
       )}
 
       {loading ? (
-        <div className="empty-state" style={{ padding: '3rem' }}>
-          <p style={{ color: 'var(--text-muted)' }}>Loading duplicates…</p>
+        <div className="empty-state" style={{ padding: '4rem 2rem' }}>
+          <div className="spinner" style={{ width: 32, height: 32, border: '3px solid #e2e8f0', borderTopColor: 'var(--color-primary-500)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', marginBottom: '1rem' }} />
+          <p style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Loading duplicates…</p>
         </div>
-      ) : displayedPairs.length === 0 ? (
-        <div className="empty-state" style={{ padding: '3rem' }}>
-          <div className="empty-state-icon">{activeTab === 'current' ? '🎉' : '📭'}</div>
-          <h2>{activeTab === 'current' ? 'All clear!' : 'No History'}</h2>
+      ) : pairs.length === 0 ? (
+        <div className="empty-state" style={{ padding: '4rem 2rem' }}>
+          <div className="empty-state-icon" style={{ fontSize: '3rem', marginBottom: '1rem' }}>{activeTab === 'current' ? '🎉' : '📭'}</div>
+          <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>{activeTab === 'current' ? 'All clear!' : 'No History'}</h2>
           <p style={{ color: 'var(--text-muted)' }}>
             {activeTab === 'current' ? 'No duplicate contacts pending review.' : 'No resolved duplicates yet.'}
           </p>
         </div>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ background: 'var(--surface-hover)', borderBottom: '1px solid var(--surface-border)' }}>
-                  <th style={{ padding: '1rem', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', width: '40%' }}>Original Record (A)</th>
-                  <th style={{ padding: '1rem', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', width: '40%' }}>Duplicate Candidate (B)</th>
-                  <th style={{ padding: '1rem', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'right', width: '20%' }}>
-                    {activeTab === 'current' ? 'Quick Actions' : 'Resolution'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {displayedPairs.map((pair) => {
-                  const isActing = actingOn === pair.id;
-                  return (
-                    <tr key={pair.id} style={{ borderBottom: '1px solid var(--surface-border)', opacity: isActing ? 0.6 : 1, transition: 'opacity 0.2s' }}>
-                      {/* Record A */}
-                      <td style={{ padding: '1rem', verticalAlign: 'top', borderRight: '1px dashed var(--surface-border)' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem', fontSize: '0.95rem' }}>{pair.recordA.name}</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--color-primary-600)', marginBottom: '0.5rem', fontWeight: 500 }}>
-                          {pair.recordA.role.replace('_', ' ').toUpperCase()}
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                          <div>📞 {pair.recordA.phone || 'No phone'}</div>
-                          <div>📍 {pair.recordA.panchayatName}</div>
-                          <div>👤 {pair.recordA.agentName}</div>
-                        </div>
-                      </td>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {pairs.map((pair) => {
+            const isTarget = actingOn === pair.id;
+            return (
+              <div 
+                key={pair.id} 
+                className="card" 
+                style={{ 
+                  padding: 0, 
+                  overflow: 'hidden',
+                  opacity: isActing && isTarget ? 0.6 : 1,
+                  transition: 'opacity 0.2s, transform 0.2s',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)'
+                }}
+              >
+                {/* Responsive Flex Container */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', width: '100%' }}>
+                  
+                  {/* Record A */}
+                  <div style={{ flex: '1 1 300px', padding: '1.5rem', borderRight: '1px dashed var(--surface-border)', borderBottom: '1px dashed var(--surface-border)' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>Original Record (A)</div>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.2rem', fontSize: '1.1rem' }}>{pair.recordA.name}</div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--color-primary-600)', marginBottom: '0.75rem', fontWeight: 600 }}>
+                      {pair.recordA.role.replace('_', ' ').toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><span>📞</span> <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{pair.recordA.phone || 'No phone'}</span></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><span>📍</span> <span>{pair.recordA.panchayatName}</span></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><span>👤</span> <span>{pair.recordA.agentName}</span></div>
+                    </div>
+                  </div>
 
-                      {/* Record B */}
-                      <td style={{ padding: '1rem', verticalAlign: 'top' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem', fontSize: '0.95rem' }}>{pair.recordB.name}</div>
-                        <div style={{ fontSize: '0.8rem', color: '#f59e0b', marginBottom: '0.5rem', fontWeight: 500 }}>
-                          {pair.recordB.role.replace('_', ' ').toUpperCase()}
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                          <div>📞 {pair.recordB.phone || 'No phone'}</div>
-                          <div>📍 {pair.recordB.panchayatName}</div>
-                          <div>👤 {pair.recordB.agentName}</div>
-                        </div>
-                      </td>
+                  {/* Record B */}
+                  <div style={{ flex: '1 1 300px', padding: '1.5rem', borderRight: '1px dashed var(--surface-border)', borderBottom: '1px dashed var(--surface-border)' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>Duplicate Candidate (B)</div>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.2rem', fontSize: '1.1rem' }}>{pair.recordB.name}</div>
+                    <div style={{ fontSize: '0.85rem', color: '#f59e0b', marginBottom: '0.75rem', fontWeight: 600 }}>
+                      {pair.recordB.role.replace('_', ' ').toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><span>📞</span> <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{pair.recordB.phone || 'No phone'}</span></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><span>📍</span> <span>{pair.recordB.panchayatName}</span></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><span>👤</span> <span>{pair.recordB.agentName}</span></div>
+                    </div>
+                  </div>
 
-                      {/* Actions */}
-                      <td style={{ padding: '1rem', verticalAlign: 'middle', textAlign: 'right' }}>
-                        {activeTab === 'current' && pair.status === 'pending' ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
-                            <button
-                              className="btn btn-sm btn-primary"
-                              style={{ width: '100%', background: '#10b981', borderColor: '#10b981' }}
-                              onClick={() => handleAction(pair.id, 'merged')}
-                              disabled={isActing}
-                            >
-                              🔗 Merge (Keep A)
-                            </button>
-                            <button
-                              className="btn btn-sm btn-ghost"
-                              style={{ width: '100%', fontSize: '0.75rem' }}
-                              onClick={() => handleAction(pair.id, 'dismissed')}
-                              disabled={isActing}
-                            >
-                              ✕ Dismiss
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="badge" style={{ 
-                            background: pair.status === 'merged' ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)', 
-                            color: pair.status === 'merged' ? '#10b981' : '#64748b',
-                            fontSize: '0.8rem'
-                          }}>
-                            {pair.status === 'merged' ? '✅ Merged' : '✕ Dismissed'}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  {/* Actions */}
+                  <div style={{ flex: '1 1 200px', padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', background: 'var(--surface-hover)' }}>
+                    {activeTab === 'current' && pair.status === 'pending' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
+                        <button
+                          className="btn btn-primary"
+                          style={{ width: '100%', background: '#10b981', borderColor: '#10b981', fontWeight: 600, padding: '0.75rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
+                          onClick={() => mergeMutation.mutate(pair.id)}
+                          disabled={isActing}
+                        >
+                          {isActing && isTarget ? (
+                            <span className="spinner" style={{ width: '1rem', height: '1rem', borderWidth: '2px', borderTopColor: 'white' }}></span>
+                          ) : '🔗 Merge (Keep A)'}
+                        </button>
+                        <button
+                          className="btn btn-ghost"
+                          style={{ width: '100%', fontSize: '0.85rem', fontWeight: 600, padding: '0.75rem', border: '1px solid #e2e8f0' }}
+                          onClick={() => dismissMutation.mutate(pair.id)}
+                          disabled={isActing}
+                        >
+                          ✕ Dismiss
+                        </button>
+                        <div style={{ textAlign: 'center', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                          Merging discards Record B.
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '0.5rem' }}>
+                        <span className="badge" style={{ 
+                          background: pair.status === 'merged' ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)', 
+                          color: pair.status === 'merged' ? '#10b981' : '#64748b',
+                          fontSize: '0.85rem',
+                          fontWeight: 700,
+                          padding: '0.5rem 1rem'
+                        }}>
+                          {pair.status === 'merged' ? '✅ Merged' : '✕ Dismissed'}
+                        </span>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {activeTab === 'history' && 'Resolved'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -359,7 +359,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>admin@nexmarket.com</p>
                 </div>
               )}
-              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f1f5f9', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justify-content: 'center', fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f1f5f9', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>
                 AD
               </div>
             </div>
