@@ -339,25 +339,38 @@ export default function PipelinePage() {
     setDraggedContactId(null);
     
     const contact = contacts.find(c => c.clientId === contactId);
-    if (!contact || contact.status === newStatus) return;
+    if (!contact) return;
 
-    saveContactMutation.mutate({ clientId: contactId, update: { status: newStatus } });
+    if (newStatus === 'Escalated') {
+      if (contact.agentEscalated) return;
+      saveContactMutation.mutate({ clientId: contactId, update: { agentEscalated: true } });
+    } else {
+      if (contact.status === newStatus && !contact.agentEscalated) return;
+      saveContactMutation.mutate({ clientId: contactId, update: { status: newStatus, agentEscalated: false } });
+    }
   };
 
   const handleStatusChange = (contactId: string, newStatus: string) => {
-    saveContactMutation.mutate({ clientId: contactId, update: { status: newStatus } });
+    if (newStatus === 'Escalated') {
+      saveContactMutation.mutate({ clientId: contactId, update: { agentEscalated: true } });
+    } else {
+      saveContactMutation.mutate({ clientId: contactId, update: { status: newStatus, agentEscalated: false } });
+    }
   };
 
   const renderKanbanBoard = () => {
     const columns = [
       { id: 'Lead', title: 'Leads', color: '#94a3b8' },
       { id: 'Contacted', title: 'Contacted', color: '#eab308' },
-      { id: 'FollowUp', title: 'Follow-Up', color: '#3b82f6' }
+      { id: 'FollowUp', title: 'Follow-Up', color: '#3b82f6' },
+      { id: 'Escalated', title: 'Escalated', color: '#ef4444' }
     ];
 
     return (
       <div style={{ display: 'flex', gap: '1.5rem', flex: 1, overflowX: 'auto', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', minHeight: '600px' }}>
-        {columns.map(col => (
+        {columns.map(col => {
+          const colContacts = contacts.filter(c => col.id === 'Escalated' ? c.agentEscalated : (c.status === col.id && !c.agentEscalated));
+          return (
           <div 
             key={col.id} 
             style={{ 
@@ -378,11 +391,11 @@ export default function PipelinePage() {
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#1e293b' }}>{col.title}</h3>
               </div>
               <span style={{ background: '#e2e8f0', color: '#64748b', fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '12px' }}>
-                {contacts.filter(c => c.status === col.id).length}
+                {colContacts.length}
               </span>
             </div>
             <div style={{ padding: '0.75rem', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {contacts.filter(c => c.status === col.id).map(c => (
+              {colContacts.map(c => (
                 <KanbanCard 
                   key={c.clientId} 
                   contact={c} 
@@ -394,14 +407,15 @@ export default function PipelinePage() {
                   onStatusChange={handleStatusChange}
                 />
               ))}
-              {contacts.filter(c => c.status === col.id).length === 0 && (
+              {colContacts.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '0.85rem', fontWeight: 600, border: '2px dashed #cbd5e1', borderRadius: '8px' }}>
                   Drop contacts here
                 </div>
               )}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -1309,14 +1323,17 @@ function KanbanCard({ contact, panchayatsData, isDragging, onDragStart, onDragEn
       {onStatusChange && (
         <div className="kanban-mobile-actions" style={{ gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
           <span style={{ width: '100%', fontSize: '0.7rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Move to:</span>
-          {contact.status !== 'Lead' && (
+          {(contact.agentEscalated || contact.status !== 'Lead') && (
             <button onClick={() => onStatusChange(contact.clientId, 'Lead')} style={{ flex: 1, padding: '0.35rem', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 600, color: '#475569', cursor: 'pointer' }}>Lead</button>
           )}
-          {contact.status !== 'Contacted' && (
+          {(contact.agentEscalated || contact.status !== 'Contacted') && (
             <button onClick={() => onStatusChange(contact.clientId, 'Contacted')} style={{ flex: 1, padding: '0.35rem', background: '#fef9c3', border: '1px solid #fde047', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 600, color: '#854d0e', cursor: 'pointer' }}>Contacted</button>
           )}
-          {contact.status !== 'FollowUp' && (
+          {(contact.agentEscalated || contact.status !== 'FollowUp') && (
             <button onClick={() => onStatusChange(contact.clientId, 'FollowUp')} style={{ flex: 1, padding: '0.35rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 600, color: '#1d4ed8', cursor: 'pointer' }}>Follow-Up</button>
+          )}
+          {!contact.agentEscalated && (
+            <button onClick={() => onStatusChange(contact.clientId, 'Escalated')} style={{ flex: 1, padding: '0.35rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 600, color: '#b91c1c', cursor: 'pointer' }}>Escalate</button>
           )}
         </div>
       )}

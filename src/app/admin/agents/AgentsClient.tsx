@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAgentStore } from '@/store/agent-store';
 import { getAgents, onboardAgent, updateAgentProfile, uploadPhoto, getPanchayats, resetAgentPassword, type AdminAgentDto, type PanchayatDto } from '@/lib/sync/api-client';
 
@@ -15,13 +16,28 @@ function generatePassword(length = 12): string {
 
 export default function AgentsClient() {
   const agentId = useAgentStore((s) => s.agentId);
-  const [agentsList, setAgentsList] = useState<AdminAgentDto[]>([]);
-  const [panchayats, setPanchayats] = useState<PanchayatDto[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const queryClient = useQueryClient();
+
+  const { data: agentsList = [], isLoading: loading, error: agentsQueryError } = useQuery({
+    queryKey: ['admin-agents'],
+    queryFn: () => getAgents() as Promise<AdminAgentDto[]>,
+    enabled: !!agentId,
+    refetchInterval: 30000,
+  });
+
+  const { data: panchayats = [] } = useQuery({
+    queryKey: ['panchayats'],
+    queryFn: () => getPanchayats() as Promise<PanchayatDto[]>,
+    enabled: !!agentId,
+    staleTime: 1000 * 60 * 60,
+  });
+
+  const error = agentsQueryError ? (agentsQueryError instanceof Error ? agentsQueryError.message : 'Failed to load agents.') : '';
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'low-connectivity' | 'offline'>('all');
   const [showDeactivated, setShowDeactivated] = useState(false);
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
   // Remove/reactivate — "remove" deactivates (isActive: false) rather than
   // hard-deleting, since AgentId is referenced (as a plain string, no FK
@@ -71,27 +87,7 @@ export default function AgentsClient() {
     block: string;
   } | null>(null);
 
-  const loadAgents = useCallback(async () => {
-    if (!agentId) return;
-    setLoading(true);
-    setError('');
-    try {
-      const data = await getAgents();
-      setAgentsList(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load agents.');
-    } finally {
-      setLoading(false);
-    }
-  }, [agentId]);
-
-  useEffect(() => {
-    void loadAgents();
-    getPanchayats().then(setPanchayats).catch(console.error);
-    // Live-ish refresh — cheap poll rather than a full presence/WebSocket system.
-    const timer = setInterval(() => void loadAgents(), 30_000);
-    return () => clearInterval(timer);
-  }, [loadAgents]);
+  // React Query replaces manual loading and polling
 
   const uniqueDistricts = useMemo(() => {
     const d = Array.from(new Set(panchayats.map(p => p.district))).sort();
@@ -195,7 +191,7 @@ export default function AgentsClient() {
         district: created.district,
         block: created.block,
       });
-      void loadAgents();
+      queryClient.invalidateQueries({ queryKey: ['admin-agents'] });
     } catch (err) {
       setOnboardError(err instanceof Error ? err.message : 'Failed to onboard agent.');
     } finally {
@@ -209,7 +205,7 @@ export default function AgentsClient() {
     setRemoveError('');
     try {
       await updateAgentProfile(removingAgent.agentId, { isActive: false });
-      setAgentsList((prev) => prev.map((a) => (a.agentId === removingAgent.agentId ? { ...a, isActive: false } : a)));
+      queryClient.invalidateQueries({ queryKey: ['admin-agents'] });
       setRemovingAgent(null);
     } catch (err) {
       setRemoveError(err instanceof Error ? err.message : 'Failed to remove officer.');
@@ -222,9 +218,9 @@ export default function AgentsClient() {
     setReactivatingId(agent.agentId);
     try {
       await updateAgentProfile(agent.agentId, { isActive: true });
-      setAgentsList((prev) => prev.map((a) => (a.agentId === agent.agentId ? { ...a, isActive: true } : a)));
+      queryClient.invalidateQueries({ queryKey: ['admin-agents'] });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reactivate officer.');
+      alert(err instanceof Error ? err.message : 'Failed to reactivate officer.');
     } finally {
       setReactivatingId(null);
     }
@@ -337,39 +333,139 @@ export default function AgentsClient() {
       </div>
 
       {/* Filter Bar */}
-      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-        <div style={{ flex: 1 }}>
-          <input
-            type="text"
-            className="field-input"
-            placeholder="🔍 Search officer by name, district, block, or mobile..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ width: '100%' }}
-          />
+      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} className="md:hidden">
+          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Filters & Search</span>
+          <button 
+            onClick={() => setIsFilterDrawerOpen(!isFilterDrawerOpen)}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0.2rem' }}
+          >
+            {isFilterDrawerOpen ? '🔼' : '🔽'}
+          </button>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {(['all', 'online', 'low-connectivity', 'offline'] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={`btn btn-sm ${statusFilter === s ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setStatusFilter(s)}
-              style={{ textTransform: 'capitalize' }}
-            >
-              {s === 'all' ? 'All Status' : s === 'low-connectivity' ? 'Low Signal' : s}
-            </button>
-          ))}
+
+        <div className={`filter-drawer ${isFilterDrawerOpen ? 'open' : ''}`}>
+          <style>{`
+            .filter-drawer {
+              display: flex;
+              gap: 1rem;
+              align-items: center;
+              flex-wrap: wrap;
+            }
+            .md\\:hidden { display: none !important; }
+            @media (max-width: 768px) {
+              .md\\:hidden { display: flex !important; }
+              .filter-drawer {
+                display: none;
+                flex-direction: column;
+                align-items: stretch !important;
+                margin-top: 1rem;
+              }
+              .filter-drawer.open {
+                display: flex;
+              }
+              .status-buttons {
+                flex-wrap: wrap;
+              }
+              .status-buttons button {
+                flex: 1 1 45%;
+              }
+            }
+          `}</style>
+          
+          <div style={{ flex: 1, minWidth: '250px' }}>
+            <input
+              type="text"
+              className="field-input"
+              placeholder="🔍 Search officer by name, district, block, or mobile..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ width: '100%' }}
+            />
+          </div>
+          <div className="status-buttons" style={{ display: 'flex', gap: '0.5rem' }}>
+            {(['all', 'online', 'low-connectivity', 'offline'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={`btn btn-sm ${statusFilter === s ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setStatusFilter(s)}
+                style={{ textTransform: 'capitalize', whiteSpace: 'nowrap' }}
+              >
+                {s === 'all' ? 'All Status' : s === 'low-connectivity' ? 'Low Signal' : s}
+              </button>
+            ))}
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+            <div style={{
+              width: '40px',
+              height: '22px',
+              background: showDeactivated ? 'var(--color-primary-500)' : '#cbd5e1',
+              borderRadius: '11px',
+              position: 'relative',
+              transition: 'background 0.2s',
+            }}>
+              <div style={{
+                width: '18px',
+                height: '18px',
+                background: 'white',
+                borderRadius: '50%',
+                position: 'absolute',
+                top: '2px',
+                left: showDeactivated ? '20px' : '2px',
+                transition: 'left 0.2s',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+              }} />
+            </div>
+            <input 
+              type="checkbox" 
+              checked={showDeactivated} 
+              onChange={(e) => setShowDeactivated(e.target.checked)} 
+              style={{ display: 'none' }}
+            />
+            Show deactivated
+          </label>
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', cursor: 'pointer' }}>
-          <input type="checkbox" checked={showDeactivated} onChange={(e) => setShowDeactivated(e.target.checked)} />
-          Show deactivated officers
-        </label>
       </div>
 
       {/* Agents Table */}
+      <style>{`
+        @media (max-width: 768px) {
+          .responsive-table, .responsive-table thead, .responsive-table tbody, .responsive-table th, .responsive-table td, .responsive-table tr {
+            display: block;
+          }
+          .responsive-table thead tr {
+            display: none;
+          }
+          .responsive-table tr {
+            margin-bottom: 1rem;
+            border: 1px solid var(--surface-border) !important;
+            border-radius: 8px;
+            background: var(--surface-card);
+            padding: 0.5rem;
+          }
+          .responsive-table td {
+            border: none !important;
+            border-bottom: 1px solid var(--surface-border) !important;
+            position: relative;
+            padding: 0.75rem 1rem !important;
+          }
+          .responsive-table td::before {
+            content: attr(data-label);
+            display: block;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+          }
+          .responsive-table td:last-child {
+            border-bottom: none !important;
+          }
+        }
+      `}</style>
       <div className="card" style={{ overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+        <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ background: 'var(--surface-card-hover)', borderBottom: '1px solid var(--surface-border)' }}>
               <th style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Officer Name & Phone</th>
@@ -398,7 +494,7 @@ export default function AgentsClient() {
             ) : (
               filtered.map((agent) => (
                 <tr key={agent.agentId} style={{ borderBottom: '1px solid var(--surface-border)', opacity: agent.isActive ? 1 : 0.6 }}>
-                  <td style={{ padding: '0.85rem 1rem' }}>
+                  <td data-label="Officer Name & Phone" style={{ padding: '0.85rem 1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                       <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{agent.name}</div>
                       {!agent.isActive && (
@@ -409,11 +505,11 @@ export default function AgentsClient() {
                     </div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>+91 {agent.phone}</div>
                   </td>
-                  <td style={{ padding: '0.85rem 1rem' }}>
+                  <td data-label="Assigned Territory" style={{ padding: '0.85rem 1rem' }}>
                     <div style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{agent.district}</div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Block: {agent.block}</div>
                   </td>
-                  <td style={{ padding: '0.85rem 1rem' }}>
+                  <td data-label="Connectivity Status" style={{ padding: '0.85rem 1rem' }}>
                     <span
                       style={{
                         padding: '0.2rem 0.5rem',
@@ -432,25 +528,25 @@ export default function AgentsClient() {
                         : 'No GPS data yet'}
                     </div>
                   </td>
-                  <td style={{ padding: '0.85rem 1rem' }}>
+                  <td data-label="Shift Status" style={{ padding: '0.85rem 1rem' }}>
                     {agent.activeShift ? (
                       <span className="badge badge-online">⏰ Active Shift</span>
                     ) : (
                       <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>💤 Off Duty</span>
                     )}
                   </td>
-                  <td style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <td data-label="Visits" style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)' }}>
                     {agent.todayVisits}
                   </td>
-                  <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                  <td data-label="Contacts" style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
                     <span style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--color-primary-400)', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '4px' }}>
                       {agent.todayContacts}
                     </span>
                   </td>
-                  <td style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600, color: agent.todayReferrals > 0 ? '#10b981' : 'var(--text-muted)' }}>
+                  <td data-label="Referrals" style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600, color: agent.todayReferrals > 0 ? '#10b981' : 'var(--text-muted)' }}>
                     {agent.todayReferrals}
                   </td>
-                  <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                  <td data-label="Actions" style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                       <Link href={`/admin/agents/${encodeURIComponent(agent.agentId)}`} className="btn btn-ghost btn-sm" style={{ fontSize: '0.78rem' }}>
                         👁 View
