@@ -211,3 +211,11 @@ export async function isLocalDatabaseEmpty(): Promise<boolean> {
   const visitCount = await db.visits.count();
   return contactCount === 0 && visitCount === 0;
 }
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export function useNotifications() {
+  return useLiveQuery(() => 
+    db.notifications.orderBy('timestamp').reverse().toArray()
+  );
+}

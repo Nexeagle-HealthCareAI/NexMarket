@@ -13,6 +13,7 @@ import { logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-cl
 import { useAgentStore } from '@/store/agent-store';
 import PwaInstallPrompt from '@/components/PwaInstallPrompt';
 import NotificationListener from '@/components/NotificationListener';
+import NotificationDropdown from '@/components/NotificationDropdown';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { AnimatePresence, motion } from 'framer-motion';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
@@ -332,6 +333,8 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <NotificationDropdown />
+
           {!isOnline && (
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '0.3rem 0.6rem', borderRadius: '2rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: 600, color: '#ef4444' }}>
               <span style={{ width: 6, height: 6, background: '#ef4444', borderRadius: '50%' }} /> Offline
@@ -374,11 +377,14 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
       {/* ─── Desktop Left Sidebar (Visible on >= 768px) ────────────────────── */}
       <aside className="desktop-sidebar" aria-label="Desktop navigation">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem', padding: '0 0.5rem' }}>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.02em' }}>NexMarket</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', fontWeight: 600 }}>{t.outreachPortal}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem', padding: '0 0.5rem', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.02em' }}>NexMarket</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', fontWeight: 600 }}>{t.outreachPortal}</div>
+              </div>
             </div>
+            <NotificationDropdown />
           </div>
 
           {renderUserInfo()}

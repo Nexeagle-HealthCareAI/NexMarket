@@ -224,6 +224,17 @@ export interface LocalDraft {
   updatedAt: string;     // ISO timestamp
 }
 
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export interface LocalNotification {
+  id: string;
+  title: string;
+  body: string;
+  data?: any;            // Optional extra data (e.g., target clientId)
+  isRead: boolean;
+  timestamp: string;     // ISO timestamp
+}
+
 // ─── Dexie Database Class ─────────────────────────────────────────────────────
 
 export class NexMarketDB extends Dexie {
@@ -240,6 +251,7 @@ export class NexMarketDB extends Dexie {
   syncState!: EntityTable<SyncState, 'key'>;
   surveyQuestions!: EntityTable<import('../sync/api-client').SurveyQuestionDto, 'id'>;
   drafts!: EntityTable<LocalDraft, 'id'>;
+  notifications!: EntityTable<LocalNotification, 'id'>;
 
   constructor() {
     super('nexmarket_db');
@@ -289,6 +301,10 @@ export class NexMarketDB extends Dexie {
 
     this.version(7).stores({
       drafts: 'id',
+    });
+
+    this.version(8).stores({
+      notifications: 'id, isRead, timestamp',
     });
   }
 }

@@ -1,45 +1,88 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useAgentStore } from '@/store/agent-store';
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 export default function NotificationListener() {
   const [permission, setPermission] = useState<NotificationPermission>('default');
+  const agentId = useAgentStore((state: any) => state.agentId);
 
   useEffect(() => {
-    // Check current permission
     if ('Notification' in window) {
       setPermission(Notification.permission);
+      
+      // Auto-subscribe if permission was already granted
+      if (Notification.permission === 'granted' && agentId) {
+        subscribeToPush();
+      }
     }
 
-    // Listen for broadcast messages from Admin tab
     const channel = new BroadcastChannel('nexmarket-notifications');
-    
     channel.onmessage = (event) => {
       const { title, body } = event.data;
-      
-      // If we have permission, show a real system notification!
       if (Notification.permission === 'granted') {
-        new Notification(title, {
-          body: body,
-          icon: '/icons/icon-192.png',
-          badge: '/icons/icon-192.png',
-        });
-      } else {
-        // Fallback: Just alert or console log for demo purposes if permission not granted
-        console.log('Received Push Notification:', title, body);
-        alert(`🔔 Push Notification:\n\n${title}\n${body}`);
+        new Notification(title, { body, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png' });
       }
     };
 
-    return () => {
-      channel.close();
-    };
-  }, []);
+    return () => channel.close();
+  }, [agentId]);
+
+  const subscribeToPush = async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      
+      if (!subscription) {
+        const publicVapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+        if (!publicVapidKey) {
+          console.error('VAPID key not found');
+          return;
+        }
+        
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+        });
+      }
+
+      // Send to server
+      if (agentId) {
+        await fetch('/api/notifications/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId, subscription })
+        });
+      }
+    } catch (err) {
+      console.error('Failed to subscribe to web push:', err);
+    }
+  };
 
   const requestPermission = async () => {
     if (!('Notification' in window)) return;
     const result = await Notification.requestPermission();
     setPermission(result);
+    if (result === 'granted') {
+      subscribeToPush();
+    }
   };
 
   if (permission === 'granted' || permission === 'denied') return null;
