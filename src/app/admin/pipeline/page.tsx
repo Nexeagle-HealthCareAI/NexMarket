@@ -367,25 +367,59 @@ export default function PipelinePage() {
     ];
 
     return (
-      <div style={{ display: 'flex', gap: '1.5rem', flex: 1, overflowX: 'auto', padding: '1rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', minHeight: '600px' }}>
-        {columns.map(col => {
-          const colContacts = contacts.filter(c => col.id === 'Escalated' ? c.agentEscalated : (c.status === col.id && !c.agentEscalated));
-          return (
-          <div 
-            key={col.id} 
-            style={{ 
-              flex: '0 0 320px', 
-              display: 'flex', 
-              flexDirection: 'column', 
-              background: '#f1f5f9', 
-              borderRadius: '12px',
-              height: '100%',
-              border: '1px solid #e2e8f0'
-            }}
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, col.id)}
-          >
-            <div style={{ padding: '1rem', borderBottom: '2px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <>
+        <style>{`
+          .kanban-board {
+            display: flex;
+            gap: 1.5rem;
+            flex: 1;
+            overflow-x: auto;
+            padding: 1rem;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            min-height: 600px;
+            scroll-snap-type: x mandatory;
+            scroll-padding: 1rem;
+            /* Hide scrollbar for cleaner look on mobile */
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+          }
+          .kanban-board::-webkit-scrollbar {
+            display: none;
+          }
+          .kanban-col {
+            flex: 0 0 320px;
+            display: flex;
+            flex-direction: column;
+            background: #f1f5f9;
+            border-radius: 12px;
+            height: 100%;
+            border: 1px solid #e2e8f0;
+            scroll-snap-align: center;
+          }
+          @media (max-width: 768px) {
+            .kanban-board {
+              padding: 0.5rem;
+              gap: 1rem;
+              scroll-padding: 0.5rem;
+            }
+            .kanban-col {
+              flex: 0 0 calc(100vw - 3rem);
+            }
+          }
+        `}</style>
+        <div className="kanban-board">
+          {columns.map(col => {
+            const colContacts = contacts.filter(c => col.id === 'Escalated' ? c.agentEscalated : (c.status === col.id && !c.agentEscalated));
+            return (
+            <div 
+              key={col.id} 
+              className="kanban-col"
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, col.id)}
+            >
+              <div style={{ padding: '1rem', borderBottom: '2px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <div style={{ width: 12, height: 12, borderRadius: '50%', background: col.color }} />
                 <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#1e293b' }}>{col.title}</h3>
@@ -416,7 +450,8 @@ export default function PipelinePage() {
           </div>
           );
         })}
-      </div>
+        </div>
+      </>
     );
   };
   const renderDailyQueue = () => {
