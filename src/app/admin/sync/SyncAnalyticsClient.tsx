@@ -86,7 +86,7 @@ export default function SyncAnalyticsClient() {
       )}
 
       {/* Metric Cards */}
-      <motion.div variants={itemVariants} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+      <motion.div variants={itemVariants} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
         {stats.map((stat, i) => (
           <div key={i} style={{
             background: 'white', padding: '1.25rem', borderRadius: '12px',

@@ -4,6 +4,7 @@ import './globals.css';
 import PwaRegister from '@/components/PwaRegister';
 import { getDictionary } from '@/i18n/getDictionary';
 import { I18nProvider } from '@/i18n/I18nProvider';
+import { Providers } from '@/components/Providers';
 
 export const metadata: Metadata = {
   title: 'NexMarket | Field Outreach & Marketing Portal',
@@ -46,8 +47,10 @@ export default async function RootLayout({
       </head>
       <body suppressHydrationWarning>
         <I18nProvider dictionary={dictionary}>
-          <PwaRegister />
-          {children}
+          <Providers>
+            <PwaRegister />
+            {children}
+          </Providers>
         </I18nProvider>
       </body>
     </html>
