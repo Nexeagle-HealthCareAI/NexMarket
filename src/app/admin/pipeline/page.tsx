@@ -250,10 +250,11 @@ export default function PipelinePage() {
 
     try {
       const isWorklist = activeTab === 'worklist';
+      const isDailyQueue = activeTab === 'daily_queue';
       const isRecent = activeTab === 'recent';
       
       let maxFollowUpDate: string | undefined = undefined;
-      if (isWorklist) {
+      if (isWorklist || isDailyQueue) {
          const d = new Date();
          d.setHours(23,59,59,999);
          maxFollowUpDate = d.toISOString();
@@ -273,7 +274,7 @@ export default function PipelinePage() {
         districts: selectedCities,
         blocks: selectedBlocks,
         panchayats: selectedPanchayats,
-        statuses: activeTab === 'worklist' ? ['Lead', 'Contacted', 'FollowUp'] : undefined,
+        statuses: isDailyQueue ? ['Lead', 'FollowUp'] : (isWorklist ? ['Lead', 'Contacted', 'FollowUp'] : undefined),
         startDate,
         endDate,
         maxFollowUpDate,
@@ -442,7 +443,8 @@ export default function PipelinePage() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {contacts.map(c => {
-            const pInfo = getPanchayatInfo(c.panchayatId);
+            const p = panchayatsData.find((p: any) => p.id === c.panchayatId);
+            const pInfo = p || { name: 'Unknown', block: 'Unknown' };
             return (
               <div key={c.clientId} style={{ background: 'white', borderRadius: '12px', padding: '1.5rem', border: '1px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', gap: '1.5rem', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                 <div>
