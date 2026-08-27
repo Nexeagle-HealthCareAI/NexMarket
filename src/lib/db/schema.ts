@@ -66,6 +66,8 @@ export interface LocalContact {
   cardGiven: boolean;
   agentEscalated?: boolean;
   agentEscalationNote?: string;
+  agentEscalationResolved?: boolean;
+  agentEscalationResolution?: string;
   notes?: string;
   complaints?: string;
   conflicts?: string;

@@ -430,7 +430,17 @@ export default function AgentsClient() {
 
       {/* Agents Table */}
       <style>{`
+        .mobile-only-cell { display: none; }
+        .desktop-only-cell { display: table-cell; }
+        .actions-cell { text-align: right; }
+        .action-buttons { justify-content: flex-end; }
+        
         @media (max-width: 768px) {
+          .mobile-only-cell { display: block; }
+          .desktop-only-cell { display: none !important; }
+          .actions-cell { text-align: left !important; }
+          .action-buttons { justify-content: flex-start !important; }
+          
           .responsive-table, .responsive-table thead, .responsive-table tbody, .responsive-table th, .responsive-table td, .responsive-table tr {
             display: block;
           }
@@ -472,10 +482,10 @@ export default function AgentsClient() {
               <th style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Assigned Territory</th>
               <th style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Connectivity Status</th>
               <th style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Shift Status</th>
-              <th style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>Visits</th>
-              <th style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>Contacts</th>
-              <th style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>Referrals</th>
-              <th style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'right' }}>Actions</th>
+              <th className="desktop-only-cell" style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>Visits</th>
+              <th className="desktop-only-cell" style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>Contacts</th>
+              <th className="desktop-only-cell" style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>Referrals</th>
+              <th className="actions-cell" style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -535,19 +545,28 @@ export default function AgentsClient() {
                       <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>💤 Off Duty</span>
                     )}
                   </td>
-                  <td data-label="Visits" style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <td data-label="Performance" className="mobile-only-cell" style={{ padding: '0.85rem 1rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.8rem' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Visits: {agent.todayVisits}</span>
+                      <span style={{ color: 'var(--text-muted)' }}>|</span>
+                      <span style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--color-primary-400)', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '4px' }}>Contacts: {agent.todayContacts}</span>
+                      <span style={{ color: 'var(--text-muted)' }}>|</span>
+                      <span style={{ fontWeight: 600, color: agent.todayReferrals > 0 ? '#10b981' : 'var(--text-muted)' }}>Referrals: {agent.todayReferrals}</span>
+                    </div>
+                  </td>
+                  <td className="desktop-only-cell" data-label="Visits" style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)' }}>
                     {agent.todayVisits}
                   </td>
-                  <td data-label="Contacts" style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                  <td className="desktop-only-cell" data-label="Contacts" style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
                     <span style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--color-primary-400)', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '4px' }}>
                       {agent.todayContacts}
                     </span>
                   </td>
-                  <td data-label="Referrals" style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600, color: agent.todayReferrals > 0 ? '#10b981' : 'var(--text-muted)' }}>
+                  <td className="desktop-only-cell" data-label="Referrals" style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600, color: agent.todayReferrals > 0 ? '#10b981' : 'var(--text-muted)' }}>
                     {agent.todayReferrals}
                   </td>
-                  <td data-label="Actions" style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
-                    <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  <td data-label="Actions" className="actions-cell" style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
+                    <div className="action-buttons" style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                       <Link href={`/admin/agents/${encodeURIComponent(agent.agentId)}`} className="btn btn-ghost btn-sm" style={{ fontSize: '0.78rem' }}>
                         👁 View
                       </Link>

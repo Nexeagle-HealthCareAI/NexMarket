@@ -166,9 +166,50 @@ export default function CoveredPanchayatsTab() {
       </div>
 
       {/* Table */}
+      <style>{`
+        @media (max-width: 768px) {
+          .responsive-table, .responsive-table thead, .responsive-table tbody, .responsive-table th, .responsive-table td, .responsive-table tr {
+            display: block;
+          }
+          .responsive-table thead tr {
+            display: none;
+          }
+          .responsive-table tr {
+            margin-bottom: 1rem;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 8px;
+            background: white;
+            padding: 0.5rem;
+          }
+          .responsive-table td {
+            border: none !important;
+            border-bottom: 1px solid #e2e8f0 !important;
+            position: relative;
+            padding: 0.75rem 1rem !important;
+            text-align: right;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .responsive-table td::before {
+            content: attr(data-label);
+            display: block;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 700;
+            text-align: left;
+            flex-shrink: 0;
+            margin-right: 1rem;
+          }
+          .responsive-table td:last-child {
+            border-bottom: none !important;
+          }
+        }
+      `}</style>
       <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
               <tr>
                 <SortableTh label="Name" field="name" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
@@ -190,15 +231,15 @@ export default function CoveredPanchayatsTab() {
                     onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'} 
                     onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
                   >
-                    <td style={{ padding: '1rem', fontWeight: 600, color: '#0f172a' }}>{p.name}</td>
-                    <td style={{ padding: '1rem', color: '#334155' }}>{p.block}</td>
-                    <td style={{ padding: '1rem', color: '#334155' }}>{p.district}</td>
-                    <td style={{ padding: '1rem', color: '#334155', fontWeight: 700 }}>
+                    <td data-label="Name" style={{ padding: '1rem', fontWeight: 600, color: '#0f172a' }}>{p.name}</td>
+                    <td data-label="Block" style={{ padding: '1rem', color: '#334155' }}>{p.block}</td>
+                    <td data-label="District" style={{ padding: '1rem', color: '#334155' }}>{p.district}</td>
+                    <td data-label="Contacts" style={{ padding: '1rem', color: '#334155', fontWeight: 700 }}>
                       <span style={{ background: '#dbeafe', color: '#1e3a8a', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.8rem' }}>
                         {p.contactCount}
                       </span>
                     </td>
-                    <td style={{ padding: '1rem', color: '#64748b', fontSize: '0.85rem' }}>
+                    <td data-label="Covered By" style={{ padding: '1rem', color: '#64748b', fontSize: '0.85rem' }}>
                       {p.coveredByAgents.length > 0 ? p.coveredByAgents.join(', ') : 'Unknown'}
                     </td>
                   </tr>

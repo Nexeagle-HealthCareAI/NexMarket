@@ -59,6 +59,42 @@ export default function HospitalCrmClient() {
 
   return (
     <div style={{ paddingBottom: '3rem' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .responsive-table, .responsive-table thead, .responsive-table tbody, .responsive-table th, .responsive-table td, .responsive-table tr {
+            display: block;
+          }
+          .responsive-table thead tr {
+            display: none;
+          }
+          .responsive-table tr {
+            margin-bottom: 1rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            padding: 0.5rem;
+          }
+          .responsive-table td {
+            border: none !important;
+            border-bottom: 1px solid #f1f5f9 !important;
+            position: relative;
+            padding: 0.75rem 1rem !important;
+            text-align: left !important;
+          }
+          .responsive-table td::before {
+            content: attr(data-label);
+            display: block;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+          }
+          .responsive-table td:last-child {
+            border-bottom: none !important;
+          }
+        }
+      `}</style>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1>Hospital CRM</h1>
@@ -94,7 +130,7 @@ export default function HospitalCrmClient() {
       ) : (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr style={{ background: 'var(--surface-hover)', borderBottom: '1px solid var(--surface-border)' }}>
                   <th style={{ padding: '1rem', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Patient & Notes</th>
@@ -109,22 +145,22 @@ export default function HospitalCrmClient() {
                   const st = STATUS_LABELS[r.status] || STATUS_LABELS.pending;
                   return (
                     <tr key={r.clientId} style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                      <td style={{ padding: '1rem' }}>
+                      <td data-label="Patient & Notes" style={{ padding: '1rem' }}>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.patientName || 'Unknown Patient'}</div>
                         <div style={{ fontSize: '0.85rem', color: 'var(--color-primary-600)', marginTop: '0.2rem' }}>📞 {r.clientPhone || 'No Phone'}</div>
                         {r.notes && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.4rem', whiteSpace: 'pre-wrap', maxHeight: 60, overflowY: 'auto' }}>{r.notes}</div>}
                       </td>
-                      <td style={{ padding: '1rem' }}>
+                      <td data-label="Agent & Contact" style={{ padding: '1rem' }}>
                         <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{r.contactName}</div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Ref by: {r.agentName}</div>
                       </td>
-                      <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                      <td data-label="Date" style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
                         {r.referralDate ? new Date(r.referralDate).toLocaleDateString('en-GB') : new Date(r.createdAt).toLocaleDateString('en-GB')}
                       </td>
-                      <td style={{ padding: '1rem' }}>
+                      <td data-label="Status" style={{ padding: '1rem' }}>
                         <span className={`badge ${st.badge}`}>{st.icon} {st.label}</span>
                       </td>
-                      <td style={{ padding: '1rem', textAlign: 'right' }}>
+                      <td data-label="Actions" style={{ padding: '1rem', textAlign: 'right' }}>
                         <button 
                           className="btn btn-sm btn-secondary" 
                           onClick={() => {

@@ -352,8 +352,52 @@ export default function AdminPanchayatsPage() {
           </div>
 
           <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+            <style>{`
+              @media (max-width: 768px) {
+                .responsive-table, .responsive-table thead, .responsive-table tbody, .responsive-table th, .responsive-table td, .responsive-table tr {
+                  display: block;
+                }
+                .responsive-table thead tr {
+                  display: none;
+                }
+                .responsive-table tr {
+                  margin-bottom: 1rem;
+                  border: 1px solid #e2e8f0 !important;
+                  border-radius: 8px;
+                  background: white;
+                  padding: 0.5rem;
+                }
+                .responsive-table td {
+                  border: none !important;
+                  border-bottom: 1px solid #e2e8f0 !important;
+                  position: relative;
+                  padding: 0.75rem 1rem !important;
+                  text-align: right;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                }
+                .responsive-table td::before {
+                  content: attr(data-label);
+                  display: block;
+                  font-size: 0.75rem;
+                  text-transform: uppercase;
+                  color: #64748b;
+                  font-weight: 700;
+                  text-align: left;
+                  flex-shrink: 0;
+                  margin-right: 1rem;
+                }
+                .responsive-table td:last-child {
+                  border-bottom: none !important;
+                }
+                .manage-grid {
+                  grid-template-columns: 1fr !important;
+                }
+              }
+            `}</style>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                   <tr>
                     <SortableTh label="Name" field="name" sortField={sortField} sortDirection={sortDirection} onSort={handleSort} />
@@ -370,10 +414,10 @@ export default function AdminPanchayatsPage() {
                   ) : (
                     paginated.map((p) => (
                       <tr key={p.id} style={{ borderBottom: '1px solid #e2e8f0', background: 'white' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.background = 'white'}>
-                        <td style={{ padding: '1rem', fontWeight: 600, color: '#0f172a' }}>{p.name}</td>
-                        <td style={{ padding: '1rem', color: '#334155' }}>{p.block}</td>
-                        <td style={{ padding: '1rem', color: '#334155' }}>{p.district}</td>
-                        <td style={{ padding: '1rem', color: '#64748b' }}>
+                        <td data-label="Name" style={{ padding: '1rem', fontWeight: 600, color: '#0f172a' }}>{p.name}</td>
+                        <td data-label="Block" style={{ padding: '1rem', color: '#334155' }}>{p.block}</td>
+                        <td data-label="District" style={{ padding: '1rem', color: '#334155' }}>{p.district}</td>
+                        <td data-label="LGD Code" style={{ padding: '1rem', color: '#64748b' }}>
                           {p.lgdCode || (
                             <div>
                               <span style={{ fontStyle: 'italic', color: '#cbd5e1' }}>Added manually</span>
@@ -381,7 +425,7 @@ export default function AdminPanchayatsPage() {
                             </div>
                           )}
                         </td>
-                        <td style={{ padding: '1rem' }}>
+                        <td data-label="Marketing Status" style={{ padding: '1rem' }}>
                           <span style={{
                             fontSize: '0.72rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '20px',
                             background: p.isActiveForMarketing ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.15)',
@@ -390,7 +434,7 @@ export default function AdminPanchayatsPage() {
                             {p.isActiveForMarketing ? '✅ Active' : '⏸ Inactive'}
                           </span>
                         </td>
-                        <td style={{ padding: '1rem' }}>
+                        <td data-label="Actions" style={{ padding: '1rem' }}>
                           <div style={{ display: 'flex', gap: '0.5rem' }}>
                             <button 
                               onClick={() => setEditPanchayat(p)}
@@ -463,7 +507,7 @@ export default function AdminPanchayatsPage() {
             Everything defaults to active, so nothing changes until you curate a block.
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem', maxWidth: '640px' }}>
+          <div className="manage-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem', maxWidth: '640px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.35rem' }}>District</label>
               <select

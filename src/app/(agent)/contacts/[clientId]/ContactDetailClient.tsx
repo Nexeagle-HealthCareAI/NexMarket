@@ -400,6 +400,13 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
           </div>
         )}
 
+        {contact.agentEscalationResolved && contact.agentEscalationResolution && (
+          <div style={{ marginTop: '0.75rem', padding: '0.6rem', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: '#166534' }}>
+            <strong style={{ display: 'block', color: '#15803d', marginBottom: '0.2rem' }}>✓ Resolved by Admin:</strong> 
+            {contact.agentEscalationResolution}
+          </div>
+        )}
+
         {contact.notes && (
           <div style={{ marginTop: '0.75rem', padding: '0.6rem', background: 'var(--surface-bg)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
             <strong>Notes:</strong> {contact.notes}

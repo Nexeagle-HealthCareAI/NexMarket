@@ -215,7 +215,6 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
           </div>
         </div>
 
-        {/* Personal Details Row */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem', borderTop: '1px solid #e2e8f0', paddingTop: '1.5rem' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Phone Number</label>
@@ -258,7 +257,6 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
         </div>
       </motion.div>
 
-      {/* Documents Section */}
       {contact.documents && contact.documents.length > 0 && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', maxWidth: '100%', marginBottom: '2rem', padding: '1.5rem' }}>
           <h2 style={{ margin: '0 0 1.25rem 0', fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>Attached Documents ({contact.documents.length})</h2>
@@ -289,7 +287,6 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
         </motion.div>
       )}
 
-      {/* Full Width Table */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', maxWidth: '100%' }}>
         <div style={{ padding: '1.25rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
           <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>Communication Timeline</h2>
@@ -298,7 +295,7 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
           {history.length === 0 ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', fontStyle: 'italic' }}>No history available.</div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1000px' }}>
+            <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1000px' }}>
               <thead style={{ background: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }}>
                 <tr>
                   <th style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Date & Time</th>
@@ -313,14 +310,14 @@ export default function ContactProfilePage({ params }: { params: Promise<{ clien
               <tbody>
                 {history.slice().reverse().map((h) => (
                   <tr key={h.id} style={{ borderBottom: '1px solid #e2e8f0', background: 'white', transition: 'background 0.2s', cursor: 'default' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.background = 'white'}>
-                    <td style={{ padding: '1rem 1.5rem', fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
+                    <td data-label="Date & Time" style={{ padding: '1rem 1.5rem', fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
                       <div style={{ color: '#0f172a' }}>{new Date(h.timestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                       <div style={{ fontSize: '0.75rem' }}>{new Date(h.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
                     </td>
-                    <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', fontWeight: 700, color: '#0f172a' }}>
+                    <td data-label="Agent" style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', fontWeight: 700, color: '#0f172a' }}>
                       {h.updatedBy}
                     </td>
-                    <td style={{ padding: '1rem 1.5rem' }}>
+                    <td data-label="Stage Update" style={{ padding: '1rem 1.5rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '0.8rem', color: '#64748b', background: '#f1f5f9', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>{h.previousStatus}</span>
                         <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>→</span>
