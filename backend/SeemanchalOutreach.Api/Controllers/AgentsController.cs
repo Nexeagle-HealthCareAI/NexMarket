@@ -154,10 +154,32 @@ namespace SeemanchalOutreach.Api.Controllers
 
         [HttpGet]
         [Authorize(Roles = "Admin,admin")]
-        public async Task<ActionResult<List<AgentSummaryDto>>> GetAgents(CancellationToken cancellationToken)
+        public async Task<ActionResult<object>> GetAgents(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 50,
+            [FromQuery] string? search = null,
+            [FromQuery] string? statusFilter = null,
+            CancellationToken cancellationToken = default)
         {
-            var agents = await _db.Agents.AsNoTracking().OrderBy(a => a.Name).ToListAsync(cancellationToken);
-            if (agents.Count == 0) return Ok(new List<AgentSummaryDto>());
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize, 1, 1000);
+
+            var query = _db.Agents.AsNoTracking();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var searchLower = search.ToLower();
+                query = query.Where(a => a.Name.ToLower().Contains(searchLower) || a.Phone.Contains(searchLower));
+            }
+
+            var totalCount = await query.CountAsync(cancellationToken);
+            var agents = await query
+                .OrderBy(a => a.Name)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(cancellationToken);
+
+            if (agents.Count == 0) return Ok(new { TotalCount = totalCount, Items = new List<AgentSummaryDto>() });
 
             var agentIds = agents.Select(a => a.AgentId).ToList();
             var todayUtc = DateTime.UtcNow.Date;
@@ -222,7 +244,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 };
             }).ToList();
 
-            return Ok(result);
+            return Ok(new { TotalCount = totalCount, Items = result });
         }
 
         [HttpGet("{agentId}/trajectory")]

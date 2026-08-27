@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db';
 import type { EntityType, SyncOutboxEntry } from '../db/schema';
 
-const MAX_RETRIES = 7;
+const MAX_RETRIES = 3;
 
 // ─── Wire type mapping ─────────────────────────────────────────────────────────
 
@@ -166,32 +166,60 @@ export async function incrementRetry(
   localId: number,
   errorMessage: string,
 ): Promise<void> {
-  await db.syncOutbox
-    .where({ localId })
-    .modify((entry) => {
-      entry.attemptCount += 1;
-      entry.lastAttemptAt = new Date().toISOString();
-      entry.errorMessage = errorMessage;
+  const entry = await db.syncOutbox.get(localId);
+  if (!entry) return;
+
+  if (entry.attemptCount + 1 >= MAX_RETRIES) {
+    // Move to DLQ
+    await db.transaction('rw', [db.syncOutbox, db.syncDeadLetterQueue], async () => {
+      await db.syncDeadLetterQueue.add({
+        clientId: entry.clientId,
+        deviceId: entry.deviceId,
+        entityType: entry.entityType,
+        payload: entry.payload,
+        attemptCount: entry.attemptCount + 1,
+        createdAt: entry.createdAt,
+        lastAttemptAt: new Date().toISOString(),
+        errorMessage,
+      });
+      await db.syncOutbox.delete(localId);
     });
+  } else {
+    // Increment retry
+    await db.syncOutbox.update(localId, {
+      attemptCount: entry.attemptCount + 1,
+      lastAttemptAt: new Date().toISOString(),
+      errorMessage,
+    });
+  }
 }
 
 // ─── Dead letter count ────────────────────────────────────────────────────────
 
 export async function getDeadLetterCount(): Promise<number> {
-  return db.syncOutbox.filter((e) => e.attemptCount >= MAX_RETRIES).count();
+  return db.syncDeadLetterQueue.count();
 }
 
-// Items that hit MAX_RETRIES are excluded from getPendingEntries forever —
-// silently, with nothing in the UI ever telling the agent or admin they
-// exist. This puts them back in the normal sync queue so the next poll
-// picks them up again, instead of them sitting stuck with zero visibility.
 export async function retryDeadLetters(): Promise<number> {
-  return db.syncOutbox
-    .filter((e) => e.attemptCount >= MAX_RETRIES)
-    .modify((entry) => {
-      entry.attemptCount = 0;
-      entry.errorMessage = undefined;
-    });
+  let count = 0;
+  await db.transaction('rw', [db.syncOutbox, db.syncDeadLetterQueue], async () => {
+    const dlqItems = await db.syncDeadLetterQueue.toArray();
+    for (const item of dlqItems) {
+      await db.syncOutbox.add({
+        clientId: item.clientId,
+        deviceId: item.deviceId,
+        entityType: item.entityType,
+        payload: item.payload,
+        attemptCount: 0,
+        createdAt: item.createdAt,
+      });
+      if (item.localId) {
+        await db.syncDeadLetterQueue.delete(item.localId);
+      }
+      count++;
+    }
+  });
+  return count;
 }
 
 // ─── Trajectory batch helper ──────────────────────────────────────────────────

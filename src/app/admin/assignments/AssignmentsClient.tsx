@@ -46,7 +46,7 @@ export default function AssignmentsClient() {
         getPanchayats(),
         getCoveredPanchayats(),
       ]);
-      setAgents(agentsData);
+      setAgents(agentsData.items);
       setAssignments(assignmentsData);
       setPanchayats(panchayatsData);
       setCoveredPanchayats(coveredData);

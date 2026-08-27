@@ -66,9 +66,9 @@ export default function MapClient() {
     if (!agentId) return;
     try {
       const data = await getAgents();
-      setAgents(data);
+      setAgents(data.items);
       setAgentsError(null);
-      setSelectedAgentId((current) => current || deepLinkAgentId || data[0]?.agentId || '');
+      setSelectedAgentId((current) => current || deepLinkAgentId || data.items[0]?.agentId || '');
     } catch (err) {
       // Was previously a console.error-only failure — the map kept showing
       // stale agent positions with no indication anything was wrong, which

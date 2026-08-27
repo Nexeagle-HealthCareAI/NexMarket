@@ -14,12 +14,18 @@ export default function DuplicatesClient() {
   // Tabs: 'current' (pending) | 'history' (resolved)
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
 
-  const { data: pairs = [], isLoading: loading, error: queryError } = useQuery({
-    queryKey: ['duplicates', activeTab],
-    queryFn: () => getDuplicates(activeTab === 'current' ? 'pending' : 'history'),
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
+  const { data: duplicatesData, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['duplicates', activeTab, page, pageSize],
+    queryFn: () => getDuplicates(activeTab === 'current' ? 'pending' : 'history', page, pageSize),
     enabled: !!agentId,
     staleTime: 1000 * 60 * 5, // Cache for 5 minutes
   });
+
+  const pairs = duplicatesData?.items || [];
+  const totalCount = duplicatesData?.totalCount || 0;
 
   const mergeMutation = useMutation({
     mutationFn: (id: string) => mergeDuplicate(id),
@@ -205,6 +211,49 @@ export default function DuplicatesClient() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {!loading && pairs.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} duplicates
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <select
+              className="input-field"
+              style={{ width: 'auto', padding: '0.2rem 1.5rem 0.2rem 0.5rem', fontSize: '0.85rem', minHeight: '32px' }}
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+            >
+              <option value="10">10 / page</option>
+              <option value="50">50 / page</option>
+              <option value="100">100 / page</option>
+            </select>
+            <div style={{ display: 'flex', gap: '0.25rem' }}>
+              <button 
+                className="btn btn-secondary btn-sm" 
+                disabled={page === 1}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+              >
+                Previous
+              </button>
+              <div style={{ padding: '0.2rem 0.5rem', fontSize: '0.85rem', color: 'var(--text-primary)', border: '1px solid var(--surface-border)', borderRadius: '4px', background: 'var(--surface-hover)' }}>
+                Page {page} of {Math.max(1, Math.ceil(totalCount / pageSize))}
+              </div>
+              <button 
+                className="btn btn-secondary btn-sm" 
+                disabled={page >= Math.ceil(totalCount / pageSize)}
+                onClick={() => setPage(p => Math.min(Math.ceil(totalCount / pageSize), p + 1))}
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

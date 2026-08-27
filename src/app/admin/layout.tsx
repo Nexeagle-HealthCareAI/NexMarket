@@ -12,6 +12,7 @@ const adminNavItems = [
   { href: '/admin/map', label: 'Live Map', icon: '🗺️' },
   { href: '/admin/assignments', label: 'Tasks', icon: '📋' },
   { href: '/admin/sync', label: 'Sync', icon: '📡' },
+  { href: '/admin/sync/dlq', label: 'Sync DLQ', icon: '🗑️' },
   { href: '/admin/agents', label: 'Agents', icon: '👥' },
   { href: '/admin/duplicates', label: 'Duplicates', icon: '⚠️' },
   { href: '/admin/reports', label: 'Reports', icon: '📊' },

@@ -65,7 +65,7 @@ export function SurveyDataManagementTab({
             </thead>
             <tbody>
               {paginatedSurveys.map((survey) => {
-                let answers: any = {};
+                let answers: Record<string, string | string[]> = {};
                 try {
                   if (survey.answersJson) answers = JSON.parse(survey.answersJson);
                 } catch (e) {}

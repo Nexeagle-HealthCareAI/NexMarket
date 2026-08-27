@@ -28,8 +28,15 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetReferrals([FromQuery] string? status)
+        public async Task<IActionResult> GetReferrals(
+            [FromQuery] string? status,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 50,
+            [FromQuery] string? search = null)
         {
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize, 1, 1000);
+
             var query = _context.Referrals.AsNoTracking().AsQueryable();
 
             if (!string.IsNullOrEmpty(status))
@@ -37,8 +44,18 @@ namespace SeemanchalOutreach.Api.Controllers
                 query = query.Where(r => r.Status == status);
             }
 
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var searchLower = search.ToLower();
+                query = query.Where(r => r.PatientName.ToLower().Contains(searchLower) || r.ClientPhone != null && r.ClientPhone.Contains(searchLower));
+            }
+
+            var totalCount = await query.CountAsync();
+
             var referrals = await query
                 .OrderByDescending(r => r.ReferralDate ?? r.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(r => new
                 {
                     r.Id,
@@ -83,7 +100,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 r.CreatedAt
             });
 
-            return Ok(result);
+            return Ok(new { TotalCount = totalCount, Items = result });
         }
 
         [HttpPut("{clientId}/status")]

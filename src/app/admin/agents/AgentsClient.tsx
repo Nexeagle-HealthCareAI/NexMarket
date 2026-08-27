@@ -18,12 +18,20 @@ export default function AgentsClient() {
   const agentId = useAgentStore((s) => s.agentId);
   const queryClient = useQueryClient();
 
-  const { data: agentsList = [], isLoading: loading, error: agentsQueryError } = useQuery({
-    queryKey: ['admin-agents'],
-    queryFn: () => getAgents() as Promise<AdminAgentDto[]>,
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'low-connectivity' | 'offline'>('all');
+
+  const { data: agentsData, isLoading: loading, error: agentsQueryError } = useQuery({
+    queryKey: ['admin-agents', page, pageSize, search, statusFilter],
+    queryFn: () => getAgents(page, pageSize, search, statusFilter === 'all' ? undefined : statusFilter),
     enabled: !!agentId,
     refetchInterval: 30000,
   });
+
+  const agentsList = agentsData?.items || [];
+  const totalCount = agentsData?.totalCount || 0;
 
   const { data: panchayats = [] } = useQuery({
     queryKey: ['panchayats'],
@@ -34,8 +42,7 @@ export default function AgentsClient() {
 
   const error = agentsQueryError ? (agentsQueryError instanceof Error ? agentsQueryError.message : 'Failed to load agents.') : '';
 
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'low-connectivity' | 'offline'>('all');
+  // search and statusFilter are now at the top of the component
   const [showDeactivated, setShowDeactivated] = useState(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
@@ -101,25 +108,17 @@ export default function AgentsClient() {
   const filtered = useMemo(() => {
     return agentsList.filter((a) => {
       if (!showDeactivated && !a.isActive) return false;
-      if (statusFilter !== 'all' && a.status !== statusFilter) return false;
-      if (!search.trim()) return true;
-      const q = search.toLowerCase();
-      return (
-        a.name.toLowerCase().includes(q) ||
-        a.district.toLowerCase().includes(q) ||
-        a.block.toLowerCase().includes(q) ||
-        a.phone.includes(q)
-      );
+      return true;
     });
-  }, [search, statusFilter, showDeactivated, agentsList]);
+  }, [showDeactivated, agentsList]);
 
   const stats = useMemo(() => {
-    const total = agentsList.length;
-    const online = agentsList.filter((a) => a.status === 'online').length;
+    const total = totalCount;
+    const online = agentsList.filter((a) => a.status === 'online').length; // (Estimates based on current page if paginated)
     const activeShifts = agentsList.filter((a) => a.activeShift).length;
     const totalContacts = agentsList.reduce((sum, a) => sum + a.todayContacts, 0);
     return { total, online, activeShifts, totalContacts };
-  }, [agentsList]);
+  }, [agentsList, totalCount]);
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -611,6 +610,46 @@ export default function AgentsClient() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} officers
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <select
+            className="input-field"
+            style={{ width: 'auto', padding: '0.2rem 1.5rem 0.2rem 0.5rem', fontSize: '0.85rem', minHeight: '32px' }}
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+          >
+            <option value="10">10 / page</option>
+            <option value="50">50 / page</option>
+            <option value="100">100 / page</option>
+          </select>
+          <div style={{ display: 'flex', gap: '0.25rem' }}>
+            <button 
+              className="btn btn-secondary btn-sm" 
+              disabled={page === 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+            >
+              Previous
+            </button>
+            <div style={{ padding: '0.2rem 0.5rem', fontSize: '0.85rem', color: 'var(--text-primary)', border: '1px solid var(--surface-border)', borderRadius: '4px', background: 'var(--surface-hover)' }}>
+              Page {page} of {Math.max(1, Math.ceil(totalCount / pageSize))}
+            </div>
+            <button 
+              className="btn btn-secondary btn-sm" 
+              disabled={page >= Math.ceil(totalCount / pageSize)}
+              onClick={() => setPage(p => Math.min(Math.ceil(totalCount / pageSize), p + 1))}
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Onboard Marketing Officer Drawer */}

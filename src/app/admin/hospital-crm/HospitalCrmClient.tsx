@@ -13,8 +13,12 @@ export default function HospitalCrmClient() {
   const [referrals, setReferrals] = useState<HospitalReferralDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  
   const [selectedReferral, setSelectedReferral] = useState<HospitalReferralDto | null>(null);
   const [newStatus, setNewStatus] = useState<'pending' | 'converted' | 'lost'>('pending');
   const [adminNotes, setAdminNotes] = useState('');
@@ -24,8 +28,14 @@ export default function HospitalCrmClient() {
     setLoading(true);
     setError('');
     try {
-      const data = await getHospitalReferrals(statusFilter === 'all' ? undefined : statusFilter);
-      setReferrals(data);
+      const data = await getHospitalReferrals(
+        statusFilter === 'all' ? undefined : statusFilter,
+        page,
+        pageSize,
+        search.trim() || undefined
+      );
+      setReferrals(data.items);
+      setTotalCount(data.totalCount);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load referrals.');
     } finally {
@@ -36,7 +46,7 @@ export default function HospitalCrmClient() {
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
+  }, [statusFilter, page, pageSize, search]);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,17 +110,27 @@ export default function HospitalCrmClient() {
           <h1>Hospital CRM</h1>
           <p style={{ color: 'var(--text-muted)' }}>Manage patient referrals from field agents.</p>
         </div>
-        <select 
-          className="field-input" 
-          style={{ width: 200, background: 'var(--surface-input)' }}
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="all">All Referrals</option>
-          <option value="pending">⏳ Pending Review</option>
-          <option value="converted">✅ Converted</option>
-          <option value="lost">❌ Lost / Declined</option>
-        </select>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            className="field-input"
+            placeholder="Search patients..."
+            style={{ width: 200, background: 'var(--surface-input)' }}
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          />
+          <select 
+            className="field-input" 
+            style={{ width: 200, background: 'var(--surface-input)' }}
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+          >
+            <option value="all">All Referrals</option>
+            <option value="pending">⏳ Pending Review</option>
+            <option value="converted">✅ Converted</option>
+            <option value="lost">❌ Lost / Declined</option>
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -181,6 +201,49 @@ export default function HospitalCrmClient() {
         </div>
       )}
 
+      {/* Pagination Controls */}
+      {!loading && referrals.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} referrals
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <select
+              className="input-field"
+              style={{ width: 'auto', padding: '0.2rem 1.5rem 0.2rem 0.5rem', fontSize: '0.85rem', minHeight: '32px' }}
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+            >
+              <option value="10">10 / page</option>
+              <option value="50">50 / page</option>
+              <option value="100">100 / page</option>
+            </select>
+            <div style={{ display: 'flex', gap: '0.25rem' }}>
+              <button 
+                className="btn btn-secondary btn-sm" 
+                disabled={page === 1}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+              >
+                Previous
+              </button>
+              <div style={{ padding: '0.2rem 0.5rem', fontSize: '0.85rem', color: 'var(--text-primary)', border: '1px solid var(--surface-border)', borderRadius: '4px', background: 'var(--surface-hover)' }}>
+                Page {page} of {Math.max(1, Math.ceil(totalCount / pageSize))}
+              </div>
+              <button 
+                className="btn btn-secondary btn-sm" 
+                disabled={page >= Math.ceil(totalCount / pageSize)}
+                onClick={() => setPage(p => Math.min(Math.ceil(totalCount / pageSize), p + 1))}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Update Modal */}
       {selectedReferral && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
@@ -196,7 +259,7 @@ export default function HospitalCrmClient() {
               <select 
                 className="field-input" 
                 value={newStatus} 
-                onChange={e => setNewStatus(e.target.value as any)}
+                onChange={e => setNewStatus(e.target.value as "pending" | "converted" | "lost")}
               >
                 <option value="pending">⏳ Pending Review</option>
                 <option value="converted">✅ Converted (Admitted/Consulted)</option>

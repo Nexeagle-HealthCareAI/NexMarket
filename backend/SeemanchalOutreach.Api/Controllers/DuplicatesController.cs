@@ -46,8 +46,15 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<List<DuplicatePairDto>>> GetDuplicates([FromQuery] string? status, CancellationToken cancellationToken)
+        public async Task<ActionResult<object>> GetDuplicates(
+            [FromQuery] string? status, 
+            [FromQuery] int page = 1, 
+            [FromQuery] int pageSize = 50, 
+            CancellationToken cancellationToken = default)
         {
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize, 1, 1000);
+
             var query = _db.Contacts.AsNoTracking()
                 .Where(c => c.PotentialDuplicateOf != null && c.PotentialDuplicateOf != "");
 
@@ -57,14 +64,17 @@ namespace SeemanchalOutreach.Api.Controllers
             }
             else if (status == "history")
             {
-                query = query.Where(c => c.IsMerged || c.DuplicateReviewedAt != null)
-                             .OrderByDescending(c => c.DuplicateReviewedAt ?? c.LastModifiedAt ?? c.CreatedAt)
-                             .Take(100);
+                query = query.Where(c => c.IsMerged || c.DuplicateReviewedAt != null);
             }
 
-            var flagged = await query.ToListAsync(cancellationToken);
+            var totalCount = await query.CountAsync(cancellationToken);
+            var flagged = await query
+                             .OrderByDescending(c => c.DuplicateReviewedAt ?? c.LastModifiedAt)
+                             .Skip((page - 1) * pageSize)
+                             .Take(pageSize)
+                             .ToListAsync(cancellationToken);
 
-            if (flagged.Count == 0) return Ok(new List<DuplicatePairDto>());
+            if (flagged.Count == 0) return Ok(new { TotalCount = totalCount, Items = new List<DuplicatePairDto>() });
 
             var originalClientIds = flagged.Select(f => f.PotentialDuplicateOf!).Distinct().ToList();
             var originals = await _db.Contacts.AsNoTracking()
@@ -136,7 +146,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 });
             }
 
-            return Ok(result);
+            return Ok(new { TotalCount = totalCount, Items = result });
         }
 
         [HttpPost("{clientId}/merge")]

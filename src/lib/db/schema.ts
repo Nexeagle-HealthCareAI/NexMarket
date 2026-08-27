@@ -211,6 +211,18 @@ export interface SyncOutboxEntry {
   errorMessage?: string;
 }
 
+export interface SyncDeadLetterQueueEntry {
+  localId?: number;
+  clientId: string;
+  deviceId: string;
+  entityType: EntityType;
+  payload: string;       // JSON serialized entity
+  attemptCount: number;
+  createdAt: string;     
+  lastAttemptAt: string; // The time of the final failed attempt before moving to DLQ
+  errorMessage: string;  // The final error that poisoned it
+}
+
 // ─── Sync State (key-value metadata store) ────────────────────────────────────
 
 export interface SyncState {
@@ -254,6 +266,7 @@ export class NexMarketDB extends Dexie {
   surveyQuestions!: EntityTable<import('../sync/api-client').SurveyQuestionDto, 'id'>;
   drafts!: EntityTable<LocalDraft, 'id'>;
   notifications!: EntityTable<LocalNotification, 'id'>;
+  syncDeadLetterQueue!: EntityTable<SyncDeadLetterQueueEntry, 'localId'>;
 
   constructor() {
     super('nexmarket_db');
@@ -307,6 +320,10 @@ export class NexMarketDB extends Dexie {
 
     this.version(8).stores({
       notifications: 'id, isRead, timestamp',
+    });
+
+    this.version(9).stores({
+      syncDeadLetterQueue: '++localId, [clientId+deviceId], entityType, createdAt',
     });
   }
 }

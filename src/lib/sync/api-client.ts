@@ -551,9 +551,19 @@ export interface UpdateReferralStatusDto {
   notes?: string;
 }
 
-export async function getHospitalReferrals(status?: string): Promise<HospitalReferralDto[]> {
-  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-  return get<HospitalReferralDto[]>(`/api/v1/referrals${qs}`);
+export async function getHospitalReferrals(
+  status?: string,
+  page = 1,
+  pageSize = 50,
+  searchQuery?: string
+): Promise<{ totalCount: number; items: HospitalReferralDto[] }> {
+  const params = new URLSearchParams();
+  if (status) params.append('status', status);
+  params.append('page', page.toString());
+  params.append('pageSize', pageSize.toString());
+  if (searchQuery) params.append('search', searchQuery);
+  
+  return get<{ totalCount: number; items: HospitalReferralDto[] }>(`/api/v1/referrals?${params.toString()}`);
 }
 
 export async function updateReferralStatus(clientId: string, dto: UpdateReferralStatusDto): Promise<{ message: string }> {
@@ -562,8 +572,19 @@ export async function updateReferralStatus(clientId: string, dto: UpdateReferral
 
 // ─── Admin API ────────────────────────────────────────────────────────────────
 
-export function getAgents(): Promise<AdminAgentDto[]> {
-  return get<AdminAgentDto[]>('/api/v1/agents');
+export function getAgents(
+  page = 1,
+  pageSize = 50,
+  searchQuery?: string,
+  statusFilter?: string
+): Promise<{ totalCount: number; items: AdminAgentDto[] }> {
+  const params = new URLSearchParams();
+  params.append('page', page.toString());
+  params.append('pageSize', pageSize.toString());
+  if (searchQuery) params.append('search', searchQuery);
+  if (statusFilter) params.append('statusFilter', statusFilter);
+  
+  return get<{ totalCount: number; items: AdminAgentDto[] }>(`/api/v1/agents?${params.toString()}`);
 }
 
 export function getAgentDetail(agentId: string): Promise<AgentDetailDto> {
@@ -579,9 +600,17 @@ export function getAgentTrajectory(agentId: string, date?: string): Promise<Traj
   return get<TrajectoryPointDto[]>(`/api/v1/agents/${encodeURIComponent(agentId)}/trajectory${qs}`);
 }
 
-export function getDuplicates(status?: string): Promise<DuplicatePairDto[]> {
-  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-  return get<DuplicatePairDto[]>(`/api/v1/duplicates${qs}`);
+export function getDuplicates(
+  status?: string,
+  page = 1,
+  pageSize = 50
+): Promise<{ totalCount: number; items: DuplicatePairDto[] }> {
+  const params = new URLSearchParams();
+  if (status) params.append('status', status);
+  params.append('page', page.toString());
+  params.append('pageSize', pageSize.toString());
+
+  return get<{ totalCount: number; items: DuplicatePairDto[] }>(`/api/v1/duplicates?${params.toString()}`);
 }
 
 export function mergeDuplicate(clientId: string): Promise<unknown> {
