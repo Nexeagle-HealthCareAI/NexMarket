@@ -49,7 +49,7 @@ export default function PipelinePage() {
   const togglePinContact = useAgentStore((s) => s.togglePinContact);
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<'daily_queue' | 'worklist' | 'recent' | 'historical'>('daily_queue');
+  const [activeTab, setActiveTab] = useState<'daily_queue' | 'worklist' | 'recent' | 'historical' | 'important'>('daily_queue');
   const [queueGoal, setQueueGoal] = useState<number>(100);
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
@@ -131,7 +131,7 @@ export default function PipelinePage() {
       maxFollowUpDate,
       updatedAfter,
       agentEscalated: showEscalatedOnly ? true : undefined,
-      isImportant: showImportantOnly ? true : undefined,
+      isImportant: (showImportantOnly || activeTab === 'important') ? true : undefined,
       searchQuery: searchQuery.trim() || undefined,
       sortBy,
       sortOrder,
@@ -359,7 +359,7 @@ export default function PipelinePage() {
           <div>
             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Total Added
-              {activeTab === 'worklist' ? ' — Worklist' : activeTab === 'recent' ? ' — Recent Activity' : ' — Historical'}
+              {activeTab === 'worklist' ? ' — Worklist' : activeTab === 'recent' ? ' — Recent Activity' : activeTab === 'important' ? ' — Important' : ' — Historical'}
             </div>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>{loading ? '…' : totalCount.toLocaleString()}</div>
           </div>
@@ -411,6 +411,17 @@ export default function PipelinePage() {
           }}
         >
           🗄️ Historical Data
+        </button>
+        <button
+          onClick={() => { setActiveTab('important'); setPage(1); setSortBy('lastupdated'); setSortOrder('desc'); }}
+          style={{
+            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
+            fontSize: '1rem', fontWeight: 700, color: activeTab === 'important' ? '#eab308' : '#64748b',
+            borderBottom: activeTab === 'important' ? '3px solid #eab308' : '3px solid transparent',
+            marginBottom: '-2px', transition: 'all 0.2s'
+          }}
+        >
+          ⭐ Important
         </button>
       </div>
 
@@ -483,7 +494,7 @@ export default function PipelinePage() {
                   <tr>
                     <SortableHeader label="Contact Details" columnKey="name" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
                     <SortableHeader label="Location (Village)" columnKey="location" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
-                    {activeTab === 'recent' && (
+                    {(activeTab === 'recent' || activeTab === 'important') && (
                       <>
                         <SortableHeader label="Stage (Result)" columnKey="status" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} width="160px" />
                         <SortableHeader label="Follow-up Date" columnKey="followupdate" currentSortBy={sortBy} currentSortOrder={sortOrder} onSort={(k, o) => { setSortBy(k); setSortOrder(o); setPage(1); }} />
@@ -510,7 +521,7 @@ export default function PipelinePage() {
                         contact={c}
                         panchayatName={pInfo?.name}
                         blockName={pInfo?.block}
-                        showStageAndFollowUp={activeTab === 'recent'}
+                        showStageAndFollowUp={activeTab === 'recent' || activeTab === 'important'}
                         showComments={activeTab === 'historical'}
                         showQuickActions={false}
                         onEdit={() => setEditDrawerContact(c)}

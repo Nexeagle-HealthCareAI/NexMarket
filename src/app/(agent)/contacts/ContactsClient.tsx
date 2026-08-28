@@ -239,9 +239,35 @@ export default function ContactsPage() {
         </select>
       </motion.div>
 
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '1rem', borderBottom: '2px solid var(--surface-border)', marginBottom: '1rem' }}>
+        <button
+          onClick={() => setRoleFilter('all')}
+          style={{
+            background: 'none', border: 'none', padding: '0.75rem 0.5rem', cursor: 'pointer',
+            fontSize: '0.95rem', fontWeight: 600, color: roleFilter !== 'important' ? 'var(--color-primary-600)' : 'var(--text-muted)',
+            borderBottom: roleFilter !== 'important' ? '3px solid var(--color-primary-600)' : '3px solid transparent',
+            marginBottom: '-2px', transition: 'all 0.2s'
+          }}
+        >
+          All Contacts
+        </button>
+        <button
+          onClick={() => setRoleFilter('important')}
+          style={{
+            background: 'none', border: 'none', padding: '0.75rem 0.5rem', cursor: 'pointer',
+            fontSize: '0.95rem', fontWeight: 600, color: roleFilter === 'important' ? '#d97706' : 'var(--text-muted)',
+            borderBottom: roleFilter === 'important' ? '3px solid #d97706' : '3px solid transparent',
+            marginBottom: '-2px', transition: 'all 0.2s'
+          }}
+        >
+          ★ Important
+        </button>
+      </div>
+
       {/* Role filter chips */}
       <motion.div variants={itemVariants} style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-        {(['all', 'important', 'asha_worker', 'rmp_doctor', 'ward_member', 'medicine_shop', 'mukhiya', 'prominent_person', 'lab', 'nursing_home', 'independent_doctor', 'hospital', 'other'] as const).map((role) => (
+        {(['all', 'asha_worker', 'rmp_doctor', 'ward_member', 'medicine_shop', 'mukhiya', 'prominent_person', 'lab', 'nursing_home', 'independent_doctor', 'hospital', 'other'] as const).map((role) => (
           <button
             key={role}
             id={`filter-${role}`}
@@ -258,9 +284,10 @@ export default function ContactsPage() {
               cursor: 'pointer',
               whiteSpace: 'nowrap',
               transition: 'all 120ms ease',
+              display: roleFilter === 'important' && role !== 'all' ? 'none' : 'block',
             }}
           >
-            {role === 'all' ? t.filterAll : role === 'important' ? '★ Important' : ROLE_LABELS[role as ContactRole]}
+            {role === 'all' ? t.filterAll : ROLE_LABELS[role as ContactRole]}
           </button>
         ))}
       </motion.div>
