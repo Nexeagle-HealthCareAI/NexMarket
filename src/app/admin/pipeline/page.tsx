@@ -61,6 +61,7 @@ export default function PipelinePage() {
   const [sortBy, setSortBy] = useState<string | undefined>('followupdate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | undefined>('asc');
   const [showEscalatedOnly, setShowEscalatedOnly] = useState(false);
+  const [showImportantOnly, setShowImportantOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [selectedBlocks, setSelectedBlocks] = useState<string[]>([]);
@@ -130,11 +131,12 @@ export default function PipelinePage() {
       maxFollowUpDate,
       updatedAfter,
       agentEscalated: showEscalatedOnly ? true : undefined,
+      isImportant: showImportantOnly ? true : undefined,
       searchQuery: searchQuery.trim() || undefined,
       sortBy,
       sortOrder,
     };
-  }, [page, activeTab, dateFilter, customStartDate, customEndDate, selectedCities, selectedBlocks, selectedPanchayats, showEscalatedOnly, searchQuery, sortBy, sortOrder, queueGoal]);
+  }, [page, activeTab, dateFilter, customStartDate, customEndDate, selectedCities, selectedBlocks, selectedPanchayats, showEscalatedOnly, showImportantOnly, searchQuery, sortBy, sortOrder, queueGoal]);
 
   const { data, isLoading: loading, error: queryError } = useQuery({
     queryKey: ['admin-contacts', queryFilters],
@@ -248,6 +250,7 @@ export default function PipelinePage() {
         maxFollowUpDate,
         updatedAfter,
         agentEscalated: showEscalatedOnly ? true : undefined,
+        isImportant: showImportantOnly ? true : undefined,
         searchQuery: searchQuery.trim() || undefined,
         sortBy,
         sortOrder,
@@ -420,6 +423,7 @@ export default function PipelinePage() {
         selectedPanchayats={selectedPanchayats} setSelectedPanchayats={setSelectedPanchayats} uniquePanchayats={uniquePanchayats}
         searchQuery={searchQuery} setSearchQuery={setSearchQuery}
         showEscalatedOnly={showEscalatedOnly} setShowEscalatedOnly={setShowEscalatedOnly}
+        showImportantOnly={showImportantOnly} setShowImportantOnly={setShowImportantOnly}
         setPage={setPage}
       />
 

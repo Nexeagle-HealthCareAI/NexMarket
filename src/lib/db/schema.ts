@@ -77,6 +77,7 @@ export interface LocalContact {
   lat?: number;
   lng?: number;
   potentialDuplicateOf?: string[];  // server-flagged duplicate serverIds
+  isImportant?: boolean;
   createdAt: string;    // ISO string — client clock
   updatedAt: string;
   syncedAt?: string;
@@ -324,6 +325,10 @@ export class NexMarketDB extends Dexie {
 
     this.version(9).stores({
       syncDeadLetterQueue: '++localId, [clientId+deviceId], entityType, createdAt',
+    });
+
+    this.version(10).stores({
+      contacts: '++localId, [clientId+deviceId], serverId, panchayatId, agentId, phone, status, followUpDate, syncedAt, isImportant',
     });
   }
 }

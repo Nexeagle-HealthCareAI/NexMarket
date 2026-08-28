@@ -171,6 +171,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     createdAt = c.CreatedAt.ToString("o"),
                     updatedAt = c.CreatedAt.ToString("o"),
                     potentialDuplicateOf = c.PotentialDuplicateOf,
+                    isImportant = c.IsImportant,
                 }),
                 visits = visits.Select(v => new
                 {

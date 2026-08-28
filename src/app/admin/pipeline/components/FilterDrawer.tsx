@@ -117,6 +117,8 @@ export interface FilterDrawerProps {
   setSearchQuery: (v: string) => void;
   showEscalatedOnly: boolean;
   setShowEscalatedOnly: (v: boolean) => void;
+  showImportantOnly?: boolean;
+  setShowImportantOnly?: (v: boolean) => void;
   setPage: (p: number) => void;
 }
 
@@ -129,6 +131,7 @@ export function FilterDrawer({
   selectedPanchayats, setSelectedPanchayats, uniquePanchayats,
   searchQuery, setSearchQuery,
   showEscalatedOnly, setShowEscalatedOnly,
+  showImportantOnly, setShowImportantOnly,
   setPage
 }: FilterDrawerProps) {
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
@@ -221,9 +224,21 @@ export function FilterDrawer({
             <div style={{ position: 'absolute', top: 2, left: showEscalatedOnly ? 20 : 2, width: 18, height: 18, background: 'white', borderRadius: '50%', transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
           </div>
           <span style={{ fontSize: '0.85rem', fontWeight: 700, color: showEscalatedOnly ? '#b91c1c' : '#475569' }}>
-            🚨 Escalations Only
+            🚨 Escalations
           </span>
         </div>
+        
+        {/* Important Toggle */}
+        {setShowImportantOnly && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: showImportantOnly ? '#fefce8' : 'white', border: `1px solid ${showImportantOnly ? '#fde047' : '#cbd5e1'}`, padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s', marginTop: 'auto' }} onClick={() => { setShowImportantOnly(!showImportantOnly); setPage(1); }}>
+            <div style={{ width: 40, height: 22, background: showImportantOnly ? '#eab308' : '#cbd5e1', borderRadius: 11, position: 'relative', transition: 'background 0.2s' }}>
+              <div style={{ position: 'absolute', top: 2, left: showImportantOnly ? 20 : 2, width: 18, height: 18, background: 'white', borderRadius: '50%', transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
+            </div>
+            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: showImportantOnly ? '#a16207' : '#475569' }}>
+              ★ Important
+            </span>
+          </div>
+        )}
       </div>
     </>
   );

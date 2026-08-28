@@ -120,6 +120,7 @@ namespace SeemanchalOutreach.Domain.Entities
         public bool WhatsappAdded { get; set; }
         public bool CardGiven { get; set; }
         public string? PhotoUrl { get; set; }
+        public bool IsImportant { get; set; } = false;
         
         public bool AgentEscalated { get; set; } = false;
         public string? AgentEscalationNote { get; set; }

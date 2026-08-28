@@ -28,6 +28,7 @@ export default function EditContactDrawer({ contact, panchayats, isOpen, onClose
   const [editConflicts, setEditConflicts] = useState(contact.conflicts || '');
   const [editAgentEscalated, setEditAgentEscalated] = useState(contact.agentEscalated || false);
   const [editAgentEscalationNote, setEditAgentEscalationNote] = useState(contact.agentEscalationNote || '');
+  const [editIsImportant, setEditIsImportant] = useState(contact.isImportant || false);
 
   const hasChanges = 
     editName !== (contact.name || '') ||
@@ -39,7 +40,8 @@ export default function EditContactDrawer({ contact, panchayats, isOpen, onClose
     editComplaints !== (contact.complaints || '') ||
     editConflicts !== (contact.conflicts || '') ||
     editAgentEscalated !== (contact.agentEscalated || false) ||
-    editAgentEscalationNote !== (contact.agentEscalationNote || '');
+    editAgentEscalationNote !== (contact.agentEscalationNote || '') ||
+    editIsImportant !== (contact.isImportant || false);
 
   const uniqueDistricts = Array.from(new Set(panchayats.map(p => p.district))).sort();
   
@@ -63,7 +65,8 @@ export default function EditContactDrawer({ contact, panchayats, isOpen, onClose
       complaints: editComplaints,
       conflicts: editConflicts,
       agentEscalated: editAgentEscalated,
-      agentEscalationNote: editAgentEscalationNote
+      agentEscalationNote: editAgentEscalationNote,
+      isImportant: editIsImportant
     });
   };
 
@@ -213,6 +216,18 @@ export default function EditContactDrawer({ contact, panchayats, isOpen, onClose
 
               <div style={{ height: '1px', background: '#e2e8f0', margin: '0.5rem 0' }} />
 
+              <div style={{ background: editIsImportant ? '#fefce8' : '#f8fafc', padding: '1rem', borderRadius: '8px', border: `1px solid ${editIsImportant ? '#fde047' : '#e2e8f0'}`, transition: 'all 0.2s', marginBottom: '-0.5rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', userSelect: 'none' }}>
+                  <div style={{ width: 44, height: 24, background: editIsImportant ? '#eab308' : '#cbd5e1', borderRadius: 12, position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                    <div style={{ position: 'absolute', top: 2, left: editIsImportant ? 22 : 2, width: 20, height: 20, background: 'white', borderRadius: '50%', transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
+                  </div>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: editIsImportant ? '#854d0e' : '#475569' }}>
+                    ★ Important Contact
+                  </span>
+                  <input type="checkbox" checked={editIsImportant} onChange={e => setEditIsImportant(e.target.checked)} style={{ display: 'none' }} />
+                </label>
+              </div>
+
               <div style={{ background: editAgentEscalated ? '#fef2f2' : '#f8fafc', padding: '1rem', borderRadius: '8px', border: `1px solid ${editAgentEscalated ? '#fca5a5' : '#e2e8f0'}`, transition: 'all 0.2s' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', userSelect: 'none' }}>
                   <div style={{ width: 44, height: 24, background: editAgentEscalated ? '#ef4444' : '#cbd5e1', borderRadius: 12, position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
@@ -221,6 +236,7 @@ export default function EditContactDrawer({ contact, panchayats, isOpen, onClose
                   <span style={{ fontSize: '0.85rem', fontWeight: 700, color: editAgentEscalated ? '#b91c1c' : '#475569' }}>
                     🚨 Escalate to Admin
                   </span>
+                  <input type="checkbox" checked={editAgentEscalated} onChange={e => setEditAgentEscalated(e.target.checked)} style={{ display: 'none' }} />
                 </label>
                 
                 <AnimatePresence>

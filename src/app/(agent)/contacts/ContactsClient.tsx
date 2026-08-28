@@ -7,6 +7,7 @@ import { useAgentStore } from '@/store/agent-store';
 import { useContacts, usePanchayats, db } from '@/lib/db';
 import type { ContactRole } from '@/lib/db/schema';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { addToOutbox } from '@/lib/sync/outbox';
 
 const ROLE_CLASSES: Record<ContactRole, string> = {
   asha_worker: 'role-asha',
@@ -68,14 +69,26 @@ export default function ContactsPage() {
   };
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState<ContactRole | 'all'>('all');
+  const [roleFilter, setRoleFilter] = useState<ContactRole | 'all' | 'important'>('all');
   
   const [selectedDistrict, setSelectedDistrict] = useState<string>('');
   const [selectedBlock, setSelectedBlock] = useState<string>('');
   const [selectedPanchayat, setSelectedPanchayat] = useState<string>('');
 
-  const pinnedContactIds = useAgentStore((s) => s.pinnedContactIds || []);
-  const togglePinContact = useAgentStore((s) => s.togglePinContact);
+  async function handleToggleImportant(e: React.MouseEvent, clientId: string, current: boolean) {
+    e.preventDefault();
+    await db.contacts.where('clientId').equals(clientId).modify({ isImportant: !current });
+    const contact = await db.contacts.where('clientId').equals(clientId).first();
+    if (contact) {
+      await addToOutbox({
+        clientId: contact.clientId,
+        deviceId: contact.deviceId,
+        entityType: 'contact',
+        payload: JSON.stringify(contact),
+        type: 'contact_update'
+      });
+    }
+  }
 
   const uniqueDistricts = useMemo(() => {
     if (!panchayats) return [];
@@ -112,7 +125,7 @@ export default function ContactsPage() {
       const matchesBlock = !selectedBlock || panchayat?.block === selectedBlock;
       const matchesPanchayat = !selectedPanchayat || c.panchayatId === selectedPanchayat;
 
-      const matchesRole = roleFilter === 'all' || c.role === roleFilter;
+      const matchesRole = roleFilter === 'all' ? true : roleFilter === 'important' ? c.isImportant === true : c.role === roleFilter;
       const query = searchQuery.toLowerCase();
       const matchesSearch =
         !query ||
@@ -125,13 +138,11 @@ export default function ContactsPage() {
 
   const sortedFiltered = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      const aPinned = pinnedContactIds.includes(a.clientId);
-      const bPinned = pinnedContactIds.includes(b.clientId);
-      if (aPinned && !bPinned) return -1;
-      if (!aPinned && bPinned) return 1;
+      if (a.isImportant && !b.isImportant) return -1;
+      if (!a.isImportant && b.isImportant) return 1;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [filtered, pinnedContactIds]);
+  }, [filtered]);
 
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants}>
@@ -231,7 +242,7 @@ export default function ContactsPage() {
 
       {/* Role filter chips */}
       <motion.div variants={itemVariants} style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-        {(['all', 'asha_worker', 'rmp_doctor', 'ward_member', 'medicine_shop', 'mukhiya', 'prominent_person', 'lab', 'nursing_home', 'independent_doctor', 'hospital', 'other'] as const).map((role) => (
+        {(['all', 'important', 'asha_worker', 'rmp_doctor', 'ward_member', 'medicine_shop', 'mukhiya', 'prominent_person', 'lab', 'nursing_home', 'independent_doctor', 'hospital', 'other'] as const).map((role) => (
           <button
             key={role}
             id={`filter-${role}`}
@@ -250,7 +261,7 @@ export default function ContactsPage() {
               transition: 'all 120ms ease',
             }}
           >
-            {role === 'all' ? t.filterAll : ROLE_LABELS[role]}
+            {role === 'all' ? t.filterAll : role === 'important' ? '★ Important' : ROLE_LABELS[role as ContactRole]}
           </button>
         ))}
       </motion.div>
@@ -292,7 +303,7 @@ export default function ContactsPage() {
                           <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
                             {contact.name}
                           </p>
-                          {pinnedContactIds.includes(contact.clientId) && (
+                          {contact.isImportant && (
                             <Pin size={14} fill="currentColor" color="var(--color-primary-600)" />
                           )}
                           {contact.potentialDuplicateOf?.length ? (
@@ -323,20 +334,17 @@ export default function ContactsPage() {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
                         <button
-                          onClick={(e) => {
-                            e.preventDefault(); // prevent navigation
-                            togglePinContact(contact.clientId);
-                          }}
+                          onClick={(e) => handleToggleImportant(e, contact.clientId, !!contact.isImportant)}
                           style={{
                             background: 'transparent',
                             border: 'none',
-                            color: pinnedContactIds.includes(contact.clientId) ? 'var(--color-primary-600)' : 'var(--text-muted)',
+                            color: contact.isImportant ? 'var(--color-primary-600)' : 'var(--text-muted)',
                             cursor: 'pointer',
                             padding: '0.2rem',
                           }}
-                          title={pinnedContactIds.includes(contact.clientId) ? "Unpin Contact" : "Pin Contact"}
+                          title={contact.isImportant ? "Remove Important" : "Mark Important"}
                         >
-                          {pinnedContactIds.includes(contact.clientId) ? <Pin size={18} fill="currentColor" /> : <Pin size={18} />}
+                          {contact.isImportant ? <Pin size={18} fill="currentColor" /> : <Pin size={18} />}
                         </button>
                         <span className={`role-chip ${ROLE_CLASSES[contact.role]}`}>
                           {ROLE_LABELS[contact.role]}

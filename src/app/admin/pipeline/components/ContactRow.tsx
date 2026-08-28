@@ -60,6 +60,9 @@ export function ContactRow({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <div style={{ fontWeight: 700, color: '#0f172a' }}>{contact.name}</div>
+              {contact.isImportant && (
+                <Pin size={14} fill="currentColor" color="#eab308" />
+              )}
               {onTogglePin && (
                 <button 
                   onClick={onTogglePin} 

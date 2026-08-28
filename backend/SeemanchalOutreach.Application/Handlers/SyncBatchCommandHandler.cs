@@ -248,6 +248,7 @@ namespace SeemanchalOutreach.Application.Handlers
                                      : root.TryGetProperty("comments", out var cProp) && cProp.ValueKind == JsonValueKind.String ? cProp.GetString() : null;
                     double? lat = GetOptionalDouble(root, "lat");
                     double? lng = GetOptionalDouble(root, "lng");
+                    bool isImportant = GetBool(root, "isImportant", false);
                     bool agentEscalated = GetBool(root, "agentEscalated", false);
                     string? agentEscalationNote = root.TryGetProperty("agentEscalationNote", out var aenProp) && aenProp.ValueKind == JsonValueKind.String ? aenProp.GetString() : null;
                     string? photoUrl = root.TryGetProperty("photoUrl", out var pProp) && pProp.ValueKind == JsonValueKind.String ? pProp.GetString() : null;
@@ -285,6 +286,7 @@ namespace SeemanchalOutreach.Application.Handlers
                             Longitude = lng,
                             AgentEscalated = agentEscalated,
                             AgentEscalationNote = agentEscalationNote,
+                            IsImportant = isImportant,
                             PhotoUrl = photoUrl,
                             CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
                             ServerReceivedAt = syncedAt
@@ -365,6 +367,7 @@ namespace SeemanchalOutreach.Application.Handlers
                             existing.Profession = profession;
                             existing.WhatsappAdded = whatsapp;
                             existing.CardGiven = card;
+                            existing.IsImportant = isImportant;
                             existing.Latitude = lat ?? existing.Latitude;
                             existing.Longitude = lng ?? existing.Longitude;
                             if (!string.IsNullOrEmpty(photoUrl)) existing.PhotoUrl = photoUrl;

@@ -51,6 +51,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
   const [editConflicts, setEditConflicts] = useState('');
   const [editWhatsappAdded, setEditWhatsappAdded] = useState(false);
   const [editCardGiven, setEditCardGiven] = useState(false);
+  const [editIsImportant, setEditIsImportant] = useState(false);
 
   function startEditingProfile() {
     if (!contact) return;
@@ -65,6 +66,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
     setEditConflicts(contact.conflicts || '');
     setEditWhatsappAdded(contact.whatsappAdded || false);
     setEditCardGiven(contact.cardGiven || false);
+    setEditIsImportant(contact.isImportant || false);
     setIsEditingProfile(true);
   }
 
@@ -81,6 +83,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
         conflicts: editConflicts.trim() || undefined,
         whatsappAdded: editWhatsappAdded,
         cardGiven: editCardGiven,
+        isImportant: editIsImportant,
         agentEscalated: editAgentEscalated,
         agentEscalationNote: editAgentEscalationNote.trim() || undefined,
         updatedAt: new Date().toISOString() 
@@ -272,6 +275,10 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
                 <input type="checkbox" checked={editCardGiven} onChange={e => setEditCardGiven(e.target.checked)} />
                 Partner Card Given
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                <input type="checkbox" checked={editIsImportant} onChange={e => setEditIsImportant(e.target.checked)} />
+                ★ Mark as Important
+              </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: '#b91c1c', fontWeight: editAgentEscalated ? 600 : 400, marginTop: '0.25rem' }}>
                 <input 
                   type="checkbox" 
@@ -316,6 +323,11 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
               <span className="badge" style={{ background: 'rgba(99,102,241,0.2)', color: 'var(--color-primary-400)', fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}>
                 {contact.role.replace('_', ' ').toUpperCase()}
               </span>
+              {contact.isImportant && (
+                <span className="badge" style={{ background: '#fef9c3', color: '#854d0e', fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}>
+                  ★ Important
+                </span>
+              )}
               {contact.profession && (
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{contact.profession}</span>
               )}

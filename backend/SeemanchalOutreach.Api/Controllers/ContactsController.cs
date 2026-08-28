@@ -33,6 +33,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public string? AgentEscalationResolution { get; set; }
         public bool? AgentEscalated { get; set; }
         public string? AgentEscalationNote { get; set; }
+        public bool? IsImportant { get; set; }
     }
 
     [ApiController]
@@ -60,6 +61,7 @@ namespace SeemanchalOutreach.Api.Controllers
             [FromQuery] DateTime? maxFollowUpDate = null,
             [FromQuery] DateTime? updatedAfter = null,
             [FromQuery] bool? agentEscalated = null,
+            [FromQuery] bool? isImportant = null,
             [FromQuery] string? search = null,
             [FromQuery] string? sortBy = null,
             [FromQuery] string? sortOrder = null,
@@ -131,6 +133,11 @@ namespace SeemanchalOutreach.Api.Controllers
                 contactsQuery = contactsQuery.Where(c => c.AgentEscalated);
             }
 
+            if (isImportant.HasValue && isImportant.Value)
+            {
+                contactsQuery = contactsQuery.Where(c => c.IsImportant);
+            }
+
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var lowerSearch = search.ToLowerInvariant();
@@ -183,6 +190,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     c.AgentEscalationResolution,
                     c.WhatsappAdded,
                     c.CardGiven,
+                    c.IsImportant,
                     c.CreatedAt,
                     LastHistory = _db.ContactHistory
                         .Where(h => h.ContactClientId == c.ClientId)
@@ -216,6 +224,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 c.AgentEscalationResolution,
                 c.WhatsappAdded,
                 c.CardGiven,
+                c.IsImportant,
                 c.CreatedAt,
                 LastUpdatedAt = c.LastHistory?.Timestamp,
                 LastUpdatedBy = c.LastHistory?.UpdatedBy
@@ -259,6 +268,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     c.AgentEscalationResolution,
                     c.WhatsappAdded,
                     c.CardGiven,
+                    c.IsImportant,
                     c.CreatedAt,
                     Documents = _db.ContactDocuments
                         .Where(d => d.ContactClientId == c.ClientId)
@@ -302,6 +312,7 @@ namespace SeemanchalOutreach.Api.Controllers
             if (dto.Name != null) contact.Name = dto.Name;
             if (dto.Phone != null) contact.Phone = dto.Phone;
             if (dto.PanchayatId != null) contact.PanchayatId = dto.PanchayatId;
+            if (dto.IsImportant.HasValue) contact.IsImportant = dto.IsImportant.Value;
             
             if (dto.AgentEscalated.HasValue)
             {

@@ -771,6 +771,7 @@ export interface AdminContactDto {
   agentEscalationNote?: string | null;
   isEscalationResolved?: boolean;
   agentEscalationResolution?: string | null;
+  isImportant?: boolean;
   documents?: { id: string, url: string, mimeType: string, label: string | null, createdAt: string }[];
 }
 
@@ -790,6 +791,7 @@ export interface ContactUpdateRequest {
   agentEscalationResolution?: string | null;
   agentEscalated?: boolean;
   agentEscalationNote?: string | null;
+  isImportant?: boolean;
 }
 
 export interface AdminContactsQuery {
@@ -804,6 +806,7 @@ export interface AdminContactsQuery {
   maxFollowUpDate?: string;
   updatedAfter?: string;
   agentEscalated?: boolean;
+  isImportant?: boolean;
   searchQuery?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
@@ -830,6 +833,7 @@ export function getAdminContacts(query: AdminContactsQuery = {}): Promise<Pagina
   if (query.maxFollowUpDate) params.set('maxFollowUpDate', query.maxFollowUpDate);
   if (query.updatedAfter) params.set('updatedAfter', query.updatedAfter);
   if (query.agentEscalated) params.set('agentEscalated', 'true');
+  if (query.isImportant) params.set('isImportant', 'true');
   if (query.searchQuery) params.set('search', query.searchQuery);
   if (query.sortBy) params.set('sortBy', query.sortBy);
   if (query.sortOrder) params.set('sortOrder', query.sortOrder);
