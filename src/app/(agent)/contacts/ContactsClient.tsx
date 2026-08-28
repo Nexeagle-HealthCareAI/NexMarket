@@ -80,13 +80,12 @@ export default function ContactsPage() {
     await db.contacts.where('clientId').equals(clientId).modify({ isImportant: !current });
     const contact = await db.contacts.where('clientId').equals(clientId).first();
     if (contact) {
-      await addToOutbox({
-        clientId: contact.clientId,
-        deviceId: contact.deviceId,
-        entityType: 'contact',
-        payload: JSON.stringify(contact),
-        type: 'contact_update'
-      });
+      await addToOutbox(
+        contact.clientId,
+        contact.deviceId,
+        'contact',
+        contact
+      );
     }
   }
 
