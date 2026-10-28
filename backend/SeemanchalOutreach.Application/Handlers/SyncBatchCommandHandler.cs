@@ -16,11 +16,61 @@ namespace SeemanchalOutreach.Application.Handlers
     {
         private readonly IMarketingDbContext _db;
         private readonly IPhotoUploadService _photoUploadService;
+        private readonly ILiveEvents _live;
 
-        public SyncBatchCommandHandler(IMarketingDbContext db, IPhotoUploadService photoUploadService)
+        public SyncBatchCommandHandler(IMarketingDbContext db, IPhotoUploadService photoUploadService, ILiveEvents live)
         {
             _db = db;
             _photoUploadService = photoUploadService;
+            _live = live;
+        }
+
+        /// <summary>Tells the live dashboard about field activity that was just synced. Never throws.</summary>
+        private async Task PublishLiveAsync(string agentId, List<OutboxItemDto> created, CancellationToken cancellationToken)
+        {
+            if (created.Count == 0) return;
+            try
+            {
+                var agentName = await _db.Agents.AsNoTracking().Where(a => a.AgentId == agentId).Select(a => a.Name).FirstOrDefaultAsync(cancellationToken) ?? agentId;
+                foreach (var item in created)
+                {
+                    using var doc = JsonDocument.Parse(item.Payload);
+                    var root = doc.RootElement;
+                    LiveEvent? e = null;
+                    switch (item.Type)
+                    {
+                        case "shift_start":
+                            e = new LiveEvent { Kind = "shift", Text = $"{agentName} started a shift" };
+                            break;
+                        case "visit_checkin":
+                        {
+                            var pid = GetString(root, "panchayatId", "");
+                            var place = await _db.Panchayats.AsNoTracking().Where(p => p.PanchayatId == pid).Select(p => p.Name).FirstOrDefaultAsync(cancellationToken);
+                            e = new LiveEvent { Kind = "visit", Text = $"{agentName} checked in at {place ?? "a panchayat"}" };
+                            break;
+                        }
+                        case "contact_new":
+                            e = new LiveEvent { Kind = "partner", Text = $"{agentName} added a partner: {GetString(root, "name", "")}", RefId = GetString(root, "clientId", item.ClientId) };
+                            break;
+                        case "referral_new":
+                        {
+                            var dept = GetString(root, "department", "");
+                            e = new LiveEvent
+                            {
+                                Kind = "referral",
+                                Text = $"New referral: {GetString(root, "patientName", "")}{(string.IsNullOrEmpty(dept) ? "" : " → " + dept)}, by {agentName}",
+                                RefId = GetString(root, "clientId", item.ClientId),
+                            };
+                            break;
+                        }
+                    }
+                    if (e != null) await _live.PublishAsync(e);
+                }
+            }
+            catch (Exception)
+            {
+                // The sync itself succeeded; a missed live update is harmless.
+            }
         }
 
         // Contacts are captured offline-first, so a photo taken in the field is
@@ -62,6 +112,52 @@ namespace SeemanchalOutreach.Application.Handlers
             }
         }
 
+        /// <summary>
+        /// Moves the agent's dot on the live map: the newest GPS fix in this batch (route points,
+        /// a check-in or a shift start). Fixes older than 30 minutes are offline catch-up and
+        /// aren't pushed. Never throws.
+        /// </summary>
+        private async Task PublishLatestLocationAsync(string agentId, IEnumerable<OutboxItemDto> items, CancellationToken cancellationToken)
+        {
+            try
+            {
+                double lat = 0, lng = 0; double? acc = null; DateTime best = DateTime.MinValue;
+                void Consider(double la, double ln, DateTime at, double? a)
+                {
+                    if (la == 0 || ln == 0 || at <= best) return;
+                    lat = la; lng = ln; best = at; acc = a;
+                }
+                foreach (var item in items)
+                {
+                    using var doc = JsonDocument.Parse(item.Payload);
+                    var root = doc.RootElement;
+                    switch (item.Type)
+                    {
+                        case "trajectory_batch":
+                            if (root.TryGetProperty("points", out var pts) && pts.ValueKind == JsonValueKind.Array)
+                                foreach (var p in pts.EnumerateArray())
+                                    Consider(GetDouble(p, "lat", 0), GetDouble(p, "lng", 0), GetDateTime(p, "recordedAt", DateTime.MinValue), GetOptionalDouble(p, "accuracyM"));
+                            break;
+                        case "visit_checkin":
+                            Consider(GetDouble(root, "checkInLat", 0), GetDouble(root, "checkInLng", 0), GetDateTime(root, "checkInAt", DateTime.MinValue), null);
+                            break;
+                        case "shift_start":
+                            Consider(GetDouble(root, "startLat", 0), GetDouble(root, "startLng", 0), GetDateTime(root, "startTime", DateTime.MinValue), null);
+                            break;
+                    }
+                }
+                if (best == DateTime.MinValue || best < DateTime.UtcNow.AddMinutes(-30)) return;
+                var name = await _db.Agents.AsNoTracking().Where(a => a.AgentId == agentId).Select(a => a.Name).FirstOrDefaultAsync(cancellationToken) ?? agentId;
+                await _live.PublishLocationAsync(new LiveLocation { AgentId = agentId, Name = name, Lat = lat, Lng = lng, At = best, AccuracyM = acc });
+            }
+            catch (Exception)
+            {
+                // A missed map update is harmless; the map also refreshes on its own.
+            }
+        }
+
+        private static readonly HashSet<string> LiveTypes = new() { "shift_start", "visit_checkin", "contact_new", "referral_new" };
+
         public async Task<SyncBatchResponse> Handle(SyncBatchCommand request, CancellationToken cancellationToken)
         {
             var response = new SyncBatchResponse();
@@ -97,6 +193,7 @@ namespace SeemanchalOutreach.Application.Handlers
             var preUploadedUrls = uploadTasks.ToDictionary(k => k.Key, v => v.Value.Result);
 
             // 2. In-batch Duplicate Tracking
+            var createdForLive = new List<OutboxItemDto>();
             var batchPhones = new HashSet<string>();
             var batchNames = new HashSet<string>();
 
@@ -132,8 +229,11 @@ namespace SeemanchalOutreach.Application.Handlers
                 }
 
                 response.Results.Add(result);
+                if (result.Status == "created" && LiveTypes.Contains(item.Type)) createdForLive.Add(item);
             }
 
+            await PublishLiveAsync(request.AgentId, createdForLive, cancellationToken);
+            await PublishLatestLocationAsync(request.AgentId, request.Items, cancellationToken);
             return response;
         }
 
@@ -443,6 +543,9 @@ namespace SeemanchalOutreach.Application.Handlers
                             ClientPhone = root.TryGetProperty("clientPhone", out var refPhoneProp) && refPhoneProp.ValueKind == JsonValueKind.String ? refPhoneProp.GetString() : null,
                             ReferralDate = GetOptionalDateTime(root, "referralDate"),
                             Status = GetString(root, "status", "pending"),
+                            PatientAge = root.TryGetProperty("patientAge", out var ageProp) && ageProp.ValueKind == JsonValueKind.Number && ageProp.TryGetInt32(out var age) ? age : null,
+                            PatientSex = root.TryGetProperty("patientSex", out var sexProp) && sexProp.ValueKind == JsonValueKind.String ? sexProp.GetString() : null,
+                            Urgent = GetBool(root, "urgent", false),
                             CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
                             ServerReceivedAt = syncedAt
                         };

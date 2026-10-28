@@ -1,5 +1,6 @@
 'use client';
 
+import { isDashboardRole } from '@/lib/crm/access';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { loginWithPassword, syncPull } from '@/lib/sync/api-client';
@@ -112,8 +113,8 @@ export default function LoginPage() {
 
       if (auth.mustChangePassword) {
         router.push('/change-password');
-      } else if (auth.role?.toLowerCase() === 'admin') {
-        router.push('/admin/agents');
+      } else if (isDashboardRole(auth.role)) {
+        router.push('/admin/dashboard');
       } else {
         router.push('/home');
       }
@@ -169,7 +170,7 @@ export default function LoginPage() {
             </span>
           </div>
           <h1 style={{ fontSize: 'clamp(2.5rem, 4vw, 3.75rem)', fontWeight: 900, color: '#0f172a', lineHeight: 1.1, letterSpacing: '-0.03em', marginBottom: '1rem' }}>
-            Welcome to <span style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #0284c7 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>NexMarket</span>
+            Welcome to <span style={{ background: 'linear-gradient(135deg, #01a0ec 0%, #20c997 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>NexEagle</span>
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '1.15rem', maxWidth: '580px', lineHeight: 1.6, fontWeight: 400 }}>
             Empowering field officers, regional representatives, and executives with instant territory intelligence, offline synchronization, and standardized RBAC access.
@@ -216,7 +217,7 @@ export default function LoginPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <span className="badge-online" style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }} />
             <span style={{ color: '#0f172a', fontSize: '0.85rem', fontWeight: 600 }}>
-              NexMarket Outreach Network · Live Outbox Engine Active
+              NexEagle · Glisan Akbari SuperSpeciality Hospital
             </span>
           </div>
           <span style={{ color: 'var(--color-primary-600)', fontSize: '0.8rem', fontWeight: 700 }}>
@@ -241,7 +242,7 @@ export default function LoginPage() {
             style={{
               width: 56,
               height: 56,
-              background: 'linear-gradient(135deg, #ffffff 0%, #e2e8f0 100%)',
+              background: '#0e1525',
               borderRadius: '16px',
               display: 'flex',
               alignItems: 'center',
@@ -258,7 +259,7 @@ export default function LoginPage() {
             transition={{ duration: 0.5, delay: 0.1, ease: 'easeOut' }}
             style={{ fontSize: '2.5rem', fontWeight: 900, letterSpacing: '-0.04em', marginBottom: '0.25rem' }}
           >
-            NexMarket
+            NexEagle
           </motion.h1>
           <motion.p
             initial={{ y: 20, opacity: 0 }}
@@ -266,7 +267,7 @@ export default function LoginPage() {
             transition={{ duration: 0.5, delay: 0.2, ease: 'easeOut' }}
             style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.85)', fontWeight: 500, letterSpacing: '0.01em' }}
           >
-            Field Operations Platform
+            Glisan Akbari SuperSpeciality Hospital
           </motion.p>
         </div>
 
@@ -277,13 +278,13 @@ export default function LoginPage() {
               fontSize: '2.4rem',
               fontWeight: 900,
               letterSpacing: '-0.03em',
-              background: 'linear-gradient(135deg, #0f172a 0%, #334155 50%, #4f46e5 100%)',
+              background: 'linear-gradient(135deg, #0f172a 0%, #0a4e94 55%, #01a0ec 100%)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               marginBottom: '0.35rem',
             }}
           >
-            NexMarket
+            NexEagle
           </h1>
         </div>
 
@@ -460,7 +461,7 @@ export default function LoginPage() {
               </div>
 
               <div style={{ textAlign: 'center', marginTop: '1rem', color: '#94a3b8', fontSize: '0.8rem', fontWeight: 500 }}>
-                Protected by NexMarket Security
+                Protected by NexEagle Security
               </div>
             </form>
           )}

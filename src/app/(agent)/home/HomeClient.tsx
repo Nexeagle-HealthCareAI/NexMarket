@@ -34,10 +34,8 @@ export default function HomeClient() {
   const activeVisit = useActiveVisit(agentId ?? undefined);
   const contacts = useContacts(agentId ?? undefined);
   const visits = useVisits(agentId ?? undefined);
-  const { position, permission } = useGeolocation({
-    shiftId: activeShift?.clientId,
-    record: !!activeShift,
-  });
+  // Route recording runs in <ShiftTracker /> (agent layout); this only reads the position.
+  const { position, permission } = useGeolocation({ record: false });
   
   const [shiftLoading, setShiftLoading] = useState(false);
 

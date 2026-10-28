@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
 
@@ -96,7 +97,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet("covered")]
-        [Authorize(Roles = "Admin,admin")]
+        [PageAccess(Pages.Field)]
         public async Task<ActionResult<List<CoveredPanchayatDto>>> GetCoveredPanchayats(CancellationToken cancellationToken)
         {
             var coveredData = await _db.Contacts
@@ -149,7 +150,7 @@ namespace SeemanchalOutreach.Api.Controllers
         // count toward an agent's assignment (see AssignmentsController), so
         // this is what actually controls what a block assignment covers.
         [HttpPatch("marketing-status")]
-        [Authorize(Roles = "Admin,admin")]
+        [PageAccess(Pages.Field)]
         public async Task<IActionResult> UpdateMarketingStatus([FromBody] UpdateMarketingStatusRequest request, CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
@@ -170,7 +171,7 @@ namespace SeemanchalOutreach.Api.Controllers
         // (SyncBatchCommandHandler's "panchayat_new" case) — this direct, always-
         // online endpoint is for the admin panel, which has no offline concern.
         [HttpPost]
-        [Authorize(Roles = "Admin,admin")]
+        [PageAccess(Pages.Field)]
         public async Task<ActionResult<PanchayatDto>> CreatePanchayat([FromBody] CreatePanchayatRequest request, CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
@@ -220,7 +221,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin,admin")]
+        [PageAccess(Pages.Field)]
         public async Task<IActionResult> UpdatePanchayat(string id, [FromBody] UpdatePanchayatRequest request, CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
@@ -264,7 +265,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin,admin")]
+        [PageAccess(Pages.Field)]
         public async Task<IActionResult> DeletePanchayat(string id, CancellationToken cancellationToken)
         {
             var panchayat = await _db.Panchayats.FirstOrDefaultAsync(p => p.PanchayatId == id, cancellationToken);

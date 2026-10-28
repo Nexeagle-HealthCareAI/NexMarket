@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SeemanchalOutreach.Api.Security;
 using Microsoft.EntityFrameworkCore;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
@@ -9,7 +10,8 @@ namespace SeemanchalOutreach.Api.Controllers
 {
     [ApiController]
     [Route("api/v1/admin/questions")]
-    [Authorize(Roles = "Admin,admin")]
+    [Authorize]
+    [PageAccess(Pages.Analytics)]
     public class AdminSurveyQuestionsController : ControllerBase
     {
         private readonly IMarketingDbContext _db;

@@ -66,6 +66,15 @@ namespace SeemanchalOutreach.Domain.Entities
         public string Name { get; set; } = string.Empty;
         public double? CentroidLat { get; set; }
         public double? CentroidLng { get; set; }
+        // Where the centroid came from: villages (census villages matched to this panchayat),
+        // hq-village (the census village carrying the panchayat's name) or block (block centre only).
+        public string LocationSource { get; set; } = "block";
+        // A pin an admin placed by hand — wins over everything else. Kept separate from the
+        // centroid because the seeder rewrites the centroid on every start-up.
+        public double? ManualLat { get; set; }
+        public double? ManualLng { get; set; }
+        public DateTime? ManualSetAt { get; set; }
+        public string? ManualSetBy { get; set; }
         // Defaults true so every already-seeded/assigned panchayat keeps
         // working exactly as before — this only matters once an admin
         // deliberately curates a block's panchayats via "Manage Panchayat".
@@ -121,6 +130,13 @@ namespace SeemanchalOutreach.Domain.Entities
         public bool CardGiven { get; set; }
         public string? PhotoUrl { get; set; }
         public bool IsImportant { get; set; } = false;
+
+        // Patient-flow champion: the person in this panchayat who most helps patients reach
+        // the hospital. Marked by an admin, manager or agent; at most a few per panchayat.
+        public bool IsChampion { get; set; }
+        public string? ChampionNote { get; set; }
+        public DateTime? ChampionSetAt { get; set; }
+        public string? ChampionSetBy { get; set; }
         
         public bool AgentEscalated { get; set; } = false;
         public string? AgentEscalationNote { get; set; }
@@ -153,6 +169,17 @@ namespace SeemanchalOutreach.Domain.Entities
         public bool IsMerged { get; set; } = false;
         public string? MergedIntoClientId { get; set; }
         public DateTime? DuplicateReviewedAt { get; set; } // set when dismissed as "not a duplicate"; left null while merged (IsMerged carries that state)
+
+        // ─── Daily-calls / cycle calling (marketing team) ───
+        public DateTime? NextCallAt { get; set; }          // when this partner is next due for a call (null = due now)
+        public int CallAttempts { get; set; }              // consecutive missed attempts in the current cycle
+        public string? LastCallOutcome { get; set; }       // connected | no_answer | call_later | wrong_number
+        public DateTime? LastCalledAt { get; set; }
+        public DateTime? LastConnectedAt { get; set; }
+        public int? LastCallCycleNumber { get; set; }
+        public bool NeedsVisit { get; set; }               // set after 3 missed calls: field agent should visit
+        public bool PhoneInvalid { get; set; }             // marked "wrong number" by the call team
+        public bool WhatsappOptOut { get; set; }           // replied STOP to a broadcast
     }
 
     public class ContactDocument
@@ -202,7 +229,14 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? Notes { get; set; }
         public string? ClientPhone { get; set; }
         public DateTime? ReferralDate { get; set; }
-        public string Status { get; set; } = "pending"; // pending, converted, lost
+        // pending (= referred) | arrived | opd | admitted | procedure | discharged | lost
+        // ("converted" is the older name for admitted and is still accepted.)
+        public string Status { get; set; } = "pending";
+        public int? PatientAge { get; set; }
+        public string? PatientSex { get; set; }
+        public bool Urgent { get; set; }
+        public DateTime? ArrivedAt { get; set; }
+        public DateTime? AdmittedAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
         public DateTime ServerReceivedAt { get; set; } = DateTime.UtcNow;

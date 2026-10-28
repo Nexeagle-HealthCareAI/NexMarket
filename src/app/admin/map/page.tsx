@@ -4,12 +4,12 @@ import { Suspense } from 'react';
 
 const MapClient = dynamic(() => import('./MapClient'), {
   ssr: false,
-  loading: () => <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Live Map & Trajectories…</div>,
+  loading: () => <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading the live map…</div>,
 });
 
 export default function AdminMapPage() {
   return (
-    <Suspense fallback={<div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Live Map & Trajectories…</div>}>
+    <Suspense fallback={<div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading the live map…</div>}>
       <MapClient />
     </Suspense>
   );

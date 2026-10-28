@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Application.Interfaces;
 
 namespace SeemanchalOutreach.Api.Controllers
@@ -34,7 +35,8 @@ namespace SeemanchalOutreach.Api.Controllers
     }
 
     [ApiController]
-    [Authorize(Roles = "Admin,admin")]
+    [Authorize]
+    [PageAccess(Pages.Partners)]
     [Route("api/v1/[controller]")]
     public class DuplicatesController : ControllerBase
     {

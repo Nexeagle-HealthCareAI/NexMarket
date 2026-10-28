@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SeemanchalOutreach.Api.Security;
 using Microsoft.EntityFrameworkCore;
 using SeemanchalOutreach.Application.Interfaces;
 
@@ -15,7 +16,8 @@ namespace SeemanchalOutreach.Api.Controllers
     }
 
     [ApiController]
-    [Authorize(Roles = "Admin,admin")]
+    [Authorize]
+    [PageAccess(Pages.Analytics)]
     [Route("api/v1/admin/[controller]")]
     public class SurveysController : ControllerBase
     {

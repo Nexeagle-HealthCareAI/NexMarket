@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Application.Services;
 
 namespace SeemanchalOutreach.Api.Controllers
 {
     [ApiController]
     [Route("api/v1/[controller]")]
-    [Authorize(Roles = "Admin,admin")]
+    [Authorize]
+    [PageAccess(Pages.Analytics, Pages.Dashboard)]
     public class HealthcareDashboardController : ControllerBase
     {
         private readonly AnalyticsEngineService _analyticsService;

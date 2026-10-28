@@ -7,14 +7,14 @@ import { I18nProvider } from '@/i18n/I18nProvider';
 import { Providers } from '@/components/Providers';
 
 export const metadata: Metadata = {
-  title: 'NexMarket | Field Outreach & Marketing Portal',
+  title: 'NexEagle | Glisan Akbari SuperSpeciality Hospital',
   description:
-    'NexMarket field representative and marketing officer platform — contact logging, visit tracking, and referral management.',
+    'NexEagle hospital marketing CRM and field agent platform for Glisan Akbari SuperSpeciality Hospital.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'NexMarket',
+    title: 'NexEagle',
   },
   other: {
     'mobile-web-app-capable': 'yes',
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#6366f1',
+  themeColor: '#0e1525',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,

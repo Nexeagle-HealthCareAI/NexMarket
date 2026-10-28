@@ -1,715 +1,587 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import * as maplibregl from 'maplibre-gl';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as maplibregl from '@/lib/geo/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { useAgentStore } from '@/store/agent-store';
-import { getAgents, getAgentTrajectory, type AdminAgentDto, type TrajectoryPointDto } from '@/lib/sync/api-client';
+import { Activity, Phone, X } from 'lucide-react';
 import { getBasemapStyle } from '@/lib/geo/mapStyle';
+import { canEdit, useAccess } from '@/lib/crm/access';
+import { timeAgo, useLiveEvents, useNow, type LiveEvent, type LiveLocation } from '@/lib/crm/live';
+import {
+  AGENT_STATUS_META, geo, istDate, STATUS_META,
+  type CoverageRow, type CoverageStatus, type LiveAgent, type PanchayatDetail,
+} from '@/lib/crm/geo';
+import PanchayatPanel from '@/components/crm/geo/PanchayatPanel';
+import { Empty, ErrorBox, fmt, friendlyError, initials, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 
-interface PanchayatGeo {
-  name: string;
-  block: string;
-  district: string;
-  centroidLat: number;
-  centroidLng: number;
-  villages?: string[];
-  total_villages?: number;
-}
+const PERIODS = [
+  { key: '1', label: 'Today' },
+  { key: '7', label: '7 days' },
+  { key: '30', label: '30 days' },
+  { key: '90', label: '90 days' },
+] as const;
+type PeriodKey = (typeof PERIODS)[number]['key'];
+const STATUSES: CoverageStatus[] = ['patients', 'partners', 'visited', 'untouched'];
+const SEEMANCHAL_CENTER: [number, number] = [87.55, 25.95];
 
-// Popup.setHTML() renders raw HTML with no escaping of its own — agent.name in
-// particular comes from the onboarding form with no character restriction, so
-// an unescaped interpolation here is a stored-XSS vector (any admin viewing the
-// map runs whatever a crafted name contains).
-function escapeHtml(value: string | number): string {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+type Selection = { type: 'panchayat'; id: string } | { type: 'agent'; id: string } | null;
+type FC = GeoJSON.FeatureCollection;
+
+const statusColor: maplibregl.ExpressionSpecification = [
+  'match', ['coalesce', ['feature-state', 'status'], 'untouched'],
+  'patients', STATUS_META.patients.color,
+  'partners', STATUS_META.partners.color,
+  'visited', STATUS_META.visited.color,
+  STATUS_META.untouched.color,
+];
 
 export default function MapClient() {
-  const agentId = useAgentStore((s) => s.agentId);
-  const searchParams = useSearchParams();
-  const deepLinkAgentId = searchParams.get('agentId');
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const params = useSearchParams();
+  const { access } = useAccess();
+  const canEditField = canEdit(access, 'field');
+  const canEditPartners = canEdit(access, 'partners');
+  const [toast, showToast] = useToast();
+  const now = useNow(30000);
+
+  // ─── Filters ────────────────────────────────────────────────────────────
+  const [district, setDistrict] = useState('');
+  const [block, setBlock] = useState('');
+  const [agentFilter, setAgentFilter] = useState('');
+  const [period, setPeriod] = useState<PeriodKey>('30');
+  const [shown, setShown] = useState<Record<CoverageStatus, boolean>>({ patients: true, partners: true, visited: true, untouched: true });
+  const [showAgents, setShowAgents] = useState(true);
+  const from = istDate(Number(period) - 1);
+  const to = istDate(0);
+
+  const coverage = useLoader(() => geo.coverage({ agentId: agentFilter || undefined, from, to }), [agentFilter, from, to]);
+  const live = useLoader(() => geo.live(), []);
+
+  const initial: Selection = params.get('panchayat') ? { type: 'panchayat', id: params.get('panchayat')! }
+    : params.get('agentId') ? { type: 'agent', id: params.get('agentId')! } : null;
+  const [selected, setSelected] = useState<Selection>(initial);
+  const [panelVersion, setPanelVersion] = useState(0);
+  const [pinEdit, setPinEdit] = useState<{ id: string; name: string; lat: number; lng: number } | null>(null);
+  const [savingPin, setSavingPin] = useState(false);
+
+  // Live GPS pushed between refreshes: agentId → newest fix.
+  const [fixes, setFixes] = useState<Record<string, LiveLocation>>({});
+  const [pinged, setPinged] = useState<Record<string, number>>({});
+
+  const rows = useMemo(() => coverage.data?.items ?? [], [coverage.data]);
+  const districts = useMemo(() => [...new Set(rows.map((r) => r.district))].sort(), [rows]);
+  const blocks = useMemo(() => [...new Set(rows.filter((r) => !district || r.district === district).map((r) => r.block))].sort(), [rows, district]);
+  const visibleRows = useMemo(() => rows.filter((r) => (!district || r.district === district) && (!block || r.block === block)), [rows, district, block]);
+  const counts = useMemo(() => {
+    const c: Record<CoverageStatus, number> = { patients: 0, partners: 0, visited: 0, untouched: 0 };
+    for (const r of visibleRows) c[r.status]++;
+    return c;
+  }, [visibleRows]);
+
+  const agents: LiveAgent[] = useMemo(() => (live.data?.agents ?? []).map((a) => {
+    const f = fixes[a.agentId];
+    if (f && (!a.at || new Date(f.at) > new Date(a.at))) {
+      return { ...a, lat: f.lat, lng: f.lng, at: f.at, minutesSinceSeen: 0, status: a.status === 'no_signal' ? 'moving' : a.status };
+    }
+    return a;
+  }), [live.data, fixes]);
+
+  // ─── Live updates ───────────────────────────────────────────────────────
+  const coverageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onEvent = useCallback((e: LiveEvent) => {
+    if (['shift', 'visit'].includes(e.kind)) void live.reload();
+    if (['visit', 'partner', 'referral'].includes(e.kind)) {
+      if (coverageTimer.current) clearTimeout(coverageTimer.current);
+      coverageTimer.current = setTimeout(() => void coverage.reload(), 4000);
+    }
+  }, [live, coverage]);
+  const onLocation = useCallback((l: LiveLocation) => {
+    setFixes((f) => ({ ...f, [l.agentId]: l }));
+    setPinged((p) => ({ ...p, [l.agentId]: Date.now() }));
+  }, []);
+  const liveStatus = useLiveEvents(onEvent, onLocation);
+
+  useEffect(() => {
+    const t = setInterval(() => void live.reload(), 30000);
+    const c = setInterval(() => void coverage.reload(), 120000);
+    return () => { clearInterval(t); clearInterval(c); };
+  }, [live, coverage]);
+
+  // ─── Map ────────────────────────────────────────────────────────────────
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const hasLoadedRef = useRef(false);
-  const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
-  const replayMarkerRef = useRef<maplibregl.Marker | null>(null);
-
-  const [agents, setAgents] = useState<AdminAgentDto[]>([]);
-  const [agentsError, setAgentsError] = useState<string | null>(null);
-  const [selectedAgentId, setSelectedAgentId] = useState<string>('');
-  const [isMobile, setIsMobile] = useState(false);
-  const [trajectory, setTrajectory] = useState<TrajectoryPointDto[]>([]);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [replayIdx, setReplayIdx] = useState<number>(0);
-  const [speed, setSpeed] = useState<number>(1000); // ms per point
-
-  // Territory Mapping States
-  const [panchayats, setPanchayats] = useState<PanchayatGeo[]>([]);
-  const [selectedPanchayatDistrict, setSelectedPanchayatDistrict] = useState<string>('');
-  const [selectedPanchayatBlock, setSelectedPanchayatBlock] = useState<string>('');
-  const [selectedPanchayat, setSelectedPanchayat] = useState<string>('');
-  const panchayatMarkersRef = useRef<maplibregl.Marker[]>([]);
-
-  const selectedAgent = agents.find((a) => a.agentId === selectedAgentId);
-
-  // Fetch agents (list + poll — same cadence as the Agents page)
-  const loadAgents = useCallback(async () => {
-    if (!agentId) return;
-    try {
-      const data = await getAgents();
-      setAgents(data.items);
-      setAgentsError(null);
-      setSelectedAgentId((current) => current || deepLinkAgentId || data.items[0]?.agentId || '');
-    } catch (err) {
-      // Was previously a console.error-only failure — the map kept showing
-      // stale agent positions with no indication anything was wrong, which
-      // read as "I can't see where the agent is" once a session expired.
-      console.error('Failed to load agents', err);
-      setAgentsError(err instanceof Error ? err.message : 'Failed to load agents.');
-    }
-  }, [agentId, deepLinkAgentId]);
+  const areaIds = useRef<Set<string>>(new Set());
+  const [areasLoaded, setAreasLoaded] = useState(0);
+  const agentMarkers = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const pinMarker = useRef<maplibregl.Marker | null>(null);
+  // setSelected is stable, so map event handlers registered once can call it safely.
+  const selectRef = useRef<(s: Selection) => void>(setSelected);
 
   useEffect(() => {
-    void loadAgents();
-    const timer = setInterval(() => void loadAgents(), 30_000);
-    return () => clearInterval(timer);
-  }, [loadAgents]);
-
-  // Mobile Detection
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    handleResize(); // Initial check
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Fetch trajectory whenever the selected agent changes
-  useEffect(() => {
-    if (!agentId || !selectedAgentId) {
-      setTrajectory([]);
-      return;
-    }
-    setReplayIdx(0);
-    setIsPlaying(false);
-    getAgentTrajectory(selectedAgentId)
-      .then(setTrajectory)
-      .catch((err) => {
-        console.error('Failed to load trajectory', err);
-        setTrajectory([]);
-      });
-  }, [agentId, selectedAgentId]);
-
-  // Fetch Panchayats (real LGD reference data bundled with the frontend)
-  useEffect(() => {
-    fetch('/data/panchayats.json')
-      .then((res) => res.json())
-      .then((data) => setPanchayats(data))
-      .catch((err) => console.error(err));
-  }, []);
-
-  // Initialize MapLibre
-  useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
-
+    if (!containerRef.current || mapRef.current) return;
+    let loaded = false;
     const map = new maplibregl.Map({
-      container: mapContainerRef.current,
-      style: getBasemapStyle(),
-      center: [87.5701, 25.5541], // Seemanchal center
-      zoom: 9.5,
-      attributionControl: false,
+      container: containerRef.current,
+      style: getBasemapStyle('light'),
+      center: SEEMANCHAL_CENTER,
+      zoom: 7.6,
+      attributionControl: { compact: true },
     });
-
-    map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
     mapRef.current = map;
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.on('error', (e) => { if (!loaded) { console.error('Map error', e.error); setMapError(true); } });
 
-    // A style/tile-source failure that happens before the map ever loads
-    // otherwise leaves a blank map with no indication anything went wrong —
-    // but MapLibre also fires 'error' for individual tile hiccups during
-    // ordinary panning/zooming (a single dropped request on a flaky
-    // connection, common for field agents), which is normal and shouldn't
-    // hide an otherwise-working map. Only surface the fatal message if the
-    // map never successfully loaded in the first place.
-    map.on('error', (e) => {
-      console.error('Map error', e.error);
-      if (!hasLoadedRef.current) setMapError(true);
+    map.on('load', async () => {
+      loaded = true;
+      const empty: FC = { type: 'FeatureCollection', features: [] };
+      map.addSource('blocks', { type: 'geojson', data: '/data/seemanchal_blocks.geojson' });
+      map.addSource('areas', { type: 'geojson', data: empty, promoteId: 'id' });
+      map.addSource('points', { type: 'geojson', data: empty, promoteId: 'id' });
+      map.addSource('trails', { type: 'geojson', data: empty });
+
+      map.addLayer({
+        id: 'areas-fill', type: 'fill', source: 'areas',
+        paint: {
+          'fill-color': statusColor,
+          'fill-opacity': ['case', ['boolean', ['feature-state', 'hidden'], false], 0, ['boolean', ['feature-state', 'selected'], false], 0.85, 0.55],
+        },
+      });
+      map.addLayer({
+        id: 'areas-line', type: 'line', source: 'areas',
+        paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.3, 12, 1.5], 'line-opacity': ['case', ['boolean', ['feature-state', 'hidden'], false], 0, 0.9] },
+      });
+      map.addLayer({
+        id: 'areas-selected', type: 'line', source: 'areas',
+        paint: { 'line-color': '#0e1525', 'line-width': 3, 'line-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 1, 0] },
+      });
+      map.addLayer({
+        id: 'blocks-line', type: 'line', source: 'blocks',
+        paint: { 'line-color': '#0e1525', 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 0.8, 11, 2], 'line-opacity': 0.55, 'line-dasharray': [3, 2] },
+      });
+      map.addLayer({
+        id: 'points', type: 'circle', source: 'points',
+        paint: {
+          'circle-color': statusColor,
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 3, 11, 7],
+          'circle-stroke-color': ['case', ['==', ['get', 'source'], 'block'], '#8a93a6', '#ffffff'],
+          'circle-stroke-width': ['case', ['boolean', ['feature-state', 'selected'], false], 3, 1.5],
+          'circle-opacity': ['case', ['boolean', ['feature-state', 'hidden'], false], 0, 0.95],
+          'circle-stroke-opacity': ['case', ['boolean', ['feature-state', 'hidden'], false], 0, 1],
+        },
+      });
+      map.addLayer({
+        id: 'trails', type: 'line', source: 'trails',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ['get', 'color'], 'line-width': 3, 'line-opacity': 0.75 },
+      });
+      try {
+        map.addLayer({
+          id: 'block-labels', type: 'symbol', source: 'blocks', maxzoom: 10.5,
+          layout: { 'text-field': ['get', 'block'], 'text-font': ['Noto Sans Bold'], 'text-size': 12, 'text-allow-overlap': false },
+          paint: { 'text-color': '#0e1525', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
+        });
+        map.addLayer({
+          id: 'area-labels', type: 'symbol', source: 'areas', minzoom: 10.5,
+          layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 12 },
+          paint: { 'text-color': '#1a2236', 'text-halo-color': '#ffffff', 'text-halo-width': 1.4 },
+        });
+      } catch { /* a style without fonts: no labels, everything else works */ }
+
+      const pick = (e: maplibregl.MapLayerMouseEvent) => {
+        const id = e.features?.[0]?.properties?.id as string | undefined;
+        if (id) selectRef.current({ type: 'panchayat', id });
+      };
+      for (const layer of ['areas-fill', 'points']) {
+        map.on('click', layer, pick);
+        map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
+      }
+
+      try {
+        const res = await fetch('/data/panchayat-areas.geojson');
+        const fc = (await res.json()) as FC;
+        areaIds.current = new Set(fc.features.map((f) => String(f.properties?.id)));
+        (map.getSource('areas') as maplibregl.GeoJSONSource).setData(fc);
+        setAreasLoaded((n) => n + 1);
+      } catch { /* outlines are a bonus; points still show every panchayat */ }
+      setMapReady(true);
     });
 
-    map.on('load', () => {
-      hasLoadedRef.current = true;
-      // Add Seemanchal block boundaries GeoJSON source & layer
-      map.addSource('seemanchal-blocks', {
-        type: 'geojson',
-        data: '/data/seemanchal_blocks.geojson',
-      });
-
-      map.addLayer({
-        id: 'blocks-fill',
-        type: 'fill',
-        source: 'seemanchal-blocks',
-        paint: {
-          'fill-color': [
-            'interpolate',
-            ['linear'],
-            ['coalesce', ['get', 'total_villages'], 0],
-            0, '#f8fafc',
-            1, '#c7d2fe',
-            50, '#818cf8',
-            100, '#4f46e5',
-            150, '#312e81',
-          ],
-          'fill-opacity': 0.6,
-        },
-      });
-
-      // Add a popup on click for blocks
-      map.on('click', 'blocks-fill', (e) => {
-        const feature = e.features?.[0];
-        if (!feature) return;
-        const props = feature.properties;
-        new maplibregl.Popup()
-          .setLngLat(e.lngLat)
-          .setHTML(`
-            <div style="padding: 6px; font-family: inherit;">
-              <strong style="color: #0f172a; font-size: 1rem;">${escapeHtml(props.block)} Block</strong><br/>
-              <span style="color: #475569; font-size: 0.85rem;">District: ${escapeHtml(props.district)}</span><br/><br/>
-              <div style="display: flex; gap: 12px; margin-top: 4px;">
-                <div>
-                  <div style="font-size: 1.1rem; font-weight: 700; color: #4f46e5;">${props.total_panchayats || 0}</div>
-                  <div style="font-size: 0.7rem; color: #64748b; text-transform: uppercase;">Panchayats</div>
-                </div>
-                <div>
-                  <div style="font-size: 1.1rem; font-weight: 700; color: #4f46e5;">${props.total_villages || 0}</div>
-                  <div style="font-size: 0.7rem; color: #64748b; text-transform: uppercase;">Villages</div>
-                </div>
-              </div>
-            </div>
-          `)
-          .addTo(mapRef.current!);
-      });
-
-      map.on('mouseenter', 'blocks-fill', () => {
-        if (mapRef.current) mapRef.current.getCanvas().style.cursor = 'pointer';
-      });
-      map.on('mouseleave', 'blocks-fill', () => {
-        if (mapRef.current) mapRef.current.getCanvas().style.cursor = '';
-      });
-
-      map.addLayer({
-        id: 'blocks-line',
-        type: 'line',
-        source: 'seemanchal-blocks',
-        paint: {
-          'line-color': '#6366f1',
-          'line-width': 1.5,
-          'line-dasharray': [2, 2],
-        },
-      });
-
-      // Add trajectory line source
-      map.addSource('route', {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'LineString',
-            coordinates: [],
-          },
-        },
-      });
-
-      // Glowing outer line
-      map.addLayer({
-        id: 'route-glow',
-        type: 'line',
-        source: 'route',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-          'line-color': '#6366f1',
-          'line-width': 8,
-          'line-opacity': 0.3,
-        },
-      });
-
-      // Core trajectory line
-      map.addLayer({
-        id: 'route-core',
-        type: 'line',
-        source: 'route',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-          'line-color': '#818cf8',
-          'line-width': 3,
-        },
-      });
-
-      setMapLoaded(true);
-      setTimeout(() => map.resize(), 100);
-    });
-
+    const markers = agentMarkers.current;
     return () => {
+      markers.forEach((m) => m.remove());
+      markers.clear();
       map.remove();
       mapRef.current = null;
-      hasLoadedRef.current = false;
     };
   }, []);
 
-  // Redraw agent pins whenever the agent list or selection changes (every 30s
-  // poll included). Kept separate from the trajectory/flyTo effect below so a
-  // routine agent-list poll never yanks the map back to the trajectory start.
+  // Coverage → colours, points for panchayats without an outline, visibility filters.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapLoaded) return;
-
-    markersRef.current.forEach((m) => m.remove());
-    markersRef.current = [];
-
-    // Add agent pins — only for agents with at least one recorded GPS fix
-    agents.forEach((agent) => {
-      if (agent.lastSeenLat == null || agent.lastSeenLng == null) return;
-
-      const isSelected = agent.agentId === selectedAgentId;
-      const el = document.createElement('div');
-      el.className = 'custom-map-marker';
-      el.style.width = isSelected ? '40px' : '32px';
-      el.style.height = isSelected ? '40px' : '32px';
-      el.style.borderRadius = '50%';
-      el.style.background = isSelected
-        ? 'linear-gradient(135deg, #6366f1, #4f46e5)'
-        : agent.status === 'online'
-        ? 'linear-gradient(135deg, #10b981, #059669)'
-        : '#475569';
-      el.style.border = isSelected ? '3px solid #fff' : '2px solid rgba(255,255,255,0.7)';
-      el.style.boxShadow = isSelected ? '0 0 16px rgba(99,102,241,0.6)' : '0 2px 6px rgba(0,0,0,0.4)';
-      el.style.display = 'flex';
-      el.style.alignItems = 'center';
-      el.style.justifyContent = 'center';
-      el.style.color = '#fff';
-      el.style.fontWeight = '700';
-      el.style.fontSize = isSelected ? '0.9rem' : '0.75rem';
-      el.style.cursor = 'pointer';
-      el.style.transition = 'all 0.2s';
-      el.innerText = agent.name.slice(0, 2).toUpperCase();
-
-      el.addEventListener('click', () => {
-        setSelectedAgentId(agent.agentId);
-        setIsPlaying(false);
-        setReplayIdx(0);
-      });
-
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([agent.lastSeenLng, agent.lastSeenLat])
-        .setPopup(
-          new maplibregl.Popup({ offset: 25 }).setHTML(`
-            <div style="color: #0f172a; padding: 4px;">
-              <strong>${escapeHtml(agent.name)}</strong> (${escapeHtml(agent.block)})<br/>
-              Status: <span style="color: ${agent.status === 'online' ? '#10b981' : '#64748b'}">${escapeHtml(agent.status.toUpperCase())}</span><br/>
-              Visits today: ${escapeHtml(agent.todayVisits)}
-            </div>
-          `)
-        )
-        .addTo(map);
-
-      markersRef.current.push(marker);
-    });
-  }, [selectedAgentId, agents, mapLoaded]);
-
-  // Update the trajectory line and fly to it — deliberately keyed only on
-  // `trajectory` (which only changes when a different agent is selected or
-  // the trajectory is refetched), NOT on `agents`, so the routine 30s agent
-  // poll never yanks the map back to the trajectory start mid-pan/zoom.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapLoaded) return;
-
-    if (replayMarkerRef.current) {
-      replayMarkerRef.current.remove();
-      replayMarkerRef.current = null;
-    }
-
-    if (map.isStyleLoaded() && map.getSource('route')) {
-      const coords = trajectory.map((p) => [p.lng, p.lat]);
-      const source = map.getSource('route') as maplibregl.GeoJSONSource;
-      source.setData({
+    if (!mapReady || !map) return;
+    const points: FC = {
+      type: 'FeatureCollection',
+      features: rows.filter((r) => r.lat != null && r.lng != null && !areaIds.current.has(r.id)).map((r) => ({
         type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: coords,
-        },
-      });
-
-      // Fly to agent trajectory center
-      if (coords.length > 0) {
-        map.flyTo({
-          center: coords[0] as [number, number],
-          zoom: 12,
-          speed: 1.2,
-        });
-      }
-    }
-  }, [trajectory, mapLoaded]);
-
-  // Replay animation loop
-  useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
-    if (isPlaying && trajectory.length > 0) {
-      timer = setInterval(() => {
-        setReplayIdx((prev) => {
-          if (prev >= trajectory.length - 1) {
-            setIsPlaying(false);
-            return trajectory.length - 1;
-          }
-          return prev + 1;
-        });
-      }, speed);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
+        properties: { id: r.id, name: r.name, source: r.source },
+        geometry: { type: 'Point', coordinates: [r.lng!, r.lat!] },
+      })),
     };
-  }, [isPlaying, trajectory.length, speed]);
+    (map.getSource('points') as maplibregl.GeoJSONSource).setData(points);
+    const apply = () => {
+      for (const r of rows) {
+        const hidden = !shown[r.status] || (!!district && r.district !== district) || (!!block && r.block !== block);
+        const src = areaIds.current.has(r.id) ? 'areas' : 'points';
+        map.setFeatureState({ source: src, id: r.id }, { status: r.status, hidden });
+      }
+    };
+    // setData on points is async; apply now (areas) and again once points are in.
+    apply();
+    const t = setTimeout(apply, 250);
+    return () => clearTimeout(t);
+  }, [rows, shown, district, block, mapReady, areasLoaded]);
 
-  // Sync replay marker position with replayIdx
+  // Fit the map to the chosen district / block.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || trajectory.length === 0 || replayIdx >= trajectory.length) return;
+    if (!mapReady || !map || (!district && !block)) return;
+    const pts = visibleRows.filter((r) => r.lat != null && r.lng != null);
+    if (pts.length === 0) return;
+    const b = new maplibregl.LngLatBounds();
+    pts.forEach((r) => b.extend([r.lng!, r.lat!]));
+    map.fitBounds(b, { padding: 70, maxZoom: 12, duration: 600 });
+  }, [district, block, mapReady, visibleRows]);
 
-    const pt = trajectory[replayIdx];
-    if (!pt) return;
-
-    if (!replayMarkerRef.current) {
-      const el = document.createElement('div');
-      el.style.width = '20px';
-      el.style.height = '20px';
-      el.style.borderRadius = '50%';
-      el.style.background = '#38bdf8';
-      el.style.border = '3px solid #fff';
-      el.style.boxShadow = '0 0 12px #38bdf8';
-      replayMarkerRef.current = new maplibregl.Marker({ element: el }).setLngLat([pt.lng, pt.lat]).addTo(map);
-    }
-
-    replayMarkerRef.current.setLngLat([pt.lng, pt.lat]);
-    map.panTo([pt.lng, pt.lat], { duration: speed * 0.8 });
-  }, [replayIdx, trajectory, speed]);
-
-  const currentPoint = trajectory[replayIdx] || null;
-
-  // Panchayat Marker Rendering
+  // Highlight + fly to the selected panchayat.
+  const hasRows = rows.length > 0;
+  const hasAgents = agents.length > 0;
+  const lastSelected = useRef<string | null>(null);
   useEffect(() => {
-    if (!mapRef.current || !mapLoaded) return;
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    if (lastSelected.current) {
+      const prev = lastSelected.current;
+      map.setFeatureState({ source: areaIds.current.has(prev) ? 'areas' : 'points', id: prev }, { selected: false });
+      lastSelected.current = null;
+    }
+    if (selected?.type === 'panchayat') {
+      const r = rows.find((x) => x.id === selected.id);
+      map.setFeatureState({ source: areaIds.current.has(selected.id) ? 'areas' : 'points', id: selected.id }, { selected: true });
+      lastSelected.current = selected.id;
+      if (r?.lat != null && r.lng != null) map.easeTo({ center: [r.lng, r.lat], zoom: Math.max(map.getZoom(), 11), duration: 600 });
+    }
+    if (selected?.type === 'agent') {
+      const a = agents.find((x) => x.agentId === selected.id);
+      if (a?.lat != null && a.lng != null) map.easeTo({ center: [a.lng, a.lat], zoom: Math.max(map.getZoom(), 11.5), duration: 600 });
+    }
+    // agents/rows change every refresh; only re-centre when the selection itself changes
+    // (or when the data it needs first arrives)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, mapReady, areasLoaded, hasRows, hasAgents]);
 
-    // Clear old markers
-    panchayatMarkersRef.current.forEach((m) => m.remove());
-    panchayatMarkersRef.current = [];
-
-    // Filter
-    let filtered = panchayats;
-    if (selectedPanchayatDistrict) filtered = filtered.filter((p) => p.district === selectedPanchayatDistrict);
-    if (selectedPanchayatBlock) filtered = filtered.filter((p) => p.block === selectedPanchayatBlock);
-    if (selectedPanchayat) filtered = filtered.filter((p) => p.name === selectedPanchayat);
-
-    if (filtered.length === 0) return;
-
-    const bounds = new maplibregl.LngLatBounds();
-
-    filtered.forEach((p) => {
-      const el = document.createElement('div');
-      el.style.width = '14px';
-      el.style.height = '14px';
-      el.style.borderRadius = '50%';
-      el.style.background = '#f59e0b';
-      el.style.border = '2px solid #fff';
-      el.style.boxShadow = '0 1px 4px rgba(0,0,0,0.4)';
-      el.style.cursor = 'pointer';
-
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([p.centroidLng, p.centroidLat])
-        .setPopup(
-          new maplibregl.Popup({ offset: 15, closeButton: false }).setHTML(
-            `<div style="padding:6px;font-family:inherit;max-width:200px;max-height:250px;overflow-y:auto;">
-              <strong style="color:var(--text-primary);font-size:0.9rem">${escapeHtml(p.name)}</strong><br/>
-              <span style="color:var(--text-muted);font-size:0.75rem">${escapeHtml(p.block)}, ${escapeHtml(p.district)}</span>
-              ${p.total_villages ? `<br/><br/><strong style="font-size:0.75rem;color:#4f46e5;">VILLAGES (${p.total_villages}):</strong><br/><div style="font-size:0.75rem;color:#475569;margin-top:2px;">${escapeHtml(p.villages?.join(', ') || '')}</div>` : ''}
-            </div>`
-          )
-        )
-        .addTo(mapRef.current!);
-
-      panchayatMarkersRef.current.push(marker);
-      bounds.extend([p.centroidLng, p.centroidLat]);
-    });
-
-    // Fit map bounds if filters are applied
-    if ((selectedPanchayatDistrict || selectedPanchayatBlock || selectedPanchayat) && filtered.length > 0) {
-      if (filtered.length === 1) {
-        mapRef.current.flyTo({ center: [filtered[0].centroidLng, filtered[0].centroidLat], zoom: 12 });
+  // Agent markers + their recent trail.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    const seen = new Set<string>();
+    const trails: FC = { type: 'FeatureCollection', features: [] };
+    for (const a of agents) {
+      if (!showAgents || a.lat == null || a.lng == null || a.status === 'off_shift') continue;
+      if (agentFilter && a.agentId !== agentFilter) continue;
+      seen.add(a.agentId);
+      const color = AGENT_STATUS_META[a.status].color;
+      let m = agentMarkers.current.get(a.agentId);
+      if (!m) {
+        const el = document.createElement('button');
+        el.type = 'button';
+        el.className = 'geo-agent';
+        el.textContent = initials(a.name);
+        el.addEventListener('click', (ev) => { ev.stopPropagation(); selectRef.current({ type: 'agent', id: a.agentId }); });
+        m = new maplibregl.Marker({ element: el }).setLngLat([a.lng, a.lat]).addTo(map);
+        agentMarkers.current.set(a.agentId, m);
       } else {
-        mapRef.current.fitBounds(bounds, { padding: 80, maxZoom: 12 });
+        m.setLngLat([a.lng, a.lat]);
+      }
+      const el = m.getElement();
+      el.style.setProperty('--c', color);
+      el.title = `${a.name} — ${AGENT_STATUS_META[a.status].label}${a.currentPlace ? ` at ${a.currentPlace}` : ''}`;
+      el.setAttribute('aria-label', el.title);
+      el.classList.toggle('is-stale', a.status === 'no_signal');
+      el.classList.toggle('is-selected', selected?.type === 'agent' && selected.id === a.agentId);
+      if (pinged[a.agentId] && Date.now() - pinged[a.agentId] < 3000) {
+        el.classList.remove('is-ping');
+        void el.offsetWidth; // restart the animation
+        el.classList.add('is-ping');
+      }
+      if (a.trail.length > 1) {
+        trails.features.push({ type: 'Feature', properties: { color }, geometry: { type: 'LineString', coordinates: a.trail } });
       }
     }
-  }, [panchayats, selectedPanchayatDistrict, selectedPanchayatBlock, selectedPanchayat, mapLoaded]);
+    for (const [id, m] of agentMarkers.current) {
+      if (!seen.has(id)) { m.remove(); agentMarkers.current.delete(id); }
+    }
+    (map.getSource('trails') as maplibregl.GeoJSONSource | undefined)?.setData(trails);
+  }, [agents, showAgents, agentFilter, mapReady, selected, pinged]);
 
-  // Derived unique lists for dropdowns
-  const uniqueDistricts = Array.from(new Set(panchayats.map((p) => p.district))).sort();
-  const availableBlocks = Array.from(new Set(panchayats.filter((p) => !selectedPanchayatDistrict || p.district === selectedPanchayatDistrict).map((p) => p.block))).sort();
-  const availablePanchayats = Array.from(new Set(panchayats.filter((p) => (!selectedPanchayatDistrict || p.district === selectedPanchayatDistrict) && (!selectedPanchayatBlock || p.block === selectedPanchayatBlock)).map((p) => p.name))).sort();
+  // Pin editing: a draggable pin the admin drops on the real spot.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !pinEdit) return;
+    const el = document.createElement('div');
+    el.className = 'geo-pin-edit';
+    el.setAttribute('aria-label', `New location for ${pinEdit.name}`);
+    const m = new maplibregl.Marker({ element: el, draggable: true, anchor: 'bottom-left' }).setLngLat([pinEdit.lng, pinEdit.lat]).addTo(map);
+    m.on('dragend', () => {
+      const p = m.getLngLat();
+      setPinEdit((cur) => (cur ? { ...cur, lat: p.lat, lng: p.lng } : cur));
+    });
+    pinMarker.current = m;
+    map.easeTo({ center: [pinEdit.lng, pinEdit.lat], zoom: Math.max(map.getZoom(), 12.5), duration: 500 });
+    return () => { m.remove(); pinMarker.current = null; };
+    // the marker is created once per edit session (id), not on every drag
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinEdit?.id]);
+
+  const startMovePin = (d: PanchayatDetail) => {
+    const map = mapRef.current;
+    const c = map?.getCenter();
+    setPinEdit({ id: d.id, name: d.name, lat: d.lat ?? c?.lat ?? SEEMANCHAL_CENTER[1], lng: d.lng ?? c?.lng ?? SEEMANCHAL_CENTER[0] });
+  };
+  const savePin = async () => {
+    if (!pinEdit) return;
+    setSavingPin(true);
+    try {
+      await geo.setPin(pinEdit.id, pinEdit.lat, pinEdit.lng);
+      showToast(`Pin saved for ${pinEdit.name}. Agents now navigate to this spot.`);
+      setPinEdit(null);
+      setPanelVersion((v) => v + 1);
+      void coverage.reload();
+    } catch (e) {
+      showToast(friendlyError(e));
+    } finally {
+      setSavingPin(false);
+    }
+  };
+
+  const selectedAgent = selected?.type === 'agent' ? agents.find((a) => a.agentId === selected.id) : undefined;
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '360px 1fr', gap: '1.5rem', height: isMobile ? 'auto' : 'calc(100vh - 120px)' }}>
-      {/* Left Sidebar — Control Panel */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: isMobile ? 'visible' : 'auto', paddingRight: '0.5rem' }}>
-        {agentsError && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: 600 }}>
-            ⚠️ {agentsError} — agent positions may be stale.
-          </div>
-        )}
-        {/* Territory Explorer */}
-        <div className="card">
-          <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
-            🗺️ Territory Explorer
-          </h2>
-          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-            Filter and plot specific panchayats on the map.
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div className="field-group" style={{ margin: 0 }}>
-              <label className="field-label">District</label>
-              <select
-                className="field-input"
-                value={selectedPanchayatDistrict}
-                onChange={(e) => { setSelectedPanchayatDistrict(e.target.value); setSelectedPanchayatBlock(''); setSelectedPanchayat(''); }}
-              >
-                <option value="">All Districts</option>
-                {uniqueDistricts.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
-            <div className="field-group" style={{ margin: 0 }}>
-              <label className="field-label">Block / Council</label>
-              <select
-                className="field-input"
-                value={selectedPanchayatBlock}
-                onChange={(e) => { setSelectedPanchayatBlock(e.target.value); setSelectedPanchayat(''); }}
-              >
-                <option value="">All Blocks</option>
-                {availableBlocks.map((b) => <option key={b} value={b}>{b}</option>)}
-              </select>
-            </div>
-            <div className="field-group" style={{ margin: 0 }}>
-              <label className="field-label">Panchayat / Village</label>
-              <select
-                className="field-input"
-                value={selectedPanchayat}
-                onChange={(e) => setSelectedPanchayat(e.target.value)}
-                disabled={!selectedPanchayatBlock}
-              >
-                <option value="">All Panchayats</option>
-                {availablePanchayats.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
-
-            {(selectedPanchayatDistrict || selectedPanchayatBlock || selectedPanchayat) && (
-              <button
-                className="btn btn-ghost"
-                style={{ alignSelf: 'flex-start', marginTop: '0.25rem' }}
-                onClick={() => { setSelectedPanchayatDistrict(''); setSelectedPanchayatBlock(''); setSelectedPanchayat(''); mapRef.current?.flyTo({ center: [87.5701, 25.5541], zoom: 9.5 }); }}
-              >
-                Reset Filters
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="card">
-          <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
-            📍 Active Field Outreach
-          </h2>
-          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-            Select an agent to inspect their last known location and replay today&apos;s recorded shift trajectory.
-          </p>
-
-          {agents.length === 0 ? (
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>No agents yet.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {agents.map((a) => {
-                const isSel = a.agentId === selectedAgentId;
-                return (
-                  <div
-                    key={a.agentId}
-                    onClick={() => {
-                      setSelectedAgentId(a.agentId);
-                      setIsPlaying(false);
-                      setReplayIdx(0);
-                    }}
-                    style={{
-                      padding: '0.75rem',
-                      borderRadius: 'var(--radius-sm)',
-                      background: isSel ? 'rgba(99,102,241,0.15)' : 'var(--surface-bg)',
-                      border: `1px solid ${isSel ? 'var(--color-primary-500)' : 'var(--surface-border)'}`,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 600, color: isSel ? 'var(--color-primary-600)' : 'var(--text-primary)', fontSize: '0.9rem' }}>
-                        {a.name}
-                      </span>
-                      <span
-                        className="badge"
-                        style={{
-                          background: a.status === 'online' ? 'rgba(16,185,129,0.2)' : 'rgba(100,116,139,0.2)',
-                          color: a.status === 'online' ? '#10b981' : '#94a3b8',
-                          fontSize: '0.7rem',
-                        }}
-                      >
-                        {a.status === 'online' ? '🟢 ONLINE' : a.status === 'low-connectivity' ? '🟡 LOW SIG' : '⚪ OFFLINE'}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                      Block: <strong>{a.block}</strong>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Trajectory Replay Control Box */}
-        {selectedAgent && (
-          <div className="card" style={{ borderTop: '3px solid var(--color-primary-500)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', margin: 0 }}>
-                🔄 Trajectory Replay (today)
-              </h3>
-              <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-400)', fontWeight: 600 }}>
-                {trajectory.length} waypoints
-              </span>
-            </div>
-
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              Replaying today&apos;s route for <strong>{selectedAgent.name}</strong> ({selectedAgent.district}).
-            </p>
-
-            {/* Progress Slider */}
-            <div style={{ marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>
-                <span>Point {replayIdx + 1} of {trajectory.length || 1}</span>
-                <span>
-                  {currentPoint
-                    ? new Date(currentPoint.recordedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                    : '--:--'}
-                </span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={Math.max(0, trajectory.length - 1)}
-                value={replayIdx}
-                onChange={(e) => {
-                  setIsPlaying(false);
-                  setReplayIdx(Number(e.target.value));
-                }}
-                style={{ width: '100%', accentColor: 'var(--color-primary-500)', cursor: 'pointer' }}
-                disabled={trajectory.length === 0}
-              />
-            </div>
-
-            {/* Playback Buttons */}
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-              <button
-                className={`btn ${isPlaying ? 'btn-danger' : 'btn-primary'}`}
-                style={{ flex: 1, padding: '0.5rem' }}
-                onClick={() => {
-                  if (replayIdx >= trajectory.length - 1) setReplayIdx(0);
-                  setIsPlaying(!isPlaying);
-                }}
-                disabled={trajectory.length === 0}
-              >
-                {isPlaying ? '⏸ Pause Replay' : '▶ Start Replay'}
-              </button>
-              <button
-                className="btn btn-ghost"
-                style={{ padding: '0.5rem 0.75rem' }}
-                onClick={() => {
-                  setIsPlaying(false);
-                  setReplayIdx(0);
-                }}
-                title="Reset to start"
-              >
-                ⏹ Reset
-              </button>
-            </div>
-
-            {/* Speed Selector */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-              <span>Replay Speed:</span>
-              <div style={{ display: 'flex', gap: '0.35rem' }}>
-                {[
-                  { label: '1x', val: 1200 },
-                  { label: '2x', val: 600 },
-                  { label: '5x', val: 200 },
-                ].map((s) => (
-                  <button
-                    key={s.label}
-                    onClick={() => setSpeed(s.val)}
-                    style={{
-                      padding: '0.2rem 0.5rem',
-                      borderRadius: '4px',
-                      border: '1px solid var(--surface-border)',
-                      background: speed === s.val ? 'var(--color-primary-600)' : 'transparent',
-                      color: speed === s.val ? '#fff' : 'var(--text-muted)',
-                      cursor: 'pointer',
-                      fontSize: '0.72rem',
-                    }}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Live Point Metrics */}
-            {currentPoint && (
-              <div style={{ marginTop: '1rem', padding: '0.6rem', background: 'var(--surface-input)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', color: 'var(--text-muted)', border: '1px solid var(--surface-border)' }}>
-                <div>📍 Lat/Lng: <strong>{currentPoint.lat.toFixed(5)}, {currentPoint.lng.toFixed(5)}</strong></div>
-                <div>📡 Accuracy: ±{currentPoint.accuracyM ?? 10}m</div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Right Map Canvas Area */}
-      <div style={{ position: 'relative', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--surface-border)', boxShadow: 'var(--shadow-lg)', minHeight: '500px' }}>
-        <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
-
+    <div className="geo-page">
+      <div className="geo-map-wrap">
+        <div ref={containerRef} className="geo-map" role="region" aria-label="Map of panchayats and field agents" />
         {mapError && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,0.85)', color: '#fff', zIndex: 20, textAlign: 'center', padding: '2rem' }}>
-            <div>
-              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🗺️⚠️</div>
-              <p style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Map failed to load</p>
-              <p style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>The basemap tile provider couldn&apos;t be reached. Agent list and data below are unaffected.</p>
-            </div>
+          <div className="geo-map-error">
+            The map background couldn&apos;t load. Check the internet connection — the lists on the right still work.
           </div>
         )}
 
-        {/* Map Overlay Badge */}
-        <div style={{ position: 'absolute', top: 16, left: 16, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--surface-border)', zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>Seemanchal & Outreach Territories</div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--color-primary-600)' }}>Showing Katihar · Purnia · Araria · Kishanganj · Supaul · Uttar Dinajpur</div>
+        <div className="geo-toolbar">
+          <select className="crm-select" aria-label="District" value={district} onChange={(e) => { setDistrict(e.target.value); setBlock(''); }}>
+            <option value="">All districts</option>
+            {districts.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <select className="crm-select" aria-label="Block" value={block} onChange={(e) => setBlock(e.target.value)}>
+            <option value="">All blocks</option>
+            {blocks.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <select className="crm-select" aria-label="Agent" value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)}>
+            <option value="">All agents</option>
+            {(live.data?.agents ?? []).map((a) => <option key={a.agentId} value={a.agentId}>{a.name}</option>)}
+          </select>
+          <div className="geo-seg" role="group" aria-label="Period">
+            {PERIODS.map((p) => (
+              <button key={p.key} type="button" aria-pressed={period === p.key} onClick={() => setPeriod(p.key)}>{p.label}</button>
+            ))}
+          </div>
+        </div>
+
+        {pinEdit && (
+          <div className="geo-pinbar" role="status">
+            <span>Drag the blue pin onto <strong>{pinEdit.name}</strong>&apos;s main village.</span>
+            <button type="button" className="crm-btn is-sm" onClick={savePin} disabled={savingPin}>{savingPin ? 'Saving…' : 'Save pin'}</button>
+            <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setPinEdit(null)}>Cancel</button>
+          </div>
+        )}
+
+        <div className="geo-legend" aria-label="Legend">
+          {STATUSES.map((s) => (
+            <button key={s} type="button" aria-pressed={shown[s]} onClick={() => setShown((v) => ({ ...v, [s]: !v[s] }))} title={STATUS_META[s].hint}>
+              <span className="geo-swatch" style={{ ['--c' as string]: STATUS_META[s].color }} />
+              {STATUS_META[s].label} <span className="crm-cell-sub">· {counts[s]}</span>
+            </button>
+          ))}
+          <button type="button" aria-pressed={showAgents} onClick={() => setShowAgents((v) => !v)}>
+            <span className="geo-swatch" style={{ ['--c' as string]: AGENT_STATUS_META.moving.color, borderRadius: 999 }} />
+            Field agents
+          </button>
+        </div>
+
+        <div className="geo-live-badge">
+          <span className={`crm-live${liveStatus === 'live' ? '' : ' is-polling'}`}>
+            <span className="crm-live-dot" aria-hidden="true" />
+            {liveStatus === 'live' ? 'Live' : liveStatus === 'connecting' ? 'Connecting…' : 'Auto-refresh'}
+          </span>
         </div>
       </div>
+
+      <aside className="geo-side" aria-label="Details">
+        {selected?.type === 'panchayat' ? (
+          <PanchayatPanel
+            id={selected.id} from={from} to={to}
+            canEditField={canEditField} canEditPartners={canEditPartners}
+            onClose={() => setSelected(null)} onMovePin={startMovePin} onToast={showToast} version={panelVersion}
+          />
+        ) : selectedAgent ? (
+          <AgentCard a={selectedAgent} now={now} onClose={() => setSelected(null)} />
+        ) : (
+          <Overview
+            rows={visibleRows} counts={counts} agents={agents} now={now}
+            loading={!coverage.data} error={coverage.error} onRetry={coverage.reload}
+            liveError={live.error}
+            onAgent={(id) => setSelected({ type: 'agent', id })}
+            onBlock={(b) => setBlock(b)}
+            block={block}
+          />
+        )}
+      </aside>
+      {toast}
     </div>
+  );
+}
+
+function Overview({ rows, counts, agents, now, loading, error, onRetry, liveError, onAgent, onBlock, block }: {
+  rows: CoverageRow[]; counts: Record<CoverageStatus, number>; agents: LiveAgent[]; now: number;
+  loading: boolean; error: string | null; onRetry: () => void; liveError: string | null;
+  onAgent: (id: string) => void; onBlock: (b: string) => void; block: string;
+}) {
+  const total = rows.length;
+  const covered = total - counts.untouched;
+  const byBlock = useMemo(() => {
+    const m = new Map<string, Record<CoverageStatus, number> & { total: number }>();
+    for (const r of rows) {
+      const k = r.block;
+      const v = m.get(k) ?? { patients: 0, partners: 0, visited: 0, untouched: 0, total: 0 };
+      v[r.status]++; v.total++;
+      m.set(k, v);
+    }
+    return [...m.entries()].map(([name, v]) => ({ name, ...v, pct: v.total ? Math.round(((v.total - v.untouched) / v.total) * 100) : 0 }))
+      .sort((a, b) => a.pct - b.pct);
+  }, [rows]);
+  const onShift = agents.filter((a) => a.status !== 'off_shift');
+
+  return (
+    <>
+      <div>
+        <h2 className="crm-h2">Coverage</h2>
+        <span className="crm-sub" style={{ fontSize: 13 }}>Click a panchayat on the map for its people, visits and survey snapshot.</span>
+      </div>
+      {error && <ErrorBox message={error} onRetry={onRetry} />}
+      {loading ? <Skeleton h={90} /> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span className="geo-metric-value" style={{ fontSize: 28 }}>{total ? Math.round((covered / total) * 100) : 0}%</span>
+            <span className="crm-sub" style={{ fontSize: 13 }}>{covered} of {total} panchayats visited or with partners</span>
+          </div>
+          <div className="geo-stack" aria-hidden="true">
+            {STATUSES.map((s) => <span key={s} style={{ width: `${total ? (counts[s] / total) * 100 : 0}%`, ['--c' as string]: STATUS_META[s].color }} />)}
+          </div>
+          <div className="crm-chips" style={{ fontSize: 12 }}>
+            {STATUSES.map((s) => (
+              <span key={s} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                <span className="geo-swatch" style={{ ['--c' as string]: STATUS_META[s].color }} />{counts[s]} {STATUS_META[s].label.toLowerCase()}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="crm-card-head" style={{ marginBottom: 6 }}>
+          <h3 className="crm-h2" style={{ fontSize: 16 }}>Field force now</h3>
+          <span className="crm-sub" style={{ fontSize: 12 }}>{onShift.length} of {agents.length} on shift</span>
+        </div>
+        {liveError && <ErrorBox message={liveError} />}
+        {agents.length === 0 ? <Empty title="No field agents yet">Onboard agents in Users &amp; roles.</Empty> : (
+          <ul className="crm-list">
+            {agents.map((a) => (
+              <li key={a.agentId}>
+                <button type="button" className="geo-agent-row" onClick={() => onAgent(a.agentId)}>
+                  <span className="geo-dot" style={{ ['--c' as string]: AGENT_STATUS_META[a.status].color }} aria-hidden="true" />
+                  <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                    <span style={{ fontWeight: 600 }}>{a.name}</span>
+                    <span className="crm-cell-sub">
+                      {a.status === 'on_visit' && a.currentPlace ? `At ${a.currentPlace}` : AGENT_STATUS_META[a.status].label}
+                      {a.at && a.status !== 'off_shift' ? ` · ${timeAgo(a.at, now)}` : ''}
+                    </span>
+                  </span>
+                  <span className="crm-cell-sub" style={{ textAlign: 'right' }}>{a.today.visits} visits<br />{a.today.km.toFixed(1)} km</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {byBlock.length > 1 && (
+        <div>
+          <div className="crm-card-head" style={{ marginBottom: 6 }}>
+            <h3 className="crm-h2" style={{ fontSize: 16 }}>Blocks, least covered first</h3>
+          </div>
+          {byBlock.slice(0, 12).map((b) => (
+            <button key={b.name} type="button" className="geo-block-row" aria-pressed={block === b.name} onClick={() => onBlock(block === b.name ? '' : b.name)}>
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.name}</span>
+              <span className="geo-stack">
+                {STATUSES.map((s) => <span key={s} style={{ width: `${(b[s] / b.total) * 100}%`, ['--c' as string]: STATUS_META[s].color }} />)}
+              </span>
+              <span style={{ textAlign: 'right', fontWeight: 700 }}>{b.pct}%</span>
+            </button>
+          ))}
+          <Link href="/admin/coverage" className="crm-sub" style={{ fontSize: 13, display: 'inline-block', marginTop: 8 }}>All panchayats and blocks →</Link>
+        </div>
+      )}
+    </>
+  );
+}
+
+function AgentCard({ a, now, onClose }: { a: LiveAgent; now: number; onClose: () => void }) {
+  return (
+    <section className="geo-panel" aria-label={`Agent ${a.name}`}>
+      <header className="geo-panel-head">
+        <span className="crm-avatar" style={{ background: AGENT_STATUS_META[a.status].color, width: 44, height: 44 }}>{initials(a.name)}</span>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h2 className="crm-h2" style={{ fontSize: 20 }}>{a.name}</h2>
+          <span className="crm-sub" style={{ fontSize: 12 }}>{[a.block, a.district].filter(Boolean).join(' · ') || a.agentId}</span>
+        </div>
+        <button type="button" className="crm-btn is-secondary is-sm" onClick={onClose} aria-label="Close agent" style={{ width: 36, padding: 0 }}><X size={16} aria-hidden /></button>
+      </header>
+      <div className="geo-status-row">
+        <span className="geo-status" style={{ ['--c' as string]: AGENT_STATUS_META[a.status].color }}>
+          <span className="geo-swatch" style={{ borderRadius: 999 }} aria-hidden="true" />
+          {a.status === 'on_visit' && a.currentPlace ? `In ${a.currentPlace}` : AGENT_STATUS_META[a.status].label}
+        </span>
+        {a.at && <span className="crm-sub" style={{ fontSize: 12 }}>Last location {timeAgo(a.at, now)}{a.accuracyM ? ` · ±${Math.round(a.accuracyM)} m` : ''}</span>}
+      </div>
+      {a.status === 'no_signal' && (
+        <div className="crm-note" style={{ fontSize: 13 }}>
+          On shift but no location for {a.minutesSinceSeen ?? '?'} min — the phone may be off, out of signal, or the app closed.
+        </div>
+      )}
+      {a.shiftStartedAt && <span className="crm-sub" style={{ fontSize: 13 }}>Shift started {fmt.time(a.shiftStartedAt)}{a.currentPlaceSince ? ` · checked in ${fmt.time(a.currentPlaceSince)}` : ''}</span>}
+      <div className="geo-metrics">
+        <div className="geo-metric"><span className="crm-kpi-label" style={{ fontSize: 12 }}>Visits</span><span className="geo-metric-value">{a.today.visits}</span><span className="crm-cell-sub">{a.today.panchayats} panchayats</span></div>
+        <div className="geo-metric"><span className="crm-kpi-label" style={{ fontSize: 12 }}>Partners</span><span className="geo-metric-value">{a.today.partners}</span><span className="crm-cell-sub">added today</span></div>
+        <div className="geo-metric"><span className="crm-kpi-label" style={{ fontSize: 12 }}>Referrals</span><span className="geo-metric-value">{a.today.referrals}</span><span className="crm-cell-sub">today</span></div>
+        <div className="geo-metric"><span className="crm-kpi-label" style={{ fontSize: 12 }}>Distance</span><span className="geo-metric-value">{a.today.km.toFixed(1)}</span><span className="crm-cell-sub">km today</span></div>
+      </div>
+      <div className="crm-chips">
+        <Link className="crm-btn is-sm" href={`/admin/activity?agent=${encodeURIComponent(a.agentId)}`}><Activity size={14} aria-hidden /> Today&apos;s timeline</Link>
+        {a.phone && <a className="crm-btn is-secondary is-sm" href={`tel:${a.phone}`}><Phone size={14} aria-hidden /> Call</a>}
+        {a.status === 'off_shift' && <Pill>Not on shift</Pill>}
+      </div>
+    </section>
   );
 }

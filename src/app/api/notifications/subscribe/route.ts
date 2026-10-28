@@ -1,50 +1,40 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-
-const DB_PATH = path.join(process.cwd(), 'push-subscriptions.json');
-
-function getSubscriptions(): any[] {
-  try {
-    if (fs.existsSync(DB_PATH)) {
-      const data = fs.readFileSync(DB_PATH, 'utf-8');
-      return JSON.parse(data);
-    }
-  } catch (err) {
-    console.error('Error reading subscriptions:', err);
-  }
-  return [];
-}
-
-function saveSubscriptions(subs: any[]) {
-  try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(subs, null, 2));
-  } catch (err) {
-    console.error('Error saving subscriptions:', err);
-  }
-}
+import { isPushTokenConfigured, verifyPushToken } from '@/lib/push/auth';
+import { getSubscriptions, isValidSubscription, saveSubscriptions } from '@/lib/push/store';
 
 export async function POST(req: Request) {
   try {
-    const { agentId, subscription } = await req.json();
-
-    if (!agentId || !subscription) {
-      return NextResponse.json({ error: 'agentId and subscription are required' }, { status: 400 });
+    if (!isPushTokenConfigured()) {
+      return NextResponse.json({ error: 'Push notifications are not configured on the server' }, { status: 503 });
     }
 
-    const subs = getSubscriptions();
-    
-    // Remove existing subscription for this agent if it exists
-    const filteredSubs = subs.filter(s => s.agentId !== agentId);
-    
-    // Add new subscription
-    filteredSubs.push({
-      agentId,
-      subscription,
-      updatedAt: new Date().toISOString()
-    });
+    // The agentId comes only from the signed push token — never from the body —
+    // so one agent can't register (or overwrite) another agent's subscription.
+    const agentId = verifyPushToken(req);
+    if (!agentId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    saveSubscriptions(filteredSubs);
+    const { subscription } = await req.json();
+    if (!isValidSubscription(subscription)) {
+      return NextResponse.json({ error: 'A valid push subscription is required' }, { status: 400 });
+    }
+
+    // One subscription per agent: replace any previous one for this agent, and
+    // drop the same endpoint if it was registered under someone else (shared device).
+    const subs = getSubscriptions().filter(
+      s => s.agentId !== agentId && s.subscription?.endpoint !== subscription.endpoint
+    );
+    subs.push({
+      agentId,
+      subscription: {
+        endpoint: subscription.endpoint,
+        expirationTime: subscription.expirationTime ?? null,
+        keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth },
+      },
+      updatedAt: new Date().toISOString(),
+    });
+    saveSubscriptions(subs);
 
     return NextResponse.json({ success: true });
   } catch (error) {
