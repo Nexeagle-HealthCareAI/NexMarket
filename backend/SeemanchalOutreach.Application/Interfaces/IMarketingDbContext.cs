@@ -21,6 +21,15 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<AgentRefreshToken> AgentRefreshTokens { get; }
         DbSet<SurveyQuestion> SurveyQuestions { get; }
         DbSet<ContactDocument> ContactDocuments { get; }
+        DbSet<RolePermission> RolePermissions { get; }
+        DbSet<CallCycle> CallCycles { get; }
+        DbSet<CallLog> CallLogs { get; }
+        DbSet<PartnerPayment> PartnerPayments { get; }
+        DbSet<Department> Departments { get; }
+        DbSet<Doctor> Doctors { get; }
+        DbSet<ReferralStatusEntry> ReferralStatusEntries { get; }
+        DbSet<Broadcast> Broadcasts { get; }
+        DbSet<BroadcastRecipient> BroadcastRecipients { get; }
 
         ChangeTracker ChangeTracker { get; }
 

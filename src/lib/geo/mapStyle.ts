@@ -9,18 +9,27 @@
  * resolution logic ourselves. Raster tiles need no such resolution and are
  * guaranteed to render correctly with any MapLibre version.
  *
- * Falls back to MapLibre's own key-free demo style when no token is
- * configured, so local dev works with zero setup.
+ * Without a token it uses OpenFreeMap (https://openfreemap.org) — free, no key,
+ * commercial use allowed, real roads and village names. (It used to fall back to
+ * MapLibre's demo style, which shows only country outlines — useless in the field.)
+ * Override with NEXT_PUBLIC_MAP_STYLE_URL to point at any other MapLibre style.
  */
 
 import type { StyleSpecification } from 'maplibre-gl';
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-const FALLBACK_STYLE_URL = 'https://demotiles.maplibre.org/style.json';
+const CUSTOM_STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL;
+const OPENFREEMAP = {
+  // Pale and quiet — the dashboard's coverage colours and agent dots stand out on it.
+  light: 'https://tiles.openfreemap.org/styles/positron',
+  // Full colour roads, rivers and place names — for agents finding their way.
+  streets: 'https://tiles.openfreemap.org/styles/liberty',
+};
 
-export function getBasemapStyle(): string | StyleSpecification {
+export function getBasemapStyle(variant: 'light' | 'streets' = 'streets'): string | StyleSpecification {
+  if (CUSTOM_STYLE_URL) return CUSTOM_STYLE_URL;
   if (!MAPBOX_TOKEN) {
-    return FALLBACK_STYLE_URL;
+    return OPENFREEMAP[variant];
   }
 
   return {

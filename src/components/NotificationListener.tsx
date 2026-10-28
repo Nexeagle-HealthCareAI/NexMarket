@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useAgentStore } from '@/store/agent-store';
+import { getPushToken } from '@/lib/sync/api-client';
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -63,13 +64,18 @@ export default function NotificationListener() {
         });
       }
 
-      // Send to server
+      // Send to server. The agentId isn't sent — the subscribe route takes it
+      // from a signed token the API issues to the logged-in agent.
       if (agentId) {
-        await fetch('/api/notifications/subscribe', {
+        const { token } = await getPushToken();
+        const res = await fetch('/api/notifications/subscribe', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ agentId, subscription })
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ subscription })
         });
+        if (!res.ok) {
+          console.error('Push subscription was rejected:', res.status);
+        }
       }
     } catch (err) {
       console.error('Failed to subscribe to web push:', err);

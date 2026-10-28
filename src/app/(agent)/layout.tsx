@@ -1,5 +1,6 @@
 'use client';
 
+import { isDashboardRole } from '@/lib/crm/access';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -13,6 +14,7 @@ import { logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-cl
 import { useAgentStore } from '@/store/agent-store';
 import PwaInstallPrompt from '@/components/PwaInstallPrompt';
 import NotificationListener from '@/components/NotificationListener';
+import ShiftTracker from '@/components/ShiftTracker';
 import NotificationDropdown from '@/components/NotificationDropdown';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -237,9 +239,9 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
           </Link>
         );
       })}
-      {role?.toLowerCase() === 'admin' && (
+      {isDashboardRole(role) && (
         <Link
-          href="/admin/agents"
+          href="/admin/dashboard"
           className="sidebar-nav-link"
           onClick={() => setIsDrawerOpen(false)}
           style={{ marginTop: '0.5rem', borderTop: '1px solid var(--surface-border)', paddingTop: '0.75rem' }}
@@ -400,6 +402,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
       <main className="page-container" style={{ paddingTop: '0.5rem' }}>
         <PwaInstallPrompt />
         <NotificationListener />
+        <ShiftTracker />
         {children}
       </main>
 

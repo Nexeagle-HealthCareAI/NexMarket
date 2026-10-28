@@ -51,3 +51,6 @@ backend/**/obj/
 /public/sw.js.map
 /public/swe-worker-*.js
 /public/swe-worker-*.js.map
+
+# web-push subscription store (runtime data, see src/lib/push/store.ts)
+/data/

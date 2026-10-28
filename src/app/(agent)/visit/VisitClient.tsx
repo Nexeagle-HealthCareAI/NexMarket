@@ -42,11 +42,8 @@ export default function VisitPage() {
     getMyAssignment().then(setAssignment).catch(() => setAssignment(null));
   }, [agentId]);
 
-  const { position, permission } = useGeolocation({
-    shiftId: activeShift?.clientId,
-    visitId: activeVisit?.clientId,
-    record: !!activeShift,
-  });
+  // Route recording runs in <ShiftTracker /> (agent layout); this only reads the position.
+  const { position, permission } = useGeolocation({ record: false });
 
   const isOnShift = !!activeShift && !activeShift.endAt;
   const hasActiveVisit = !!activeVisit;

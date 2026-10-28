@@ -24,6 +24,15 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<AgentRefreshToken> AgentRefreshTokens => Set<AgentRefreshToken>();
         public DbSet<SurveyQuestion> SurveyQuestions => Set<SurveyQuestion>();
         public DbSet<ContactDocument> ContactDocuments { get; set; } = null!;
+        public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+        public DbSet<CallCycle> CallCycles => Set<CallCycle>();
+        public DbSet<CallLog> CallLogs => Set<CallLog>();
+        public DbSet<PartnerPayment> PartnerPayments => Set<PartnerPayment>();
+        public DbSet<Department> Departments => Set<Department>();
+        public DbSet<Doctor> Doctors => Set<Doctor>();
+        public DbSet<ReferralStatusEntry> ReferralStatusEntries => Set<ReferralStatusEntry>();
+        public DbSet<Broadcast> Broadcasts => Set<Broadcast>();
+        public DbSet<BroadcastRecipient> BroadcastRecipients => Set<BroadcastRecipient>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -87,6 +96,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.ClientId).IsUnique();
                 entity.HasIndex(e => new { e.PanchayatId, e.Phone });
                 entity.HasIndex(e => new { e.PanchayatId, e.Name });
+                entity.HasIndex(e => e.NextCallAt);
             });
 
             // ─── ContactHistoryEntry ─────────────────────────────────
@@ -139,6 +149,76 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("agent_refresh_tokens");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.AgentId, e.DeviceId }).IsUnique();
+            });
+
+            // ─── CRM: roles, calls, payments, departments, broadcasts ─
+            modelBuilder.Entity<RolePermission>(entity =>
+            {
+                entity.ToTable("role_permissions");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.Role, e.PageKey }).IsUnique();
+            });
+
+            modelBuilder.Entity<CallCycle>(entity =>
+            {
+                entity.ToTable("call_cycles");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Number).IsUnique();
+            });
+
+            modelBuilder.Entity<CallLog>(entity =>
+            {
+                entity.ToTable("call_logs");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.ContactClientId, e.CreatedAt });
+                entity.HasIndex(e => new { e.CycleNumber, e.ContactClientId });
+                entity.HasIndex(e => e.CreatedAt);
+            });
+
+            modelBuilder.Entity<PartnerPayment>(entity =>
+            {
+                entity.ToTable("partner_payments");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Amount).HasPrecision(12, 2);
+                entity.HasIndex(e => e.ContactClientId);
+                entity.HasIndex(e => e.Status);
+            });
+
+            modelBuilder.Entity<Department>(entity =>
+            {
+                entity.ToTable("departments");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Name).IsUnique();
+            });
+
+            modelBuilder.Entity<Doctor>(entity =>
+            {
+                entity.ToTable("doctors");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.DepartmentId);
+            });
+
+            modelBuilder.Entity<ReferralStatusEntry>(entity =>
+            {
+                entity.ToTable("referral_status_history");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.ReferralClientId, e.ChangedAt });
+            });
+
+            modelBuilder.Entity<Broadcast>(entity =>
+            {
+                entity.ToTable("broadcasts");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.Status, e.ScheduledAt });
+            });
+
+            modelBuilder.Entity<BroadcastRecipient>(entity =>
+            {
+                entity.ToTable("broadcast_recipients");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.BroadcastId);
+                entity.HasIndex(e => e.ProviderMessageId);
+                entity.HasIndex(e => e.Phone);
             });
 
             // ─── SurveyQuestion ──────────────────────────────────────

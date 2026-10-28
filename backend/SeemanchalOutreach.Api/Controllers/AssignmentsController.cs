@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SeemanchalOutreach.Api.Services;
+using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
 
@@ -48,6 +50,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public DateTime? LastVisitedAt { get; set; }
         public double? CentroidLat { get; set; }
         public double? CentroidLng { get; set; }
+        /// <summary>manual | field | villages | hq-village | block — "block" means only the block centre is known.</summary>
+        public string LocationSource { get; set; } = "block";
     }
 
     public class MyAssignmentDto
@@ -75,7 +79,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,admin")]
+        [PageAccess(Pages.Field)]
         public async Task<ActionResult<List<AssignmentSummaryDto>>> GetAssignments(CancellationToken cancellationToken)
         {
             var assignments = await _db.BlockAssignments.AsNoTracking()
@@ -147,7 +151,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,admin")]
+        [PageAccess(Pages.Field)]
         public async Task<ActionResult<AssignmentSummaryDto>> CreateAssignment([FromBody] CreateAssignmentRequest request, CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
@@ -218,7 +222,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpPatch("{id:guid}")]
-        [Authorize(Roles = "Admin,admin")]
+        [PageAccess(Pages.Field)]
         public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateAssignmentStatusRequest request, CancellationToken cancellationToken)
         {
             if (!ValidStatuses.Contains(request.Status))
@@ -270,6 +274,8 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Select(g => new { PanchayatId = g.Key, LastVisitedAt = g.Max(v => v.CheckInAt) })
                 .ToListAsync(cancellationToken);
             var visitMap = visits.ToDictionary(v => v.PanchayatId, v => v.LastVisitedAt);
+            var checkIns = await PanchayatLocator.CheckInsAsync(_db, panchayats.Select(p => p.PanchayatId).ToList(), cancellationToken);
+            var spots = panchayats.ToDictionary(p => p.PanchayatId, p => PanchayatLocator.Resolve(p, checkIns.GetValueOrDefault(p.PanchayatId)));
 
             return Ok(new MyAssignmentDto
             {
@@ -284,8 +290,9 @@ namespace SeemanchalOutreach.Api.Controllers
                     Name = p.Name,
                     Visited = visitMap.ContainsKey(p.PanchayatId),
                     LastVisitedAt = visitMap.GetValueOrDefault(p.PanchayatId),
-                    CentroidLat = p.CentroidLat,
-                    CentroidLng = p.CentroidLng,
+                    CentroidLat = spots[p.PanchayatId].Lat,
+                    CentroidLng = spots[p.PanchayatId].Lng,
+                    LocationSource = spots[p.PanchayatId].Source,
                 }).ToList(),
             });
         }

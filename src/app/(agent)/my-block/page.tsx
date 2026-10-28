@@ -7,10 +7,18 @@ import { getMyAssignment, type MyAssignmentDto } from '@/lib/sync/api-client';
 import { getSyncStateValue, setSyncStateValue } from '@/lib/db';
 import { useQuery } from '@tanstack/react-query';
 import { useGeolocation } from '@/lib/geo/useGeolocation';
-import { haversineDistanceMeters } from '@/lib/geo/distance';
+import { formatDistance, haversineDistanceMeters } from '@/lib/geo/distance';
 import TaskMap from './TaskMap';
 
 const CACHE_KEY_PREFIX = 'lastAssignment_';
+// A gram panchayat spans a few km, and its pin is the middle of its villages — so an agent
+// anywhere in the panchayat should be able to check in. Pins known only to the block centre
+// don't block check-in at all; the check-in itself teaches the map where the panchayat is.
+const CHECK_IN_RADIUS_M = 2500;
+
+function directionsUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+}
 
 export default function MyTaskPage() {
   const agentId = useAgentStore((s) => s.agentId);
@@ -45,6 +53,10 @@ export default function MyTaskPage() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
+  // GPS updates every few seconds; the list re-sorts only when the agent moves ~500 m.
+  const posLat = position ? Math.round(position.lat * 200) / 200 : null;
+  const posLng = position ? Math.round(position.lng * 200) / 200 : null;
+
   const { total, visited, pct, visible } = useMemo(() => {
     if (!assignment?.data?.panchayats) {
       return { total: 0, visited: 0, pct: 0, visible: [] };
@@ -59,13 +71,19 @@ export default function MyTaskPage() {
         vis.push(p);
       }
     }
+    // Nearest first, so the agent can plan the day's route; pending before visited.
+    const dist = (p: (typeof panchs)[number]) =>
+      posLat != null && posLng != null && p.centroidLat != null && p.centroidLng != null && p.locationSource !== 'block'
+        ? haversineDistanceMeters({ lat: posLat, lng: posLng }, { lat: p.centroidLat, lng: p.centroidLng })
+        : Number.POSITIVE_INFINITY;
+    vis.sort((a, b) => Number(a.visited) - Number(b.visited) || dist(a) - dist(b) || a.name.localeCompare(b.name));
     return {
       total: t,
       visited: v,
       pct: t > 0 ? Math.round((v / t) * 100) : 0,
       visible: vis,
     };
-  }, [assignment?.data?.panchayats, filter]);
+  }, [assignment?.data?.panchayats, filter, posLat, posLng]);
 
   // Fix Ghost Selection Bug
   useEffect(() => {
@@ -168,7 +186,8 @@ export default function MyTaskPage() {
             if (position && canRoute) {
               distanceToTarget = haversineDistanceMeters(position, { lat: p.centroidLat!, lng: p.centroidLng! });
             }
-            const isWithinGeofence = distanceToTarget !== null && distanceToTarget <= 200;
+            const approximate = p.locationSource === 'block';
+            const isWithinGeofence = approximate || (distanceToTarget !== null && distanceToTarget <= CHECK_IN_RADIUS_M);
             
             return (
               <div
@@ -186,7 +205,11 @@ export default function MyTaskPage() {
                     )}
                     {canRoute && (
                       <div className="text-xs text-blue-500 font-semibold mt-1">
-                        {isSelected ? '🧭 Routing shown above' : '🧭 Tap to route'}
+                        {approximate
+                          ? '📍 Location approximate'
+                          : distanceToTarget !== null
+                            ? `🧭 ${formatDistance(distanceToTarget)} away · ${isSelected ? 'route shown above' : 'tap to route'}`
+                            : isSelected ? '🧭 Routing shown above' : '🧭 Tap to route'}
                       </div>
                     )}
                   </div>
@@ -200,10 +223,26 @@ export default function MyTaskPage() {
                   <div className="mt-3 pt-3 border-t border-[var(--surface-border)]">
                     {!isWithinGeofence && !p.visited ? (
                        <div className="text-center text-xs text-red-500 mb-2 font-semibold">
-                         You must be within 200m of the location to check in. 
-                         {distanceToTarget && ` (Currently ${Math.round(distanceToTarget)}m away)`}
+                         Reach {p.name} to check in (within {CHECK_IN_RADIUS_M / 1000} km of its centre).
+                         {distanceToTarget !== null && ` You are ${formatDistance(distanceToTarget)} away.`}
                        </div>
                     ) : null}
+                    {approximate && !p.visited ? (
+                       <div className="text-center text-xs text-amber-600 mb-2 font-semibold">
+                         We only know this panchayat&apos;s block. Check in when you reach it — your check-in puts it on the map.
+                       </div>
+                    ) : null}
+                    {!approximate && p.centroidLat != null && p.centroidLng != null && (
+                      <a
+                        href={directionsUrl(p.centroidLat, p.centroidLng)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn btn-sm btn-ghost w-full flex justify-center mb-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        🗺️ Directions in Google Maps
+                      </a>
+                    )}
                     <Link 
                       href={isWithinGeofence || p.visited ? `/visit?preselect=${p.panchayatId}` : '#'}
                       className={`btn btn-sm w-full flex justify-center ${isWithinGeofence || p.visited ? 'btn-primary' : 'btn-disabled opacity-50 cursor-not-allowed'}`}

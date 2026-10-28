@@ -6,17 +6,34 @@ namespace SeemanchalOutreach.Api.SeedData
 {
     public static class SurveyQuestionSeeder
     {
+        /// <summary>
+        /// The six questions agents ask in every panchayat. Together they show what people
+        /// fall ill with, which specialist is missing, where patients go today, who decides
+        /// the hospital, how families pay, and how they reach a hospital in an emergency.
+        /// The other questions stay in the database (older answers still show) but are
+        /// switched off, so the agent app no longer asks them.
+        /// </summary>
+        public static readonly string[] CoreQuestionIds =
+        {
+            "morbidity_profile",
+            "specialist_deficit",
+            "treatment_destination",
+            "referral_decision_maker",
+            "payment_funding_source",
+            "emergency_transport",
+        };
+
+        public const string CoreSection = "Panchayat snapshot";
+
+        /// <summary>
+        /// Keeps the questionnaire in line with this file on every start-up. Questions are
+        /// matched by QuestionId and updated in place, so their ids stay the same between
+        /// restarts; questions no longer listed here are removed.
+        /// </summary>
         public static async Task SeedIfEmptyAsync(Infrastructure.Persistence.MarketingDbContext db)
         {
-            // Force clear ALL existing questions to ensure only our new 18 questions exist
-            var existing = await db.SurveyQuestions.ToListAsync();
-            if (existing.Any())
+            var all = new List<SurveyQuestion>
             {
-                db.SurveyQuestions.RemoveRange(existing);
-                await db.SaveChangesAsync();
-            }
-
-            db.SurveyQuestions.AddRange(
                 new SurveyQuestion
                 {
                     QuestionId = "morbidity_profile",
@@ -197,7 +214,44 @@ namespace SeemanchalOutreach.Api.SeedData
                     OptionsJson = "[\"Sasta Ilaaj (Low cost / Free packages)\", \"Doctor ka purana naam aur tajarba (Doctor fame & experience)\", \"Ayushman / Swasthya Sathi accept hota hai (Government card)\", \"Staff aur doctor ka vyavahar achha hai (Courteous staff)\", \"Operation safal hone ka vishwas (High clinical success rate)\", \"Other\"]",
                     Order = 20
                 }
-            );
+            };
+
+            for (int i = 0; i < CoreQuestionIds.Length; i++)
+            {
+                var q = all.First(x => x.QuestionId == CoreQuestionIds[i]);
+                q.Order = i + 1;
+                q.Section = CoreSection;
+                q.IsOptional = false;
+            }
+            foreach (var q in all)
+            {
+                q.IsActive = CoreQuestionIds.Contains(q.QuestionId);
+                if (!q.IsActive) q.Order += 100;
+            }
+
+            var existing = await db.SurveyQuestions.ToListAsync();
+            var byId = existing.GroupBy(q => q.QuestionId).ToDictionary(g => g.Key, g => g.ToList());
+            foreach (var q in all)
+            {
+                if (byId.TryGetValue(q.QuestionId, out var rows))
+                {
+                    var row = rows[0];
+                    row.Text = q.Text;
+                    row.Type = q.Type;
+                    row.Section = q.Section;
+                    row.OptionsJson = q.OptionsJson;
+                    row.IsOptional = q.IsOptional;
+                    row.IsActive = q.IsActive;
+                    row.Order = q.Order;
+                    db.SurveyQuestions.RemoveRange(rows.Skip(1)); // duplicates from older seeding
+                }
+                else
+                {
+                    db.SurveyQuestions.Add(q);
+                }
+            }
+            var keep = all.Select(q => q.QuestionId).ToHashSet();
+            db.SurveyQuestions.RemoveRange(existing.Where(q => !keep.Contains(q.QuestionId)));
             await db.SaveChangesAsync();
         }
     }

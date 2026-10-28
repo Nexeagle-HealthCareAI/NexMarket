@@ -50,7 +50,7 @@ export default function PwaRegister() {
     <div
       style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 999999,
-        background: '#4f46e5', color: 'white', textAlign: 'center',
+        background: '#0a72d6', color: 'white', textAlign: 'center',
         padding: '0.6rem 1rem', fontSize: '0.85rem', fontWeight: 700,
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
       }}

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
 
@@ -146,14 +147,16 @@ namespace SeemanchalOutreach.Api.Controllers
     public class AgentsController : ControllerBase
     {
         private readonly IMarketingDbContext _db;
+        private readonly IPermissionService _perms;
 
-        public AgentsController(IMarketingDbContext db)
+        public AgentsController(IMarketingDbContext db, IPermissionService perms)
         {
             _db = db;
+            _perms = perms;
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,admin")]
+        [PageAccess(Pages.Field, Pages.Users, Pages.Dashboard)]
         public async Task<ActionResult<object>> GetAgents(
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 50,
@@ -248,7 +251,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet("{agentId}/trajectory")]
-        [Authorize(Roles = "Admin,admin")]
+        [PageAccess(Pages.Field)]
         public async Task<ActionResult<object>> GetTrajectory(string agentId, [FromQuery] DateOnly? date, CancellationToken cancellationToken)
         {
             var day = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
@@ -273,8 +276,8 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             // Admin can view anyone; an agent can view their own record.
             var currentAgentId = User.FindFirst("agentId")?.Value;
-            var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
-            if (currentAgentId != agentId && role != "Admin")
+            if (currentAgentId != agentId && !User.IsAdmin()
+                && await _perms.GetLevelAsync(User, Pages.Field, Pages.Users) < Pages.View)
             {
                 return Forbid();
             }
@@ -362,10 +365,19 @@ namespace SeemanchalOutreach.Api.Controllers
         /// a real login available, so no anonymous bootstrap path is needed.
         /// </summary>
         [HttpPost]
-        [Authorize(Roles = "Admin,admin")]
+        [PageAccess(Pages.Users)]
         public async Task<ActionResult<object>> Onboard([FromBody] OnboardAgentRequest request, CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            // Dashboard accounts (Admin, Marketing manager, Hospital representative) can
+            // only be created by an Admin; anyone with Users & roles edit can onboard field agents.
+            var dashboardRole = RoleChecks.CanonicalDashboardRole(request.Role);
+            if (dashboardRole != null && !User.IsAdmin())
+            {
+                return Forbid();
+            }
+            if (dashboardRole != null) request.Role = dashboardRole;
 
             if (await _db.Agents.AnyAsync(a => a.Phone == request.Phone, cancellationToken))
             {
@@ -381,6 +393,8 @@ namespace SeemanchalOutreach.Api.Controllers
             string prefix = request.Role.Trim().ToLowerInvariant() switch
             {
                 "admin" => "ADM",
+                "marketingmanager" => "MGR",
+                "hospitalrep" => "HRP",
                 "field officer" => "FLD",
                 "marketing executive" => "MKT",
                 "regional representative" => "REG",
@@ -489,8 +503,7 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             // Only allow the agent themselves to update their own profile, or an admin
             var currentAgentId = User.FindFirst("agentId")?.Value;
-            var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
-            var isAdmin = role == "Admin";
+            var isAdmin = User.IsAdmin();
 
             if (currentAgentId != agentId && !isAdmin)
             {
@@ -534,7 +547,7 @@ namespace SeemanchalOutreach.Api.Controllers
             // reassign their own role/district/block or reactivate themselves.
             if (isAdmin)
             {
-                if (!string.IsNullOrEmpty(dto.Role)) agent.Role = dto.Role;
+                if (!string.IsNullOrEmpty(dto.Role)) agent.Role = RoleChecks.CanonicalDashboardRole(dto.Role) ?? dto.Role;
                 if (!string.IsNullOrEmpty(dto.District)) agent.District = dto.District;
                 if (!string.IsNullOrEmpty(dto.Block)) agent.Block = dto.Block;
                 if (dto.IsActive != null) agent.IsActive = dto.IsActive.Value;

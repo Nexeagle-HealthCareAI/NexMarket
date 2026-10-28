@@ -12,6 +12,9 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
 using SeemanchalOutreach.Api.Hubs;
 using SeemanchalOutreach.Api.SeedData;
+using SeemanchalOutreach.Api.Security;
+using SeemanchalOutreach.Api.Services;
+using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Application;
 using SeemanchalOutreach.Infrastructure;
 using SeemanchalOutreach.Infrastructure.Persistence;
@@ -25,6 +28,12 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Add Controllers & SignalR
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
+
+// CRM: page permissions, cyclic calling, live dashboard events, WhatsApp broadcasts.
+builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddScoped<CallCycleService>();
+builder.Services.AddSingleton<ILiveEvents, LiveEventPublisher>();
+builder.Services.AddHostedService<BroadcastDispatcher>();
 
 // Consistent JSON error shape for both validation failures ([ApiController]'s
 // automatic 400s) and unhandled exceptions (via UseExceptionHandler below) —
@@ -196,6 +205,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<LocationHub>("/hubs/location").RequireAuthorization();
+app.MapHub<LiveHub>("/hubs/live").RequireAuthorization();
 
 // Deploy-pipeline health check — intentionally anonymous, no DB round-trip
 // (keep it cheap so it can't false-negative on a slow query under load).

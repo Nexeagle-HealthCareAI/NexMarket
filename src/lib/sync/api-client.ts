@@ -714,6 +714,8 @@ export interface AssignmentPanchayatDto {
   lastVisitedAt: string | null;
   centroidLat: number | null;
   centroidLng: number | null;
+  /** manual | field | villages | hq-village | block — "block" means only the block centre is known. */
+  locationSource?: string;
 }
 
 export interface MyAssignmentDto {
@@ -948,3 +950,42 @@ export interface AdminSurveyDto {
 export function getAdminSurveys(): Promise<AdminSurveyDto[]> {
   return get<AdminSurveyDto[]>('/api/v1/admin/surveys');
 }
+
+// ─── Web push ────────────────────────────────────────────────────────────────
+
+export interface PushTokenDto {
+  token: string;
+  expiresAt: string;
+}
+
+// Short-lived signed token proving who the caller is to the web app's
+// /api/notifications/subscribe route (which can't see the API's auth cookies).
+export function getPushToken(): Promise<PushTokenDto> {
+  return get<PushTokenDto>('/api/v1/notifications/push-token');
+}
+
+// ─── CRM (dashboard) — generic JSON helpers ──────────────────────────────────
+// Same cookie auth and 401 → refresh → retry behaviour as every call above.
+
+export const API_ORIGIN = API_BASE;
+
+export const crm = {
+  get: <T>(path: string) => get<T>(path),
+  post: <T>(path: string, body?: unknown) => post<unknown, T>(path, body ?? {}),
+  put: <T>(path: string, body?: unknown) => put<unknown, T>(path, body ?? {}),
+  del: <T>(path: string) => del<T>(path),
+  /** Downloads a file (e.g. CSV export) with the session cookie and saves it. */
+  async download(path: string, fileName: string): Promise<void> {
+    const res = await doFetch(path, {});
+    if (!res.ok) throw new Error(`API GET ${path} → ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+};

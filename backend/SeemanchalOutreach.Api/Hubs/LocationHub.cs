@@ -1,3 +1,4 @@
+using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -19,6 +20,18 @@ namespace SeemanchalOutreach.Api.Hubs
     [Authorize]
     public class LocationHub : Hub
     {
+        // Only admins join the "admins" group, and location updates go only to
+        // that group — field agents can send their own position but never
+        // receive anyone else's live GPS.
+        public override async Task OnConnectedAsync()
+        {
+            if (Context.User.IsAdmin())
+            {
+                await Groups.AddToGroupAsync(Context.ConnectionId, RoleChecks.AdminsGroup);
+            }
+            await base.OnConnectedAsync();
+        }
+
         public async Task BroadcastLocation(LocationUpdateDto update)
         {
             // AgentId/AgentName come from the caller's own JWT, never from the
@@ -28,7 +41,7 @@ namespace SeemanchalOutreach.Api.Hubs
             var agentName = Context.User?.FindFirst(ClaimTypes.Name)?.Value;
             if (string.IsNullOrEmpty(agentId)) return;
 
-            await Clients.All.SendAsync("ReceiveLocationUpdate", new
+            await Clients.Group(RoleChecks.AdminsGroup).SendAsync("ReceiveLocationUpdate", new
             {
                 AgentId = agentId,
                 AgentName = agentName,

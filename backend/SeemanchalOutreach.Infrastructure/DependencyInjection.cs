@@ -32,6 +32,12 @@ namespace SeemanchalOutreach.Infrastructure
             });
             services.AddSingleton<IDirectionsService, MapboxDirectionsService>();
 
+            services.AddHttpClient("whatsapp", client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(15);
+            });
+            services.AddSingleton<IWhatsAppSender, WhatsAppCloudSender>();
+
             return services;
         }
     }

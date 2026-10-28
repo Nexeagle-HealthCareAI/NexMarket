@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
 
@@ -37,7 +38,8 @@ namespace SeemanchalOutreach.Api.Controllers
     }
 
     [ApiController]
-    [Authorize(Roles = "Admin,admin")]
+    [Authorize]
+    [PageAccess(Pages.Partners)]
     [Route("api/v1/admin/[controller]")]
     public class ContactsController : ControllerBase
     {

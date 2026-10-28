@@ -35,6 +35,10 @@ namespace SeemanchalOutreach.Api.SeedData
 
         [JsonPropertyName("centroidLng")]
         public double? CentroidLng { get; set; }
+
+        // villages | hq-village | block — see scripts/geo/build_panchayat_geo.py
+        [JsonPropertyName("locationSource")]
+        public string? LocationSource { get; set; }
     }
 
     public static class PanchayatSeeder
@@ -78,6 +82,7 @@ namespace SeemanchalOutreach.Api.SeedData
                     p.State = state;
                     p.CentroidLat = r.CentroidLat;
                     p.CentroidLng = r.CentroidLng;
+                    p.LocationSource = string.IsNullOrWhiteSpace(r.LocationSource) ? "block" : r.LocationSource;
                 }
                 else
                 {
@@ -91,6 +96,7 @@ namespace SeemanchalOutreach.Api.SeedData
                         State = state,
                         CentroidLat = r.CentroidLat,
                         CentroidLng = r.CentroidLng,
+                        LocationSource = string.IsNullOrWhiteSpace(r.LocationSource) ? "block" : r.LocationSource,
                     });
                 }
             }

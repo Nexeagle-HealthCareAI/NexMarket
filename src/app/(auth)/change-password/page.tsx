@@ -1,5 +1,6 @@
 'use client';
 
+import { isDashboardRole } from '@/lib/crm/access';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { changePassword } from '@/lib/sync/api-client';
@@ -36,7 +37,7 @@ export default function ChangePasswordPage() {
     setIsLoading(true);
     try {
       await changePassword(currentPassword, newPassword);
-      router.push(role?.toLowerCase() === 'admin' ? '/admin/agents' : '/home');
+      router.push(isDashboardRole(role) ? '/admin/dashboard' : '/home');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to change password. Please try again.');
     } finally {

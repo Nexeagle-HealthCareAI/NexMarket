@@ -1,5 +1,6 @@
 'use client';
 
+import { isDashboardRole } from '@/lib/crm/access';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAgentStore } from '@/store/agent-store';
@@ -125,7 +126,7 @@ export default function AssignmentsClient() {
     }
   }
 
-  const nonAdminAgents = agents.filter((a) => a.role.toLowerCase() !== 'admin');
+  const nonAdminAgents = agents.filter((a) => !isDashboardRole(a.role));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

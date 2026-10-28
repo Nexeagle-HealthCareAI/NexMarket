@@ -9,3 +9,5 @@ backend
 *.md
 .vscode
 coverage
+
+data

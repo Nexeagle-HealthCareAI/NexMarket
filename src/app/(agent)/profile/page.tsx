@@ -1,5 +1,6 @@
 'use client';
 
+import { isDashboardRole } from '@/lib/crm/access';
 import { useEffect, useRef, useState } from 'react';
 import { useAgentStore } from '@/store/agent-store';
 import { getAgentDetail, updateAgentProfile, uploadPhoto, logout as apiLogout, type AgentDetailDto, type UpdateAgentProfileRequest } from '@/lib/sync/api-client';
@@ -242,9 +243,9 @@ export default function ProfilePage() {
 
       {/* Admin and Logout Options */}
       <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        {role?.toLowerCase() === 'admin' && (
+        {isDashboardRole(role) && (
           <Link
-            href="/admin/agents"
+            href="/admin/dashboard"
             className="btn btn-full"
             style={{ 
               background: 'white', 
