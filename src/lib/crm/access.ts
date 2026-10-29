@@ -73,3 +73,8 @@ export function canView(a: AccessMe | null, page: PageKey): boolean {
 export function canEdit(a: AccessMe | null, page: PageKey): boolean {
   return !!a && (a.isAdmin || (a.pages?.[page] ?? 0) >= 2);
 }
+
+/** Block assignments and tasks for agents: admins, marketing managers, and anyone who can edit the field pages. */
+export function canAssignBlocks(a: AccessMe | null): boolean {
+  return canEdit(a, 'field') || a?.role === 'MarketingManager';
+}

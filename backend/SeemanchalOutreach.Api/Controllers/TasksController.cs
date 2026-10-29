@@ -68,7 +68,7 @@ namespace SeemanchalOutreach.Api.Controllers
     /// <summary>Tasks for field agents, given from Block assignments. Viewing needs the Field page; changes need Edit.</summary>
     [ApiController]
     [Authorize]
-    [PageAccess(Pages.Field)]
+    [PageAccess(Pages.Field, AlsoRoles = RoleChecks.MarketingManager)]
     [Route("api/v1/tasks")]
     public class TasksController : ControllerBase
     {

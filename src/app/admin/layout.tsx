@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore, type ComponentType 
 import {
   LayoutDashboard, PhoneCall, Inbox, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
-  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck,
+  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History,
 } from 'lucide-react';
 import { logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useAgentStore } from '@/store/agent-store';
@@ -69,6 +69,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/departments', label: 'Departments & doctors', page: 'departments', icon: Building2 },
       { href: '/admin/users', label: 'Users & roles', page: 'users', icon: ShieldCheck },
+      { href: '/admin/audit', label: 'Activity log', page: 'admin', icon: History },
       { href: '/admin/sync', label: 'Sync health', page: 'admin', icon: RefreshCw },
     ],
   },

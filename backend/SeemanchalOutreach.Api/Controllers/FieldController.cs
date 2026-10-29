@@ -241,6 +241,45 @@ namespace SeemanchalOutreach.Api.Controllers
             var ordered = events.OrderBy(e => e.At).ToList();
             double shiftMinutes = onShiftWindows.Sum(w => Math.Max(0, (w.To - w.From).TotalMinutes));
 
+            // ─── Where the time went: stops (stayed put) and travel, from shift start to end ───
+            var nearbyPlaces = await NearbyPanchayatsAsync(good, ct);
+            var segments = BuildSegments(good, onShiftWindows, visits.Select(v => (v.CheckInAt, v.CheckOutAt, v.PanchayatId)).ToList());
+            var segOut = new List<object>();
+            int stopNo = 0;
+            foreach (var g in segments)
+            {
+                var inside = ordered.Where(e => e.At >= g.From && e.At < g.To && e.Kind is "partner" or "referral" or "survey" or "photo").ToList();
+                string? placeId = g.VisitPanchayatId;
+                string? placeName = placeId != null ? Place(placeId) : null;
+                double? nearM = null;
+                if (g.Kind == "stop" && placeName == null && g.Lat != null)
+                {
+                    var best = nearbyPlaces.Select(pl => (pl, d: HaversineM(g.Lat.Value, g.Lng!.Value, pl.Lat, pl.Lng))).OrderBy(x => x.d).FirstOrDefault();
+                    if (best.pl != null && best.d <= 3000) { placeName = best.pl.Name; placeId = best.pl.Id; nearM = Math.Round(best.d); }
+                }
+                segOut.Add(new
+                {
+                    kind = g.Kind,                                   // stop | move | gap
+                    no = g.Kind == "stop" ? ++stopNo : (int?)null,
+                    from = g.From,
+                    to = g.To,
+                    minutes = (int)Math.Round((g.To - g.From).TotalMinutes),
+                    lat = g.Lat, lng = g.Lng,
+                    km = g.Km,
+                    kmh = g.Kind == "move" && (g.To - g.From).TotalHours > 0 ? Math.Round(g.Km / (g.To - g.From).TotalHours, 0) : (double?)null,
+                    panchayatId = placeId,
+                    place = placeName,
+                    placeIsNear = nearM != null,                     // true = nearest panchayat, not a check-in
+                    nearM,
+                    checkedIn = g.VisitPanchayatId != null,
+                    activities = inside.Select(e => new { kind = e.Kind, at = e.At, title = e.Title }),
+                });
+            }
+            var stopMins = segments.Where(g => g.Kind == "stop").Sum(g => (g.To - g.From).TotalMinutes);
+            var moveMins = segments.Where(g => g.Kind == "move").Sum(g => (g.To - g.From).TotalMinutes);
+            var gapMins = segments.Where(g => g.Kind == "gap").Sum(g => (g.To - g.From).TotalMinutes);
+            var unregistered = segments.Where(g => g.Kind == "stop" && g.VisitPanchayatId == null && (g.To - g.From).TotalMinutes >= 20).ToList();
+
             return Ok(new
             {
                 agent,
@@ -262,6 +301,19 @@ namespace SeemanchalOutreach.Api.Controllers
                     gpsPoints = pts.Count,
                 },
                 route = good.Select(p => new { lat = Math.Round(p.Lat, 6), lng = Math.Round(p.Lng, 6), at = p.At }),
+                segments = segOut,
+                time = new
+                {
+                    shiftFrom = onShiftWindows.Count == 0 ? (DateTime?)null : onShiftWindows.Min(w => w.From),
+                    shiftTo = onShiftWindows.Count == 0 ? (DateTime?)null : onShiftWindows.Max(w => w.To),
+                    stopMinutes = (int)Math.Round(stopMins),
+                    moveMinutes = (int)Math.Round(moveMins),
+                    gapMinutes = (int)Math.Round(gapMins),
+                    stops = segments.Count(g => g.Kind == "stop"),
+                    longestStopMinutes = segments.Where(g => g.Kind == "stop").Select(g => (int)Math.Round((g.To - g.From).TotalMinutes)).DefaultIfEmpty(0).Max(),
+                    stopsWithoutCheckIn = unregistered.Count,
+                    minutesStoppedWithoutCheckIn = (int)Math.Round(unregistered.Sum(g => (g.To - g.From).TotalMinutes)),
+                },
                 events = ordered.Select(e => new
                 {
                     kind = e.Kind,
@@ -275,6 +327,107 @@ namespace SeemanchalOutreach.Api.Controllers
                     url = e.Url,
                 }),
             });
+        }
+
+        // ─── Stops and travel ──────────────────────────────────────────────────
+
+        private const double StopRadiusM = 150;     // staying within this counts as one place
+        private static readonly TimeSpan StopMin = TimeSpan.FromMinutes(8);
+        private static readonly TimeSpan GapMin = TimeSpan.FromMinutes(30);
+
+        private sealed record Seg(string Kind, DateTime From, DateTime To, double? Lat, double? Lng, double Km, string? VisitPanchayatId);
+
+        private static double HaversineM(double lat1, double lng1, double lat2, double lng2)
+        {
+            const double R = 6371000;
+            double dLat = (lat2 - lat1) * Math.PI / 180, dLng = (lng2 - lng1) * Math.PI / 180;
+            double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) + Math.Cos(lat1 * Math.PI / 180) * Math.Cos(lat2 * Math.PI / 180) * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+            return 2 * R * Math.Asin(Math.Min(1, Math.Sqrt(a)));
+        }
+
+        /// <summary>
+        /// Splits a shift into stops (stayed within ~150 m for 8+ minutes), travel between them, and gaps
+        /// (30+ minutes with no GPS). A check-in that overlaps a stop names it; otherwise the nearest panchayat is used.
+        /// </summary>
+        private static List<Seg> BuildSegments(List<Pt> pts, List<(DateTime From, DateTime To)> windows, List<(DateTime In, DateTime? Out, string Pid)> visits)
+        {
+            var result = new List<Seg>();
+            foreach (var w in windows.OrderBy(w => w.From))
+            {
+                var ps = pts.Where(p => p.At >= w.From && p.At <= w.To).OrderBy(p => p.At).ToList();
+                if (ps.Count == 0) { if ((w.To - w.From) >= GapMin) result.Add(new Seg("gap", w.From, w.To, null, null, 0, null)); continue; }
+
+                // Stay points: from point i, extend while every point stays near point i.
+                var stays = new List<(int I, int J)>();
+                int i = 0;
+                while (i < ps.Count)
+                {
+                    int j = i;
+                    while (j + 1 < ps.Count && HaversineM(ps[i].Lat, ps[i].Lng, ps[j + 1].Lat, ps[j + 1].Lng) <= StopRadiusM && ps[j + 1].At - ps[j].At < GapMin) j++;
+                    if (ps[j].At - ps[i].At >= StopMin) { stays.Add((i, j)); i = j + 1; }
+                    else i++;
+                }
+
+                DateTime cursor = w.From;
+                int lastIdx = -1;
+                void Travel(int fromIdx, int toIdx, DateTime from, DateTime to)
+                {
+                    if (to <= from) return;
+                    // Split travel at long silences.
+                    var leg = ps.Skip(Math.Max(0, fromIdx)).Take(Math.Max(0, toIdx - Math.Max(0, fromIdx) + 1)).Where(p => p.At >= from && p.At <= to).ToList();
+                    DateTime segStart = from;
+                    var run = new List<Pt>();
+                    DateTime prev = from;
+                    foreach (var p in leg)
+                    {
+                        if (p.At - prev >= GapMin)
+                        {
+                            if (prev > segStart) result.Add(new Seg("move", segStart, prev, null, null, Math.Round(DistanceKm(run), 1), null));
+                            result.Add(new Seg("gap", prev, p.At, null, null, 0, null));
+                            segStart = p.At;
+                            run = new List<Pt>();
+                        }
+                        run.Add(p);
+                        prev = p.At;
+                    }
+                    if (to - prev >= GapMin)
+                    {
+                        if (prev > segStart) result.Add(new Seg("move", segStart, prev, null, null, Math.Round(DistanceKm(run), 1), null));
+                        result.Add(new Seg("gap", prev, to, null, null, 0, null));
+                    }
+                    else if (to > segStart)
+                        result.Add(new Seg("move", segStart, to, null, null, Math.Round(DistanceKm(run), 1), null));
+                }
+
+                foreach (var (si, sj) in stays)
+                {
+                    Travel(lastIdx < 0 ? 0 : lastIdx, si, cursor, ps[si].At);
+                    var group = ps.Skip(si).Take(sj - si + 1).ToList();
+                    var from = ps[si].At; var to = ps[sj].At;
+                    var visit = visits.Where(v => v.In < to.AddMinutes(5) && (v.Out ?? to) > from.AddMinutes(-5))
+                        .OrderByDescending(v => ((v.Out ?? to) < to ? (v.Out ?? to) : to) - (v.In > from ? v.In : from)).Select(v => v.Pid).FirstOrDefault();
+                    result.Add(new Seg("stop", from, to, Math.Round(group.Average(p => p.Lat), 6), Math.Round(group.Average(p => p.Lng), 6), 0, visit));
+                    cursor = to; lastIdx = sj;
+                }
+                Travel(lastIdx < 0 ? 0 : lastIdx, ps.Count - 1, cursor, w.To);
+            }
+            // Drop slivers under a minute so the grid stays readable.
+            return result.Where(g => (g.To - g.From).TotalMinutes >= 1 || g.Kind == "stop").ToList();
+        }
+
+        private sealed record NearPlace(string Id, string Name, double Lat, double Lng);
+
+        /// <summary>Panchayats with a location inside the box around the day's route (plus ~3 km).</summary>
+        private async Task<List<NearPlace>> NearbyPanchayatsAsync(List<Pt> pts, CancellationToken ct)
+        {
+            if (pts.Count == 0) return new();
+            double minLat = pts.Min(p => p.Lat) - 0.03, maxLat = pts.Max(p => p.Lat) + 0.03, minLng = pts.Min(p => p.Lng) - 0.03, maxLng = pts.Max(p => p.Lng) + 0.03;
+            return (await _db.Panchayats.AsNoTracking()
+                    .Where(p => (p.ManualLat ?? p.CentroidLat) != null && (p.ManualLng ?? p.CentroidLng) != null)
+                    .Where(p => (p.ManualLat ?? p.CentroidLat) >= minLat && (p.ManualLat ?? p.CentroidLat) <= maxLat && (p.ManualLng ?? p.CentroidLng) >= minLng && (p.ManualLng ?? p.CentroidLng) <= maxLng)
+                    .Select(p => new { p.PanchayatId, p.Name, Lat = (p.ManualLat ?? p.CentroidLat)!.Value, Lng = (p.ManualLng ?? p.CentroidLng)!.Value })
+                    .ToListAsync(ct))
+                .Select(p => new NearPlace(p.PanchayatId, p.Name, p.Lat, p.Lng)).ToList();
         }
 
         private record TimelineEvent(

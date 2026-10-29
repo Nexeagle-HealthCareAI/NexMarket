@@ -258,4 +258,27 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime? DoneAt { get; set; }
         public string? DoneNote { get; set; }
     }
+
+    /// <summary>
+    /// One change to one record (or a sign-in): who did it, from which device, and what changed.
+    /// Written automatically when changes are saved; never edited.
+    /// </summary>
+    public class AuditLog
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public DateTime At { get; set; } = DateTime.UtcNow;
+        public string ActorId { get; set; } = "system";      // agentId of the person, or "system"
+        public string? ActorName { get; set; }
+        public string? ActorRole { get; set; }
+        public string Source { get; set; } = "system";       // crm | app | system
+        public string? DeviceId { get; set; }
+        public string? DeviceType { get; set; }              // desktop | tablet | phone
+        public string? Ip { get; set; }
+        public string? Request { get; set; }                 // e.g. "PUT /api/v1/partners/…/priority"
+        public string Action { get; set; } = "update";       // create | update | delete | sign_in | sign_out | session_replaced | password_reset
+        public string Entity { get; set; } = string.Empty;   // e.g. Partner, Referral, Visit
+        public string? EntityId { get; set; }
+        public string? Summary { get; set; }                 // a readable name: partner name, patient name, task title…
+        public string? ChangesJson { get; set; }             // {"Priority":{"from":"normal","to":"high"}}
+    }
 }

@@ -32,7 +32,10 @@ export default function Survey() {
   const [skipText, setSkipText] = useState('');
 
   const done = () => {
-    if (isNew === '1') router.replace({ pathname: '/partner/[id]', params: { id: contactId } });
+    // Added during a visit: go straight back to the panchayat, where the new person is picked.
+    const v = q.activeVisit();
+    if (isNew === '1' && v && v.panchayatId === contact?.panchayatId && router.canGoBack()) router.back();
+    else if (isNew === '1') router.replace({ pathname: '/partner/[id]', params: { id: contactId } });
     else if (router.canGoBack()) router.back();
     else router.replace('/today');
   };

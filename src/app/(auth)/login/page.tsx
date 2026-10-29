@@ -1,9 +1,9 @@
 'use client';
 
 import { isDashboardRole } from '@/lib/crm/access';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
-import { loginWithPassword, syncPull } from '@/lib/sync/api-client';
+import { loginWithPassword, syncPull, SIGNED_OUT_KEY } from '@/lib/sync/api-client';
 import { setSyncStateValue, isLocalDatabaseEmpty, getOrCreateDeviceId, db } from '@/lib/db';
 import { refreshReferenceData } from '@/lib/sync/seeder';
 import { useAgentStore } from '@/store/agent-store';
@@ -12,7 +12,22 @@ import { motion } from 'framer-motion';
 import PwaInstallPrompt from '@/components/PwaInstallPrompt';
 import NexMarketLogo from '@/components/NexMarketLogo';
 
+// Why the last session on this browser ended (a newer sign-in on another device of the same kind, etc.).
+const outListeners = new Set<() => void>();
+function readSignedOut(): string {
+  try { return sessionStorage.getItem(SIGNED_OUT_KEY) ?? ''; } catch { return ''; }
+}
+function clearSignedOut() {
+  try { sessionStorage.removeItem(SIGNED_OUT_KEY); } catch { /* storage off */ }
+  outListeners.forEach((l) => l());
+}
+
 export default function LoginPage() {
+  const signedOutReason = useSyncExternalStore(
+    (cb) => { outListeners.add(cb); return () => { outListeners.delete(cb); }; },
+    readSignedOut,
+    () => '',
+  );
   const router = useRouter();
   const setAuth = useAgentStore((s) => s.setAuth);
 
@@ -25,6 +40,7 @@ export default function LoginPage() {
 
   async function performLogin(targetId: string, targetPass: string) {
     setError('');
+    clearSignedOut();
     setIsLoading(true);
     setIsInitializing(true);
 
@@ -407,6 +423,25 @@ export default function LoginPage() {
                   </button>
                 </div>
               </div>
+
+              {signedOutReason && !error && (
+                <div role="status"
+                  style={{
+                    padding: '0.85rem',
+                    borderRadius: '12px',
+                    background: '#fff7e6',
+                    color: '#92400e',
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.6rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ flexShrink: 0 }}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <span>{signedOutReason} Each person can be signed in on one laptop or desktop, one tablet and one phone at a time.</span>
+                </div>
+              )}
 
               {error && (
                 <div

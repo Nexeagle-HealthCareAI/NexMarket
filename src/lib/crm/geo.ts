@@ -161,6 +161,23 @@ export interface AgentActivity {
   };
   route: { lat: number; lng: number; at: string }[];
   events: TimelineEvent[];
+  /** The shift split into stops, travel and GPS gaps, in order. */
+  segments?: DaySegment[];
+  time?: {
+    shiftFrom: string | null; shiftTo: string | null; stopMinutes: number; moveMinutes: number; gapMinutes: number;
+    stops: number; longestStopMinutes: number; stopsWithoutCheckIn: number; minutesStoppedWithoutCheckIn: number;
+  };
+}
+
+export interface DaySegment {
+  kind: 'stop' | 'move' | 'gap';
+  no: number | null;
+  from: string; to: string; minutes: number;
+  lat: number | null; lng: number | null;
+  km: number; kmh: number | null;
+  panchayatId: string | null; place: string | null; placeIsNear: boolean; nearM: number | null;
+  checkedIn: boolean;
+  activities: { kind: TimelineKind; at: string; title: string }[];
 }
 
 export interface CoverageFilter {

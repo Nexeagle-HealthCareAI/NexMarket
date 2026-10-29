@@ -6,7 +6,8 @@ import { Suspense, useCallback, useEffect, useMemo, useState, type ComponentType
 import {
   Camera, ChevronLeft, ChevronRight, ClipboardList, LogIn, LogOut, Pause, Play, Play as Start, Square, TriangleAlert, UserPlus, Send, MapPin,
 } from 'lucide-react';
-import { geo, istDate, type AgentActivity, type TimelineEvent, type TimelineKind } from '@/lib/crm/geo';
+import { geo, istDate, type AgentActivity, type DaySegment, type TimelineEvent, type TimelineKind } from '@/lib/crm/geo';
+import { DayRibbon, TimeGrid } from '@/components/crm/geo/DayTime';
 import { useLiveEvents, type LiveLocation } from '@/lib/crm/live';
 import { Empty, ErrorBox, fmt, PageHead, Skeleton, useLoader } from '@/components/crm/ui';
 
@@ -50,6 +51,15 @@ function ActivityInner() {
 
   const act = useLoader<AgentActivity | null>(() => (effectiveAgent ? geo.activity(effectiveAgent, date) : Promise.resolve(null)), [effectiveAgent, date]);
   const [focus, setFocus] = useState<TimelineEvent | null>(null);
+  const [seg, setSeg] = useState<DaySegment | null>(null);
+  // A stop or leg picked in the ribbon or grid: show it on the map (travel/gaps jump to where they started).
+  const pickSeg = (g: DaySegment, scroll = false) => {
+    setSeg(g);
+    if (scroll) document.getElementById('act-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const near = g.lat != null ? g : (act.data?.route ?? []).find((p) => p.at >= g.from);
+    if (near && near.lat != null && near.lng != null)
+      setFocus({ kind: g.kind === 'stop' ? 'visit_in' : 'partner', at: g.from, title: '', detail: null, lat: near.lat, lng: near.lng } as TimelineEvent);
+  };
   const [replayIdx, setReplayIdx] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const route = act.data?.route ?? [];
@@ -83,6 +93,7 @@ function ActivityInner() {
   if (lastView !== viewKey) {
     setLastView(viewKey);
     setFocus(null);
+    setSeg(null);
     setReplayIdx(null);
     setPlaying(false);
   }
@@ -125,8 +136,10 @@ function ActivityInner() {
             <Stat label="Location gaps" value={`${s!.gaps}`} sub={s!.gaps ? '30+ min with no GPS on shift' : 'Tracked all shift'} bad={s!.gaps > 0} />
           </div>
 
+          <DayRibbon data={d} selected={seg} onPick={pickSeg} />
+
           <div className="act-layout">
-            <section className="crm-card" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14 }} aria-label="Route">
+            <section id="act-map" className="crm-card" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14 }} aria-label="Route">
               <RouteMap data={d} focus={focus} replayIndex={replayIdx} />
               {route.length > 1 && (
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -168,6 +181,16 @@ function ActivityInner() {
               )}
             </section>
           </div>
+
+          {(d.segments?.length ?? 0) > 0 && (
+            <section className="crm-card" aria-labelledby="tg-h">
+              <div className="crm-card-head">
+                <h2 id="tg-h" className="crm-h2">Time grid</h2>
+                <span className="crm-sub" style={{ fontSize: 13 }}>Every stop and leg of travel, shift start to end</span>
+              </div>
+              <TimeGrid data={d} selected={seg} onPick={(g) => pickSeg(g, true)} />
+            </section>
+          )}
         </>
       )}
     </main>

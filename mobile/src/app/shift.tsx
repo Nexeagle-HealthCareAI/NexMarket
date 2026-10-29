@@ -1,8 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
-import { Btn, Card, Pill, Screen, T, TopBar } from '../components/ui';
+import { Btn, Card, Pill, Screen, T, TopBar, toast } from '../components/ui';
+import { PanchayatList, sortPanchayats } from '../components/PanchayatList';
+import { tryCheckIn } from '../lib/visit';
+import { useHere } from '../lib/useHere';
+import { formatDist } from '../lib/plan';
 import { Icon } from '../components/Icon';
 import { useDb, useSession } from '../lib/session';
 import { db, q } from '../lib/db';
@@ -16,6 +20,10 @@ export default function StartShift() {
   const { t, lang, agent } = useSession();
   const [busy, setBusy] = useState(false);
   const [gps, setGps] = useState<{ on: boolean; accuracy: number | null } | null>(null);
+  // The panchayat the agent is starting in: everyone they add today goes into it until they move on.
+  const [picked, setPicked] = useState<string | null>(null);
+  const starting = useRef(false);
+  const here = useHere(true);
 
   const data = useDb(() => {
     const a = q.assigned();
@@ -28,12 +36,14 @@ export default function StartShift() {
       const hours = duration(t, new Date(last.endTime).getTime() - new Date(last.startTime).getTime());
       lastLine = `${t('lastShift', { when: relDay(t, lang, last.startTime), hours })}${pts.length > 1 ? ` · ${km(t, routeKm(pts))}` : ''}${visits ? ` · ${visits} ${t('visits')}` : ''}`;
     }
-    return { total: a.length, done: a.filter((x) => x.visited).length, lastLine, active: !!q.activeShift() };
+    return { total: a.length, done: a.filter((x) => x.visited).length, lastLine, active: !!q.activeShift(), assigned: a };
   }, [t, lang]);
 
   useEffect(() => {
-    if (data.active) router.replace('/today');
+    if (data.active && !starting.current) router.replace('/today');
   }, [data.active]);
+  const list = useMemo(() => sortPanchayats(data.assigned, here), [data.assigned, here]);
+  const pickedName = list.find((p) => p.panchayatId === picked)?.name ?? '';
 
   useEffect(() => {
     let alive = true;
@@ -52,12 +62,23 @@ export default function StartShift() {
 
   const start = async () => {
     setBusy(true);
+    starting.current = true;
     try {
       const r = await beginShift(t);
       if (r === 'denied') Alert.alert(t('needBackgroundLocation'), t('permissionDenied'), [{ text: t('fix'), onPress: () => openAppSettings() }, { text: t('close') }]);
       else if (r === 'no-fix') Alert.alert(t('locationOff'), t('turnOnLocation'));
-      else router.replace('/today');
+      else if (!picked) router.replace('/today');
+      else {
+        // Check in straight away, so new partners land in this panchayat.
+        const c = await tryCheckIn(picked);
+        if (c.ok) toast(t('shiftStartedIn', { name: pickedName }));
+        else Alert.alert(t('shiftStarted'), c.why === 'far'
+          ? t('startedNotCheckedIn', { name: pickedName, dist: formatDist(c.distM, t) })
+          : t('turnOnLocation'));
+        router.replace({ pathname: '/checkin', params: { panchayatId: picked } });
+      }
     } finally {
+      starting.current = false;
       setBusy(false);
     }
   };
@@ -69,7 +90,8 @@ export default function StartShift() {
     <Screen header={<TopBar title={t('startShift')} />}
       footer={
         <View style={{ padding: 16, gap: 8, backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border }}>
-          <Btn label={t('startShift')} icon="nav" kind="ok" onPress={start} loading={busy} />
+          <Btn label={picked ? t('startShiftIn', { name: pickedName }) : list.length ? t('pickPanchayatFirst') : t('startShift')}
+            icon="nav" kind="ok" onPress={start} loading={busy} disabled={list.length > 0 && !picked} />
           {data.lastLine ? <T style={{ textAlign: 'center', color: C.text2, fontSize: 13 }}>{data.lastLine}</T> : null}
         </View>
       }>
@@ -91,6 +113,14 @@ export default function StartShift() {
           </>
         ) : <T style={{ color: C.text2 }}>{t('noBlock')}</T>}
       </Card>
+
+      {list.length ? (
+        <View style={{ gap: 8 }}>
+          <T style={{ fontSize: 17, fontWeight: '800' }}>{t('whereStarting')}</T>
+          <T style={{ color: C.text2, fontSize: 13 }}>{t('whereStartingHint')}</T>
+          <PanchayatList list={list} here={here} selected={picked} onPick={setPicked} />
+        </View>
+      ) : null}
 
       <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Icon name="pin" color={gps?.on === false ? C.bad : C.ok} />

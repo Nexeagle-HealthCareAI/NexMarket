@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text,
+  ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text,
   TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -176,16 +176,21 @@ export function Toggle({ label, value, onChange }: { label: string; value: boole
 }
 
 // ─── Bottom sheet ───
-export function Sheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: React.ReactNode }) {
+export function Sheet({ visible, onClose, title, children, scroll = true }: { visible: boolean; onClose: () => void; title?: string; children: React.ReactNode; scroll?: boolean }) {
   const insets = useSafeAreaInsets();
+  const maxH = Dimensions.get('window').height * 0.88;
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={s.scrim} onPress={onClose} accessibilityLabel="Close" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={[s.sheet, { paddingBottom: 16 + insets.bottom }]}>
+        <View style={[s.sheet, { paddingBottom: 16 + insets.bottom, maxHeight: maxH }]}>
           <View style={s.grabber} />
           {title ? <T style={s.sheetTitle}>{title}</T> : null}
-          {children}
+          {scroll ? (
+            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 12 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {children}
+            </ScrollView>
+          ) : children}
         </View>
       </KeyboardAvoidingView>
     </Modal>

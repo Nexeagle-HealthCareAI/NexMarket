@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { BottomNav, Btn, Card, Chip, Empty, Field, Screen, T, TopBar, toast } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { MoveSheet } from '../components/MoveSheet';
+import { WhatsAppSheet } from '../components/WhatsAppSheet';
 import { useDb, useSession } from '../lib/session';
 import { db, type Contact } from '../lib/db';
 import { setFollowUp } from '../lib/repo';
@@ -24,6 +25,7 @@ export default function FollowUps() {
   const [prio, setPrio] = useState<Priority | null>(null);
   const [term, setTerm] = useState('');
   const [moving, setMoving] = useState<string | null>(null);
+  const [wa, setWa] = useState<{ name: string; phone: string | null } | null>(null);
 
   const rows = useDb(() => db().getAllSync<Row>(
     `SELECT c.*, COALESCE(a.name, p.name) AS place, COALESCE(a.lat, p.lat) AS pLat, COALESCE(a.lng, p.lng) AS pLng,
@@ -90,7 +92,15 @@ export default function FollowUps() {
                   </T>
                 ) : null}
               </View>
-              <T style={{ color: pc.fg, fontSize: 12, fontWeight: '700' }}>{t(`priority_${c.priority}`)}</T>
+              <View style={{ alignItems: 'flex-end', gap: 8 }}>
+                <T style={{ color: pc.fg, fontSize: 12, fontWeight: '700' }}>{t(`priority_${c.priority}`)}</T>
+                {c.phone ? (
+                  <Pressable onPress={() => setWa({ name: c.name, phone: c.phone })} accessibilityRole="button" accessibilityLabel={t('whatsapp')} hitSlop={8}
+                    style={({ pressed }) => [{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#e7f8ee', alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
+                    <Icon name="whatsapp" size={20} color="#1fa855" />
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <Btn flex small kind="secondary" icon="phone" label={t('call')} disabled={!c.phone} onPress={() => callNumber(c.phone)} />
@@ -100,6 +110,7 @@ export default function FollowUps() {
           </Card>
         );
       })}
+      <WhatsAppSheet visible={!!wa} onClose={() => setWa(null)} name={wa?.name ?? ''} phone={wa?.phone ?? null} />
       <MoveSheet visible={!!moving} onClose={() => setMoving(null)} onPick={(d) => { if (moving) setFollowUp(moving, d); setMoving(null); toast(t('savedOnPhone')); }} />
     </Screen>
   );

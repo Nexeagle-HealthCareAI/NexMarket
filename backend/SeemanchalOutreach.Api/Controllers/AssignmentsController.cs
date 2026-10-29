@@ -48,6 +48,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public string Name { get; set; } = string.Empty;
         public bool Visited { get; set; }
         public DateTime? LastVisitedAt { get; set; }
+        /// <summary>How many times this agent has checked in here under this assignment (revisits count).</summary>
+        public int VisitCount { get; set; }
         public double? CentroidLat { get; set; }
         public double? CentroidLng { get; set; }
         /// <summary>manual | field | villages | hq-village | block — "block" means only the block centre is known.</summary>
@@ -79,7 +81,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet]
-        [PageAccess(Pages.Field)]
+        [PageAccess(Pages.Field, AlsoRoles = RoleChecks.MarketingManager)]
         public async Task<ActionResult<List<AssignmentSummaryDto>>> GetAssignments(CancellationToken cancellationToken)
         {
             var assignments = await _db.BlockAssignments.AsNoTracking()
@@ -153,7 +155,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpPost]
-        [PageAccess(Pages.Field)]
+        [PageAccess(Pages.Field, AlsoRoles = RoleChecks.MarketingManager)]
         public async Task<ActionResult<AssignmentSummaryDto>> CreateAssignment([FromBody] CreateAssignmentRequest request, CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
@@ -224,7 +226,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpPatch("{id:guid}")]
-        [PageAccess(Pages.Field)]
+        [PageAccess(Pages.Field, AlsoRoles = RoleChecks.MarketingManager)]
         public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateAssignmentStatusRequest request, CancellationToken cancellationToken)
         {
             if (!ValidStatuses.Contains(request.Status))
@@ -275,9 +277,10 @@ namespace SeemanchalOutreach.Api.Controllers
             var visits = await _db.Visits.AsNoTracking()
                 .Where(v => v.AgentId == agentId && v.CheckInAt >= assignment.AssignedAt)
                 .GroupBy(v => v.PanchayatId)
-                .Select(g => new { PanchayatId = g.Key, LastVisitedAt = g.Max(v => v.CheckInAt) })
+                .Select(g => new { PanchayatId = g.Key, LastVisitedAt = g.Max(v => v.CheckInAt), Count = g.Count() })
                 .ToListAsync(cancellationToken);
             var visitMap = visits.ToDictionary(v => v.PanchayatId, v => v.LastVisitedAt);
+            var visitCount = visits.ToDictionary(v => v.PanchayatId, v => v.Count);
             var checkIns = await PanchayatLocator.CheckInsAsync(_db, panchayats.Select(p => p.PanchayatId).ToList(), cancellationToken);
             var spots = panchayats.ToDictionary(p => p.PanchayatId, p => PanchayatLocator.Resolve(p, checkIns.GetValueOrDefault(p.PanchayatId)));
 
@@ -294,6 +297,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     Name = p.Name,
                     Visited = visitMap.ContainsKey(p.PanchayatId),
                     LastVisitedAt = visitMap.GetValueOrDefault(p.PanchayatId),
+                    VisitCount = visitCount.GetValueOrDefault(p.PanchayatId),
                     CentroidLat = spots[p.PanchayatId].Lat,
                     CentroidLng = spots[p.PanchayatId].Lng,
                     LocationSource = spots[p.PanchayatId].Source,
@@ -323,7 +327,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet("board")]
-        [PageAccess(Pages.Field)]
+        [PageAccess(Pages.Field, AlsoRoles = RoleChecks.MarketingManager)]
         public async Task<IActionResult> Board(CancellationToken ct)
         {
             var panchayats = await _db.Panchayats.AsNoTracking().Where(p => p.IsActiveForMarketing)
@@ -379,7 +383,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet("block")]
-        [PageAccess(Pages.Field)]
+        [PageAccess(Pages.Field, AlsoRoles = RoleChecks.MarketingManager)]
         public async Task<IActionResult> BlockDetail([FromQuery] string district, [FromQuery] string block, CancellationToken ct)
         {
             var panchayats = await _db.Panchayats.AsNoTracking()
@@ -443,7 +447,7 @@ namespace SeemanchalOutreach.Api.Controllers
         /// so giving them a different block closes their old one.
         /// </summary>
         [HttpPost("assign")]
-        [PageAccess(Pages.Field)]
+        [PageAccess(Pages.Field, AlsoRoles = RoleChecks.MarketingManager)]
         public async Task<IActionResult> Assign([FromBody] AssignBlockDto dto, CancellationToken ct)
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);

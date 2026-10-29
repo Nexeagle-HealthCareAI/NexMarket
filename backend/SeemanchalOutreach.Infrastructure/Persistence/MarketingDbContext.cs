@@ -39,6 +39,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<AiItem> AiItems => Set<AiItem>();
         public DbSet<SurveyEdit> SurveyEdits => Set<SurveyEdit>();
         public DbSet<AgentTask> AgentTasks => Set<AgentTask>();
+        public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -263,6 +264,15 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("survey_edits");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.ResponseId);
+            });
+
+            modelBuilder.Entity<AuditLog>(entity =>
+            {
+                entity.ToTable("audit_logs");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.At);
+                entity.HasIndex(e => new { e.ActorId, e.At });
+                entity.HasIndex(e => new { e.Entity, e.EntityId });
             });
 
             modelBuilder.Entity<AgentTask>(entity =>
