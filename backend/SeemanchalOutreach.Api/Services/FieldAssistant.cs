@@ -259,7 +259,7 @@ namespace SeemanchalOutreach.Api.Services
                         _logger.LogWarning(ex, "Field assistant tool {Tool} failed", name);
                         output = "{\"error\":\"That lookup failed.\"}";
                     }
-                    if (output.Length > 16000) output = output[..16000];
+                    if (output.Length > 6000) output = output[..6000] + "…(cut)";
                     messages.Add(new JsonObject { ["role"] = "tool", ["tool_call_id"] = call["id"]!.ToString(), ["content"] = output });
                     used.Add(name);
                 }

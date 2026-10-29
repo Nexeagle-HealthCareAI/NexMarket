@@ -8,6 +8,9 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Api.Services;
 using SeemanchalOutreach.Application.Interfaces;
@@ -24,12 +27,18 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IMarketingDbContext _db;
         private readonly BusinessData _data;
         private readonly AnalystAgent _agent;
+        private readonly IServiceScopeFactory _scopes;
+        private readonly IHostApplicationLifetime _life;
+        private readonly ILogger<AnalyticsController> _logger;
 
-        public AnalyticsController(IMarketingDbContext db, BusinessData data, AnalystAgent agent)
+        public AnalyticsController(IMarketingDbContext db, BusinessData data, AnalystAgent agent, IServiceScopeFactory scopes, IHostApplicationLifetime life, ILogger<AnalyticsController> logger)
         {
             _db = db;
             _data = data;
             _agent = agent;
+            _scopes = scopes;
+            _life = life;
+            _logger = logger;
         }
 
         [HttpGet("overview")]
@@ -98,17 +107,33 @@ namespace SeemanchalOutreach.Api.Controllers
             return b == null ? NotFound(new { message = "Briefing not found." }) : Ok(BriefingDto(b));
         }
 
-        /// <summary>Run a briefing now. Takes 20-60 seconds; the page waits for it.</summary>
+        /// <summary>
+        /// Start a briefing now. It runs in the background (it can take a few minutes on Groq's free plan,
+        /// which allows few tokens a minute); the page checks back until it is finished.
+        /// </summary>
         [HttpPost("analyst/run")]
         public async Task<IActionResult> Run([FromQuery] string? scope, CancellationToken ct)
         {
             if (!_agent.Configured) return StatusCode(503, new { message = "The AI analyst isn't switched on yet. Add the Groq API key on the server (Groq__ApiKey)." });
             var sc = scope == "surveys" ? "surveys" : "business";
-            var busy = await _db.AiBriefings.AnyAsync(b => b.Scope == sc && b.Status == "running" && b.CreatedAt > DateTime.UtcNow.AddMinutes(-5), ct);
-            if (busy) return Conflict(new { message = "A briefing is already being written. It will show here in a minute." });
-            var b = await _agent.RunBriefingAsync(User.AgentIdOf() ?? "", ct, sc);
-            if (b.Status != "ok") return StatusCode(502, new { message = b.Error ?? "The analyst couldn't finish." });
-            return Ok(BriefingDto(b));
+            var busy = await _db.AiBriefings.AnyAsync(b => b.Scope == sc && b.Status == "running" && b.CreatedAt > DateTime.UtcNow.AddMinutes(-10), ct);
+            if (busy) return Conflict(new { message = "A briefing is already being written. It will show here when it's ready." });
+            var by = User.AgentIdOf() ?? "";
+            var stopping = _life.ApplicationStopping;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var scopeSvc = _scopes.CreateScope();
+                    var agent = scopeSvc.ServiceProvider.GetRequiredService<AnalystAgent>();
+                    await agent.RunBriefingAsync(by, stopping, sc);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Background AI briefing failed");
+                }
+            });
+            return Accepted(new { running = true });
         }
 
         [HttpGet("analyst/items")]

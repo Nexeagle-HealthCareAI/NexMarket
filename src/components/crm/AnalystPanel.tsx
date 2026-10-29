@@ -66,14 +66,26 @@ export default function AnalystPanel({ scope = 'business', suggestions = SUGGEST
   const [toast, showToast] = useToast();
   const [itemsVersion, setItemsVersion] = useState(0);
 
+  // The briefing is written in the background (a few minutes at most on Groq's free plan); check back until it's done.
   const run = async () => {
     setRunning(true);
     try {
-      const b = await crm.post<Briefing>(`/api/v1/analytics/analyst/run?scope=${scope}`);
+      await crm.post(`/api/v1/analytics/analyst/run?scope=${scope}`);
       setViewing(null);
+      const before = state.data?.latest?.id;
+      for (let i = 0; i < 72; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const now = await crm.get<AnalystRes>(`/api/v1/analytics/analyst?scope=${scope}`);
+        if (!now.running) {
+          state.setData(now);
+          setItemsVersion((v) => v + 1);
+          if (now.latest && now.latest.id !== before) showToast(now.latest.toolCalls ? `Briefing ready. The analyst made ${now.latest.toolCalls} lookups.` : 'Briefing ready.');
+          else if (now.lastError) showToast(`The analysis didn't finish: ${now.lastError}`);
+          return;
+        }
+      }
+      showToast('Still writing. It will show here when it is ready.');
       await state.reload();
-      setItemsVersion((v) => v + 1);
-      showToast(b.toolCalls ? `Briefing ready. The analyst made ${b.toolCalls} lookups.` : 'Briefing ready.');
     } catch (e) {
       showToast(friendlyError(e));
     } finally {
@@ -115,7 +127,7 @@ export default function AnalystPanel({ scope = 'business', suggestions = SUGGEST
             </button>
           )}
         </div>
-        {(running || s.running) && <div className="crm-note" role="status">The analyst is going through referrals, partners, field visits and survey answers. This takes 20 to 60 seconds.</div>}
+        {(running || s.running) && <div className="crm-note" role="status">The analyst is going through referrals, partners, field visits and survey answers. This usually takes under a minute, and up to a few minutes when the free Groq plan asks us to slow down. You can leave this page.</div>}
         {s.lastError && !running && <div className="crm-error" role="alert">Last run failed: {s.lastError}</div>}
         {!b || !r ? (
           <Empty title="Nothing yet">{editable ? `Run the first analysis. After that it runs by itself ${scope === 'surveys' ? 'every week' : 'every morning'}.` : `The first briefing will appear after the ${scope === 'surveys' ? 'weekly' : 'morning'} run.`}</Empty>
