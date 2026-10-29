@@ -435,6 +435,10 @@ const bn: Strings = {
   pwMismatch: "দুটি পাসওয়ার্ড আলাদা।",
   pwSaved: "পাসওয়ার্ড তৈরি হয়েছে",
   pwSave: "সেভ করে এগিয়ে যান",
+
+  // Photo is optional when adding a partner
+  skipPhoto: "ছবি বাদ দিন",
+  optional: "ঐচ্ছিক",
 };
 
 export default bn;

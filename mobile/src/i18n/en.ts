@@ -453,6 +453,10 @@ const en = {
   pwMismatch: "The two passwords are different.",
   pwSaved: "Password set",
   pwSave: "Save and continue",
+
+  // Photo is optional when adding a partner
+  skipPhoto: "Skip photo",
+  optional: "optional",
 };
 
 export default en;

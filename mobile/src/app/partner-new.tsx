@@ -58,7 +58,6 @@ export default function NewPartner() {
     const e: Record<string, string> = {};
     if (!name.trim()) e.name = t('needName');
     if (!panchayatId) e.panchayat = t('needPanchayat');
-    if (!photos.length) e.photo = t('needPhoto');
     setErrors(e);
     if (Object.keys(e).length) return;
     setBusy(true);
@@ -81,7 +80,7 @@ export default function NewPartner() {
       footer={
         <View style={{ padding: 16, backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border }}>
           {step === 0
-            ? <Btn label={t('next')} onPress={() => (photos.length ? setStep(1) : setErrors({ photo: t('needPhoto') }))} disabled={!photos.length} />
+            ? <Btn label={photos.length ? t('next') : t('skipPhoto')} kind={photos.length ? 'primary' : 'secondary'} onPress={() => setStep(1)} />
             : <Btn label={t('nextSixQuestions')} icon="chevron" onPress={save} loading={busy} />}
         </View>
       }>
@@ -112,7 +111,7 @@ export default function NewPartner() {
               <T style={{ fontSize: 18, fontWeight: '700', color: C.blueInk }}>{t('takePhoto')}</T>
             </Pressable>
           )}
-          <T style={{ fontWeight: '700' }}>{t('photoStamped')}</T>
+          <T style={{ fontWeight: '700' }}>{t('photoStamped')} <T style={{ fontWeight: '600', color: C.text2 }}>· {t('optional')}</T></T>
           <T style={{ color: C.text2, fontSize: 13 }}>{t('photoHint')}</T>
           {errors.photo ? <T style={{ color: C.bad }}>{errors.photo}</T> : null}
           {photos.length ? (

@@ -434,6 +434,10 @@ const hinglish: Strings = {
   pwMismatch: "Dono password alag hain.",
   pwSaved: "Password ban gaya",
   pwSave: "Save karein aur aage badhein",
+
+  // Photo is optional when adding a partner
+  skipPhoto: "Photo chhodein",
+  optional: "optional",
 };
 
 export default hinglish;

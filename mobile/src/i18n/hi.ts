@@ -434,6 +434,10 @@ const hi: Strings = {
   pwMismatch: "दोनों पासवर्ड अलग हैं।",
   pwSaved: "पासवर्ड बन गया",
   pwSave: "सेव करें और आगे बढ़ें",
+
+  // Photo is optional when adding a partner
+  skipPhoto: "फ़ोटो छोड़ें",
+  optional: "चाहें तो",
 };
 
 export default hi;
