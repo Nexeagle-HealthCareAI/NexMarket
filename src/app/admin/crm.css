@@ -564,3 +564,36 @@
   .crm .vita-panel { right: 0; left: 0; bottom: 0; top: 0; width: 100%; max-width: none; height: 100%; border-radius: 0; z-index: 260; }
 }
 @media (prefers-reduced-motion: reduce) { .crm .vita-fab-img::after, .crm .vita-bob, .crm .vita-typing i { animation: none; } }
+
+/* ─── Where the time went (agent activity) ───────────────────────────────── */
+.crm .dt-card { display: flex; flex-direction: column; gap: 10px; }
+.crm .dt-ribbon { position: relative; height: 34px; border-radius: 10px; background: var(--line, #eef0f4); overflow: hidden; }
+.crm .dt-piece { position: absolute; top: 0; bottom: 0; border: 0; padding: 0; cursor: pointer; color: #fff; font: 800 11px Inter, sans-serif; display: flex; align-items: center; justify-content: center; border-right: 1px solid rgba(255,255,255,.7); }
+.crm .dt-piece:hover { filter: brightness(1.08); }
+.crm .dt-piece[aria-pressed='true'] { box-shadow: inset 0 0 0 3px #0e1525; z-index: 1; }
+.crm .dt-ticks { position: relative; height: 16px; font-size: 11px; color: var(--text-3); }
+.crm .dt-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.crm .dt-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-2); }
+.crm .dt-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.crm .dt-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.crm .dt-sum > div { background: var(--bg); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.crm .dt-sum strong { font-size: 18px; }
+.crm .dt-sum span { font-size: 12px; color: var(--text-3); }
+.crm .dt-sum .is-bad { background: var(--bad-soft); } .crm .dt-sum .is-bad strong { color: var(--bad); }
+.crm .dt-sum .is-warn { background: var(--warn-soft); } .crm .dt-sum .is-warn strong { color: var(--warn-ink); }
+.crm .dt-grid td { vertical-align: top; }
+.crm .dt-row { cursor: pointer; }
+.crm .dt-row:hover td { background: var(--accent-tint); }
+.crm .dt-row[aria-selected='true'] td { background: var(--accent-tint); }
+.crm .dt-row.is-move td, .crm .dt-row.is-gap td { color: var(--text-2); }
+.crm .dt-bar { display: inline-block; width: 4px; height: 30px; border-radius: 2px; margin-right: 8px; vertical-align: middle; float: left; }
+.crm .dt-no { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 800; }
+.crm .dt-acts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+@media (max-width: 767px) {
+  .crm .dt-grid thead { display: none; }
+  .crm .dt-grid, .crm .dt-grid tbody, .crm .dt-grid tr, .crm .dt-grid td { display: block; width: 100%; }
+  .crm .dt-grid tr { display: grid; grid-template-columns: auto 1fr; column-gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .crm .dt-grid td { padding: 2px 0 !important; border: 0 !important; }
+  .crm .dt-grid td:nth-child(3), .crm .dt-grid td:nth-child(4) { grid-column: 1 / -1; }
+  .crm .dt-grid td:nth-child(4):empty { display: none; }
+}

@@ -50,9 +50,23 @@ export default function RouteMap({ data, focus, replayIndex }: { data: AgentActi
     markers.current = [];
     const bounds = new maplibregl.LngLatBounds();
     coords.forEach((c) => bounds.extend(c));
+    const stops = (data.segments ?? []).filter((g) => g.kind === 'stop' && g.lat != null && g.lng != null);
+    // Numbered stops, sized by how long the agent stayed: green = checked in, amber = stopped without a check-in.
+    for (const g of stops) {
+      const size = Math.round(Math.min(40, 22 + g.minutes / 6));
+      const el = document.createElement('div');
+      el.className = 'act-pin';
+      el.style.cssText = `width:${size}px;height:${size}px;border-radius:999px;background:${g.checkedIn ? '#16a36a' : '#d9822b'};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);color:#fff;font:800 12px Inter,sans-serif;display:flex;align-items:center;justify-content:center;cursor:pointer;`;
+      el.textContent = String(g.no);
+      const t = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+      el.title = `Stop ${g.no} · ${t(g.from)}–${t(g.to)} · ${g.minutes} min${g.place ? ` · ${g.placeIsNear ? 'near ' : ''}${g.place}` : ''}${g.checkedIn ? '' : ' · no check-in'}`;
+      markers.current.push(new maplibregl.Marker({ element: el }).setLngLat([g.lng!, g.lat!]).addTo(map));
+      bounds.extend([g.lng!, g.lat!]);
+    }
     let stop = 0;
     for (const e of data.events) {
       if (e.lat == null || e.lng == null || e.kind === 'visit_out') continue;
+      if (stops.length > 0 && e.kind === 'visit_in') continue; // stops above already show check-ins
       const el = document.createElement('div');
       el.className = 'act-pin';
       el.style.cssText = `width:${e.kind === 'visit_in' ? 26 : 14}px;height:${e.kind === 'visit_in' ? 26 : 14}px;border-radius:999px;background:${KIND_COLOR[e.kind] ?? '#5a6478'};border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);color:#fff;font:700 12px Inter,sans-serif;display:flex;align-items:center;justify-content:center;`;
