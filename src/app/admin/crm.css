@@ -497,3 +497,17 @@
 .sv-q { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; }
 .sv-q[data-sel] { border: 2px solid var(--accent); }
 .sv-q-n { width: 32px; height: 32px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-ink); font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+/* AI analyst areas */
+.crm .an-areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.crm .an-area { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--card); cursor: pointer; font: inherit; color: inherit; transition: border-color .15s, box-shadow .15s; }
+.crm .an-area:hover { border-color: #c9cedb; }
+.crm .an-area[aria-selected='true'] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint); }
+.crm .an-area-top { display: flex; align-items: center; gap: 7px; font-size: 14px; }
+.crm .an-area-top strong { flex: 1; min-width: 0; }
+.crm .an-area-sub { font-size: 12px; color: var(--text-3); }
+.crm .an-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.crm .an-spin { animation: an-spin 1s linear infinite; color: var(--accent); }
+@keyframes an-spin { to { transform: rotate(360deg); } }
+.crm .an-count { margin-left: 6px; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--accent-tint); color: var(--accent); }
+@media (max-width: 640px) { .crm .an-areas { grid-template-columns: repeat(2, 1fr); } }

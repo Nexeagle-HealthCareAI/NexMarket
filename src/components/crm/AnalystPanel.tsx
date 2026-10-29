@@ -57,10 +57,15 @@ function normalize(raw: unknown): BriefingResult | null {
 
 // ─── AI analyst panel (business or surveys) ────────────────────────────────────────────────────────────
 
-export default function AnalystPanel({ scope = 'business', suggestions = SUGGESTIONS, intro }: { scope?: 'business' | 'surveys'; suggestions?: string[]; intro?: string }) {
+export type AnalystView = 'all' | 'brief' | 'items' | 'ask' | 'history';
+
+/** The analyst for one area. view picks one part (used by the area workspace); 'all' shows everything on one page. */
+export default function AnalystPanel({ scope = 'business', suggestions = SUGGESTIONS, intro, view = 'all', onChanged }: {
+  scope?: string; suggestions?: string[]; intro?: string; view?: AnalystView; onChanged?: () => void;
+}) {
   const { access } = useAccess();
   const editable = canEdit(access, 'analytics');
-  const state = useLoader(() => crm.get<AnalystRes>(`/api/v1/analytics/analyst?scope=${scope}`), []);
+  const state = useLoader(() => crm.get<AnalystRes>(`/api/v1/analytics/analyst?scope=${scope}`), [scope]);
   const [viewing, setViewing] = useState<Briefing | null>(null);
   const [running, setRunning] = useState(false);
   const [toast, showToast] = useToast();
@@ -79,6 +84,7 @@ export default function AnalystPanel({ scope = 'business', suggestions = SUGGEST
         if (!now.running) {
           state.setData(now);
           setItemsVersion((v) => v + 1);
+          onChanged?.();
           if (now.latest && now.latest.id !== before) showToast(now.latest.toolCalls ? `Briefing ready. The analyst made ${now.latest.toolCalls} lookups.` : 'Briefing ready.');
           else if (now.lastError) showToast(`The analysis didn't finish: ${now.lastError}`);
           return;
@@ -114,6 +120,7 @@ export default function AnalystPanel({ scope = 'business', suggestions = SUGGEST
   return (
     <>
       {intro && <p className="crm-sub" style={{ margin: 0, fontSize: 14 }}>{intro}</p>}
+      {(view === 'all' || view === 'brief' || (view === 'history' && viewing)) && (
       <section className="crm-card an-brief" aria-labelledby="br-h">
         <div className="crm-card-head">
           <h2 id="br-h" className="crm-h2" style={{ flex: 1 }}>
@@ -130,7 +137,7 @@ export default function AnalystPanel({ scope = 'business', suggestions = SUGGEST
         {(running || s.running) && <div className="crm-note" role="status">The analyst is going through referrals, partners, field visits and survey answers. This usually takes under a minute, and up to a few minutes when the free Groq plan asks us to slow down. You can leave this page.</div>}
         {s.lastError && !running && <div className="crm-error" role="alert">Last run failed: {s.lastError}</div>}
         {!b || !r ? (
-          <Empty title="Nothing yet">{editable ? `Run the first analysis. After that it runs by itself ${scope === 'surveys' ? 'every week' : 'every morning'}.` : `The first briefing will appear after the ${scope === 'surveys' ? 'weekly' : 'morning'} run.`}</Empty>
+          <Empty title="Nothing yet">{editable ? `Run the first analysis. After that it runs by itself ${scope === 'business' ? 'every morning' : 'about once a week'}.` : `The first briefing will appear after the ${scope === 'business' ? 'morning' : 'weekly'} run.`}</Empty>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6 }}>{r.summary}</p>
@@ -160,13 +167,19 @@ export default function AnalystPanel({ scope = 'business', suggestions = SUGGEST
           </div>
         )}
       </section>
+      )}
 
-      <div className="crm-row">
-        <Tracker key={itemsVersion} scope={scope} editable={editable} showToast={showToast} />
-        <Ask scope={scope} suggestions={suggestions} />
-      </div>
+      {view === 'all' && (
+        <div className="crm-row">
+          <Tracker key={itemsVersion} scope={scope} editable={editable} showToast={showToast} />
+          <Ask scope={scope} suggestions={suggestions} />
+        </div>
+      )}
+      {view === 'items' && <Tracker key={`${scope}-${itemsVersion}`} scope={scope} editable={editable} showToast={showToast} onChanged={onChanged} />}
+      {view === 'ask' && <Ask key={scope} scope={scope} suggestions={suggestions} />}
 
-      {s.history.length > 1 && (
+      {view === 'history' && s.history.length === 0 && <Empty title="No briefings yet">Past briefings for this area will be listed here.</Empty>}
+      {((view === 'all' && s.history.length > 1) || (view === 'history' && s.history.length > 0)) && (
         <section className="crm-card" aria-labelledby="hi-h">
           <div className="crm-card-head"><h2 id="hi-h" className="crm-h2">Earlier briefings</h2></div>
           <ul className="crm-list">
@@ -204,7 +217,7 @@ function FindingList({ title, tone, items }: { title: string; tone: Tone; items:
 const STATUS_FILTERS: { k: string; l: string }[] = [{ k: 'active', l: 'Open' }, { k: 'done', l: 'Done' }, { k: 'dismissed', l: 'Dismissed' }, { k: 'all', l: 'All' }];
 const STATUS_LABEL: Record<ItemStatus, string> = { open: 'Open', in_progress: 'In progress', done: 'Done', dismissed: 'Dismissed' };
 
-function Tracker({ scope, editable, showToast }: { scope: string; editable: boolean; showToast: (m: string) => void }) {
+function Tracker({ scope, editable, showToast, onChanged }: { scope: string; editable: boolean; showToast: (m: string) => void; onChanged?: () => void }) {
   const { access } = useAccess();
   const canTask = canEdit(access, 'field');
   const [taskFor, setTaskFor] = useState<TaskPreset | null>(null);
@@ -216,6 +229,7 @@ function Tracker({ scope, editable, showToast }: { scope: string; editable: bool
     try {
       await crm.put(`/api/v1/analytics/analyst/items/${it.id}`, patch);
       await items.reload();
+      onChanged?.();
       if (patch.status) showToast(`Marked ${STATUS_LABEL[patch.status].toLowerCase()}.`);
     } catch (e) { showToast(friendlyError(e)); }
   };

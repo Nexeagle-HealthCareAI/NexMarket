@@ -81,7 +81,7 @@ namespace SeemanchalOutreach.Api.Controllers
         [HttpGet("analyst")]
         public async Task<IActionResult> Analyst([FromQuery] string? scope, CancellationToken ct)
         {
-            var sc = scope == "surveys" ? "surveys" : "business";
+            var sc = AnalystAreas.Normalize(scope);
             var latest = await _db.AiBriefings.AsNoTracking().Where(b => b.Scope == sc && b.Status == "ok").OrderByDescending(b => b.CreatedAt).FirstOrDefaultAsync(ct);
             var running = await _db.AiBriefings.AsNoTracking()
                 .Where(b => b.Scope == sc && b.Status == "running" && b.CreatedAt > DateTime.UtcNow.AddMinutes(-10)).OrderByDescending(b => b.CreatedAt).FirstOrDefaultAsync(ct);
@@ -100,6 +100,38 @@ namespace SeemanchalOutreach.Api.Controllers
             });
         }
 
+        /// <summary>Each analyst area with its latest briefing's health, whether one is being written, and open items, for the area tabs.</summary>
+        [HttpGet("analyst/areas")]
+        public async Task<IActionResult> Areas(CancellationToken ct)
+        {
+            var today = AttendanceService.TodayIst;
+            var latest = (await _db.AiBriefings.AsNoTracking().Where(b => b.Status == "ok")
+                    .GroupBy(b => b.Scope).Select(g => g.OrderByDescending(b => b.CreatedAt).Select(b => new { b.Scope, b.CreatedAt, b.Health, b.Summary }).First())
+                    .ToListAsync(ct)).ToDictionary(x => x.Scope);
+            var running = await _db.AiBriefings.AsNoTracking().Where(b => b.Status == "running" && b.CreatedAt > DateTime.UtcNow.AddMinutes(-10))
+                .Select(b => b.Scope).Distinct().ToListAsync(ct);
+            var items = await _db.AiItems.AsNoTracking().Where(i => i.Status == "open" || i.Status == "in_progress")
+                .GroupBy(i => i.Scope).Select(g => new { Scope = g.Key, open = g.Count(), overdue = g.Count(i => i.DueDate != null && i.DueDate < today), high = g.Count(i => i.Severity == "high") })
+                .ToDictionaryAsync(x => x.Scope, ct);
+            return Ok(new
+            {
+                configured = _agent.Configured,
+                areas = AnalystAreas.All.Select(a => new
+                {
+                    key = a.Key,
+                    label = a.Label,
+                    autoEveryDays = a.AutoEveryDays,
+                    latestAt = latest.TryGetValue(a.Key, out var l) ? l.CreatedAt : (DateTime?)null,
+                    health = l?.Health,
+                    summary = l?.Summary,
+                    running = running.Contains(a.Key),
+                    open = items.TryGetValue(a.Key, out var it) ? it.open : 0,
+                    overdue = it?.overdue ?? 0,
+                    high = it?.high ?? 0,
+                }),
+            });
+        }
+
         [HttpGet("analyst/briefings/{id:guid}")]
         public async Task<IActionResult> Briefing(Guid id, CancellationToken ct)
         {
@@ -115,7 +147,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> Run([FromQuery] string? scope, CancellationToken ct)
         {
             if (!_agent.Configured) return StatusCode(503, new { message = "The AI analyst isn't switched on yet. Add the Groq API key on the server (Groq__ApiKey)." });
-            var sc = scope == "surveys" ? "surveys" : "business";
+            var sc = AnalystAreas.Normalize(scope);
             var busy = await _db.AiBriefings.AnyAsync(b => b.Scope == sc && b.Status == "running" && b.CreatedAt > DateTime.UtcNow.AddMinutes(-10), ct);
             if (busy) return Conflict(new { message = "A briefing is already being written. It will show here when it's ready." });
             var by = User.AgentIdOf() ?? "";
@@ -139,7 +171,7 @@ namespace SeemanchalOutreach.Api.Controllers
         [HttpGet("analyst/items")]
         public async Task<IActionResult> Items([FromQuery] string? status, [FromQuery] string? scope, CancellationToken ct)
         {
-            var sc = scope == "surveys" ? "surveys" : "business";
+            var sc = AnalystAreas.Normalize(scope);
             var q = _db.AiItems.AsNoTracking().Where(i => i.Scope == sc);
             if (status == "active" || string.IsNullOrWhiteSpace(status)) q = q.Where(i => i.Status == "open" || i.Status == "in_progress");
             else if (status != "all") q = q.Where(i => i.Status == status);
