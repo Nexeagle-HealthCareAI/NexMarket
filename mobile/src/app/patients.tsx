@@ -6,7 +6,7 @@ import { Icon } from '../components/Icon';
 import { useDb, useSession } from '../lib/session';
 import { db, type Referral } from '../lib/db';
 import { dayShort } from '../lib/format';
-import { openWhatsApp } from '../lib/links';
+import { WhatsAppSheet } from '../components/WhatsAppSheet';
 import { stageStep, stageTone } from '../components/stage';
 import { C } from '../theme';
 
@@ -16,6 +16,7 @@ type Row = Referral & { partnerName: string | null; partnerPhone: string | null;
 export default function Patients() {
   const { t, lang } = useSession();
   const [filter, setFilter] = useState<Filter>('all');
+  const [thank, setThank] = useState<{ name: string; phone: string } | null>(null);
   const rows = useDb(() => db().getAllSync<Row>(
     `SELECT r.*, c.name AS partnerName, c.phone AS partnerPhone,
             EXISTS(SELECT 1 FROM outbox o WHERE o.clientId = r.clientId) AS unsent
@@ -82,13 +83,16 @@ export default function Patients() {
             ) : waiting >= 2 ? <T style={{ color: C.warnInk, fontSize: 13 }}>{t('waitingDays', { n: waiting })}</T> : null}
 
             {step >= 3 && r.partnerPhone ? (
-              <Pressable onPress={() => openWhatsApp(r.partnerPhone)} style={{ alignSelf: 'flex-start' }}>
-                <T style={{ color: C.ok, fontWeight: '700' }}>{t('thankPartner', { name: r.partnerName ?? '' })}</T>
+              <Pressable onPress={() => setThank({ name: r.partnerName ?? '', phone: r.partnerPhone! })} accessibilityRole="button"
+                style={({ pressed }) => [{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#e7f8ee', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 }, pressed && { opacity: 0.8 }]}>
+                <Icon name="whatsapp" size={16} color="#1fa855" />
+                <T style={{ color: '#127a3d', fontWeight: '700' }}>{t('thankPartner', { name: r.partnerName ?? '' })}</T>
               </Pressable>
             ) : null}
           </Card>
         );
       })}
+      <WhatsAppSheet visible={!!thank} onClose={() => setThank(null)} name={thank?.name ?? ''} phone={thank?.phone ?? null} template="thanks" />
     </Screen>
   );
 }

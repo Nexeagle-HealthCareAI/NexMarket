@@ -18,7 +18,7 @@ const TEMPLATES: { key: string; label: StringKey; text: StringKey }[] = [
 ];
 
 /** Pick a ready message in the agent's language (or write one), check it, and open WhatsApp with it filled in. */
-export function WhatsAppSheet({ visible, onClose, name, phone }: { visible: boolean; onClose: () => void; name: string; phone: string | null }) {
+export function WhatsAppSheet({ visible, onClose, name, phone, template = 'intro' }: { visible: boolean; onClose: () => void; name: string; phone: string | null; template?: string }) {
   const { t, agent } = useSession();
   const [pick, setPick] = useState('intro');
   const [text, setText] = useState('');
@@ -30,9 +30,10 @@ export function WhatsAppSheet({ visible, onClose, name, phone }: { visible: bool
   });
   useEffect(() => {
     if (!visible) return;
-    setPick('intro');
-    setText(fill('waIntro'));
-  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+    const tp = TEMPLATES.find((x) => x.key === template) ?? TEMPLATES[0];
+    setPick(tp.key);
+    setText(tp.key === 'own' ? '' : fill(tp.text));
+  }, [visible, template]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const choose = (k: (typeof TEMPLATES)[number]) => {
     setPick(k.key);

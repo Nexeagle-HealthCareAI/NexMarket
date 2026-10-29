@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Btn, Card, Chip, Empty, Field, Pill, Screen, T, TopBar, toast } from '../components/ui';
@@ -117,6 +117,13 @@ function InVisit({ visit, name, partners, initialContact }: {
 }) {
   const { t, lang } = useSession();
   const [contactId, setContactId] = useState<string | null>(initialContact || partners[0]?.clientId || null);
+  // Someone just added here (back from Add person): pick them so the agent can carry on with them.
+  const known = useRef(new Set(partners.map((c) => c.clientId)));
+  useEffect(() => {
+    const fresh = partners.find((c) => !known.current.has(c.clientId));
+    partners.forEach((c) => known.current.add(c.clientId));
+    if (fresh) setContactId(fresh.clientId);
+  }, [partners]);
   const [met, setMet] = useState<Met | null>(null);
   const [interest, setInterest] = useState<Interest | null>(null);
   const [note, setNote] = useState('');
@@ -180,8 +187,8 @@ function InVisit({ visit, name, partners, initialContact }: {
       </Card>
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Btn flex icon="plus" label={t('addNewPerson')} onPress={() => router.push({ pathname: '/partner-new', params: { panchayatId: visit.panchayatId } })} />
-        <Btn flex kind="secondary" icon="pin" label={t('otherPanchayat')} onPress={() => router.push('/checkin')} />
+        <Btn flex icon="plus" label={t('newPersonShort')} onPress={() => router.push({ pathname: '/partner-new', params: { panchayatId: visit.panchayatId } })} />
+        <Btn flex kind="secondary" icon="pin" label={t('nextPanchayat')} onPress={() => router.push('/checkin')} />
       </View>
 
       <T style={{ fontSize: 17, fontWeight: '700' }}>{partners.length ? t('revisitWho', { n: partners.length }) : t('noOneHereYet')}</T>

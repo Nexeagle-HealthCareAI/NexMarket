@@ -44,14 +44,15 @@ export default function Refer() {
     if (!dept) e.dept = t('needDept');
     if (!consent) e.consent = t('consentNeeded');
     setErrors(e);
-    if (Object.keys(e).length) return;
+    if (Object.keys(e).length) { toast(Object.values(e)[0]); return; }
     const n = parseInt(age, 10);
     addReferral({
       contactId, patientName: name, patientAge: Number.isFinite(n) && n > 0 && n < 120 ? n : null, patientSex: sex,
       clientPhone: phone, department: dept!, urgent, notes,
     });
-    toast(t('savedOnPhone'));
-    router.replace('/patients');
+    toast(t('referSaved', { name: name.trim() }));
+    if (router.canGoBack()) router.back();
+    else router.replace('/patients');
   };
 
   return (

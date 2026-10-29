@@ -21,7 +21,7 @@ export function PartnerPicker({ visible, onClose, onPick, panchayatFirst }: { vi
   }, [all, term]);
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={t('choosePartner')}>
+    <Sheet visible={visible} onClose={onClose} title={t('choosePartner')} scroll={false}>
       <Field placeholder={t('searchPartners')} value={term} onChangeText={setTerm} autoCorrect={false} />
       <FlatList style={{ maxHeight: 380 }} data={list} keyExtractor={(c) => c.clientId} keyboardShouldPersistTaps="handled"
         ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: C.line }} />}

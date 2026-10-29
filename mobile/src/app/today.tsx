@@ -15,12 +15,12 @@ import { useHere } from '../lib/useHere';
 import { assignment } from '../lib/sync';
 import { finishShift, resumeTrackingIfNeeded } from '../lib/shift';
 import { openDirections } from '../lib/links';
-import { dayShort, km, weekday } from '../lib/format';
+import { dayShort, km, timeOf, weekday } from '../lib/format';
 import { routeKm, startOfDay, ymd } from '../lib/util';
 import { cachedTasks } from '../lib/tasks';
 import { cachedTips, ensureTips } from '../lib/aiTips';
 import { C, PRIORITY_COLOR } from '../theme';
-import type { TFn } from '../i18n';
+import type { Lang, TFn } from '../i18n';
 
 function weekStart(): string {
   const d = new Date();
@@ -64,6 +64,11 @@ export default function Today() {
     const partners14 = db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM contacts WHERE createdAt >= ? AND createdAt < ?', two, today)?.n ?? 0;
     return {
       shift, kmToday: routeKm(pts), week, unsent: q.outboxCount(), visit: q.activeVisit(), visitsToday, partnersToday, partners14,
+      here: (() => {
+        const v = q.activeVisit();
+        if (!v) return null;
+        return { name: q.assignedOne(v.panchayatId)?.name ?? q.panchayat(v.panchayatId)?.name ?? '', since: v.checkInAt, people: q.contactsIn(v.panchayatId).length, id: v.panchayatId };
+      })(),
       openTasks: cachedTasks().filter((x) => x.status === 'open').length, tip: cachedTips(lang)?.tips[0] ?? null,
       lateTasks: cachedTasks().filter((x) => x.status === 'open' && x.dueDate != null && x.dueDate < ymd()).length,
       shiftDoneToday: (db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM shifts WHERE endTime IS NOT NULL AND endTime >= ?', today)?.n ?? 0) > 0,
@@ -154,7 +159,8 @@ export default function Today() {
                   <T style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{t('endShift')}</T>
                 </Pressable>
               </View>
-            ) : (
+            ) : null}
+            {data.shift ? <WhereNow here={data.here} t={t} lang={lang} /> : (
               <Pressable onPress={() => router.push('/shift')} style={({ pressed }) => [glass, pressed && { opacity: 0.9 }]} accessibilityRole="button" accessibilityLabel={t('startShift')}>
                 <StartOrb />
                 <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
@@ -194,18 +200,21 @@ export default function Today() {
             ) : null}
           </View>
 
-          {/* Quick actions before the shift */}
-          {!data.shift ? (
-            <View style={{ paddingHorizontal: 14, paddingTop: 18, gap: 10 }}>
-              <SectionHead icon="star" color={C.star} title={t('quickActions')} />
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <Quick icon="users" bg={C.blueSoft} fg={C.blueInk} label={t('newPartner')} onPress={() => router.push('/partner-new')} />
-                <Quick icon="hospital" bg={C.okSoft} fg={C.okInk} label={t('referPatient')} onPress={() => router.push('/refer')} />
-                <Quick icon="map" bg={C.infoSoft} fg={C.infoInk} label={t('map')} onPress={() => router.push('/route')} />
-                <Quick icon="leave" bg={C.warnSoft} fg={C.warnInk} label={t('qaLeave')} onPress={() => router.push('/leave')} />
-              </View>
+          {/* Quick actions: what the agent needs right now */}
+          <View style={{ paddingHorizontal: 14, paddingTop: 18, gap: 10 }}>
+            <SectionHead icon="star" color={C.star} title={t('quickActions')} />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Quick icon="users" bg={C.blueSoft} fg={C.blueInk} label={t('addNewPerson')}
+                onPress={() => router.push({ pathname: '/partner-new', params: data.here ? { panchayatId: data.here.id } : {} })} />
+              <Quick icon="hospital" bg={C.okSoft} fg={C.okInk} label={t('referPatient')} onPress={() => router.push('/refer')} />
+              {data.shift
+                ? <Quick icon="pin" bg={C.infoSoft} fg={C.infoInk} label={data.here ? t('changePanchayat') : t('checkIn')} onPress={() => router.push('/checkin')} />
+                : <Quick icon="map" bg={C.infoSoft} fg={C.infoInk} label={t('map')} onPress={() => router.push('/route')} />}
+              {data.shift
+                ? <Quick icon="map" bg={C.purpleSoft} fg={C.purple} label={t('map')} onPress={() => router.push('/route')} />
+                : <Quick icon="leave" bg={C.warnSoft} fg={C.warnInk} label={t('qaLeave')} onPress={() => router.push('/leave')} />}
             </View>
-          ) : null}
+          </View>
 
           {/* Tasks from the manager */}
           <TasksSection />
@@ -217,14 +226,6 @@ export default function Today() {
                 <Icon name="map" size={15} color={C.blueInk} /><T style={{ color: C.blueInk, fontWeight: '700', fontSize: 13 }}>{t('map')}</T>
               </Pressable>} />
 
-            {data.visit ? (
-              <Pressable onPress={() => router.push({ pathname: '/checkin', params: { panchayatId: data.visit!.panchayatId } })}
-                style={{ backgroundColor: C.okSoft, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Icon name="pin" color={C.okInk} />
-                <T style={{ flex: 1, color: C.okInk, fontWeight: '700' }}>{t('youAreIn')} · {q.assignedOne(data.visit.panchayatId)?.name ?? q.panchayat(data.visit.panchayatId)?.name ?? ''}</T>
-                <Icon name="chevron" color={C.okInk} />
-              </Pressable>
-            ) : null}
             {!next ? <Empty text={t('planEmpty')} icon="map" /> : <NextStop item={next} t={t} />}
             {rest.length > 0 ? (
               <View style={{ paddingLeft: 22 }}>
@@ -243,6 +244,59 @@ export default function Today() {
       </View>
       <LanguageSheet visible={langOpen} onClose={() => setLangOpen(false)} />
     </SafeAreaView>
+  );
+}
+
+/** On shift: the panchayat the agent is working in, with the next things to do there; or a nudge to check in. */
+function WhereNow({ here, t, lang }: { here: { name: string; since: string; people: number; id: string } | null; t: TFn; lang: Lang }) {
+  if (!here) {
+    return (
+      <Pressable onPress={() => router.push('/checkin')} accessibilityRole="button"
+        style={({ pressed }) => [glass, { borderColor: 'rgba(255,207,122,0.45)', backgroundColor: 'rgba(255,207,122,0.1)' }, pressed && { opacity: 0.85 }]}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,207,122,0.18)', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="pin" color="#ffcf7a" />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{t('notCheckedIn')}</T>
+          <T style={{ color: C.sideText, fontSize: 12 }} numberOfLines={2}>{t('notCheckedInSub')}</T>
+        </View>
+        <View style={{ backgroundColor: '#ffcf7a', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9 }}>
+          <T style={{ color: C.ink, fontWeight: '800', fontSize: 13 }}>{t('checkIn')}</T>
+        </View>
+      </Pressable>
+    );
+  }
+  const open = () => router.push({ pathname: '/checkin', params: { panchayatId: here.id } });
+  return (
+    <View style={[glass, { flexDirection: 'column', alignItems: 'stretch', gap: 12, borderColor: 'rgba(56,246,169,0.35)' }]}>
+      <Pressable onPress={open} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(56,246,169,0.15)', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="pin" color={C.mint} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T style={{ color: C.sideText, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>{t('workingIn').toUpperCase()}</T>
+          <T style={{ color: '#fff', fontWeight: '800', fontSize: 18 }} numberOfLines={1}>{here.name}</T>
+          <T style={{ color: C.sideText, fontSize: 12 }} numberOfLines={1}>{t('sinceAndPeople', { time: timeOf(lang, here.since), n: here.people })}</T>
+        </View>
+        <Icon name="chevron" color={C.sideText} />
+      </Pressable>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <HeroBtn icon="plus" label={t('addShort')} primary onPress={() => router.push({ pathname: '/partner-new', params: { panchayatId: here.id } })} />
+        <HeroBtn icon="check" label={t('revisit')} onPress={open} />
+        <HeroBtn icon="nav" label={t('nextPanchayat')} onPress={() => router.push('/checkin')} />
+      </View>
+    </View>
+  );
+}
+
+function HeroBtn({ icon, label, onPress, primary }: { icon: IconName; label: string; onPress: () => void; primary?: boolean }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}
+      style={({ pressed }) => [{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, paddingHorizontal: 6,
+        backgroundColor: primary ? C.mint : 'rgba(255,255,255,0.08)', borderWidth: primary ? 0 : 1, borderColor: 'rgba(255,255,255,0.16)' }, pressed && { opacity: 0.8 }]}>
+      <Icon name={icon} size={16} color={primary ? C.ink : '#fff'} />
+      <T style={{ color: primary ? C.ink : '#fff', fontWeight: '800', fontSize: 13 }} numberOfLines={1}>{label}</T>
+    </Pressable>
   );
 }
 
