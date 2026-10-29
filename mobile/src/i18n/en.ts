@@ -379,6 +379,21 @@ const en = {
   aiSuggest3: "What do people in my block need most?",
   aiSuggest4: "Which doctor sits on Monday?",
   aiSuggest5: "How am I doing this month?",
+
+  // Tasks from the manager
+  tasksFromManager: "Tasks from your manager",
+  tasksDoneToday: "{n} done today",
+  taskOverdue: "{n} days late",
+  taskDueToday: "Due today",
+  taskDueTomorrow: "Due tomorrow",
+  taskDueOn: "Due {date}",
+  taskUrgent: "Urgent",
+  taskFrom: "From {name}",
+  taskWhere: "Where",
+  taskNote: "What did you do?",
+  taskNoteHint: "Optional: who you met, what happened",
+  taskMarkDone: "Mark done",
+  taskDoneSaved: "Task done · sent to your manager",
 };
 
 export default en;

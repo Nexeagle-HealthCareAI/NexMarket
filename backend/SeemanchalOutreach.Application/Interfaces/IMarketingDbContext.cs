@@ -35,6 +35,7 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<AiBriefing> AiBriefings { get; }
         DbSet<AiItem> AiItems { get; }
         DbSet<SurveyEdit> SurveyEdits { get; }
+        DbSet<AgentTask> AgentTasks { get; }
 
         ChangeTracker ChangeTracker { get; }
 

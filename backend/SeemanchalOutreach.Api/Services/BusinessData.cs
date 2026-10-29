@@ -335,8 +335,10 @@ namespace SeemanchalOutreach.Api.Services
                 newContactsWithoutSurvey = newContacts.Count(c => !surveyed.Contains(c.ClientId)),
                 panchayatsInScope = places.Count,
                 panchayatsSurveyed = resp.Where(r => !r.IsSkipped && r.PanchayatId != null && blockOf.ContainsKey(r.PanchayatId)).Select(r => r.PanchayatId).Distinct().Count(),
-                byBlock,
-                byAgent,
+                // Keep this compact: it goes to the AI, whose free plan allows few tokens a minute.
+                byBlock = byBlock.Where(b => b.responses > 0).Take(15),
+                blocksWithNoSurveys = byBlock.Where(b => b.responses == 0).Select(b => b.block),
+                byAgent = byAgent.Take(12),
             };
         }
 }

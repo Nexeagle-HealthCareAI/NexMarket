@@ -38,6 +38,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<AiBriefing> AiBriefings => Set<AiBriefing>();
         public DbSet<AiItem> AiItems => Set<AiItem>();
         public DbSet<SurveyEdit> SurveyEdits => Set<SurveyEdit>();
+        public DbSet<AgentTask> AgentTasks => Set<AgentTask>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -262,6 +263,15 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("survey_edits");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.ResponseId);
+            });
+
+            modelBuilder.Entity<AgentTask>(entity =>
+            {
+                entity.ToTable("agent_tasks");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.AgentId, e.Status });
+                entity.HasIndex(e => new { e.District, e.Block });
+                entity.HasIndex(e => e.GroupId);
             });
 
             // ─── SurveyQuestion ──────────────────────────────────────

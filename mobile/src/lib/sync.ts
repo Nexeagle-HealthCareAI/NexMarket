@@ -5,6 +5,7 @@ import { db, kvGet, kvJson, kvSet, notifyChange, q, type OutboxRow } from './db'
 import { SYNC_INTERVAL_MS } from './config';
 import { errorMessage, nowIso, uuid } from './util';
 import { me } from './repo';
+import { refreshTasks } from './tasks';
 
 /**
  * The sync engine. Pushes the outbox in order (oldest first), then pulls what changed
@@ -56,6 +57,8 @@ async function run() {
     queueTrajectory();
     await push();
     await pull();
+    // Tasks from the manager: never let them fail the main sync.
+    await refreshTasks().catch(() => undefined);
     failures = 0;
     nextAllowedAt = 0;
     const at = nowIso();

@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Bot, Send, Sparkles } from 'lucide-react';
+import { Bot, ClipboardCheck, Send, Sparkles } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, Pill, Skeleton, useLoader, useToast, type Tone } from '@/components/crm/ui';
+import { TaskModal, type TaskPreset } from '@/components/crm/Tasks';
 
 interface Finding { key: string; title: string; detail: string; area: string; metric: string; severity: 'high' | 'medium' | 'low' }
 interface BriefingResult {
@@ -32,6 +33,28 @@ const SEV: Record<string, Tone> = { high: 'bad', medium: 'warn', low: 'neutral' 
 const KIND: Record<string, string> = { issue: 'Issue', opportunity: 'Opportunity', plan: 'Action' };
 const TREND: Record<string, { label: string; tone: Tone }> = { better: { label: 'Getting better', tone: 'ok' }, same: { label: 'No change', tone: 'neutral' }, worse: { label: 'Getting worse', tone: 'bad' }, resolved: { label: 'Looks resolved', tone: 'ok' } };
 
+// The model sometimes leaves a section out or returns the wrong shape; never let that crash the page.
+const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
+function normalize(raw: unknown): BriefingResult | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const finding = (x: Record<string, unknown>): Finding => ({
+    key: str(x.key), title: str(x.title), detail: str(x.detail), area: str(x.area), metric: str(x.metric),
+    severity: (['high', 'medium', 'low'].includes(str(x.severity)) ? str(x.severity) : 'medium') as Finding['severity'],
+  });
+  const objs = (v: unknown) => arr<unknown>(v).filter((x): x is Record<string, unknown> => !!x && typeof x === 'object');
+  return {
+    summary: str(o.summary),
+    health: (['good', 'watch', 'bad'].includes(str(o.health)) ? str(o.health) : 'watch') as BriefingResult['health'],
+    wins: objs(o.wins).map((x) => ({ title: str(x.title), detail: str(x.detail) })),
+    issues: objs(o.issues).map(finding),
+    opportunities: objs(o.opportunities).map(finding),
+    plan: objs(o.plan).map((x) => ({ key: str(x.key), title: str(x.title), detail: str(x.detail), owner: str(x.owner), due_in_days: Number(x.due_in_days) || 0, expected_impact: str(x.expected_impact) })),
+    watch_next: arr<unknown>(o.watch_next).map(str).filter(Boolean),
+  };
+}
+
 // ─── AI analyst panel (business or surveys) ────────────────────────────────────────────────────────────
 
 export default function AnalystPanel({ scope = 'business', suggestions = SUGGESTIONS, intro }: { scope?: 'business' | 'surveys'; suggestions?: string[]; intro?: string }) {
@@ -43,14 +66,26 @@ export default function AnalystPanel({ scope = 'business', suggestions = SUGGEST
   const [toast, showToast] = useToast();
   const [itemsVersion, setItemsVersion] = useState(0);
 
+  // The briefing is written in the background (a few minutes at most on Groq's free plan); check back until it's done.
   const run = async () => {
     setRunning(true);
     try {
-      const b = await crm.post<Briefing>(`/api/v1/analytics/analyst/run?scope=${scope}`);
+      await crm.post(`/api/v1/analytics/analyst/run?scope=${scope}`);
       setViewing(null);
+      const before = state.data?.latest?.id;
+      for (let i = 0; i < 72; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const now = await crm.get<AnalystRes>(`/api/v1/analytics/analyst?scope=${scope}`);
+        if (!now.running) {
+          state.setData(now);
+          setItemsVersion((v) => v + 1);
+          if (now.latest && now.latest.id !== before) showToast(now.latest.toolCalls ? `Briefing ready. The analyst made ${now.latest.toolCalls} lookups.` : 'Briefing ready.');
+          else if (now.lastError) showToast(`The analysis didn't finish: ${now.lastError}`);
+          return;
+        }
+      }
+      showToast('Still writing. It will show here when it is ready.');
       await state.reload();
-      setItemsVersion((v) => v + 1);
-      showToast(b.toolCalls ? `Briefing ready. The analyst made ${b.toolCalls} lookups.` : 'Briefing ready.');
     } catch (e) {
       showToast(friendlyError(e));
     } finally {
@@ -74,7 +109,7 @@ export default function AnalystPanel({ scope = 'business', suggestions = SUGGEST
     );
   }
   const b = viewing ?? s.latest;
-  const r = b?.result ?? null;
+  const r = normalize(b?.result);
 
   return (
     <>
@@ -92,7 +127,7 @@ export default function AnalystPanel({ scope = 'business', suggestions = SUGGEST
             </button>
           )}
         </div>
-        {(running || s.running) && <div className="crm-note" role="status">The analyst is going through referrals, partners, field visits and survey answers. This takes 20 to 60 seconds.</div>}
+        {(running || s.running) && <div className="crm-note" role="status">The analyst is going through referrals, partners, field visits and survey answers. This usually takes under a minute, and up to a few minutes when the free Groq plan asks us to slow down. You can leave this page.</div>}
         {s.lastError && !running && <div className="crm-error" role="alert">Last run failed: {s.lastError}</div>}
         {!b || !r ? (
           <Empty title="Nothing yet">{editable ? `Run the first analysis. After that it runs by itself ${scope === 'surveys' ? 'every week' : 'every morning'}.` : `The first briefing will appear after the ${scope === 'surveys' ? 'weekly' : 'morning'} run.`}</Empty>
@@ -170,6 +205,9 @@ const STATUS_FILTERS: { k: string; l: string }[] = [{ k: 'active', l: 'Open' }, 
 const STATUS_LABEL: Record<ItemStatus, string> = { open: 'Open', in_progress: 'In progress', done: 'Done', dismissed: 'Dismissed' };
 
 function Tracker({ scope, editable, showToast }: { scope: string; editable: boolean; showToast: (m: string) => void }) {
+  const { access } = useAccess();
+  const canTask = canEdit(access, 'field');
+  const [taskFor, setTaskFor] = useState<TaskPreset | null>(null);
   const [filter, setFilter] = useState('active');
   const items = useLoader(() => crm.get<ItemsRes>(`/api/v1/analytics/analyst/items?status=${filter}&scope=${scope}`), [filter, scope]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -222,6 +260,12 @@ function Tracker({ scope, editable, showToast }: { scope: string; editable: bool
                     {editable ? (
                       <ItemEditor it={it} onSave={(patch) => save(it, patch)} />
                     ) : it.note ? <div className="crm-note">{it.note}</div> : null}
+                    {canTask && (it.status === 'open' || it.status === 'in_progress') && (
+                      <button type="button" className="crm-btn is-secondary is-sm" style={{ alignSelf: 'flex-start' }}
+                        onClick={() => setTaskFor({ title: it.title, detail: it.detail, dueDate: it.dueDate, aiItemId: it.id })}>
+                        <ClipboardCheck size={15} aria-hidden /> Give to field agents as a task
+                      </button>
+                    )}
                     <span className="crm-cell-sub">First raised {fmt.date(it.createdAt)} · last updated {fmt.dateTime(it.updatedAt)}</span>
                   </div>
                 )}
@@ -230,6 +274,7 @@ function Tracker({ scope, editable, showToast }: { scope: string; editable: bool
           })}
         </ul>
       )}
+      {taskFor && <TaskModal preset={taskFor} onClose={() => setTaskFor(null)} onSaved={(m) => { showToast(m); void items.reload(); }} />}
     </section>
   );
 }

@@ -28,6 +28,11 @@ namespace SeemanchalOutreach.Api.Services
         /// <summary>Hour of the day (IST) for the automatic briefing; -1 turns it off.</summary>
         public int DailyHourIst { get; set; } = 8;
         public int PeriodDays { get; set; } = 30;
+        /// <summary>
+        /// Largest prompt (in characters) sent in one request. Groq's free plan allows 8,000 tokens a minute
+        /// for gpt-oss-120b, so keep this well under that (~4 characters a token). Raise it on a paid plan.
+        /// </summary>
+        public int MaxPromptChars { get; set; } = 18000;
     }
 
     public class AnalystUnavailableException : Exception
@@ -52,33 +57,55 @@ namespace SeemanchalOutreach.Api.Services
         public bool Configured => !string.IsNullOrWhiteSpace(_settings.ApiKey);
         public string Model => _settings.Model;
 
-        public async Task<(JsonObject Message, int Tokens)> ChatAsync(JsonArray messages, JsonArray? tools, JsonObject? responseFormat, CancellationToken ct)
+        public async Task<(JsonObject Message, int Tokens)> ChatAsync(JsonArray messages, JsonArray? tools, JsonObject? responseFormat, CancellationToken ct, bool patient = false)
         {
             if (!Configured) throw new AnalystUnavailableException("The AI analyst isn't switched on yet. Add the Groq API key on the server (Groq__ApiKey).");
+            var sendMessages = Fit(messages.DeepClone().AsArray(), _settings.MaxPromptChars);
             var body = new JsonObject
             {
                 ["model"] = _settings.Model,
-                ["messages"] = messages.DeepClone(),
+                ["messages"] = sendMessages,
                 ["temperature"] = 0.2,
             };
             if (tools != null) { body["tools"] = tools.DeepClone(); body["tool_choice"] = "auto"; }
             if (responseFormat != null) body["response_format"] = responseFormat.DeepClone();
 
             var client = _http.CreateClient("groq");
-            using var req = new HttpRequestMessage(HttpMethod.Post, _settings.BaseUrl.TrimEnd('/') + "/chat/completions")
+            var payload = body.ToJsonString();
+            HttpResponseMessage res = null!;
+            string text = "";
+            // Groq's free tier limits tokens per minute. When it says "slow down", wait as long as it asks
+            // (capped) and try again a couple of times before giving up.
+            for (int attempt = 0; ; attempt++)
             {
-                Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
-            };
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _settings.ApiKey);
-            using var res = await client.SendAsync(req, ct);
-            var text = await res.Content.ReadAsStringAsync(ct);
+                using var req = new HttpRequestMessage(HttpMethod.Post, _settings.BaseUrl.TrimEnd('/') + "/chat/completions")
+                {
+                    Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+                };
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _settings.ApiKey);
+                res?.Dispose();
+                res = await client.SendAsync(req, ct);
+                text = await res.Content.ReadAsStringAsync(ct);
+                // Background briefings can wait out the per-minute limit; someone waiting on a question can't.
+                if ((int)res.StatusCode != 429 || attempt >= (patient ? 3 : 1) || TooLarge(text)) break;
+                var wait = res.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(15 * (attempt + 1));
+                if (wait < TimeSpan.FromSeconds(3)) wait = TimeSpan.FromSeconds(3);
+                if (wait > TimeSpan.FromSeconds(patient ? 60 : 15)) wait = TimeSpan.FromSeconds(patient ? 60 : 15);
+                _logger.LogInformation("Groq rate limit; retrying in {Seconds}s", (int)wait.TotalSeconds);
+                await Task.Delay(wait, ct);
+            }
+            using var _res = res;
             if (!res.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Groq returned {Status}: {Body}", (int)res.StatusCode, text.Length > 600 ? text[..600] : text);
                 var msg = (int)res.StatusCode switch
                 {
                     401 => "The Groq API key was refused. Check Groq__ApiKey on the server.",
-                    429 => "Groq is rate-limiting us right now. Try again in a minute.",
+                    413 => "This question needs more data than the free Groq plan allows in one go. Ask something narrower, or move to Groq's paid plan.",
+                    429 when TooLarge(text) => "This needs more data than the free Groq plan allows in one go. Ask something narrower, or move to Groq's paid plan.",
+                    429 when text.Contains("per day", StringComparison.OrdinalIgnoreCase) || text.Contains("TPD", StringComparison.Ordinal) =>
+                        "Today's free Groq allowance is used up. The AI is back tomorrow, or move to Groq's paid plan.",
+                    429 => "Groq is busy for us right now (the free plan allows little per minute). Try again in a minute.",
                     _ => "The AI analyst couldn't answer just now. Try again in a minute.",
                 };
                 throw new AnalystUnavailableException(msg);
@@ -87,6 +114,40 @@ namespace SeemanchalOutreach.Api.Services
             var message = json["choices"]![0]!["message"]!.AsObject();
             int tokens = json["usage"]?["total_tokens"]?.GetValue<int>() ?? 0;
             return (message, tokens);
+        }
+
+        private static bool TooLarge(string body) =>
+            body.Contains("Request too large", StringComparison.OrdinalIgnoreCase) || body.Contains("reduce your message size", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Shrink a conversation to fit the prompt budget: older lookup results are cut down first,
+        /// then the newest, and finally any very long message. The system prompt and question stay whole.
+        /// </summary>
+        public static JsonArray Fit(JsonArray messages, int maxChars)
+        {
+            static string Content(JsonNode? m) => (m?["content"] as JsonValue)?.ToString() ?? "";
+            int Total() => messages.Sum(m => Content(m).Length + ((m?["tool_calls"])?.ToJsonString().Length ?? 0));
+            if (Total() <= maxChars) return messages;
+            const string cut = "\n…(shortened to fit the AI's limit)";
+            foreach (var limit in new[] { 2500, 1200, 500 })
+            {
+                foreach (var m in messages.OfType<JsonObject>().Where(m => (m["role"] as JsonValue)?.ToString() == "tool"))
+                {
+                    var c = Content(m);
+                    if (c.Length > limit) m["content"] = c[..limit] + cut;
+                    if (Total() <= maxChars) return messages;
+                }
+            }
+            // Still too big: cut the longest non-system messages.
+            foreach (var m in messages.OfType<JsonObject>().Where(m => (m["role"] as JsonValue)?.ToString() != "system").OrderByDescending(m => Content(m).Length))
+            {
+                var over = Total() - maxChars;
+                if (over <= 0) break;
+                var c = Content(m);
+                var keep = Math.Max(1500, c.Length - over);
+                if (c.Length > keep) m["content"] = c[..keep] + cut;
+            }
+            return messages;
         }
     }
 
@@ -97,6 +158,7 @@ namespace SeemanchalOutreach.Api.Services
     /// </summary>
     public class AnalystAgent
     {
+        private bool _patient;
         private readonly IMarketingDbContext _db;
         private readonly BusinessData _data;
         private readonly GroqClient _groq;
@@ -208,7 +270,7 @@ namespace SeemanchalOutreach.Api.Services
                     break;
             }
             var text = JsonSerializer.Serialize(result, Json);
-            return text.Length > 24000 ? text[..24000] : text;
+            return text.Length > 6000 ? text[..6000] + "…(cut)" : text;
         }
 
         /// <summary>Lets the model look things up until it is ready. Returns tool calls made.</summary>
@@ -218,7 +280,7 @@ namespace SeemanchalOutreach.Api.Services
             var tools = Tools();
             for (int round = 0; round < maxRounds; round++)
             {
-                var (msg, t) = await _groq.ChatAsync(messages, tools, null, ct);
+                var (msg, t) = await _groq.ChatAsync(messages, tools, null, ct, _patient);
                 tokens += t;
                 var toolCalls = msg["tool_calls"] as JsonArray;
                 // Keep only what the API accepts back in history.
@@ -276,6 +338,7 @@ namespace SeemanchalOutreach.Api.Services
 
         public async Task<AiBriefing> RunBriefingAsync(string createdBy, CancellationToken ct, string scope = "business")
         {
+            _patient = true;
             if (!Configured) throw new AnalystUnavailableException("The AI analyst isn't switched on yet. Add the Groq API key on the server (Groq__ApiKey).");
             _scope = scope == "surveys" ? "surveys" : "business";
             var (from, to) = BusinessData.Days(_settings.PeriodDays);
@@ -296,7 +359,7 @@ namespace SeemanchalOutreach.Api.Services
                     var coverage = await _data.SurveyCoverageAsync(ct);
                     var topBlocks = (await _db.SurveyResponses.AsNoTracking().Where(r => !r.IsSkipped && r.PanchayatId != null)
                             .Join(_db.Panchayats, r => r.PanchayatId, p => p.PanchayatId, (r, p) => p.Block)
-                            .GroupBy(b => b).Select(g => new { g.Key, n = g.Count() }).OrderByDescending(x => x.n).Take(6).ToListAsync(ct))
+                            .GroupBy(b => b).Select(g => new { g.Key, n = g.Count() }).OrderByDescending(x => x.n).Take(3).ToListAsync(ct))
                         .Select(x => x.Key).ToList();
                     var needsByBlock = new List<object>();
                     foreach (var blk in topBlocks) needsByBlock.Add(await _data.SurveyNeedsAsync(blk, ct));
@@ -307,8 +370,8 @@ namespace SeemanchalOutreach.Api.Services
                         surveyCoverage = coverage,
                         needsWholeRegion = await _data.SurveyNeedsAsync(null, ct),
                         needsInBusiestBlocks = needsByBlock,
-                        admissionsByDepartment = _data.Breakdown(snap, "department", 15),
-                        admissionsByBlock = _data.Breakdown(snap, "block", 25),
+                        admissionsByDepartment = _data.Breakdown(snap, "department", 10),
+                        admissionsByBlock = _data.Breakdown(snap, "block", 12),
                         trackedItems = open,
                     };
                 }
@@ -326,8 +389,11 @@ namespace SeemanchalOutreach.Api.Services
                     };
                 }
                 var packJson = JsonSerializer.Serialize(pack, Json);
-                var context = _scope == "surveys" ? Context + SurveyFocus : Context;
                 briefing.DataJson = packJson;
+                // The opening figures must leave room for lookups within the per-request budget.
+                var packBudget = Math.Max(4000, _settings.MaxPromptChars / 2);
+                if (packJson.Length > packBudget) packJson = packJson[..packBudget] + "…(cut to fit)";
+                var context = _scope == "surveys" ? Context + SurveyFocus : Context;
 
                 var messages = new JsonArray
                 {
@@ -361,7 +427,7 @@ namespace SeemanchalOutreach.Api.Services
                 JsonObject result;
                 try
                 {
-                    var (msg, t2) = await _groq.ChatAsync(final, null, BriefingFormat(), ct);
+                    var (msg, t2) = await _groq.ChatAsync(final, null, BriefingFormat(), ct, _patient);
                     tokens += t2;
                     result = JsonNode.Parse(msg["content"]?.GetValue<string>() ?? "{}")!.AsObject();
                 }
@@ -372,11 +438,16 @@ namespace SeemanchalOutreach.Api.Services
                         "\nReply with one JSON object with exactly these fields: summary (string), health (good|watch|bad), wins [{title,detail}], " +
                         "issues [{key,title,detail,area,metric,severity}], opportunities [same as issues], plan [{key,title,detail,owner,due_in_days,expected_impact}], " +
                         "item_updates [{id,trend (better|same|worse|resolved),note}], watch_next [string].";
-                    var (msg, t3) = await _groq.ChatAsync(final, null, new JsonObject { ["type"] = "json_object" }, ct);
+                    var (msg, t3) = await _groq.ChatAsync(final, null, new JsonObject { ["type"] = "json_object" }, ct, _patient);
                     tokens += t3;
                     result = JsonNode.Parse(msg["content"]?.GetValue<string>() ?? "{}")!.AsObject();
                 }
 
+                // JSON mode doesn't enforce the shape: make sure every list is there so the page can always show it.
+                foreach (var list in new[] { "wins", "issues", "opportunities", "plan", "item_updates", "watch_next" })
+                    if (result[list] is not JsonArray) result[list] = new JsonArray();
+                if (result["summary"] is not JsonValue) result["summary"] = "";
+                if (Str(result["health"]) is not ("good" or "watch" or "bad")) result["health"] = "watch";
                 briefing.ResultJson = result.ToJsonString();
                 briefing.Summary = Str(result["summary"]);
                 briefing.Health = Str(result["health"]);
@@ -507,7 +578,7 @@ namespace SeemanchalOutreach.Api.Services
             if (string.IsNullOrWhiteSpace(answer))
             {
                 messages.Add(new JsonObject { ["role"] = "user", ["content"] = "Answer now with what you have." });
-                var (msg, _) = await _groq.ChatAsync(messages, null, null, ct);
+                var (msg, _) = await _groq.ChatAsync(messages, null, null, ct, _patient);
                 answer = msg["content"]?.GetValue<string>() ?? "";
             }
             return (answer.Trim(), used.Distinct().ToList());
@@ -550,6 +621,8 @@ namespace SeemanchalOutreach.Api.Services
                         bool surveyDone = await db.AiBriefings.AnyAsync(b => b.Scope == "surveys" && b.Status == "ok" && b.CreatedAt >= today.AddDays(-6), stoppingToken);
                         if (!surveyDone)
                         {
+                            // Give Groq's per-minute token allowance time to refill after the business run.
+                            if (!done) await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
                             using var scope2 = _scopes.CreateScope();
                             var agent2 = scope2.ServiceProvider.GetRequiredService<AnalystAgent>();
                             await agent2.RunBriefingAsync("auto", stoppingToken, "surveys");

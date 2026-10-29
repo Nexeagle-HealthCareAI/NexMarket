@@ -360,6 +360,21 @@ const hinglish: Strings = {
   aiSuggest3: "Mere block mein logon ko sabse zyada kya chahiye?",
   aiSuggest4: "Somvar ko kaun se doctor baithte hain?",
   aiSuggest5: "Is mahine mera kaam kaisa hai?",
+
+  // Tasks from the manager
+  tasksFromManager: "Manager se kaam",
+  tasksDoneToday: "Aaj {n} poore",
+  taskOverdue: "{n} din der",
+  taskDueToday: "Aaj tak",
+  taskDueTomorrow: "Kal tak",
+  taskDueOn: "{date} tak",
+  taskUrgent: "Zaroori",
+  taskFrom: "{name} se",
+  taskWhere: "Kahan",
+  taskNote: "Aapne kya kiya?",
+  taskNoteHint: "Chahein to: kisse mile, kya hua",
+  taskMarkDone: "Poora hua",
+  taskDoneSaved: "Kaam poora · manager ko bheja gaya",
 };
 
 export default hinglish;

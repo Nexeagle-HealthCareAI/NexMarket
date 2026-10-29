@@ -61,7 +61,7 @@ namespace SeemanchalOutreach.Api.Services
 
         private static JsonArray Tools() => JsonNode.Parse("""
         [
-          {"type":"function","function":{"name":"get_my_day","description":"The agent's block, shift status, follow-ups due today or overdue, and panchayats in their block not visited in the last 30 days.","parameters":{"type":"object","properties":{},"required":[]}}},
+          {"type":"function","function":{"name":"get_my_day","description":"The agent's block, shift status, open tasks from their manager, follow-ups due today or overdue, and panchayats in their block not visited in the last 30 days.","parameters":{"type":"object","properties":{},"required":[]}}},
           {"type":"function","function":{"name":"get_my_partners","description":"Partners this agent added. filter: top = sent most patients (90 days), quiet = sent patients before but none in 60 days, champions, followups = follow-up due, all.","parameters":{"type":"object","properties":{"filter":{"type":"string","enum":["top","quiet","champions","followups","all"]},"limit":{"type":"integer"}},"required":["filter"]}}},
           {"type":"function","function":{"name":"get_partner","description":"Everything about one of the agent's partners by name: type, panchayat, priority, follow-up, latest notes, patients sent, survey answers.","parameters":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}}},
           {"type":"function","function":{"name":"get_my_month","description":"This agent's results this month compared with last month: visits, new partners, surveys, referrals, admissions, days worked.","parameters":{"type":"object","properties":{},"required":[]}}},
@@ -99,9 +99,23 @@ namespace SeemanchalOutreach.Api.Services
                     var notVisited = block == null ? new List<string>() : await _db.Panchayats.AsNoTracking()
                         .Where(p => p.Block == block && (district == null || p.District == district) && p.IsActiveForMarketing && !visited.Contains(p.PanchayatId))
                         .OrderBy(p => p.Name).Select(p => p.Name).Take(20).ToListAsync(ct);
+                    var taskRows = await _db.AgentTasks.AsNoTracking().Where(t => t.AgentId == agentId && t.Status == "open")
+                        .OrderBy(t => t.DueDate == null).ThenBy(t => t.DueDate).Take(10).ToListAsync(ct);
+                    var tasks = (await Controllers.TaskViews.ShapeAsync(_db, taskRows, ct)).Select(o => JsonSerializer.SerializeToElement(o, Json))
+                        .Select(e => new
+                        {
+                            title = e.GetProperty("title").GetString(),
+                            detail = e.GetProperty("detail").GetString(),
+                            priority = e.GetProperty("priority").GetString(),
+                            due = e.GetProperty("dueDate").GetString(),
+                            overdue = e.GetProperty("overdue").GetBoolean(),
+                            panchayats = e.GetProperty("panchayats").EnumerateArray().Select(x => x.GetProperty("name").GetString()).ToList(),
+                            partner = e.GetProperty("partner").ValueKind == JsonValueKind.Object ? e.GetProperty("partner").GetProperty("name").GetString() : null,
+                        }).ToList();
                     return new
                     {
                         today = IstClock.NowIst.ToString("dddd d MMMM"),
+                        tasksFromManager = tasks,
                         block,
                         district,
                         onShift,
@@ -245,7 +259,7 @@ namespace SeemanchalOutreach.Api.Services
                         _logger.LogWarning(ex, "Field assistant tool {Tool} failed", name);
                         output = "{\"error\":\"That lookup failed.\"}";
                     }
-                    if (output.Length > 16000) output = output[..16000];
+                    if (output.Length > 6000) output = output[..6000] + "…(cut)";
                     messages.Add(new JsonObject { ["role"] = "tool", ["tool_call_id"] = call["id"]!.ToString(), ["content"] = output });
                     used.Add(name);
                 }
@@ -298,7 +312,7 @@ namespace SeemanchalOutreach.Api.Services
             {
                 new JsonObject { ["role"] = "system", ["content"] = Context(name, lang) },
                 new JsonObject { ["role"] = "user", ["content"] =
-                    $"Give {name} three tips for today, most useful first: whom to follow up, which panchayat to visit, what to tell partners there. " +
+                    $"Give {name} three tips for today, most useful first: tasks from their manager (especially overdue ones), whom to follow up, which panchayat to visit, what to tell partners there. " +
                     $"Use real names from the data. Each tip: a title of a few words and one or two short sentences. Data:\n{JsonSerializer.Serialize(pack, Json)}" },
             };
             JsonObject result;
