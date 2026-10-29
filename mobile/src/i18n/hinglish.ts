@@ -39,6 +39,7 @@ const hinglish: Strings = {
   tabPartners: 'Saathi',
   tabPatients: 'Mareez',
   tabMe: 'Main',
+  tabVita: 'Vita',
   addAnything: 'Jodein: saathi, mareez, visit',
 
   login: 'Login karein',

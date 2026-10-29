@@ -172,7 +172,7 @@ export default function Today() {
 
           {/* Ask the AI helper */}
           <View style={{ paddingHorizontal: 14, marginTop: -20, gap: 8 }}>
-            <Pressable onPress={() => router.push('/assistant')} accessibilityRole="button" accessibilityLabel={t('aiHelper')}
+            <Pressable onPress={() => router.replace('/assistant')} accessibilityRole="button" accessibilityLabel={t('aiHelper')}
               style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.card, borderRadius: 18, paddingVertical: 11, paddingHorizontal: 12,
                 borderWidth: 1, borderColor: C.border, elevation: 4, shadowColor: C.ink, shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } }, pressed && { opacity: 0.9 }]}>
               <View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.purpleSoft, alignItems: 'center', justifyContent: 'flex-end', overflow: 'hidden' }}>
@@ -184,7 +184,7 @@ export default function Today() {
               </View>
             </Pressable>
             {data.tip ? (
-              <Pressable onPress={() => router.push('/assistant')} style={{ flexDirection: 'row', gap: 10, backgroundColor: C.purpleSoft, borderRadius: 16, padding: 12 }}>
+              <Pressable onPress={() => router.replace('/assistant')} style={{ flexDirection: 'row', gap: 10, backgroundColor: C.purpleSoft, borderRadius: 16, padding: 12 }}>
                 <Icon name="sparkle" size={16} color={C.purple} />
                 <View style={{ flex: 1, gap: 2 }}>
                   <T style={{ color: C.purple, fontWeight: '800', fontSize: 13 }}>{t('aiTipToday')} · {data.tip.title}</T>

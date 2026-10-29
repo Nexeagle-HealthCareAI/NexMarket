@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text,
+  ActivityIndicator, Animated, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text,
   TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -221,12 +221,14 @@ export function ToastHost() {
 }
 
 // ─── Bottom navigation with the centre "+" ───
-const TABS: { path: string; icon: IconName; key: 'tabToday' | 'tabPartners' | 'tabPatients' | 'tabMe' }[] = [
+const TABS: { path: string; icon: IconName | 'vita'; key: 'tabToday' | 'tabPartners' | 'tabVita' | 'tabPatients' | 'tabMe' }[] = [
   { path: '/today', icon: 'home', key: 'tabToday' },
   { path: '/followups', icon: 'users', key: 'tabPartners' },
+  { path: '/assistant', icon: 'vita', key: 'tabVita' },
   { path: '/patients', icon: 'patients', key: 'tabPatients' },
   { path: '/me', icon: 'user', key: 'tabMe' },
 ];
+const VITA_TAB = require('../../assets/mascot/think.webp');
 export function BottomNav() {
   const t = useT();
   const path = usePathname();
@@ -236,8 +238,13 @@ export function BottomNav() {
     return (
       <Pressable key={tab.path} accessibilityRole="tab" accessibilityState={{ selected: active }} style={s.tab}
         onPress={() => { if (!active) router.replace(tab.path as never); }}>
-        <Icon name={tab.icon} size={22} color={active ? C.blue : C.muted} />
-        <T style={[s.tabText, active && { color: C.blue, fontWeight: '700' }]}>{t(tab.key)}</T>
+        {tab.icon === 'vita' ? (
+          <View style={{ width: 28, height: 28, borderRadius: 14, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end',
+            backgroundColor: active ? C.purpleSoft : C.line, borderWidth: active ? 2 : 0, borderColor: C.purple }}>
+            <Image source={VITA_TAB} style={{ width: 24, height: 30 }} resizeMode="contain" />
+          </View>
+        ) : <Icon name={tab.icon} size={22} color={active ? C.blue : C.muted} />}
+        <T style={[s.tabText, active && { color: tab.icon === 'vita' ? C.purple : C.blue, fontWeight: '700' }]} numberOfLines={1}>{t(tab.key)}</T>
       </Pressable>
     );
   };
@@ -253,6 +260,7 @@ export function BottomNav() {
       </View>
       {item(TABS[2])}
       {item(TABS[3])}
+      {item(TABS[4])}
     </View>
   );
 }
@@ -288,6 +296,6 @@ export const s = StyleSheet.create({
   toast: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: C.ink, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 999 },
   nav: { flexDirection: 'row', backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border, paddingTop: 6 },
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 52 },
-  tabText: { fontSize: 12, color: C.muted, fontWeight: '600' },
+  tabText: { fontSize: 11, color: C.muted, fontWeight: '600' },
   fab: { width: 58, height: 58, borderRadius: 29, backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center', marginTop: -26, borderWidth: 4, borderColor: C.bg, elevation: 4, shadowColor: '#0a72d6', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
 });

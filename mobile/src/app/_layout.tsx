@@ -36,6 +36,7 @@ function Gate() {
         <Stack.Screen name="followups" options={{ animation: 'none' }} />
         <Stack.Screen name="patients" options={{ animation: 'none' }} />
         <Stack.Screen name="me" options={{ animation: 'none' }} />
+        <Stack.Screen name="assistant" options={{ animation: 'none' }} />
         <Stack.Screen name="add" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
       </Stack>
       <ToastHost />

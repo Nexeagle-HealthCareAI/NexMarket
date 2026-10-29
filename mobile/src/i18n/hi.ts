@@ -39,6 +39,7 @@ const hi: Strings = {
   tabPartners: 'साथी',
   tabPatients: 'मरीज',
   tabMe: 'मैं',
+  tabVita: 'Vita',
   addAnything: 'जोड़ें: साथी, मरीज, विज़िट',
 
   login: 'लॉग इन करें',

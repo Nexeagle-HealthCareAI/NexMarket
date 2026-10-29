@@ -40,6 +40,7 @@ const bn: Strings = {
   tabPartners: 'সাথী',
   tabPatients: 'রোগী',
   tabMe: 'আমি',
+  tabVita: 'Vita',
   addAnything: 'যোগ করুন: সাথী, রোগী, ভিজিট',
 
   login: 'লগ ইন করুন',

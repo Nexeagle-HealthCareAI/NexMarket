@@ -42,6 +42,7 @@ const en = {
   tabPartners: 'Partners',
   tabPatients: 'Patients',
   tabMe: 'Me',
+  tabVita: 'Vita',
   addAnything: 'Add: partner, patient, visit',
 
   // Login
