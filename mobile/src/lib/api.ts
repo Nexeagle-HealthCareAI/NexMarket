@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { Dimensions } from 'react-native';
 import { API_URL } from './config';
 
 /**
@@ -19,6 +20,17 @@ export class ApiError extends Error {
 export class OfflineError extends Error {}
 
 let access: string | null = null;
+
+/** One sign-in per kind of device (one phone, one tablet, one laptop). Big screens count as tablets. */
+export function deviceKind(): 'phone' | 'tablet' {
+  const { width, height } = Dimensions.get('screen');
+  return Math.min(width, height) >= 600 ? 'tablet' : 'phone';
+}
+
+// Why the server ended this phone's session, shown once on the sign-in screen.
+let endedReason: string | null = null;
+export const signedOutReason = () => endedReason;
+export const clearSignedOutReason = () => { endedReason = null; };
 let refreshing: Promise<boolean> | null = null;
 let onSignedOut: (() => void) | null = null;
 
@@ -63,6 +75,7 @@ async function raw(path: string, init: RequestInit & { timeoutMs?: number } = {}
       headers: {
         Accept: 'application/json',
         'X-Client': 'mobile',
+        'X-Device-Type': deviceKind(),
         ...(init.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
         ...(access ? { Authorization: `Bearer ${access}` } : {}),
         ...(init.headers ?? {}),
@@ -97,6 +110,10 @@ async function refresh(): Promise<boolean> {
     body: JSON.stringify({ agentId, deviceId, refreshToken }),
     headers: { Authorization: '' },
   });
+  if (res.status === 401) {
+    const why = await readError(res);
+    if (/^(You were signed out|Your password|An admin)/.test(why)) endedReason = why;
+  }
   if (!res.ok) return false;
   const j = (await res.json()) as { accessToken?: string; refreshToken?: string };
   if (!j.accessToken) return false;
@@ -155,6 +172,7 @@ export async function login(userId: string, password: string, deviceId: string):
     throw new ApiError(500, 'The server did not return a mobile session. Update the API.');
   }
   pending = j.mustChangePassword ? password : null;
+  endedReason = null;
   await saveTokens(j.accessToken, j.refreshToken);
   await SecureStore.setItemAsync(K_AGENT, j.agentId);
   await SecureStore.setItemAsync(K_DEVICE, j.deviceId || deviceId);

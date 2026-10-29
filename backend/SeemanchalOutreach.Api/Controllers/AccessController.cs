@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using SeemanchalOutreach.Api.Services;
 using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
@@ -26,11 +28,40 @@ namespace SeemanchalOutreach.Api.Controllers
 
         private readonly IMarketingDbContext _db;
         private readonly IPermissionService _perms;
+        private readonly IMemoryCache _cache;
+        private readonly IAuditActor _actor;
 
-        public AccessController(IMarketingDbContext db, IPermissionService perms)
+        public AccessController(IMarketingDbContext db, IPermissionService perms, IMemoryCache cache, IAuditActor actor)
         {
             _db = db;
             _perms = perms;
+            _cache = cache;
+            _actor = actor;
+        }
+
+        /// <summary>Sign-in changes an admin makes for someone else, in the activity log under the admin's name.</summary>
+        private async Task LogAdminAsync(string agentId, string action, string what)
+        {
+            var name = await _db.Agents.AsNoTracking().Where(a => a.AgentId == agentId).Select(a => a.Name).FirstOrDefaultAsync();
+            _db.AuditLogs.Add(new AuditLog
+            {
+                ActorId = _actor.ActorId, ActorName = _actor.ActorName, ActorRole = _actor.ActorRole, Source = _actor.Source,
+                DeviceId = _actor.DeviceId, DeviceType = _actor.DeviceType, Ip = _actor.Ip, Request = _actor.Request,
+                Action = action, Entity = "Sign-in", EntityId = agentId, Summary = $"{name ?? agentId}: {what}",
+            });
+        }
+
+        /// <summary>Ends one signed-in device (for example a lost phone).</summary>
+        [HttpPost("people/{agentId}/sessions/{sessionId:guid}/sign-out")]
+        [Authorize(Roles = "Admin,admin")]
+        public async Task<IActionResult> SignOutSession(string agentId, Guid sessionId)
+        {
+            var t = await _db.AgentRefreshTokens.FirstOrDefaultAsync(x => x.Id == sessionId && x.AgentId == agentId);
+            if (t == null) return NotFound();
+            if (t.RevokedAt == null) SessionGuard.End(t, "An admin signed you out of this device. Please sign in again.", _cache);
+            await LogAdminAsync(agentId, "sign_out", $"Signed out of their {DeviceKinds.Label(t.DeviceType)} by an admin");
+            await _db.SaveChangesAsync();
+            return Ok(new { signedOut = true });
         }
 
         /// <summary>The signed-in user's role and page access — drives the dashboard menu.</summary>
@@ -117,6 +148,17 @@ namespace SeemanchalOutreach.Api.Controllers
                 .GroupBy(t => t.AgentId)
                 .Select(g => new { AgentId = g.Key, At = g.Max(t => t.CreatedAt) })
                 .ToDictionaryAsync(x => x.AgentId, x => x.At);
+            var nowUtc = DateTime.UtcNow;
+            var active = (await _db.AgentRefreshTokens.AsNoTracking()
+                    .Where(t => t.RevokedAt == null && t.ExpiresAt > nowUtc)
+                    .Select(t => new { t.Id, t.AgentId, t.DeviceType, t.CreatedAt, t.LastSeenAt, t.UserAgent, t.Ip })
+                    .ToListAsync())
+                .GroupBy(t => t.AgentId)
+                .ToDictionary(g => g.Key, g => g.OrderBy(t => t.DeviceType).Select(t => new
+                {
+                    id = t.Id, deviceType = t.DeviceType ?? DeviceKinds.Desktop, signedInAt = t.CreatedAt, lastSeenAt = t.LastSeenAt,
+                    device = DescribeAgent(t.UserAgent), t.Ip,
+                }).ToList());
 
             return Ok(people.Select(p =>
             {
@@ -136,6 +178,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     // Still on the one-time password an admin gave them (they haven't set their own yet).
                     onOneTimePassword = p.MustChangePassword,
                     lastSignIn = lastLogin.TryGetValue(p.AgentId, out var at) ? at : (DateTime?)null,
+                    // Signed in right now: at most one phone, one tablet and one laptop/desktop.
+                    sessions = active.TryGetValue(p.AgentId, out var ss) ? (object)ss : Array.Empty<object>(),
                 };
             }));
         }
@@ -145,8 +189,9 @@ namespace SeemanchalOutreach.Api.Controllers
         [Authorize(Roles = "Admin,admin")]
         public async Task<IActionResult> SignOutEverywhere(string agentId)
         {
-            var tokens = await _db.AgentRefreshTokens.Where(t => t.AgentId == agentId).ToListAsync();
-            foreach (var t in tokens) t.ExpiresAt = DateTime.UtcNow.AddSeconds(-1);
+            var tokens = await _db.AgentRefreshTokens.Where(t => t.AgentId == agentId && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow).ToListAsync();
+            foreach (var t in tokens) SessionGuard.End(t, "An admin signed you out. Please sign in again.", _cache);
+            await LogAdminAsync(agentId, "sign_out", $"Signed out of every device by an admin ({tokens.Count})");
             await _db.SaveChangesAsync();
             return Ok(new { signedOutDevices = tokens.Count });
         }
@@ -168,8 +213,9 @@ namespace SeemanchalOutreach.Api.Controllers
             var password = new string(bytes.Select(b => chars[b % chars.Length]).ToArray()) + "#" + (2 + bytes[0] % 8);
             agent.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
             agent.MustChangePassword = true;
-            var sessions = await _db.AgentRefreshTokens.Where(t => t.AgentId == agentId).ToListAsync();
-            _db.AgentRefreshTokens.RemoveRange(sessions);
+            var sessions = await _db.AgentRefreshTokens.Where(t => t.AgentId == agentId && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow).ToListAsync();
+            foreach (var t in sessions) SessionGuard.End(t, "Your password was reset by an admin. Sign in with the new password.", _cache);
+            await LogAdminAsync(agentId, "password_reset", "New one-time password given by an admin");
             await _db.SaveChangesAsync();
             return Ok(new { agent.AgentId, agent.Name, agent.Phone, password, signedOutDevices = sessions.Count });
         }
@@ -184,6 +230,18 @@ namespace SeemanchalOutreach.Api.Controllers
             agent.IsActive = value;
             await _db.SaveChangesAsync();
             return Ok(new { agent.AgentId, agent.IsActive });
+        }
+
+        /// <summary>"Chrome on Windows", "NexMarket app on Android"… from a user agent.</summary>
+        private static string? DescribeAgent(string? ua)
+        {
+            if (string.IsNullOrWhiteSpace(ua)) return null;
+            string os = ua.Contains("Windows") ? "Windows" : ua.Contains("iPad") ? "iPad" : ua.Contains("iPhone") ? "iPhone"
+                : ua.Contains("Android") ? "Android" : ua.Contains("Mac OS") ? "Mac" : ua.Contains("Linux") ? "Linux" : "";
+            if (ua.Contains("okhttp") || ua.Contains("Expo") || ua.Contains("NexMarket")) return $"NexMarket app{(os == "" ? "" : " on " + os)}";
+            string br = ua.Contains("Edg/") ? "Edge" : ua.Contains("OPR/") ? "Opera" : ua.Contains("Chrome/") ? "Chrome"
+                : ua.Contains("Firefox/") ? "Firefox" : ua.Contains("Safari/") ? "Safari" : "Browser";
+            return os == "" ? br : $"{br} on {os}";
         }
     }
 }

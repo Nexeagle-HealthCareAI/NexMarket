@@ -12,10 +12,12 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
+using SeemanchalOutreach.Api.Services;
 
 namespace SeemanchalOutreach.Api.Controllers
 {
@@ -65,11 +67,13 @@ namespace SeemanchalOutreach.Api.Controllers
 
         private readonly IMarketingDbContext _db;
         private readonly IConfiguration _config;
+        private readonly IMemoryCache _cache;
 
-        public AuthController(IMarketingDbContext db, IConfiguration config)
+        public AuthController(IMarketingDbContext db, IConfiguration config, IMemoryCache cache)
         {
             _db = db;
             _config = config;
+            _cache = cache;
         }
 
         /// <summary>The NexEagle Field phone app sends "X-Client: mobile".</summary>
@@ -101,10 +105,26 @@ namespace SeemanchalOutreach.Api.Controllers
                 ? Guid.NewGuid().ToString()
                 : request.DeviceId;
 
-            string refreshToken = await IssueRefreshTokenAsync(agent.AgentId, deviceId, cancellationToken);
+            // One sign-in per kind of device: a new sign-in on a phone ends the earlier phone session
+            // (same for tablet, and for laptop/desktop). The other kinds stay signed in.
+            string deviceType = DeviceKinds.Detect(Request);
+            var replaced = await _db.AgentRefreshTokens
+                .Where(t => t.AgentId == agent.AgentId && t.DeviceId != deviceId && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
+                .Where(t => t.DeviceType == deviceType || (t.DeviceType == null && deviceType == DeviceKinds.Desktop && !IsMobileClient))
+                .ToListAsync(cancellationToken);
+            foreach (var old in replaced)
+            {
+                SessionGuard.End(old, $"You were signed out because this account signed in on another {DeviceKinds.Label(deviceType)}.", _cache);
+                _db.AuditLogs.Add(AuthAudit.Event(HttpContext, agent, "session_replaced",
+                    $"Earlier {DeviceKinds.Label(deviceType)} session ended by a new sign-in", old.DeviceId, deviceType));
+            }
+
+            var (refreshToken, session) = await IssueRefreshTokenAsync(agent.AgentId, deviceId, cancellationToken);
+            session.DeviceType = deviceType;
+            _db.AuditLogs.Add(AuthAudit.Event(HttpContext, agent, "sign_in", $"Signed in on a {DeviceKinds.Label(deviceType)}", deviceId, deviceType));
             await _db.SaveChangesAsync(cancellationToken);
 
-            string jwt = GenerateJwt(agent);
+            string jwt = GenerateJwt(agent, session);
             SetAuthCookies(jwt, refreshToken);
 
             return Ok(new
@@ -115,6 +135,8 @@ namespace SeemanchalOutreach.Api.Controllers
                 district = agent.District,
                 block = agent.Block,
                 deviceId,
+                deviceType,
+                signedOutElsewhere = replaced.Count,
                 profileCompleted = agent.ProfileCompleted,
                 mustChangePassword = agent.MustChangePassword,
                 // The phone app has no cookie jar it can trust across restarts: it keeps both
@@ -149,6 +171,13 @@ namespace SeemanchalOutreach.Api.Controllers
             var session = await _db.AgentRefreshTokens.FirstOrDefaultAsync(
                 t => t.AgentId == request.AgentId && t.DeviceId == request.DeviceId, cancellationToken);
 
+            if (session != null && session.RevokedAt != null && !string.IsNullOrEmpty(session.RevokedReason))
+            {
+                // Tell the device why, so it can show it on the sign-in screen.
+                Response.Headers["X-Session-Ended"] = "replaced";
+                return Unauthorized(session.RevokedReason);
+            }
+
             if (session == null
                 || session.ExpiresAt < DateTime.UtcNow
                 || session.TokenHash != HashToken(refreshTokenCookie))
@@ -156,10 +185,11 @@ namespace SeemanchalOutreach.Api.Controllers
                 return Unauthorized("Refresh token is invalid or expired — sign in again.");
             }
 
-            string newRefreshToken = await IssueRefreshTokenAsync(agent.AgentId, request.DeviceId, cancellationToken); // rotate — the old token can't be reused
+            session.DeviceType ??= DeviceKinds.Detect(Request);
+            var (newRefreshToken, _) = await IssueRefreshTokenAsync(agent.AgentId, request.DeviceId, cancellationToken); // rotate — the old token can't be reused
             await _db.SaveChangesAsync(cancellationToken);
 
-            string newJwt = GenerateJwt(agent);
+            string newJwt = GenerateJwt(agent, session);
             SetAuthCookies(newJwt, newRefreshToken);
 
             return Ok(new
@@ -202,9 +232,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 var hash = HashToken(refreshTokenCookie);
                 var session = await _db.AgentRefreshTokens
                     .FirstOrDefaultAsync(t => t.AgentId == agentId && t.TokenHash == hash, cancellationToken);
+                var me = await _db.Agents.AsNoTracking().FirstOrDefaultAsync(a => a.AgentId == agentId, cancellationToken);
                 if (session != null)
                 {
-                    _db.AgentRefreshTokens.Remove(session);
+                    // Keep the row (as sign-in history); it just can't be used any more.
+                    SessionGuard.End(session, "You signed out.", _cache);
+                    if (me != null) _db.AuditLogs.Add(AuthAudit.Event(HttpContext, me, "sign_out", $"Signed out on a {DeviceKinds.Label(session.DeviceType)}", session.DeviceId, session.DeviceType));
                     await _db.SaveChangesAsync(cancellationToken);
                 }
             }
@@ -242,9 +275,9 @@ namespace SeemanchalOutreach.Api.Controllers
             // using it for up to 30 more days regardless of the password change. The
             // device making this request will simply get a new one on its next login.
             var existingSessions = await _db.AgentRefreshTokens
-                .Where(t => t.AgentId == agentId)
+                .Where(t => t.AgentId == agentId && t.RevokedAt == null)
                 .ToListAsync(cancellationToken);
-            _db.AgentRefreshTokens.RemoveRange(existingSessions);
+            foreach (var s in existingSessions) SessionGuard.End(s, "Your password was changed. Please sign in with the new password.", _cache);
 
             await _db.SaveChangesAsync(cancellationToken);
 
@@ -256,7 +289,7 @@ namespace SeemanchalOutreach.Api.Controllers
             return Ok(new { message = "Password updated." });
         }
 
-        private async Task<string> IssueRefreshTokenAsync(string agentId, string deviceId, CancellationToken cancellationToken)
+        private async Task<(string Token, AgentRefreshToken Session)> IssueRefreshTokenAsync(string agentId, string deviceId, CancellationToken cancellationToken)
         {
             string token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
                 .Replace('+', '-').Replace('/', '_').TrimEnd('=');
@@ -271,7 +304,14 @@ namespace SeemanchalOutreach.Api.Controllers
 
             session.TokenHash = HashToken(token);
             session.ExpiresAt = DateTime.UtcNow.AddDays(RefreshTokenDays);
-            return token;
+            session.RevokedAt = null;
+            session.RevokedReason = null;
+            session.LastSeenAt = DateTime.UtcNow;
+            session.Ip = DeviceKinds.Ip(HttpContext);
+            var ua = Request.Headers.UserAgent.ToString();
+            session.UserAgent = ua.Length > 300 ? ua[..300] : ua;
+            SessionGuard.Forget(_cache, session.Id);
+            return (token, session);
         }
 
         private static string HashToken(string token)
@@ -314,7 +354,7 @@ namespace SeemanchalOutreach.Api.Controllers
             Response.Cookies.Delete(AuthCookies.RefreshToken, new CookieOptions { Path = "/api/v1/auth" });
         }
 
-        private string GenerateJwt(FieldAgent agent)
+        private string GenerateJwt(FieldAgent agent, AgentRefreshToken session)
         {
             var signingKey = _config["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is not configured.");
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey));
@@ -329,6 +369,11 @@ namespace SeemanchalOutreach.Api.Controllers
                 new Claim("agentId", agent.AgentId),
                 new Claim(ClaimTypes.Name, agent.Name),
                 new Claim(ClaimTypes.Role, agent.Role),
+                // Which session this token belongs to: checked on every request, so a session
+                // replaced by a newer sign-in stops working straight away.
+                new Claim("sid", session.Id.ToString()),
+                new Claim("did", session.DeviceId),
+                new Claim("dtype", session.DeviceType ?? DeviceKinds.Desktop),
             };
 
             var token = new JwtSecurityToken(

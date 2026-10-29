@@ -320,6 +320,28 @@ export interface UpdatePanchayatRequest {
 // context issued the request.
 const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' };
 
+/**
+ * One sign-in per kind of device: the server keeps at most one laptop/desktop, one tablet and one phone
+ * signed in per person. Tell it which kind this browser is (an iPad's Safari says "Macintosh", so touch decides).
+ */
+export function deviceKind(): 'desktop' | 'tablet' | 'phone' {
+  if (typeof window === 'undefined') return 'desktop';
+  const ua = navigator.userAgent;
+  const touch = (navigator.maxTouchPoints ?? 0) > 1;
+  const short = Math.min(window.screen?.width ?? 0, window.screen?.height ?? 0);
+  if (/iPad|Tablet/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua)) || (touch && /Macintosh/.test(ua))) return 'tablet';
+  if (/Mobi|iPhone|Android/i.test(ua)) return touch && short >= 600 ? 'tablet' : 'phone';
+  return 'desktop';
+}
+
+/** Why this browser was signed out (for example a newer sign-in on another laptop), shown on the sign-in page. */
+export const SIGNED_OUT_KEY = 'nx-signed-out-reason';
+function rememberSignedOutReason(text: string) {
+  const t = text.trim().replace(/^"|"$/g, '');
+  if (!/^(You were signed out|Your password|An admin|You signed out)/.test(t)) return;
+  try { sessionStorage.setItem(SIGNED_OUT_KEY, t); } catch { /* storage off */ }
+}
+
 // Fired when a 401 survives a refresh attempt — i.e. the session is truly
 // gone, not just a stale access token. Registered once by the app shell
 // (agent/admin layouts) to clear local state and bounce to /login, since
@@ -346,10 +368,11 @@ async function refreshSession(): Promise<boolean> {
 
         const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
           method: 'POST',
-          headers: JSON_HEADERS,
+          headers: { ...JSON_HEADERS, 'X-Device-Type': deviceKind() },
           credentials: 'include',
           body: JSON.stringify({ agentId, deviceId }),
         });
+        if (res.status === 401) rememberSignedOutReason(await res.text().catch(() => ''));
         return res.ok;
       } catch {
         return false;
@@ -370,6 +393,7 @@ async function refreshSession(): Promise<boolean> {
 // password, not an expired session, and retrying /auth/refresh on its own
 // 401 would just recurse forever.
 async function doFetch(path: string, init: RequestInit, isAuthEndpoint = false): Promise<Response> {
+  if (path.startsWith('/api/v1/auth/')) init = { ...init, headers: { ...(init.headers as Record<string, string> | undefined), 'X-Device-Type': deviceKind() } };
   let res = await fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' });
 
   if (res.status === 401 && !isAuthEndpoint) {

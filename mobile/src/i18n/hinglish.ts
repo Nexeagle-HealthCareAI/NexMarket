@@ -49,6 +49,7 @@ const hinglish: Strings = {
   forgotPassword: 'Password bhool gaye? Supervisor ko call karein.',
   worksOffline: 'Pehli baar login ke baad bina network bhi chalta hai',
   loginFailed: 'Agent ID ya password galat hai.',
+  signedOutElsewhere: 'Aapka account kisi doosre phone ya tablet par login hua, isliye yahan se sign out ho gaya. Ek time par ek phone, ek tablet aur ek laptop par hi login reh sakta hai.',
   loginOffline: 'Internet nahi hai. Pehli baar login ke liye signal chahiye.',
   signingIn: 'Login ho raha hai…',
   firstSync: 'Aapke saathi aur panchayat download ho rahe hain…',

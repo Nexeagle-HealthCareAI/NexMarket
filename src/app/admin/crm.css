@@ -602,3 +602,53 @@
 .crm .us-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; }
 .crm .us-copy { border: 0; background: transparent; color: var(--text-3); cursor: pointer; padding: 2px; display: inline-grid; place-items: center; }
 .crm .us-copy:hover { color: var(--accent); }
+
+/* ─── Activity log ─────────────────────────────────────────────── */
+.au-filters { display: grid; gap: 12px; margin-bottom: 16px; }
+.au-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 12px; padding: 0 6px 0 12px; background: #fff; }
+.au-search .crm-input { border: 0; box-shadow: none; padding-left: 0; }
+.au-search .crm-input:focus { box-shadow: none; }
+.au-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1100px) { .au-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .au-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.au-table td { vertical-align: top; }
+.au-day td { background: var(--grey-soft, #f4f6fa); font-size: 12px; font-weight: 800; letter-spacing: .02em; color: var(--text-2); text-transform: uppercase; padding-top: 8px; padding-bottom: 8px; }
+.au-item { cursor: pointer; }
+.au-item:hover td { background: #f8fafd; }
+.au-item[aria-expanded='true'] td { background: #f2f7fd; }
+.au-detail td { background: #f8fafd; padding-top: 4px; }
+.au-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.au-who strong { display: block; }
+.au-dev { display: inline-flex; align-items: center; gap: 3px; }
+.au-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; word-break: break-all; }
+.au-diff { background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 4px 0 10px; }
+.au-diff td, .au-diff th { padding: 8px 12px; font-size: 13px; }
+.au-diff td:first-child { font-weight: 600; white-space: nowrap; width: 1%; }
+.au-from { color: #9b2c2c; text-decoration: line-through; text-decoration-color: rgba(155, 44, 44, .4); word-break: break-word; }
+.au-to { color: #0b6b47; font-weight: 600; word-break: break-word; }
+.au-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 12px; color: var(--text-2); }
+.au-meta .crm-btn { margin-left: auto; }
+.au-timeline { list-style: none; margin: 0; padding: 0 0 0 18px; border-left: 2px solid var(--line); display: grid; gap: 16px; }
+.au-timeline li { position: relative; display: grid; gap: 8px; }
+.au-timeline li::before { content: ''; position: absolute; left: -25px; top: 6px; width: 12px; height: 12px; border-radius: 999px; background: var(--accent); border: 2px solid #fff; box-shadow: 0 0 0 2px var(--line); }
+.au-tl-head { display: flex; gap: 10px; align-items: center; }
+
+/* Signed-in devices on Users & roles */
+.us-devs { display: flex; flex-wrap: wrap; gap: 6px; }
+.us-dev { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 999px; background: #eaf6ef; color: #0b6b47; font-size: 12px; font-weight: 600; border: 1px solid #cdebd9; }
+.us-dev button { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 2px; border-radius: 999px; display: inline-flex; }
+.us-dev button:hover { background: rgba(11, 107, 71, .12); }
+.crm-avatar.is-sm { width: 30px; height: 30px; font-size: 12px; background: #5a6478; }
+@media (max-width: 640px) {
+  .au-table { min-width: 0 !important; }
+  .au-table, .au-table tbody { display: block; width: 100%; }
+  .au-table thead { display: none; }
+  .au-table tr { display: grid; grid-template-columns: 22px 72px minmax(0, 1fr); border-bottom: 1px solid var(--line); }
+  .au-table td { border-bottom: 0 !important; padding: 8px 6px; }
+  .au-item td:nth-child(4), .au-item td:nth-child(5) { grid-column: 3 / -1; padding-top: 0; }
+  .au-day { display: block !important; }
+  .au-day td { display: block; }
+  .au-detail td:first-child { display: none; }
+  .au-detail td { grid-column: 1 / -1; }
+  .au-meta .crm-btn { margin-left: 0; }
+}

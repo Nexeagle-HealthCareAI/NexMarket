@@ -1,14 +1,17 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Copy, KeyRound, Lock, MessageCircle, MessageSquare, Send, Smartphone, UserPlus } from 'lucide-react';
+import { Copy, History, KeyRound, Laptop, Lock, MessageCircle, MessageSquare, Send, Smartphone, Tablet, UserPlus, X } from 'lucide-react';
+import Link from 'next/link';
 import { crm } from '@/lib/sync/api-client';
 import { useAccess, type PageKey } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 
 interface RoleInfo { role: string; label: string; users: number; editable: boolean; pages: Record<PageKey, number> }
 interface RolesResponse { pages: PageKey[]; roles: RoleInfo[]; fieldAgents: number }
-interface Person { agentId: string; name: string; phone: string; email?: string | null; role: string; kind: 'field' | 'dashboard'; district: string; block: string; isActive: boolean; lastSignIn?: string | null; onOneTimePassword?: boolean }
+interface Person { agentId: string; name: string; phone: string; email?: string | null; role: string; kind: 'field' | 'dashboard'; district: string; block: string; isActive: boolean; lastSignIn?: string | null; onOneTimePassword?: boolean; sessions?: Session[] }
+interface Session { id: string; deviceType: 'desktop' | 'tablet' | 'phone'; signedInAt: string; lastSeenAt?: string | null; device?: string | null; ip?: string | null }
+const DEV = { desktop: { label: 'Laptop', icon: Laptop }, tablet: { label: 'Tablet', icon: Tablet }, phone: { label: 'Phone', icon: Smartphone } } as const;
 
 const PAGE_LABELS: Record<PageKey, string> = {
   dashboard: 'Command centre', calls: 'Daily calls', desk: 'Referral desk', pipeline: 'Referral pipeline', partners: 'Partners',
@@ -84,7 +87,11 @@ export default function UsersPage() {
   const visiblePeople = useMemo(() => (people.data ?? []).filter((p) => kindFilter === 'all' || p.kind === kindFilter), [people.data, kindFilter]);
 
   const signOut = async (p: Person) => {
-    try { const r = await crm.post<{ signedOutDevices: number }>(`/api/v1/access/people/${encodeURIComponent(p.agentId)}/sign-out`); showToast(`${p.name} signed out of ${r.signedOutDevices} device(s).`); }
+    try { const r = await crm.post<{ signedOutDevices: number }>(`/api/v1/access/people/${encodeURIComponent(p.agentId)}/sign-out`); showToast(`${p.name} signed out of ${r.signedOutDevices} device(s).`); void people.reload(); }
+    catch (e) { showToast(friendlyError(e)); }
+  };
+  const signOutOne = async (p: Person, sx: Session) => {
+    try { await crm.post(`/api/v1/access/people/${encodeURIComponent(p.agentId)}/sessions/${sx.id}/sign-out`); showToast(`${p.name} signed out of their ${DEV[sx.deviceType]?.label.toLowerCase() ?? 'device'}.`); void people.reload(); }
     catch (e) { showToast(friendlyError(e)); }
   };
   const setActive = async (p: Person, value: boolean) => {
@@ -175,7 +182,7 @@ export default function UsersPage() {
         {!people.data ? <div style={{ padding: '0 22px 16px' }}><Skeleton h={200} /></div> : visiblePeople.length === 0 ? <Empty title="Nobody here yet" /> : (
           <div className="crm-table-wrap">
             <table className="crm-table" style={{ minWidth: 760 }}>
-              <thead><tr><th>Person</th><th>Role</th><th>Works in</th><th>Last sign-in</th><th className="num">Actions</th></tr></thead>
+              <thead><tr><th>Person</th><th>Role</th><th>Signed in now</th><th>Last sign-in</th><th className="num">Actions</th></tr></thead>
               <tbody>
                 {visiblePeople.map((p) => (
                   <tr key={p.agentId} style={p.isActive ? undefined : { opacity: 0.55 }}>
@@ -193,7 +200,24 @@ export default function UsersPage() {
                       </div>
                     </td>
                     <td><Pill tone={p.kind === 'field' ? 'warn' : ROLE_TONE[p.role] ?? 'accent'}>{ROLE_NAME[p.role] ?? p.role}</Pill></td>
-                    <td style={{ color: 'var(--text-2)' }}>{p.kind === 'field' ? 'Android app' : 'Dashboard'}</td>
+                    <td>
+                      {(p.sessions ?? []).length === 0 ? <span className="crm-cell-sub">Not signed in</span> : (
+                        <span className="us-devs">
+                          {(p.sessions ?? []).map((sx) => {
+                            const D = DEV[sx.deviceType] ?? DEV.desktop;
+                            return (
+                              <span key={sx.id} className="us-dev" title={`${sx.device ?? D.label} · signed in ${fmt.dateTime(sx.signedInAt)}${sx.lastSeenAt ? ` · last active ${fmt.dateTime(sx.lastSeenAt)}` : ''}${sx.ip ? ` · IP ${sx.ip}` : ''}`}>
+                                <D.icon size={13} aria-hidden /> {D.label}
+                                {isAdmin && p.agentId !== access?.agentId && (
+                                  <button type="button" aria-label={`Sign ${p.name} out of their ${D.label.toLowerCase()}`} onClick={() => void signOutOne(p, sx)}><X size={12} /></button>
+                                )}
+                              </span>
+                            );
+                          })}
+                        </span>
+                      )}
+                      <div className="crm-cell-sub">{p.kind === 'field' ? 'Field app' : 'Dashboard'}</div>
+                    </td>
                     <td style={{ color: 'var(--text-2)' }}>
                       {p.lastSignIn ? fmt.dateTime(p.lastSignIn) : 'Never'}
                       <div className="crm-cell-sub" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -206,6 +230,7 @@ export default function UsersPage() {
                           <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setSending({ person: p })} title="Send their user ID"><Send size={14} aria-hidden /> Send login</button>
                           <button type="button" className="crm-btn is-sm" onClick={() => void resetPassword(p)} title="New one-time password"><KeyRound size={14} aria-hidden /> Reset &amp; send password</button>
                           <button type="button" className="crm-btn is-secondary is-sm" onClick={() => signOut(p)}>Sign out devices</button>
+                          <Link className="crm-btn is-secondary is-sm" href={`/admin/audit?actor=${encodeURIComponent(p.agentId)}`} title="Everything this person did"><History size={14} aria-hidden /> Activity</Link>
                           <button type="button" className={`crm-btn is-sm ${p.isActive ? 'is-danger' : 'is-secondary'}`} onClick={() => setActive(p, !p.isActive)}>{p.isActive ? 'Deactivate' : 'Reactivate'}</button>
                         </span>
                       )}

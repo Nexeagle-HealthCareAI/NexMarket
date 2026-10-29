@@ -54,6 +54,14 @@ namespace SeemanchalOutreach.Domain.Entities
         public string TokenHash { get; set; } = string.Empty;
         public DateTime ExpiresAt { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        /// <summary>desktop | tablet | phone — a user can be signed in on one of each at a time.</summary>
+        public string? DeviceType { get; set; }
+        public string? UserAgent { get; set; }
+        public string? Ip { get; set; }
+        public DateTime? LastSeenAt { get; set; }
+        /// <summary>Set when the session was ended by a newer sign-in on the same kind of device.</summary>
+        public DateTime? RevokedAt { get; set; }
+        public string? RevokedReason { get; set; }
     }
 
     public class Panchayat

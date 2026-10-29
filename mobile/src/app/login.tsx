@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Btn, Field, T } from '../components/ui';
 import { LANGS } from '../i18n';
-import { ApiError, OfflineError, pendingPasswordChange } from '../lib/api';
+import { ApiError, OfflineError, pendingPasswordChange, signedOutReason } from '../lib/api';
 import { APP_VERSION } from '../lib/config';
 import { useSession } from '../lib/session';
 import { C } from '../theme';
@@ -16,6 +16,9 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Signed out by the server: a newer sign-in on another phone, a password reset, or an admin.
+  const [ended] = useState(() => signedOutReason());
+  const endedText = ended ? (/another (phone|tablet)/.test(ended) ? t('signedOutElsewhere') : ended) : null;
 
   const submit = async () => {
     if (!userId.trim() || !password) return;
@@ -67,6 +70,11 @@ export default function Login() {
               placeholder="MKT-1001" returnKeyType="next" textContentType="username" autoComplete="username" />
             <Field label={t('password')} value={password} onChangeText={setPassword} secureTextEntry returnKeyType="go"
               onSubmitEditing={submit} textContentType="password" autoComplete="password" />
+            {endedText && !error ? (
+              <View style={{ backgroundColor: '#fff7e6', borderRadius: 12, padding: 12 }} accessibilityRole="alert">
+                <T style={{ color: '#92400e', fontWeight: '600', fontSize: 14 }}>{endedText}</T>
+              </View>
+            ) : null}
             {error ? <T style={{ color: C.bad, fontWeight: '600' }}>{error}</T> : null}
             <Btn label={busy ? t('firstSync') : t('continue')} onPress={submit} loading={busy} disabled={!userId.trim() || !password} />
             <T style={{ color: C.text2, fontSize: 13, textAlign: 'center' }}>{t('forgotPassword')}</T>

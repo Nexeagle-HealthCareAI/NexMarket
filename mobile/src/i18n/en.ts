@@ -53,6 +53,7 @@ const en = {
   forgotPassword: 'Forgot your password? Call your supervisor.',
   worksOffline: 'Works offline after first sign-in',
   loginFailed: 'Wrong agent ID or password.',
+  signedOutElsewhere: 'You were signed out because your account signed in on another phone or tablet. One phone, one tablet and one laptop can be signed in at a time.',
   loginOffline: 'No internet. You need signal to sign in the first time.',
   signingIn: 'Signing in…',
   firstSync: 'Downloading your partners and panchayats…',

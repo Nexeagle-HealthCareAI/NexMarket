@@ -24,6 +24,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Add Clean Architecture layers
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+// Activity log: every saved change is stamped with the signed-in person and their device.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<SeemanchalOutreach.Application.Interfaces.IAuditActor, SeemanchalOutreach.Api.Services.HttpAuditActor>();
 
 // Add Controllers & SignalR
 builder.Services.AddControllers();
@@ -97,7 +100,26 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 }
 
                 return Task.CompletedTask;
-            }
+            },
+
+            // One sign-in per kind of device: a token whose session was replaced by a newer sign-in
+            // (or signed out, or reset by an admin) stops working within seconds, not when it expires.
+            // Tokens issued before sessions were tracked carry no "sid" and keep working until they expire.
+            OnTokenValidated = async context =>
+            {
+                var sid = context.Principal?.FindFirst("sid")?.Value;
+                if (string.IsNullOrEmpty(sid)) return;
+                var sp = context.HttpContext.RequestServices;
+                var reason = await SeemanchalOutreach.Api.Services.SessionGuard.EndedReasonAsync(
+                    sp.GetRequiredService<SeemanchalOutreach.Application.Interfaces.IMarketingDbContext>(),
+                    sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+                    sid, context.HttpContext.RequestAborted);
+                if (reason != null)
+                {
+                    context.Response.Headers["X-Session-Ended"] = "replaced";
+                    context.Fail(reason);
+                }
+            },
         };
     });
 
