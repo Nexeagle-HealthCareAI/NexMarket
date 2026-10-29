@@ -361,6 +361,21 @@ const bn: Strings = {
   aiSuggest3: "আমার ব্লকের মানুষের সবচেয়ে বেশি কী দরকার?",
   aiSuggest4: "সোমবার কোন ডাক্তার বসেন?",
   aiSuggest5: "এই মাসে আমার কাজ কেমন হচ্ছে?",
+
+  // Tasks from the manager
+  tasksFromManager: "ম্যানেজারের দেওয়া কাজ",
+  tasksDoneToday: "আজ {n}টি শেষ",
+  taskOverdue: "{n} দিন দেরি",
+  taskDueToday: "আজকের মধ্যে",
+  taskDueTomorrow: "কালকের মধ্যে",
+  taskDueOn: "{date}-এর মধ্যে",
+  taskUrgent: "জরুরি",
+  taskFrom: "{name}-এর থেকে",
+  taskWhere: "কোথায়",
+  taskNote: "আপনি কী করলেন?",
+  taskNoteHint: "চাইলে: কার সাথে দেখা হল, কী হল",
+  taskMarkDone: "শেষ হয়েছে",
+  taskDoneSaved: "কাজ শেষ · ম্যানেজারকে পাঠানো হয়েছে",
 };
 
 export default bn;

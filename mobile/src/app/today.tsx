@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Avatar, BottomNav, Btn, Empty, Pill, T } from '../components/ui';
 import { Icon } from '../components/Icon';
+import { TasksSection } from '../components/TaskCard';
 import { LanguageButton, LanguageSheet } from '../components/LanguageSheet';
 import { useDb, useSession, useSync } from '../lib/session';
 import { db, q } from '../lib/db';
@@ -113,6 +114,9 @@ export default function Today() {
               <Stat n={data.week.admitted ?? 0} label={t('admitted')} color={C.okInk} />
             </View>
           </View>
+
+          {/* Tasks from the manager */}
+          <TasksSection />
 
           {/* AI helper */}
           <Pressable onPress={() => router.push('/assistant')}

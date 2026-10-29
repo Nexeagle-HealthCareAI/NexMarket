@@ -360,6 +360,21 @@ const hi: Strings = {
   aiSuggest3: "मेरे ब्लॉक में लोगों को सबसे ज़्यादा क्या चाहिए?",
   aiSuggest4: "सोमवार को कौन से डॉक्टर बैठते हैं?",
   aiSuggest5: "इस महीने मेरा काम कैसा है?",
+
+  // Tasks from the manager
+  tasksFromManager: "मैनेजर से काम",
+  tasksDoneToday: "आज {n} पूरे",
+  taskOverdue: "{n} दिन देर",
+  taskDueToday: "आज तक",
+  taskDueTomorrow: "कल तक",
+  taskDueOn: "{date} तक",
+  taskUrgent: "ज़रूरी",
+  taskFrom: "{name} से",
+  taskWhere: "कहाँ",
+  taskNote: "आपने क्या किया?",
+  taskNoteHint: "चाहें तो: किससे मिले, क्या हुआ",
+  taskMarkDone: "पूरा हुआ",
+  taskDoneSaved: "काम पूरा · मैनेजर को भेजा गया",
 };
 
 export default hi;

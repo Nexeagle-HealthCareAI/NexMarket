@@ -56,6 +56,82 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.ToTable("agent_refresh_tokens", "marketing");
                 });
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.AgentTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("AiItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Block")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactClientId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Detail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("District")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DoneAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DoneNote")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PanchayatIdsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("SeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "Status");
+
+                    b.HasIndex("District", "Block");
+
+                    b.HasIndex("GroupId");
+
+                    b.ToTable("agent_tasks", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.AiBriefing", b =>
                 {
                     b.Property<Guid>("Id")

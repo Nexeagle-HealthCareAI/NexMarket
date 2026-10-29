@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Bot, Send, Sparkles } from 'lucide-react';
+import { Bot, ClipboardCheck, Send, Sparkles } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, Pill, Skeleton, useLoader, useToast, type Tone } from '@/components/crm/ui';
+import { TaskModal, type TaskPreset } from '@/components/crm/Tasks';
 
 interface Finding { key: string; title: string; detail: string; area: string; metric: string; severity: 'high' | 'medium' | 'low' }
 interface BriefingResult {
@@ -192,6 +193,9 @@ const STATUS_FILTERS: { k: string; l: string }[] = [{ k: 'active', l: 'Open' }, 
 const STATUS_LABEL: Record<ItemStatus, string> = { open: 'Open', in_progress: 'In progress', done: 'Done', dismissed: 'Dismissed' };
 
 function Tracker({ scope, editable, showToast }: { scope: string; editable: boolean; showToast: (m: string) => void }) {
+  const { access } = useAccess();
+  const canTask = canEdit(access, 'field');
+  const [taskFor, setTaskFor] = useState<TaskPreset | null>(null);
   const [filter, setFilter] = useState('active');
   const items = useLoader(() => crm.get<ItemsRes>(`/api/v1/analytics/analyst/items?status=${filter}&scope=${scope}`), [filter, scope]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -244,6 +248,12 @@ function Tracker({ scope, editable, showToast }: { scope: string; editable: bool
                     {editable ? (
                       <ItemEditor it={it} onSave={(patch) => save(it, patch)} />
                     ) : it.note ? <div className="crm-note">{it.note}</div> : null}
+                    {canTask && (it.status === 'open' || it.status === 'in_progress') && (
+                      <button type="button" className="crm-btn is-secondary is-sm" style={{ alignSelf: 'flex-start' }}
+                        onClick={() => setTaskFor({ title: it.title, detail: it.detail, dueDate: it.dueDate, aiItemId: it.id })}>
+                        <ClipboardCheck size={15} aria-hidden /> Give to field agents as a task
+                      </button>
+                    )}
                     <span className="crm-cell-sub">First raised {fmt.date(it.createdAt)} · last updated {fmt.dateTime(it.updatedAt)}</span>
                   </div>
                 )}
@@ -252,6 +262,7 @@ function Tracker({ scope, editable, showToast }: { scope: string; editable: bool
           })}
         </ul>
       )}
+      {taskFor && <TaskModal preset={taskFor} onClose={() => setTaskFor(null)} onSaved={(m) => { showToast(m); void items.reload(); }} />}
     </section>
   );
 }

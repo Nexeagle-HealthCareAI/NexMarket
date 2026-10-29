@@ -231,4 +231,31 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? AfterJson { get; set; }
         public string? Summary { get; set; }                      // e.g. "Where patients go today: Purnea → Siliguri"
     }
+
+    /// <summary>
+    /// A job given to a field agent from Block assignments ("Visit these 3 panchayats and drop referral kits").
+    /// One row per agent; tasks given to several agents at once share a GroupId.
+    /// </summary>
+    public class AgentTask
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid GroupId { get; set; }
+        public string AgentId { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string? Detail { get; set; }
+        public string Priority { get; set; } = "normal";          // high | normal | low
+        public DateOnly? DueDate { get; set; }
+        public string? District { get; set; }
+        public string? Block { get; set; }
+        public string? PanchayatIdsJson { get; set; }             // ["pid", …] — optional, panchayats in that block
+        public string? ContactClientId { get; set; }              // optional partner
+        public Guid? AiItemId { get; set; }                       // when made from an AI analyst action
+        public string Status { get; set; } = "open";              // open | done | cancelled
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? SeenAt { get; set; }                     // first time the agent's app loaded it
+        public DateTime? DoneAt { get; set; }
+        public string? DoneNote { get; set; }
+    }
 }

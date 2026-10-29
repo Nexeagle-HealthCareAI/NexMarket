@@ -2,10 +2,11 @@
 
 import { Suspense, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ClipboardCheck } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
+import { TaskList, TaskModal, type TaskPreset } from '@/components/crm/Tasks';
 
 interface BoardBlock {
   district: string; block: string; panchayats: number; assigned: number; visited30: number;
@@ -43,7 +44,11 @@ function AssignmentsPage() {
   const [onlyEmpty, setOnlyEmpty] = useState(false);
   const [toast, showToast] = useToast();
   const selected = params.get('block');
+  const view = params.get('view') === 'tasks' ? 'tasks' : 'blocks';
   const b = board.data;
+  const [taskPreset, setTaskPreset] = useState<TaskPreset | null>(null);
+  const [taskVersion, setTaskVersion] = useState(0);
+  const tasksOpen = useLoader(() => crm.get<{ counts: { open: number; overdue: number } }>('/api/v1/tasks?status=open'), [taskVersion]);
 
   const pick = (blk: BoardBlock | null) => {
     const sp = new URLSearchParams();
@@ -51,6 +56,8 @@ function AssignmentsPage() {
     if (blk) sp.set('block', key(blk));
     router.replace(`/admin/assignments${sp.toString() ? `?${sp}` : ''}`, { scroll: false });
   };
+  const setView = (v: 'blocks' | 'tasks') => router.replace(v === 'tasks' ? '/admin/assignments?view=tasks' : '/admin/assignments', { scroll: false });
+  const tc = tasksOpen.data?.counts;
 
   const rows = useMemo(() => (b?.blocks ?? [])
     .filter((x) => !district || x.district === district)
@@ -59,7 +66,22 @@ function AssignmentsPage() {
 
   return (
     <main className="crm-page">
-      <PageHead title="Block assignments" sub="Who covers which block. Give a whole block to one agent, or split its panchayats between agents. Agents see the change in the app at their next sync." />
+      <PageHead title="Block assignments" sub="Who covers which block, and what each agent should do there. Give a whole block to one agent or split its panchayats, then give tasks. Agents see changes in the app at their next sync.">
+        {editable && <button type="button" className="crm-btn" onClick={() => setTaskPreset({})}><ClipboardCheck size={16} aria-hidden /> Give a task</button>}
+      </PageHead>
+
+      <div className="crm-tabs" role="tablist" aria-label="Assignments views">
+        <button type="button" role="tab" className="crm-tab" aria-selected={view === 'blocks'} onClick={() => setView('blocks')}>Blocks</button>
+        <button type="button" role="tab" className="crm-tab" aria-selected={view === 'tasks'} onClick={() => setView('tasks')}>
+          Tasks{tc ? ` · ${tc.open} open` : ''}{tc?.overdue ? <span style={{ color: 'var(--bad)', fontWeight: 700 }}> · {tc.overdue} overdue</span> : null}
+        </button>
+      </div>
+
+      {view === 'tasks' ? (
+        <section className="crm-card" aria-label="Tasks">
+          <TaskList agents={b?.agents} editable={editable} version={taskVersion} onNew={() => setTaskPreset({})} showToast={showToast} />
+        </section>
+      ) : (<>
 
       {board.error && <ErrorBox message={board.error} onRetry={board.reload} />}
       {!b ? <Skeleton h={110} /> : (
@@ -122,17 +144,21 @@ function AssignmentsPage() {
         <aside className="crm-card grow-2 pt-panel" aria-label="Block detail" style={{ flexBasis: 400 }}>
           {sel && b ? (
             <BlockPanel key={key(sel)} blk={sel} agents={b.agents} editable={editable} onBack={() => pick(null)}
-              onSaved={(msg) => { showToast(msg); void board.reload(); }} showToast={showToast} />
-          ) : <Empty title="Pick a block">See its panchayats and who covers each one.</Empty>}
+              onSaved={(msg) => { showToast(msg); void board.reload(); }} showToast={showToast}
+              taskVersion={taskVersion} onTask={(p) => setTaskPreset({ district: sel.district, block: sel.block, ...p })} />
+          ) : <Empty title="Pick a block">See its panchayats, who covers each one, and the tasks given there.</Empty>}
         </aside>
       </div>
+      </>)}
+      {taskPreset && <TaskModal preset={taskPreset} onClose={() => setTaskPreset(null)} onSaved={(m) => { showToast(m); setTaskVersion((v) => v + 1); }} />}
       {toast}
     </main>
   );
 }
 
-function BlockPanel({ blk, agents, editable, onBack, onSaved, showToast }: {
+function BlockPanel({ blk, agents, editable, onBack, onSaved, showToast, taskVersion, onTask }: {
   blk: BoardBlock; agents: Board['agents']; editable: boolean; onBack: () => void; onSaved: (m: string) => void; showToast: (m: string) => void;
+  taskVersion: number; onTask: (p: TaskPreset) => void;
 }) {
   const d = useLoader(() => crm.get<BlockDetail>(`/api/v1/assignments/block?district=${encodeURIComponent(blk.district)}&block=${encodeURIComponent(blk.block)}`), [blk.district, blk.block]);
   const [whole, setWhole] = useState('');
@@ -220,8 +246,14 @@ function BlockPanel({ blk, agents, editable, onBack, onSaved, showToast }: {
               <option value="__none">Nobody (unassign)</option>
             </select>
             <button type="button" className="crm-btn is-sm" disabled={!to || busy} onClick={() => save(to === '__none' ? '' : to, [...checked])}>Move</button>
+            <button type="button" className="crm-btn is-secondary is-sm" onClick={() => onTask({ panchayatIds: [...checked] })}><ClipboardCheck size={15} aria-hidden /> Give a task here</button>
           </div>
         )}
+      </section>
+
+      <section aria-labelledby="bt-h" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <h3 id="bt-h" style={{ fontSize: 15, fontWeight: 800 }}>Tasks in {blk.block}</h3>
+        <TaskList compact district={blk.district} block={blk.block} editable={editable} version={taskVersion} onNew={() => onTask({})} showToast={showToast} />
       </section>
     </div>
   );
