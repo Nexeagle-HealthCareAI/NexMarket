@@ -597,3 +597,8 @@
   .crm .dt-grid td:nth-child(3), .crm .dt-grid td:nth-child(4) { grid-column: 1 / -1; }
   .crm .dt-grid td:nth-child(4):empty { display: none; }
 }
+
+/* Users: user ID chip */
+.crm .us-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; }
+.crm .us-copy { border: 0; background: transparent; color: var(--text-3); cursor: pointer; padding: 2px; display: inline-grid; place-items: center; }
+.crm .us-copy:hover { color: var(--accent); }

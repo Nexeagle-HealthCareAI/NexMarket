@@ -424,6 +424,35 @@ const en = {
   vitaDone: "Shift done, {n} visits today. Rest well!",
   vitaNight: "Time to rest. See you tomorrow!",
   celebrateTask: "Well done! Task finished.",
+
+  // WhatsApp messages to partners
+  waTitle: "WhatsApp {name}",
+  waIntroL: "Introduce",
+  waDeptsL: "Hospital services",
+  waFollowL: "Check in",
+  waVisitL: "Coming to meet",
+  waThanksL: "Thank you",
+  waOwnL: "Write my own",
+  waOwnHint: "Type your message…",
+  waOpen: "Open WhatsApp",
+  waNoPhone: "No phone number for this partner.",
+  waHint: "WhatsApp opens with the message filled in. Check it, then press send there.",
+  waIntro: "Namaste {partner} ji, I am {agent} from {hospital}. It was good to meet you. For any patient who needs care, message me on this number and I will help arrange it.",
+  waDepts: "Namaste {partner} ji, {agent} here from {hospital}. Our departments: {departments}. Please message me before sending a patient and I will make sure they are looked after at the front desk.",
+  waFollow: "Namaste {partner} ji, {agent} here from {hospital}. Just checking in. Is there any patient I can help with this week?",
+  waVisit: "Namaste {partner} ji, {agent} here from {hospital}. I will be in your area soon. Can we meet for a few minutes?",
+  waThanks: "Namaste {partner} ji, thank you for sending a patient to {hospital}. We are taking good care of them. — {agent}",
+  waOwn: "",
+
+  // Set your own password
+  setPwTitle: "Set your own password",
+  setPwSub: "You signed in with a one-time password. Choose your own so only you can sign in.",
+  newPassword: "New password",
+  confirmPassword: "Type it again",
+  pwTooShort: "Use at least 8 characters.",
+  pwMismatch: "The two passwords are different.",
+  pwSaved: "Password set",
+  pwSave: "Save and continue",
 };
 
 export default en;

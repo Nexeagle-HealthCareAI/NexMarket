@@ -7,12 +7,13 @@ import { useDb, useSession } from '../../lib/session';
 import { q } from '../../lib/db';
 import { addNote, addPhoto, setFollowUp, setPriority } from '../../lib/repo';
 import { takePhoto } from '../../lib/photo';
-import { callNumber, openWhatsApp } from '../../lib/links';
+import { callNumber } from '../../lib/links';
 import { dayShort } from '../../lib/format';
 import { daysFromToday } from '../../lib/util';
 import { C, PRIORITY_COLOR, type Priority } from '../../theme';
 import { stageTone } from '../../components/stage';
 import { MoveSheet } from '../../components/MoveSheet';
+import { WhatsAppSheet } from '../../components/WhatsAppSheet';
 
 const PRIOS: Priority[] = ['very_high', 'high', 'normal', 'low'];
 
@@ -20,6 +21,7 @@ export default function PartnerProfile() {
   const { t, lang } = useSession();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [prioOpen, setPrioOpen] = useState(false);
+  const [waOpen, setWaOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
 
@@ -81,7 +83,7 @@ export default function PartnerProfile() {
         </Pressable>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Btn flex small kind="secondary" icon="phone" label={t('call')} disabled={!c.phone} onPress={() => { callNumber(c.phone); }} />
-          <Btn flex small kind="secondary" icon="whatsapp" label={t('whatsapp')} disabled={!c.phone} onPress={() => openWhatsApp(c.phone)} />
+          <Btn flex small kind="secondary" icon="whatsapp" label={t('whatsapp')} disabled={!c.phone} onPress={() => setWaOpen(true)} />
           <Btn flex small icon="hospital" label={t('referPatient')} onPress={() => router.push({ pathname: '/refer', params: { contactId: c.clientId } })} />
         </View>
       </Card>
@@ -148,6 +150,7 @@ export default function PartnerProfile() {
         ))}
       </Sheet>
       <MoveSheet visible={moveOpen} onClose={() => setMoveOpen(false)} onPick={(date) => { setFollowUp(c.clientId, date); setMoveOpen(false); toast(t('savedOnPhone')); }} />
+      <WhatsAppSheet visible={waOpen} onClose={() => setWaOpen(false)} name={c.name} phone={c.phone} />
     </Screen>
   );
 }

@@ -138,6 +138,11 @@ export interface LoginResult {
   refreshToken?: string;
 }
 
+// The one-time password an admin gave, kept in memory only until the agent sets their own.
+let pending: string | null = null;
+export const pendingPasswordChange = () => pending;
+export const clearPendingPasswordChange = () => { pending = null; };
+
 export async function login(userId: string, password: string, deviceId: string): Promise<LoginResult> {
   const res = await raw('/api/v1/auth/login', {
     method: 'POST',
@@ -149,6 +154,7 @@ export async function login(userId: string, password: string, deviceId: string):
     // An API without mobile token support would only set cookies, which a phone can't use.
     throw new ApiError(500, 'The server did not return a mobile session. Update the API.');
   }
+  pending = j.mustChangePassword ? password : null;
   await saveTokens(j.accessToken, j.refreshToken);
   await SecureStore.setItemAsync(K_AGENT, j.agentId);
   await SecureStore.setItemAsync(K_DEVICE, j.deviceId || deviceId);

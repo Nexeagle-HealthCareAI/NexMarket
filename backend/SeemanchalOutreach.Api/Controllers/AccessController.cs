@@ -110,7 +110,7 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             var people = await _db.Agents.AsNoTracking()
                 .OrderBy(a => a.Name)
-                .Select(a => new { a.AgentId, a.Name, a.Phone, a.Email, a.Role, a.District, a.Block, a.IsActive, a.CreatedAt })
+                .Select(a => new { a.AgentId, a.Name, a.Phone, a.Email, a.Role, a.District, a.Block, a.IsActive, a.CreatedAt, a.MustChangePassword })
                 .ToListAsync();
 
             var lastLogin = await _db.AgentRefreshTokens.AsNoTracking()
@@ -132,6 +132,9 @@ namespace SeemanchalOutreach.Api.Controllers
                     p.District,
                     p.Block,
                     p.IsActive,
+                    p.CreatedAt,
+                    // Still on the one-time password an admin gave them (they haven't set their own yet).
+                    onOneTimePassword = p.MustChangePassword,
                     lastSignIn = lastLogin.TryGetValue(p.AgentId, out var at) ? at : (DateTime?)null,
                 };
             }));
@@ -146,6 +149,29 @@ namespace SeemanchalOutreach.Api.Controllers
             foreach (var t in tokens) t.ExpiresAt = DateTime.UtcNow.AddSeconds(-1);
             await _db.SaveChangesAsync();
             return Ok(new { signedOutDevices = tokens.Count });
+        }
+
+        /// <summary>
+        /// Gives a person a new one-time password (passwords are stored hashed, so an existing one can never be shown).
+        /// Signs them out of every device; they set their own password at the next sign-in. The new password is
+        /// returned once, for the admin to send.
+        /// </summary>
+        [HttpPost("people/{agentId}/reset-password")]
+        [Authorize(Roles = "Admin,admin")]
+        public async Task<IActionResult> ResetPassword(string agentId)
+        {
+            if (agentId == User.AgentIdOf()) return BadRequest("Change your own password from your profile instead.");
+            var agent = await _db.Agents.FirstOrDefaultAsync(a => a.AgentId == agentId);
+            if (agent == null) return NotFound();
+            const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+            var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(10);
+            var password = new string(bytes.Select(b => chars[b % chars.Length]).ToArray()) + "#" + (2 + bytes[0] % 8);
+            agent.PasswordHash = BCrypt.Net.BCrypt.HashPassword(password);
+            agent.MustChangePassword = true;
+            var sessions = await _db.AgentRefreshTokens.Where(t => t.AgentId == agentId).ToListAsync();
+            _db.AgentRefreshTokens.RemoveRange(sessions);
+            await _db.SaveChangesAsync();
+            return Ok(new { agent.AgentId, agent.Name, agent.Phone, password, signedOutDevices = sessions.Count });
         }
 
         [HttpPost("people/{agentId}/active")]

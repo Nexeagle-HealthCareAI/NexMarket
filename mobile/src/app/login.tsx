@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Btn, Field, T } from '../components/ui';
 import { LANGS } from '../i18n';
-import { ApiError, OfflineError } from '../lib/api';
+import { ApiError, OfflineError, pendingPasswordChange } from '../lib/api';
 import { APP_VERSION } from '../lib/config';
 import { useSession } from '../lib/session';
 import { C } from '../theme';
@@ -23,7 +23,7 @@ export default function Login() {
     setError(null);
     try {
       await signIn(userId, password);
-      router.replace('/today');
+      router.replace(pendingPasswordChange() ? '/set-password' : '/today');
     } catch (e) {
       if (e instanceof OfflineError) setError(t('loginOffline'));
       else if (e instanceof ApiError && (e.status === 401 || e.status === 400)) setError(t('loginFailed'));

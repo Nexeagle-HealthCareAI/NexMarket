@@ -405,6 +405,35 @@ const hinglish: Strings = {
   vitaDone: "Shift poori, aaj {n} visit. Aaram karein!",
   vitaNight: "Aaram ka samay. Kal milte hain!",
   celebrateTask: "Shabash! Kaam poora hua.",
+
+  // WhatsApp messages to partners
+  waTitle: "{name} ko WhatsApp",
+  waIntroL: "Parichay",
+  waDeptsL: "Hospital sevayein",
+  waFollowL: "Haal-chaal",
+  waVisitL: "Milne aa rahe",
+  waThanksL: "Dhanyavaad",
+  waOwnL: "Apna message",
+  waOwnHint: "Apna message likhein…",
+  waOpen: "WhatsApp kholein",
+  waNoPhone: "Is partner ka phone number nahi hai.",
+  waHint: "WhatsApp mein message bhara hua khulega. Dekh lein, phir wahin bhejein.",
+  waIntro: "Namaste {partner} ji, main {agent}, {hospital} se. Aapse milkar achha laga. Kisi bhi mareez ke ilaaj ke liye isi number par mujhe message karein, main intezaam karwa dunga.",
+  waDepts: "Namaste {partner} ji, {hospital} se {agent}. Hamare vibhag: {departments}. Mareez bhejne se pehle mujhe message kar dein, main front desk par dhyan rakhwa dunga.",
+  waFollow: "Namaste {partner} ji, {hospital} se {agent}. Bas haal-chaal poochhne ke liye message kiya. Is hafte kisi mareez ke liye madad chahiye to batayein.",
+  waVisit: "Namaste {partner} ji, {hospital} se {agent}. Main jald aapke ilaake mein aa raha hoon. Kya kuch minute mil sakte hain?",
+  waThanks: "Namaste {partner} ji, {hospital} mein mareez bhejne ke liye dhanyavaad. Hum unka achhe se dhyan rakh rahe hain. — {agent}",
+  waOwn: "",
+
+  // Set your own password
+  setPwTitle: "Apna password banayein",
+  setPwSub: "Aapne ek baar wale password se sign in kiya hai. Apna password chunein taaki sirf aap hi sign in kar sakein.",
+  newPassword: "Naya password",
+  confirmPassword: "Dobara likhein",
+  pwTooShort: "Kam se kam 8 akshar rakhein.",
+  pwMismatch: "Dono password alag hain.",
+  pwSaved: "Password ban gaya",
+  pwSave: "Save karein aur aage badhein",
 };
 
 export default hinglish;

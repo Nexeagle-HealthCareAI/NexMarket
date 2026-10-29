@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SessionProvider, useSession } from '../lib/session';
+import { pendingPasswordChange } from '../lib/api';
 import { ToastHost } from '../components/ui';
 import { CelebrateHost } from '../components/Vita';
 import { C } from '../theme';
@@ -21,7 +22,7 @@ function Gate() {
     if (!ready) return;
     SplashScreen.hideAsync().catch(() => undefined);
     if (!agent && !onLogin) router.replace('/login');
-    else if (agent && onLogin) router.replace('/today');
+    else if (agent && onLogin) router.replace(pendingPasswordChange() ? '/set-password' : '/today');
   }, [ready, agent, onLogin]);
 
   if (!ready) {
@@ -37,6 +38,7 @@ function Gate() {
         <Stack.Screen name="patients" options={{ animation: 'none' }} />
         <Stack.Screen name="me" options={{ animation: 'none' }} />
         <Stack.Screen name="assistant" options={{ animation: 'none' }} />
+        <Stack.Screen name="set-password" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="add" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
       </Stack>
       <ToastHost />

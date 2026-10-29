@@ -1,14 +1,14 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Copy, Lock, Smartphone, UserPlus } from 'lucide-react';
+import { Copy, KeyRound, Lock, MessageCircle, MessageSquare, Send, Smartphone, UserPlus } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { useAccess, type PageKey } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 
 interface RoleInfo { role: string; label: string; users: number; editable: boolean; pages: Record<PageKey, number> }
 interface RolesResponse { pages: PageKey[]; roles: RoleInfo[]; fieldAgents: number }
-interface Person { agentId: string; name: string; phone: string; email?: string | null; role: string; kind: 'field' | 'dashboard'; district: string; block: string; isActive: boolean; lastSignIn?: string | null }
+interface Person { agentId: string; name: string; phone: string; email?: string | null; role: string; kind: 'field' | 'dashboard'; district: string; block: string; isActive: boolean; lastSignIn?: string | null; onOneTimePassword?: boolean }
 
 const PAGE_LABELS: Record<PageKey, string> = {
   dashboard: 'Command centre', calls: 'Daily calls', desk: 'Referral desk', pipeline: 'Referral pipeline', partners: 'Partners',
@@ -51,6 +51,15 @@ export default function UsersPage() {
   const [savingCell, setSavingCell] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<'all' | 'dashboard' | 'field'>('all');
   const [toast, showToast] = useToast();
+  const [sending, setSending] = useState<{ person: Person; password?: string } | null>(null);
+  const resetPassword = async (p: Person) => {
+    if (!window.confirm(`Give ${p.name} a new one-time password?\n\nTheir current password stops working and they are signed out of every device. They set their own password after signing in.`)) return;
+    try {
+      const r = await crm.post<{ password: string }>(`/api/v1/access/people/${encodeURIComponent(p.agentId)}/reset-password`);
+      setSending({ person: p, password: r.password });
+      void people.reload();
+    } catch (e) { showToast(friendlyError(e)); }
+  };
 
   const pages = (roles.data?.pages ?? []).filter((p) => !HIDDEN_PAGES.includes(p));
   const editableRoles = roles.data?.roles.filter((r) => r.editable) ?? [];
@@ -175,16 +184,27 @@ export default function UsersPage() {
                         <span className="crm-initials" style={{ background: '#e9ebf1', color: 'var(--text)' }}>{initials(p.name)}</span>
                         <div>
                           <div className="crm-cell-main">{p.name}{!p.isActive && ' (inactive)'}</div>
-                          <div className="crm-cell-sub">{p.agentId} · {p.phone}{p.kind === 'field' && p.block ? ` · ${p.block}` : ''}</div>
+                          <div className="crm-cell-sub" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span className="us-id" title="User ID">{p.agentId}</span>
+                            <button type="button" className="us-copy" aria-label={`Copy user ID ${p.agentId}`} title="Copy user ID" onClick={() => { void navigator.clipboard?.writeText(p.agentId); showToast(`Copied ${p.agentId}`); }}><Copy size={12} /></button>
+                            <span>{p.phone}{p.kind === 'field' && p.block ? ` · ${p.block}` : ''}</span>
+                          </div>
                         </div>
                       </div>
                     </td>
                     <td><Pill tone={p.kind === 'field' ? 'warn' : ROLE_TONE[p.role] ?? 'accent'}>{ROLE_NAME[p.role] ?? p.role}</Pill></td>
                     <td style={{ color: 'var(--text-2)' }}>{p.kind === 'field' ? 'Android app' : 'Dashboard'}</td>
-                    <td style={{ color: 'var(--text-2)' }}>{p.lastSignIn ? fmt.dateTime(p.lastSignIn) : 'Never'}</td>
+                    <td style={{ color: 'var(--text-2)' }}>
+                      {p.lastSignIn ? fmt.dateTime(p.lastSignIn) : 'Never'}
+                      <div className="crm-cell-sub" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Lock size={11} aria-hidden /> {p.onOneTimePassword ? <span style={{ color: 'var(--warn-ink)', fontWeight: 600 }}>One-time password, not changed yet</span> : 'Set their own password'}
+                      </div>
+                    </td>
                     <td className="num">
                       {isAdmin && p.agentId !== access?.agentId && (
-                        <span style={{ display: 'inline-flex', gap: 6 }}>
+                        <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setSending({ person: p })} title="Send their user ID"><Send size={14} aria-hidden /> Send login</button>
+                          <button type="button" className="crm-btn is-sm" onClick={() => void resetPassword(p)} title="New one-time password"><KeyRound size={14} aria-hidden /> Reset &amp; send password</button>
                           <button type="button" className="crm-btn is-secondary is-sm" onClick={() => signOut(p)}>Sign out devices</button>
                           <button type="button" className={`crm-btn is-sm ${p.isActive ? 'is-danger' : 'is-secondary'}`} onClick={() => setActive(p, !p.isActive)}>{p.isActive ? 'Deactivate' : 'Reactivate'}</button>
                         </span>
@@ -198,6 +218,7 @@ export default function UsersPage() {
         )}
       </section>
 
+      {sending && <SendLogin person={sending.person} password={sending.password} onClose={() => setSending(null)} />}
       {inviting && <InviteUser kind={inviting} onClose={() => setInviting(null)} onDone={() => { void people.reload(); void roles.reload(); }} />}
       {toast}
     </main>
@@ -252,14 +273,7 @@ function InviteUser({ kind, onClose, onDone }: { kind: 'dashboard' | 'field'; on
   };
 
   if (created) {
-    const text = `NexEagle login\nUser ID: ${created.agentId}\nOne-time password: ${created.password}\nYou'll be asked to set your own password at first sign-in.`;
-    return (
-      <Modal title="Account created" onClose={onClose} actions={<button type="button" className="crm-btn" onClick={onClose}>Done</button>}>
-        <p className="crm-sub">Share these details privately. The password is shown only once.</p>
-        <pre style={{ background: 'var(--bg)', borderRadius: 12, padding: 14, fontSize: 14, whiteSpace: 'pre-wrap', margin: 0 }}>{text}</pre>
-        <button type="button" className="crm-btn is-secondary" onClick={() => void navigator.clipboard?.writeText(text)}><Copy size={16} aria-hidden /> Copy</button>
-      </Modal>
-    );
+    return <SendLogin title="Account created" person={{ agentId: created.agentId, name: `${form.firstName} ${form.lastName}`.trim(), phone: form.phone, kind }} password={created.password} onClose={onClose} />;
   }
 
   return (
@@ -284,6 +298,43 @@ function InviteUser({ kind, onClose, onDone }: { kind: 'dashboard' | 'field'; on
       </div>
       {kind === 'field' && <p className="crm-note">They sign in to the Android app with their agent ID and the one-time password, then set their own.</p>}
       {error && <div className="crm-error" role="alert">{error}</div>}
+    </Modal>
+  );
+}
+
+function loginText(p: { agentId: string; name: string; kind: 'field' | 'dashboard' }, password?: string): string {
+  const where = p.kind === 'field' ? 'Open the NexMarket AI app on your phone and sign in.' : 'Sign in at the NexEagle dashboard.';
+  return [
+    `Namaste ${p.name.split(' ')[0] || ''}, here are your NexMarket AI login details.`,
+    `User ID: ${p.agentId}`,
+    password ? `One-time password: ${password}` : null,
+    where,
+    password ? 'You will be asked to set your own password after signing in. Please don\'t share it with anyone.' : 'Use the password you set. If you forgot it, ask your admin to reset it.',
+  ].filter(Boolean).join('\n');
+}
+
+/** Send someone their user ID (and a new one-time password, when one was just made) on WhatsApp, SMS or by copying. */
+function SendLogin({ person, password, onClose, title }: { person: { agentId: string; name: string; phone: string; kind: 'field' | 'dashboard' }; password?: string; onClose: () => void; title?: string }) {
+  const [copied, setCopied] = useState(false);
+  const text = loginText(person, password);
+  const digits = (person.phone ?? '').replace(/\D/g, '');
+  const intl = digits.length === 10 ? `91${digits}` : digits;
+  return (
+    <Modal title={title ?? (password ? 'New one-time password' : 'Send login details')} onClose={onClose} actions={<button type="button" className="crm-btn is-secondary" onClick={onClose}>Done</button>}>
+      {password && <p className="crm-note" style={{ margin: 0 }}>This password is shown only now. Send it to {person.name} privately; it stops working once they set their own.</p>}
+      <pre style={{ background: 'var(--bg)', borderRadius: 12, padding: 14, fontSize: 14, whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', lineHeight: 1.5 }}>{text}</pre>
+      <div className="crm-chips">
+        <a className="crm-btn" style={{ background: '#1fa855', borderColor: '#1fa855' }} href={intl ? `https://wa.me/${intl}?text=${encodeURIComponent(text)}` : undefined} target="_blank" rel="noreferrer" aria-disabled={!intl}>
+          <MessageCircle size={16} aria-hidden /> Send on WhatsApp
+        </a>
+        <a className="crm-btn is-secondary" href={intl ? `sms:+${intl}?body=${encodeURIComponent(text)}` : undefined} aria-disabled={!intl}>
+          <MessageSquare size={16} aria-hidden /> Send SMS
+        </a>
+        <button type="button" className="crm-btn is-secondary" onClick={() => { void navigator.clipboard?.writeText(text); setCopied(true); }}>
+          <Copy size={16} aria-hidden /> {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      {!intl && <span className="crm-cell-sub">No mobile number on file. Copy the details and send them another way.</span>}
     </Modal>
   );
 }

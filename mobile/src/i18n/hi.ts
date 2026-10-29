@@ -405,6 +405,35 @@ const hi: Strings = {
   vitaDone: "शिफ्ट पूरी, आज {n} विज़िट। आराम करें!",
   vitaNight: "आराम का समय। कल मिलते हैं!",
   celebrateTask: "शाबाश! काम पूरा हुआ।",
+
+  // WhatsApp messages to partners
+  waTitle: "{name} को WhatsApp",
+  waIntroL: "परिचय",
+  waDeptsL: "हॉस्पिटल सेवाएँ",
+  waFollowL: "हाल-चाल",
+  waVisitL: "मिलने आ रहे हैं",
+  waThanksL: "धन्यवाद",
+  waOwnL: "अपना संदेश",
+  waOwnHint: "अपना संदेश लिखें…",
+  waOpen: "WhatsApp खोलें",
+  waNoPhone: "इस पार्टनर का फ़ोन नंबर नहीं है।",
+  waHint: "WhatsApp में संदेश भरा हुआ खुलेगा। देख लें, फिर वहीं भेजें।",
+  waIntro: "नमस्ते {partner} जी, मैं {agent}, {hospital} से। आपसे मिलकर अच्छा लगा। किसी भी मरीज़ के इलाज के लिए इसी नंबर पर मुझे संदेश करें, मैं इंतज़ाम करवा दूँगा।",
+  waDepts: "नमस्ते {partner} जी, {hospital} से {agent}। हमारे विभाग: {departments}। मरीज़ भेजने से पहले मुझे संदेश कर दें, मैं फ्रंट डेस्क पर ध्यान रखवा दूँगा।",
+  waFollow: "नमस्ते {partner} जी, {hospital} से {agent}। बस हाल-चाल पूछने के लिए संदेश किया। इस हफ़्ते किसी मरीज़ के लिए मदद चाहिए तो बताइए।",
+  waVisit: "नमस्ते {partner} जी, {hospital} से {agent}। मैं जल्द आपके इलाके में आ रहा हूँ। क्या कुछ मिनट मिल सकते हैं?",
+  waThanks: "नमस्ते {partner} जी, {hospital} में मरीज़ भेजने के लिए धन्यवाद। हम उनका अच्छे से ध्यान रख रहे हैं। — {agent}",
+  waOwn: "",
+
+  // Set your own password
+  setPwTitle: "अपना पासवर्ड बनाएँ",
+  setPwSub: "आपने एक बार वाले पासवर्ड से साइन इन किया है। अपना पासवर्ड चुनें ताकि सिर्फ़ आप ही साइन इन कर सकें।",
+  newPassword: "नया पासवर्ड",
+  confirmPassword: "दोबारा लिखें",
+  pwTooShort: "कम से कम 8 अक्षर रखें।",
+  pwMismatch: "दोनों पासवर्ड अलग हैं।",
+  pwSaved: "पासवर्ड बन गया",
+  pwSave: "सेव करें और आगे बढ़ें",
 };
 
 export default hi;
