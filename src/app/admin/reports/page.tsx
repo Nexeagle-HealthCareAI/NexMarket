@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Sparkles } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import AnalystPanel from '@/components/crm/AnalystPanel';
+import AnalystWorkspace from '@/components/crm/AnalystWorkspace';
 import { contactTypeLabel, Empty, ErrorBox, fmt, PageHead, rupees, Skeleton, useLoader } from '@/components/crm/ui';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ function AnalyticsPage() {
         <button type="button" role="tab" className="crm-tab" aria-selected={tab === 'business'} onClick={() => setTab('business')}>Business view</button>
         <button type="button" role="tab" className="crm-tab" aria-selected={tab === 'ai'} onClick={() => setTab('ai')}><Sparkles size={14} aria-hidden style={{ verticalAlign: -2, marginRight: 6 }} />AI analyst</button>
       </div>
-      {tab === 'business' ? <Business days={days} /> : <AnalystPanel scope="business" />}
+      {tab === 'business' ? <Business days={days} /> : <AnalystWorkspace />}
     </main>
   );
 }

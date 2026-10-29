@@ -3,7 +3,7 @@ import type { Strings } from './en';
 // বাংলা — DRAFT translation. Needs review by a native Bengali speaker from the
 // Kishanganj / Uttar Dinajpur team before rollout (especially survey and consent wording).
 const bn: Strings = {
-  appName: 'NexEagle Field',
+  appName: 'NexMarket AI',
   hospital: 'গ্লিসান আকবরী সুপার স্পেশালিটি হাসপাতাল',
   fieldTeamApp: 'ফিল্ড টিম অ্যাপ',
 
@@ -40,6 +40,7 @@ const bn: Strings = {
   tabPartners: 'সাথী',
   tabPatients: 'রোগী',
   tabMe: 'আমি',
+  tabVita: 'Vita',
   addAnything: 'যোগ করুন: সাথী, রোগী, ভিজিট',
 
   login: 'লগ ইন করুন',
@@ -63,7 +64,7 @@ const bn: Strings = {
   turnOnLocation: 'লোকেশন চালু করুন',
   battery: 'ব্যাটারি',
   batterySaverWarn: 'ব্যাটারি সেভার অ্যাপ বন্ধ করে দিতে পারে',
-  batterySaverHint: 'কিছু ফোন (Xiaomi, Vivo, Oppo, Realme) ব্যাকগ্রাউন্ডে ট্র্যাকিং বন্ধ করে দেয়। NexEagle Field-এর জন্য ব্যাটারি “No restrictions”-এ রাখুন।',
+  batterySaverHint: 'কিছু ফোন (Xiaomi, Vivo, Oppo, Realme) ব্যাকগ্রাউন্ডে ট্র্যাকিং বন্ধ করে দেয়। NexMarket AI-এর জন্য ব্যাটারি “No restrictions”-এ রাখুন।',
   fix: 'ঠিক করুন',
   locationNotice: 'আপনার লোকেশন শুধু শিফটের সময় রেকর্ড হয়, যাতে হাসপাতাল আপনার ভিজিট আর দূরত্ব দেখতে পায়। শিফট শেষ করলেই বন্ধ।',
   locationNoticeEn: 'Location is recorded only while your shift is on, also with the screen off.',
@@ -346,7 +347,7 @@ const bn: Strings = {
   dateOrder: '“কবে পর্যন্ত” তারিখ “কবে থেকে”-র পরে হতে হবে।',
 
   // AI helper
-  aiHelper: "AI সহায়ক",
+  aiHelper: "Vita · AI সহায়ক",
   aiHelperSub: "আপনার পার্টনার, পঞ্চায়েত, ডাক্তার আর ফলাফল নিয়ে জিজ্ঞেস করুন",
   aiTodayTips: "আজকের পরামর্শ",
   aiAskPlaceholder: "আপনার কাজ নিয়ে যা খুশি জিজ্ঞেস করুন…",
@@ -376,6 +377,35 @@ const bn: Strings = {
   taskNoteHint: "চাইলে: কার সাথে দেখা হল, কী হল",
   taskMarkDone: "শেষ হয়েছে",
   taskDoneSaved: "কাজ শেষ · ম্যানেজারকে পাঠানো হয়েছে",
+
+  // Home screen
+  goodAfternoon: "নমস্কার, {name}",
+  goodEvening: "শুভ সন্ধ্যা, {name}",
+  ringVisits: "আজকের ভিজিট",
+  ringPartners: "নতুন পার্টনার",
+  ringPatients: "এই সপ্তাহের রোগী",
+  startShiftSub: "আজ {n}টি স্টপ · ম্যানেজারের {m}টি কাজ",
+  aiAskHome: "Vita-কে যা খুশি জিজ্ঞেস করুন…",
+  aiTipToday: "আজকের পরামর্শ",
+  quickActions: "দ্রুত কাজ",
+  qaLeave: "ছুটি",
+  shiftLive: "{km} · লোকেশন চালু",
+
+  // Vita and branding
+  poweredBy: "NexEagle-এর সৌজন্যে",
+  liveOn: "লাইভ",
+  liveSyncing: "পাঠানো হচ্ছে",
+  liveOffline: "অফলাইন",
+  vitaMorning: "সুপ্রভাত! আগে চা, তারপর আজ {n}টি স্টপ। তৈরি হলে চলুন।",
+  vitaReady: "আজ {n}টি স্টপ বাকি। শিফট শুরু করুন, আমি পথ দেখাব।",
+  vitaFly: "চলুন! পরের স্টপ: {name}",
+  vitaFlyNone: "উড়ান চলছে! কাছাকাছি পার্টনার যোগ করুন বা চেক-ইন করুন।",
+  vitaLate: "{n}টি কাজ দেরিতে চলছে। আগে এগুলো সেরে ফেলুন।",
+  vitaLunch: "লাঞ্চ ব্রেক! ভালো করে খান, তারপর পরের স্টপ।",
+  vitaCheer: "আজকের সব স্টপ শেষ। দারুণ!",
+  vitaDone: "শিফট শেষ, আজ {n}টি ভিজিট। বিশ্রাম নিন!",
+  vitaNight: "বিশ্রামের সময়। কাল দেখা হবে!",
+  celebrateTask: "দারুণ! কাজ শেষ হয়েছে।",
 };
 
 export default bn;

@@ -7,7 +7,7 @@ import { syncNow } from './sync';
 
 /**
  * Background location, only while a shift is on. Android shows a permanent
- * notification ("NexEagle Field · shift on") for as long as it runs, which is what
+ * notification ("NexMarket AI · shift on") for as long as it runs, which is what
  * keeps the OS from killing it. A point is kept every 2 minutes, or sooner after
  * 100 m of movement.
  */

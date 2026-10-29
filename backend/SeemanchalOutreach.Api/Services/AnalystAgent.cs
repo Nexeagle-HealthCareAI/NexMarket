@@ -152,6 +152,53 @@ namespace SeemanchalOutreach.Api.Services
     }
 
     /// <summary>
+    /// The analyst's areas. Each has its own briefing, tracked items and questions, so the team can look at
+    /// partners, the field team, referrals or money on their own. "business" is the overall view.
+    /// </summary>
+    public static class AnalystAreas
+    {
+        public sealed record Area(string Key, string Label, string Prefix, string Focus, string Look, int AutoEveryDays);
+
+        public static readonly Area[] All =
+        {
+            new("business", "Overview", "", "",
+                "agents, departments, partners gone quiet, survey needs in weak blocks", 1),
+            new("partners", "Partners", "p-",
+                " This briefing is only about the partner network: who is sending patients and who has stopped, which partner types and blocks convert best, " +
+                "champions, new partners who have never referred, the follow-up backlog and open escalations. Actions are mostly for the call desk and field agents: " +
+                "whom to ring, whom to visit, whom to make a champion, which partner types to recruit more of.",
+                "top partners, partners gone quiet, partner types, follow-ups and escalations", 7),
+            new("field", "Field team", "f-",
+                " This briefing is only about the field team: visits per agent, coverage of each agent's block, panchayats never visited, new partners per agent, " +
+                "follow-up discipline, survey skipping, attendance and leave. Be fair: compare agents with similar blocks, and say what support an agent needs, not only who is behind.",
+                "per-agent work, least-covered blocks, survey coverage per agent", 7),
+            new("referrals", "Referrals", "r-",
+                " This briefing is only about referrals and hospital departments: where the funnel leaks (referred → arrived → admitted), which departments get " +
+                "the most and fewest patients, which blocks and partner types send patients who actually arrive, lost patients, and urgent cases. Actions are for the " +
+                "referral desk, the call desk and department heads.",
+                "departments, blocks and partner types, the funnel", 7),
+            new("money", "Money", "m-",
+                " This briefing is only about money paid to partners: what was paid against the admissions it brought, cost per admission, payouts waiting for " +
+                "approval or overdue, partners paid with no admissions, and which partner types and purposes give the best return. Be careful and factual about money; " +
+                "never accuse anyone, point to what should be checked.",
+                "the money summary, top partners, partner types", 7),
+            new("surveys", "Surveys", "s-", SurveyFocusText,
+                "needs in other blocks, survey coverage, admissions that match the needs", 7),
+        };
+
+        internal const string SurveyFocusText =
+            " This briefing is about the community survey. Read the answers to find what each area needs and how the hospital can serve it: " +
+            "which specialist services or health camps to promote where (match them to departments the hospital has), where patients go today " +
+            "(competition and outflow to Siliguri, Purnea, Patna, Kolkata, or untreated), how families pay (Ayushman Bharat, Swasthya Sathi, cash, loans) " +
+            "and what that means for packages and help desks, emergency transport gaps (ambulance tie-ups), and who decides the hospital (which partner types to court). " +
+            "Also judge the survey itself: thin samples, blocks with few answers, agents skipping it or adding contacts without a survey. " +
+            "Tie needs to the business numbers where you can (admissions by department and block).";
+
+        public static string Normalize(string? key) => All.Any(a => a.Key == key) ? key! : "business";
+        public static Area Get(string? key) => All.First(a => a.Key == Normalize(key));
+    }
+
+    /// <summary>
     /// The AI analyst. It reads the business numbers (through read-only, aggregated tools),
     /// writes a briefing, and keeps a list of issues and planned actions that it re-checks
     /// on every run. People decide what happens to each item; the analyst only reports.
@@ -192,14 +239,6 @@ namespace SeemanchalOutreach.Api.Services
             "name the block, partner type, department or agent concerned; every planned action needs an owner (a role such as Marketing manager, " +
             "Call desk, Field agent <name>, Admin) and a realistic number of days.";
 
-        private const string SurveyFocus =
-            " This briefing is about the community survey. Read the answers to find what each area needs and how the hospital can serve it: " +
-            "which specialist services or health camps to promote where (match them to departments the hospital has), where patients go today " +
-            "(competition and outflow to Siliguri, Purnea, Patna, Kolkata, or untreated), how families pay (Ayushman Bharat, Swasthya Sathi, cash, loans) " +
-            "and what that means for packages and help desks, emergency transport gaps (ambulance tie-ups), and who decides the hospital (which partner types to court). " +
-            "Also judge the survey itself: thin samples, blocks with few answers, agents skipping it or adding contacts without a survey. " +
-            "Tie needs to the business numbers where you can (admissions by department and block).";
-
         // ─── Tools the analyst may call (all read-only and aggregated) ─────────────
 
         private static JsonArray Tools() => JsonNode.Parse("""
@@ -211,6 +250,7 @@ namespace SeemanchalOutreach.Api.Services
           {"type":"function","function":{"name":"get_field_work","description":"Visits, panchayats visited vs in scope, least-covered blocks, per-agent visits and new partners, overdue follow-ups, open escalations and pending leave for the last N days.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_survey_needs","description":"Top answers to the survey questions the app asks, for the whole region or one block.","parameters":{"type":"object","properties":{"block":{"type":"string","description":"Block name, or empty for all"}},"required":[]}}},
           {"type":"function","function":{"name":"get_survey_coverage","description":"How well the survey is being done: answers and panchayats surveyed per block, and per agent how many were answered, skipped, or new contacts left without a survey (last 30 days).","parameters":{"type":"object","properties":{},"required":[]}}},
+          {"type":"function","function":{"name":"get_money_summary","description":"Money paid to partners in the last N days against the admissions it brought: total, cost per admission, waiting approval, approved but unpaid, overdue, by purpose and partner type, top paid partners, partners paid with no admissions.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_tracked_items","description":"Issues, opportunities and planned actions already being tracked, with owner, due date and status.","parameters":{"type":"object","properties":{"status":{"type":"string","enum":["open","in_progress","done","dismissed","all"]}},"required":[]}}}
         ]
         """)!.AsArray();
@@ -235,6 +275,9 @@ namespace SeemanchalOutreach.Api.Services
             {
                 case "get_overview":
                     result = _data.Overview(await _data.LoadAsync(from, to, ct));
+                    break;
+                case "get_money_summary":
+                    result = await _data.MoneyAsync(await _data.LoadAsync(from, to, ct), ct);
                     break;
                 case "get_breakdown":
                     var by = Str(args["by"]) ?? "block";
@@ -340,7 +383,8 @@ namespace SeemanchalOutreach.Api.Services
         {
             _patient = true;
             if (!Configured) throw new AnalystUnavailableException("The AI analyst isn't switched on yet. Add the Groq API key on the server (Groq__ApiKey).");
-            _scope = scope == "surveys" ? "surveys" : "business";
+            _scope = AnalystAreas.Normalize(scope);
+            var area = AnalystAreas.Get(_scope);
             var (from, to) = BusinessData.Days(_settings.PeriodDays);
             var briefing = new AiBriefing { CreatedBy = createdBy, Scope = _scope, PeriodFrom = from, PeriodTo = to, Model = Model };
             _db.AiBriefings.Add(briefing);
@@ -375,6 +419,54 @@ namespace SeemanchalOutreach.Api.Services
                         trackedItems = open,
                     };
                 }
+                else if (_scope == "partners")
+                {
+                    pack = new
+                    {
+                        today = IstClock.NowIst.ToString("dddd d MMMM yyyy"),
+                        periodDays = _settings.PeriodDays,
+                        overview = _data.Overview(snap),
+                        byPartnerType = _data.Breakdown(snap, "type", 12),
+                        topPartners = _data.TopPartners(snap, 10),
+                        goneQuiet = _data.GoneQuiet(snap, 10),
+                        trackedItems = open,
+                    };
+                }
+                else if (_scope == "field")
+                {
+                    pack = new
+                    {
+                        today = IstClock.NowIst.ToString("dddd d MMMM yyyy"),
+                        periodDays = _settings.PeriodDays,
+                        field = await _data.FieldAsync(snap, ct),
+                        byAgent = _data.Breakdown(snap, "agent", 15),
+                        trackedItems = open,
+                    };
+                }
+                else if (_scope == "referrals")
+                {
+                    pack = new
+                    {
+                        today = IstClock.NowIst.ToString("dddd d MMMM yyyy"),
+                        periodDays = _settings.PeriodDays,
+                        overview = _data.Overview(snap),
+                        byDepartment = _data.Breakdown(snap, "department", 15),
+                        byBlock = _data.Breakdown(snap, "block", 15),
+                        byPartnerType = _data.Breakdown(snap, "type", 10),
+                        trackedItems = open,
+                    };
+                }
+                else if (_scope == "money")
+                {
+                    pack = new
+                    {
+                        today = IstClock.NowIst.ToString("dddd d MMMM yyyy"),
+                        periodDays = _settings.PeriodDays,
+                        money = await _data.MoneyAsync(snap, ct),
+                        overview = _data.Overview(snap),
+                        trackedItems = open,
+                    };
+                }
                 else
                 {
                     pack = new
@@ -393,15 +485,14 @@ namespace SeemanchalOutreach.Api.Services
                 // The opening figures must leave room for lookups within the per-request budget.
                 var packBudget = Math.Max(4000, _settings.MaxPromptChars / 2);
                 if (packJson.Length > packBudget) packJson = packJson[..packBudget] + "…(cut to fit)";
-                var context = _scope == "surveys" ? Context + SurveyFocus : Context;
+                var context = Context + area.Focus;
 
                 var messages = new JsonArray
                 {
                     new JsonObject { ["role"] = "system", ["content"] = context },
                     new JsonObject { ["role"] = "user", ["content"] =
-                        (_scope == "surveys"
-                            ? $"Prepare the survey briefing. Starting figures:\n{packJson}\n\nLook deeper with the tools where something stands out (needs in other blocks, survey coverage, admissions that match the needs). "
-                            : $"Prepare the briefing for the last {_settings.PeriodDays} days. Starting figures:\n{packJson}\n\nLook deeper with the tools wherever something stands out (agents, departments, partners gone quiet, survey needs in weak blocks). ") +
+                        $"Prepare the {(area.Key == "business" ? "overall" : area.Label.ToLowerInvariant())} briefing for the last {_settings.PeriodDays} days. Starting figures:\n{packJson}\n\n" +
+                        $"Look deeper with the tools where something stands out ({area.Look}). " +
                         "Use at most 6 lookups. When you have enough, reply with the single word DONE." },
                 };
                 var used = new List<string>();
@@ -485,7 +576,7 @@ namespace SeemanchalOutreach.Api.Services
             string Key(JsonObject node)
             {
                 var k = Slug(Str(node["key"]) ?? Str(node["title"]) ?? "");
-                return k == "" ? "" : _scope == "surveys" ? "s-" + k : k;
+                return k == "" ? "" : AnalystAreas.Get(_scope).Prefix + k;
             }
             var keys = incoming.Select(x => Key(x.Node)).Where(k => k != "").ToList();
             var existing = await _db.AiItems.Where(i => keys.Contains(i.Key)).ToDictionaryAsync(i => i.Key, ct);
@@ -554,13 +645,13 @@ namespace SeemanchalOutreach.Api.Services
 
         public async Task<(string Answer, List<string> Tools)> AskAsync(string question, List<ChatTurn> history, CancellationToken ct, string scope = "business")
         {
-            _scope = scope == "surveys" ? "surveys" : "business";
+            _scope = AnalystAreas.Normalize(scope);
             var (from, to) = BusinessData.Days(_settings.PeriodDays);
             var overview = _data.Overview(await _data.LoadAsync(from, to, ct));
             var messages = new JsonArray
             {
-                new JsonObject { ["role"] = "system", ["content"] = Context + (_scope == "surveys" ? SurveyFocus : "") +
-                    " Answer the user's question about the business. Look numbers up with the tools before answering; don't guess. " +
+                new JsonObject { ["role"] = "system", ["content"] = Context + AnalystAreas.Get(_scope).Focus +
+                    " You are speaking as Vita, NexEagle's market analyst, in the CRM chat. Answer the user's question about the business. Look numbers up with the tools before answering; don't guess. " +
                     "Keep answers short: a direct answer first, then the numbers behind it, then at most three suggested actions. Plain text, short lists allowed." },
                 new JsonObject { ["role"] = "system", ["content"] = $"Today is {IstClock.NowIst:dddd d MMMM yyyy}. Last {_settings.PeriodDays} days at a glance: {JsonSerializer.Serialize(overview, Json)}" },
             };
@@ -617,15 +708,22 @@ namespace SeemanchalOutreach.Api.Services
                             var agent = scope.ServiceProvider.GetRequiredService<AnalystAgent>();
                             await agent.RunBriefingAsync("auto", stoppingToken);
                         }
-                        // Survey answers change slowly: one survey briefing a week.
-                        bool surveyDone = await db.AiBriefings.AnyAsync(b => b.Scope == "surveys" && b.Status == "ok" && b.CreatedAt >= today.AddDays(-6), stoppingToken);
-                        if (!surveyDone)
+                        // The other areas change slowly: each about once a week, and at most one of them a day,
+                        // so the free Groq plan's daily allowance is left for questions and the agents' helper.
+                        bool otherToday = await db.AiBriefings.AnyAsync(b => b.CreatedBy == "auto" && b.Scope != "business" && b.CreatedAt >= today, stoppingToken);
+                        if (!otherToday)
                         {
-                            // Give Groq's per-minute token allowance time to refill after the business run.
-                            if (!done) await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
-                            using var scope2 = _scopes.CreateScope();
-                            var agent2 = scope2.ServiceProvider.GetRequiredService<AnalystAgent>();
-                            await agent2.RunBriefingAsync("auto", stoppingToken, "surveys");
+                            foreach (var area in AnalystAreas.All.Where(a => a.Key != "business"))
+                            {
+                                var since = today.AddDays(-(area.AutoEveryDays - 1));
+                                if (await db.AiBriefings.AnyAsync(b => b.Scope == area.Key && b.Status == "ok" && b.CreatedAt >= since, stoppingToken)) continue;
+                                // Give Groq's per-minute allowance time to refill after the overview run.
+                                if (!done) await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
+                                using var scope2 = _scopes.CreateScope();
+                                var agent2 = scope2.ServiceProvider.GetRequiredService<AnalystAgent>();
+                                await agent2.RunBriefingAsync("auto", stoppingToken, area.Key);
+                                break;
+                            }
                         }
                     }
                 }

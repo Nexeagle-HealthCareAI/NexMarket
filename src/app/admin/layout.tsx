@@ -1,5 +1,6 @@
 'use client';
 
+import VitaChat from '@/components/crm/VitaChat';
 import './crm.css';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -264,6 +265,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {children}
       </div>
+
+      <VitaChat />
 
       <nav className="crm-bottom" aria-label="Main">
         {phoneItems.map((item) => {

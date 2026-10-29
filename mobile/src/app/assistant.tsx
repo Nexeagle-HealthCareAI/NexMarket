@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, TextInput, View } from 'react-native';
-import { Screen, T, TopBar } from '../components/ui';
+import { BottomNav, Screen, T } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { useSession } from '../lib/session';
 import { api, ApiError, OfflineError, post } from '../lib/api';
 import { errorMessage } from '../lib/util';
+import { saveTips } from '../lib/aiTips';
+import { Vita } from '../components/Vita';
 import type { StringKey } from '../i18n';
 import { C } from '../theme';
 
@@ -34,7 +36,9 @@ export default function Assistant() {
     setTipsBusy(true);
     setTipsError(null);
     try {
-      setTips(await api<Tips>(`/api/v1/me/assistant/tips?lang=${lang}${refresh ? '&refresh=true' : ''}`, { timeoutMs: 90000 }));
+      const got = await api<Tips>(`/api/v1/me/assistant/tips?lang=${lang}${refresh ? '&refresh=true' : ''}`, { timeoutMs: 90000 });
+      setTips(got);
+      saveTips(lang, got);
     } catch (e) {
       setTipsError(e instanceof OfflineError || (e instanceof ApiError && e.status === 503) ? explain(e) : t('aiTipsFailed'));
     } finally {
@@ -61,21 +65,41 @@ export default function Assistant() {
     }
   };
 
+  // Follow the chat once it has started; on open, stay at the top with today's tips.
   useEffect(() => {
+    if (msgs.length === 0) return;
     const id = setTimeout(() => scroller.current?.scrollToEnd({ animated: true }), 80);
     return () => clearTimeout(id);
   }, [msgs.length, asking]);
 
   const clear = msgs.length > 0 ? (
     <Pressable onPress={() => setMsgs([])} hitSlop={8} style={{ paddingHorizontal: 8, paddingVertical: 6 }}>
-      <T style={{ color: C.blueInk, fontWeight: '600', fontSize: 14 }}>{t('aiClear')}</T>
+      <T style={{ color: C.mint, fontWeight: '700', fontSize: 13 }}>{t('aiClear')}</T>
     </Pressable>
   ) : null;
 
   return (
     <Screen scroll={false} padded={false}
-      header={<TopBar title={t('aiHelper')} sub={t('aiHelperSub')} right={clear} />}
+      bg={C.ink}
+      header={
+        <View style={{ backgroundColor: C.ink, paddingHorizontal: 18, paddingTop: 8, paddingBottom: 14, flexDirection: 'row', alignItems: 'flex-end', gap: 12, overflow: 'hidden' }}>
+          <View style={{ position: 'absolute', right: -60, top: -80, width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(42,91,215,0.22)' }} />
+          <Vita mood={asking ? 'think' : 'ai'} height={88} />
+          <View style={{ flex: 1, minWidth: 0, gap: 2, paddingBottom: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <T style={{ color: '#fff', fontSize: 24, fontWeight: '800' }}>Vita</T>
+              <View style={{ backgroundColor: 'rgba(56,246,169,0.15)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
+                <T style={{ color: C.mint, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>AI</T>
+              </View>
+              <View style={{ flex: 1 }} />
+              {clear}
+            </View>
+            <T style={{ color: C.sideText, fontSize: 13, lineHeight: 18 }} numberOfLines={2}>{t('aiHelperSub')}</T>
+          </View>
+        </View>
+      }
       footer={
+        <>
         <View style={{ padding: 12, gap: 6, backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
             <TextInput value={text} onChangeText={setText} placeholder={t('aiAskPlaceholder')} placeholderTextColor={C.muted}
@@ -89,39 +113,41 @@ export default function Assistant() {
           </View>
           <T style={{ color: C.muted, fontSize: 11, textAlign: 'center' }}>{t('aiPrivacy')}</T>
         </View>
+        <BottomNav />
+        </>
       }>
-      <ScrollView ref={scroller} contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 24 }} keyboardShouldPersistTaps="handled"
+      <ScrollView ref={scroller} style={{ backgroundColor: C.bg }} contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 24 }} keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={false} onRefresh={() => void loadTips(true)} />}>
         {/* Today's tips */}
-        <View style={{ backgroundColor: C.ink, borderRadius: 18, padding: 16, gap: 12 }}>
+        <View style={{ backgroundColor: C.card, borderRadius: 18, padding: 14, gap: 10, borderWidth: 1, borderColor: C.border }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Icon name="sparkle" color={C.mint} size={18} />
-            <T style={{ color: '#fff', fontSize: 16, fontWeight: '700', flex: 1 }}>{t('aiTodayTips')}</T>
+            <Icon name="sparkle" color={C.purple} size={18} />
+            <T style={{ fontSize: 16, fontWeight: '800', flex: 1 }}>{t('aiTodayTips')}</T>
             {tips && !tipsBusy ? (
               <Pressable onPress={() => void loadTips(true)} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Icon name="refresh" color={C.sideText} size={14} />
-                <T style={{ color: C.sideText, fontSize: 12 }}>{t('aiNewTips')}</T>
+                <Icon name="refresh" color={C.blueInk} size={14} />
+                <T style={{ color: C.blueInk, fontSize: 12, fontWeight: '600' }}>{t('aiNewTips')}</T>
               </Pressable>
             ) : null}
           </View>
           {tipsBusy ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 }}>
-              <ActivityIndicator color={C.mint} />
-              <T style={{ color: C.sideText }}>{t('aiThinking')}</T>
+              <Vita mood="think" height={34} />
+              <T style={{ color: C.text2 }}>{t('aiThinking')}</T>
             </View>
           ) : tipsError ? (
-            <T style={{ color: C.sideText }}>{tipsError}</T>
+            <T style={{ color: C.text2 }}>{tipsError}</T>
           ) : tips ? (
             <>
-              {tips.greeting ? <T style={{ color: C.sideText, fontSize: 14 }}>{tips.greeting}</T> : null}
+              {tips.greeting ? <T style={{ color: C.text3, fontSize: 14 }}>{tips.greeting}</T> : null}
               {tips.tips.map((tip, i) => (
-                <View key={i} style={{ flexDirection: 'row', gap: 10, backgroundColor: C.ink2, borderRadius: 12, padding: 12 }}>
-                  <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: i === 0 ? C.mint : C.inkLine, alignItems: 'center', justifyContent: 'center' }}>
-                    <T style={{ color: i === 0 ? C.ink : '#fff', fontWeight: '800', fontSize: 13 }}>{i + 1}</T>
+                <View key={i} style={{ flexDirection: 'row', gap: 10, backgroundColor: i === 0 ? C.purpleSoft : C.bg, borderRadius: 12, padding: 12 }}>
+                  <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: i === 0 ? C.purple : C.borderStrong, alignItems: 'center', justifyContent: 'center' }}>
+                    <T style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>{i + 1}</T>
                   </View>
                   <View style={{ flex: 1, gap: 2 }}>
-                    <T style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{tip.title}</T>
-                    <T style={{ color: C.sideText, fontSize: 14, lineHeight: 20 }}>{tip.detail}</T>
+                    <T style={{ fontWeight: '700', fontSize: 15 }}>{tip.title}</T>
+                    <T style={{ color: C.text2, fontSize: 14, lineHeight: 20 }}>{tip.detail}</T>
                   </View>
                 </View>
               ))}
@@ -155,7 +181,7 @@ export default function Assistant() {
         ))}
         {asking ? (
           <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10 }}>
-            <ActivityIndicator color={C.blue} size="small" />
+            <Vita mood="think" height={36} />
             <T style={{ color: C.text2 }}>{t('aiThinking')}</T>
           </View>
         ) : null}

@@ -8,10 +8,10 @@ const VERSION: string = require('./package.json').version;
 const versionCode = Number(process.env.ANDROID_VERSION_CODE ?? '1');
 
 const LOCATION_PURPOSE =
-  'NexEagle Field records your location only while your shift is on, including when the screen is off, so the hospital can see your visits and distance. Tracking stops when you end the shift.';
+  'NexMarket AI records your location only while your shift is on, including when the screen is off, so the hospital can see your visits and distance. Tracking stops when you end the shift.';
 
 const config: ExpoConfig = {
-  name: 'NexEagle Field',
+  name: 'NexMarket AI',
   slug: 'nexeagle-field',
   scheme: 'nexeaglefield',
   version: VERSION,
@@ -77,7 +77,7 @@ const config: ExpoConfig = {
         locationAlwaysAndWhenInUsePermission: LOCATION_PURPOSE,
         locationAlwaysPermission: LOCATION_PURPOSE,
         locationWhenInUsePermission:
-          'NexEagle Field uses your location to check you in at panchayats and to plan your route.',
+          'NexMarket AI uses your location to check you in at panchayats and to plan your route.',
         motionUsagePermission: false,
         isIosBackgroundLocationEnabled: true,
         isAndroidBackgroundLocationEnabled: true,
@@ -87,7 +87,7 @@ const config: ExpoConfig = {
     [
       'expo-image-picker',
       {
-        cameraPermission: 'NexEagle Field uses the camera to photograph partners, clinics and documents. Each photo is stamped with the time and place.',
+        cameraPermission: 'NexMarket AI uses the camera to photograph partners, clinics and documents. Each photo is stamped with the time and place.',
         photosPermission: false,
         microphonePermission: false,
       },

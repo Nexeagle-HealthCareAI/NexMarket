@@ -2,7 +2,7 @@
 // {name}-style placeholders are filled in by t(key, { name: ... }).
 const en = {
   // App
-  appName: 'NexEagle Field',
+  appName: 'NexMarket AI',
   hospital: 'Glisan Akbari SuperSpeciality Hospital',
   fieldTeamApp: 'Field team app',
 
@@ -42,6 +42,7 @@ const en = {
   tabPartners: 'Partners',
   tabPatients: 'Patients',
   tabMe: 'Me',
+  tabVita: 'Vita',
   addAnything: 'Add: partner, patient, visit',
 
   // Login
@@ -67,7 +68,7 @@ const en = {
   turnOnLocation: 'Turn on location',
   battery: 'Battery',
   batterySaverWarn: 'Battery saver can stop the app',
-  batterySaverHint: 'Some phones (Xiaomi, Vivo, Oppo, Realme) stop tracking in the background. Set battery to “No restrictions” for NexEagle Field.',
+  batterySaverHint: 'Some phones (Xiaomi, Vivo, Oppo, Realme) stop tracking in the background. Set battery to “No restrictions” for NexMarket AI.',
   fix: 'Fix',
   locationNotice: 'Your location is recorded only during your shift, so the hospital can see your visits and distance. It stops as soon as you end the shift.',
   locationNoticeEn: 'Location is recorded only while your shift is on, also with the screen off.',
@@ -364,7 +365,7 @@ const en = {
   dateOrder: '“To” date must be on or after “From”.',
 
   // AI helper
-  aiHelper: "AI helper",
+  aiHelper: "Vita · AI helper",
   aiHelperSub: "Ask about your partners, panchayats, doctors and results",
   aiTodayTips: "Tips for today",
   aiAskPlaceholder: "Ask anything about your work…",
@@ -394,6 +395,35 @@ const en = {
   taskNoteHint: "Optional: who you met, what happened",
   taskMarkDone: "Mark done",
   taskDoneSaved: "Task done · sent to your manager",
+
+  // Home screen
+  goodAfternoon: "Good afternoon, {name}",
+  goodEvening: "Good evening, {name}",
+  ringVisits: "Visits today",
+  ringPartners: "New partners",
+  ringPatients: "Patients this week",
+  startShiftSub: "{n} stops today · {m} tasks from your manager",
+  aiAskHome: "Ask Vita anything…",
+  aiTipToday: "Tip for today",
+  quickActions: "Quick actions",
+  qaLeave: "Leave",
+  shiftLive: "{km} · location on",
+
+  // Vita and branding
+  poweredBy: "Powered by NexEagle",
+  liveOn: "Live",
+  liveSyncing: "Syncing",
+  liveOffline: "Offline",
+  vitaMorning: "Good morning! Coffee first, then {n} stops today. Ready when you are.",
+  vitaReady: "{n} stops waiting today. Start your shift and I will guide the way.",
+  vitaFly: "Let's go! Next stop: {name}",
+  vitaFlyNone: "Flying high! Add partners or check in nearby.",
+  vitaLate: "{n} things are running late. Let's clear them first.",
+  vitaLunch: "Lunch break! Eat well, then on to the next stop.",
+  vitaCheer: "All of today's stops done. Brilliant work!",
+  vitaDone: "Shift done, {n} visits today. Rest well!",
+  vitaNight: "Time to rest. See you tomorrow!",
+  celebrateTask: "Well done! Task finished.",
 };
 
 export default en;

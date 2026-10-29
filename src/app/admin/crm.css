@@ -497,3 +497,70 @@
 .sv-q { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; }
 .sv-q[data-sel] { border: 2px solid var(--accent); }
 .sv-q-n { width: 32px; height: 32px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-ink); font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+/* AI analyst areas */
+.crm .an-areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.crm .an-area { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--card); cursor: pointer; font: inherit; color: inherit; transition: border-color .15s, box-shadow .15s; }
+.crm .an-area:hover { border-color: #c9cedb; }
+.crm .an-area[aria-selected='true'] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint); }
+.crm .an-area-top { display: flex; align-items: center; gap: 7px; font-size: 14px; }
+.crm .an-area-top strong { flex: 1; min-width: 0; }
+.crm .an-area-sub { font-size: 12px; color: var(--text-3); }
+.crm .an-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.crm .an-spin { animation: an-spin 1s linear infinite; color: var(--accent); }
+@keyframes an-spin { to { transform: rotate(360deg); } }
+.crm .an-count { margin-left: 6px; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--accent-tint); color: var(--accent); }
+@media (max-width: 640px) { .crm .an-areas { grid-template-columns: repeat(2, 1fr); } }
+
+/* ─── Vita · market analyst chat ─────────────────────────────────────────── */
+.crm .vita-fab { position: fixed; right: 20px; bottom: 20px; z-index: 150; display: flex; align-items: center; gap: 10px; padding: 6px 16px 6px 6px; border: 0; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(135deg, #0e1525, #1d3f8f); color: #fff; box-shadow: 0 10px 26px rgba(14, 21, 37, .35); font: inherit; transition: transform .15s; }
+.crm .vita-fab:hover { transform: translateY(-2px); }
+.crm .vita-fab-img { width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.1); display: grid; place-items: center; overflow: hidden; position: relative; }
+.crm .vita-fab-img::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid rgba(56,246,169,.55); animation: vita-ring 2.2s infinite; }
+.crm .vita-fab-img img { width: 46px; height: 46px; object-fit: contain; }
+.crm .vita-fab-text { display: flex; flex-direction: column; text-align: left; line-height: 1.15; }
+.crm .vita-fab-text strong { font-size: 14px; }
+.crm .vita-fab-text span { font-size: 11px; color: #9fe9c9; }
+@keyframes vita-ring { 0% { transform: scale(.9); opacity: 1; } 100% { transform: scale(1.25); opacity: 0; } }
+.crm .vita-panel { position: fixed; right: 20px; bottom: 20px; z-index: 160; width: 400px; max-width: calc(100vw - 32px); height: min(640px, calc(100vh - 40px));
+  display: flex; flex-direction: column; background: var(--card); border-radius: 22px; box-shadow: 0 24px 60px rgba(14, 21, 37, .28); overflow: hidden; border: 1px solid var(--border); }
+.crm .vita-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 14px; color: #fff;
+  background: radial-gradient(120% 120% at 100% 0%, #1d3f8f 0%, rgba(29,63,143,0) 60%), radial-gradient(90% 90% at 0% 100%, #0f5a4a 0%, rgba(15,90,74,0) 60%), #0e1525; }
+.crm .vita-head img { width: 52px; height: 52px; object-fit: contain; flex-shrink: 0; }
+.crm .vita-head strong { display: flex; align-items: center; gap: 8px; font-size: 17px; }
+.crm .vita-head span { display: block; font-size: 12px; color: #aeb7ca; }
+.crm .vita-tag { display: inline !important; font-size: 10px !important; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: #38f6a9 !important; background: rgba(56,246,169,.14); padding: 2px 7px; border-radius: 999px; }
+.crm .vita-icon { width: 34px; height: 34px; border-radius: 10px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.06); color: #fff; display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
+.crm .vita-bob { animation: vita-bob 1.4s ease-in-out infinite; }
+@keyframes vita-bob { 50% { transform: translateY(-4px); } }
+.crm .vita-areas { display: flex; gap: 6px; padding: 10px 12px; overflow-x: auto; border-bottom: 1px solid var(--border); scrollbar-width: none; }
+.crm .vita-areas button { flex-shrink: 0; font: inherit; font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--text-2); cursor: pointer; }
+.crm .vita-areas button[aria-pressed='true'] { background: #5b3fb8; border-color: #5b3fb8; color: #fff; }
+.crm .vita-thread { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+.crm .vita-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 6px 4px; }
+.crm .vita-empty img { width: 110px; height: 110px; object-fit: contain; }
+.crm .vita-empty p { margin: 0 0 4px; font-size: 14px; color: var(--text-2); line-height: 1.5; }
+.crm .vita-suggest { width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); cursor: pointer; color: var(--text); }
+.crm .vita-suggest:hover { border-color: #5b3fb8; }
+.crm .vita-msg { max-width: 88%; padding: 10px 13px; border-radius: 16px; font-size: 14px; line-height: 1.5; display: flex; flex-direction: column; gap: 6px; }
+.crm .vita-msg.is-user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.crm .vita-msg.is-assistant { align-self: flex-start; background: var(--card); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.crm .vita-msg.is-failed { background: var(--warn-soft); border-color: #f0c98a; color: var(--warn-ink); }
+.crm .vita-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-3); }
+.crm .vita-meta button { margin-left: auto; border: 0; background: transparent; color: var(--text-3); cursor: pointer; padding: 2px; }
+.crm .vita-typing { flex-direction: row; gap: 4px; padding: 13px 16px; }
+.crm .vita-typing i { width: 7px; height: 7px; border-radius: 50%; background: #5b3fb8; animation: vita-dot 1s infinite; }
+.crm .vita-typing i:nth-child(2) { animation-delay: .15s; } .crm .vita-typing i:nth-child(3) { animation-delay: .3s; }
+@keyframes vita-dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+.crm .vita-form { display: flex; gap: 8px; padding: 10px 12px 6px; border-top: 1px solid var(--border); background: var(--card); align-items: flex-end; }
+.crm .vita-form textarea { flex: 1; resize: none; font: inherit; font-size: 14px; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--bg); max-height: 120px; min-height: 42px; }
+.crm .vita-form button { width: 42px; height: 42px; border-radius: 50%; border: 0; background: #5b3fb8; color: #fff; display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
+.crm .vita-form button:disabled { opacity: .4; cursor: default; }
+.crm .vita-foot { display: block; font-size: 10.5px; color: var(--text-3); padding: 0 14px 10px; background: var(--card); }
+@media (max-width: 767px) {
+  .crm .vita-fab { right: 12px; bottom: calc(80px + env(safe-area-inset-bottom)); padding: 4px; }
+  .crm .vita-fab-text { display: none; }
+  .crm .vita-panel { right: 0; left: 0; bottom: 0; top: 0; width: 100%; max-width: none; height: 100%; border-radius: 0; z-index: 260; }
+}
+@media (prefers-reduced-motion: reduce) { .crm .vita-fab-img::after, .crm .vita-bob, .crm .vita-typing i { animation: none; } }

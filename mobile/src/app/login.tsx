@@ -8,6 +8,7 @@ import { ApiError, OfflineError } from '../lib/api';
 import { APP_VERSION } from '../lib/config';
 import { useSession } from '../lib/session';
 import { C } from '../theme';
+import { Vita } from '../components/Vita';
 
 export default function Login() {
   const { t, lang, setLang, signIn } = useSession();
@@ -37,8 +38,12 @@ export default function Login() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20, gap: 20 }} keyboardShouldPersistTaps="handled">
           <View style={{ alignItems: 'center', gap: 8, marginTop: 24 }}>
-            <Image source={require('../../assets/icon.png')} style={{ width: 72, height: 72, borderRadius: 18 }} />
-            <T style={{ color: '#fff', fontSize: 26, fontWeight: '800' }}>{t('appName')}</T>
+            <Vita mood="wave" height={150} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Image source={require('../../assets/brand/logo.png')} style={{ width: 34, height: 25 }} resizeMode="contain" />
+              <T style={{ color: '#fff', fontSize: 26, fontWeight: '800' }}>NexMarket <T style={{ color: C.mint, fontSize: 26, fontWeight: '800' }}>AI</T></T>
+            </View>
+            <T style={{ color: C.sideText, fontSize: 12, letterSpacing: 0.5 }}>{t('poweredBy')}</T>
             <T style={{ color: C.sideText, fontSize: 14, textAlign: 'center' }}>{t('hospital')}</T>
             <T style={{ color: C.mint, fontSize: 14, fontWeight: '700' }}>{t('fieldTeamApp')}</T>
           </View>

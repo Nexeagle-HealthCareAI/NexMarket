@@ -341,5 +341,45 @@ namespace SeemanchalOutreach.Api.Services
                 byAgent = byAgent.Take(12),
             };
         }
-}
+        /// <summary>
+        /// Payouts against what they bring in: paid in the period, waiting for approval, approved but unpaid,
+        /// overdue, cost per admission, and the partners paid most (with their admissions) or paid with no admissions.
+        /// </summary>
+        public async Task<object> MoneyAsync(Snapshot s, CancellationToken ct)
+        {
+            var pays = await _db.PartnerPayments.AsNoTracking().Where(p => p.Status != "rejected")
+                .Select(p => new { p.ContactClientId, p.Amount, p.Status, p.Purpose, p.PaidAt, p.DueDate, p.CreatedAt }).ToListAsync(ct);
+            var paid = pays.Where(p => p.Status == "paid" && p.PaidAt >= s.From && p.PaidAt < s.To).ToList();
+            var paidPrev = pays.Where(p => p.Status == "paid" && p.PaidAt >= s.PrevFrom && p.PaidAt < s.From).Sum(p => p.Amount);
+            var admitted = s.InPeriod.Where(r => r.Admitted).ToList();
+            var admByContact = admitted.GroupBy(r => r.ContactId).ToDictionary(g => g.Key, g => g.Count());
+            var refByContact = s.InPeriod.GroupBy(r => r.ContactId).ToDictionary(g => g.Key, g => g.Count());
+            string Name(string id) => s.Partners.TryGetValue(id, out var p) ? p.Name : "Unknown partner";
+            string Type(string id) => s.Partners.TryGetValue(id, out var p) ? p.Role : "";
+            var byPartner = paid.GroupBy(p => p.ContactClientId).Select(g => new
+            {
+                partner = Name(g.Key), type = Type(g.Key), block = s.BlockOf(g.Key), paid = g.Sum(x => x.Amount),
+                referred = refByContact.GetValueOrDefault(g.Key), admitted = admByContact.GetValueOrDefault(g.Key),
+            }).ToList();
+            var now = DateTime.UtcNow;
+            var open = pays.Where(p => p.Status is "pending_approval" or "approved").ToList();
+            return new
+            {
+                periodDays = (int)Math.Round((s.To - s.From).TotalDays),
+                paidInPeriod = paid.Sum(p => p.Amount),
+                paidPreviousPeriod = paidPrev,
+                paymentsInPeriod = paid.Count,
+                admissionsInPeriod = admitted.Count,
+                costPerAdmission = admitted.Count == 0 ? (decimal?)null : Math.Round(paid.Sum(p => p.Amount) / admitted.Count, 0),
+                waitingApproval = new { count = open.Count(p => p.Status == "pending_approval"), amount = open.Where(p => p.Status == "pending_approval").Sum(p => p.Amount) },
+                approvedNotPaid = new { count = open.Count(p => p.Status == "approved"), amount = open.Where(p => p.Status == "approved").Sum(p => p.Amount) },
+                overdue = new { count = open.Count(p => p.DueDate != null && p.DueDate < now), amount = open.Where(p => p.DueDate != null && p.DueDate < now).Sum(p => p.Amount) },
+                byPurpose = paid.GroupBy(p => string.IsNullOrWhiteSpace(p.Purpose) ? "Other" : p.Purpose).Select(g => new { purpose = g.Key, amount = g.Sum(x => x.Amount), count = g.Count() })
+                    .OrderByDescending(x => x.amount).Take(8),
+                byPartnerType = byPartner.GroupBy(x => x.type).Select(g => new { type = g.Key, paid = g.Sum(x => x.paid), admitted = g.Sum(x => x.admitted) }).OrderByDescending(x => x.paid).Take(8),
+                topPaidPartners = byPartner.OrderByDescending(x => x.paid).Take(10),
+                paidButNoAdmissions = byPartner.Where(x => x.admitted == 0).OrderByDescending(x => x.paid).Take(8),
+            };
+        }
+    }
 }
