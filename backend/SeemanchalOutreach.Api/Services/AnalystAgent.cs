@@ -65,13 +65,28 @@ namespace SeemanchalOutreach.Api.Services
             if (responseFormat != null) body["response_format"] = responseFormat.DeepClone();
 
             var client = _http.CreateClient("groq");
-            using var req = new HttpRequestMessage(HttpMethod.Post, _settings.BaseUrl.TrimEnd('/') + "/chat/completions")
+            var payload = body.ToJsonString();
+            HttpResponseMessage res = null!;
+            string text = "";
+            // Groq's free tier limits tokens per minute. When it says "slow down", wait as long as it asks
+            // (capped) and try again a couple of times before giving up.
+            for (int attempt = 0; ; attempt++)
             {
-                Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
-            };
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _settings.ApiKey);
-            using var res = await client.SendAsync(req, ct);
-            var text = await res.Content.ReadAsStringAsync(ct);
+                using var req = new HttpRequestMessage(HttpMethod.Post, _settings.BaseUrl.TrimEnd('/') + "/chat/completions")
+                {
+                    Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+                };
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _settings.ApiKey);
+                res?.Dispose();
+                res = await client.SendAsync(req, ct);
+                text = await res.Content.ReadAsStringAsync(ct);
+                if ((int)res.StatusCode != 429 || attempt >= 2) break;
+                var wait = res.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(8 * (attempt + 1));
+                if (wait > TimeSpan.FromSeconds(25)) wait = TimeSpan.FromSeconds(25);
+                _logger.LogInformation("Groq rate limit; retrying in {Seconds}s", (int)wait.TotalSeconds);
+                await Task.Delay(wait, ct);
+            }
+            using var _res = res;
             if (!res.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Groq returned {Status}: {Body}", (int)res.StatusCode, text.Length > 600 ? text[..600] : text);
@@ -377,6 +392,11 @@ namespace SeemanchalOutreach.Api.Services
                     result = JsonNode.Parse(msg["content"]?.GetValue<string>() ?? "{}")!.AsObject();
                 }
 
+                // JSON mode doesn't enforce the shape: make sure every list is there so the page can always show it.
+                foreach (var list in new[] { "wins", "issues", "opportunities", "plan", "item_updates", "watch_next" })
+                    if (result[list] is not JsonArray) result[list] = new JsonArray();
+                if (result["summary"] is not JsonValue) result["summary"] = "";
+                if (Str(result["health"]) is not ("good" or "watch" or "bad")) result["health"] = "watch";
                 briefing.ResultJson = result.ToJsonString();
                 briefing.Summary = Str(result["summary"]);
                 briefing.Health = Str(result["health"]);
@@ -550,6 +570,8 @@ namespace SeemanchalOutreach.Api.Services
                         bool surveyDone = await db.AiBriefings.AnyAsync(b => b.Scope == "surveys" && b.Status == "ok" && b.CreatedAt >= today.AddDays(-6), stoppingToken);
                         if (!surveyDone)
                         {
+                            // Give Groq's per-minute token allowance time to refill after the business run.
+                            if (!done) await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
                             using var scope2 = _scopes.CreateScope();
                             var agent2 = scope2.ServiceProvider.GetRequiredService<AnalystAgent>();
                             await agent2.RunBriefingAsync("auto", stoppingToken, "surveys");

@@ -32,6 +32,28 @@ const SEV: Record<string, Tone> = { high: 'bad', medium: 'warn', low: 'neutral' 
 const KIND: Record<string, string> = { issue: 'Issue', opportunity: 'Opportunity', plan: 'Action' };
 const TREND: Record<string, { label: string; tone: Tone }> = { better: { label: 'Getting better', tone: 'ok' }, same: { label: 'No change', tone: 'neutral' }, worse: { label: 'Getting worse', tone: 'bad' }, resolved: { label: 'Looks resolved', tone: 'ok' } };
 
+// The model sometimes leaves a section out or returns the wrong shape; never let that crash the page.
+const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
+function normalize(raw: unknown): BriefingResult | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const finding = (x: Record<string, unknown>): Finding => ({
+    key: str(x.key), title: str(x.title), detail: str(x.detail), area: str(x.area), metric: str(x.metric),
+    severity: (['high', 'medium', 'low'].includes(str(x.severity)) ? str(x.severity) : 'medium') as Finding['severity'],
+  });
+  const objs = (v: unknown) => arr<unknown>(v).filter((x): x is Record<string, unknown> => !!x && typeof x === 'object');
+  return {
+    summary: str(o.summary),
+    health: (['good', 'watch', 'bad'].includes(str(o.health)) ? str(o.health) : 'watch') as BriefingResult['health'],
+    wins: objs(o.wins).map((x) => ({ title: str(x.title), detail: str(x.detail) })),
+    issues: objs(o.issues).map(finding),
+    opportunities: objs(o.opportunities).map(finding),
+    plan: objs(o.plan).map((x) => ({ key: str(x.key), title: str(x.title), detail: str(x.detail), owner: str(x.owner), due_in_days: Number(x.due_in_days) || 0, expected_impact: str(x.expected_impact) })),
+    watch_next: arr<unknown>(o.watch_next).map(str).filter(Boolean),
+  };
+}
+
 // ─── AI analyst panel (business or surveys) ────────────────────────────────────────────────────────────
 
 export default function AnalystPanel({ scope = 'business', suggestions = SUGGESTIONS, intro }: { scope?: 'business' | 'surveys'; suggestions?: string[]; intro?: string }) {
@@ -74,7 +96,7 @@ export default function AnalystPanel({ scope = 'business', suggestions = SUGGEST
     );
   }
   const b = viewing ?? s.latest;
-  const r = b?.result ?? null;
+  const r = normalize(b?.result);
 
   return (
     <>
