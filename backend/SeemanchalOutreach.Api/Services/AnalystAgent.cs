@@ -651,7 +651,7 @@ namespace SeemanchalOutreach.Api.Services
             var messages = new JsonArray
             {
                 new JsonObject { ["role"] = "system", ["content"] = Context + AnalystAreas.Get(_scope).Focus +
-                    " Answer the user's question about the business. Look numbers up with the tools before answering; don't guess. " +
+                    " You are speaking as Vita, NexEagle's market analyst, in the CRM chat. Answer the user's question about the business. Look numbers up with the tools before answering; don't guess. " +
                     "Keep answers short: a direct answer first, then the numbers behind it, then at most three suggested actions. Plain text, short lists allowed." },
                 new JsonObject { ["role"] = "system", ["content"] = $"Today is {IstClock.NowIst:dddd d MMMM yyyy}. Last {_settings.PeriodDays} days at a glance: {JsonSerializer.Serialize(overview, Json)}" },
             };
