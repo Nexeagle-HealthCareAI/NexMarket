@@ -124,6 +124,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     .Where(kv => kv.Value.District == a.District && kv.Value.Block == a.Block)
                     .Select(kv => kv.Key)
                     .ToHashSet();
+                var scope = Scope(a);
+                if (scope != null) blockPanchayatIds.IntersectWith(scope);
 
                 var visited = visits
                     .Where(v => v.AgentId == a.AgentId && v.CheckInAt >= a.AssignedAt && blockPanchayatIds.Contains(v.PanchayatId))
@@ -142,7 +144,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     Notes = a.Notes,
                     AssignedAt = a.AssignedAt,
                     CompletedAt = a.CompletedAt,
-                    TotalPanchayats = totalByBlock.GetValueOrDefault((a.District, a.Block), 0),
+                    TotalPanchayats = Scope(a) == null ? totalByBlock.GetValueOrDefault((a.District, a.Block), 0) : blockPanchayatIds.Count,
                     VisitedPanchayats = visited,
                 };
             }).ToList();
@@ -264,6 +266,8 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Where(p => p.District == assignment.District && p.Block == assignment.Block && p.IsActiveForMarketing)
                 .OrderBy(p => p.Name)
                 .ToListAsync(cancellationToken);
+            var myScope = Scope(assignment);
+            if (myScope != null) panchayats = panchayats.Where(p => myScope.Contains(p.PanchayatId)).ToList();
 
             // Scoped to visits on/after this assignment's AssignedAt — otherwise an
             // agent reassigned to a block they'd previously worked (under an earlier,
@@ -296,5 +300,211 @@ namespace SeemanchalOutreach.Api.Controllers
                 }).ToList(),
             });
         }
-    }
+    
+        // ─── Board: blocks, who covers them, and splitting a block between agents ───
+
+        /// <summary>The panchayats an assignment covers, or null when it covers the whole block.</summary>
+        public static HashSet<string>? Scope(BlockAssignment a)
+        {
+            if (string.IsNullOrWhiteSpace(a.PanchayatIdsJson)) return null;
+            try { return System.Text.Json.JsonSerializer.Deserialize<List<string>>(a.PanchayatIdsJson)?.ToHashSet(); }
+            catch (System.Text.Json.JsonException) { return null; }
+        }
+
+        private static string? ScopeJson(IEnumerable<string>? ids) =>
+            ids == null ? null : System.Text.Json.JsonSerializer.Serialize(ids.Distinct().OrderBy(x => x).ToList());
+
+        private async Task<List<(string AgentId, string Name, string Block, string District)>> FieldAgentsAsync(CancellationToken ct)
+        {
+            var list = await _db.Agents.AsNoTracking().Where(a => a.IsActive)
+                .Select(a => new { a.AgentId, a.Name, a.Role, a.Block, a.District }).ToListAsync(ct);
+            return list.Where(a => !RoleChecks.IsDashboardRole(a.Role)).OrderBy(a => a.Name)
+                .Select(a => (a.AgentId, a.Name, a.Block, a.District)).ToList();
+        }
+
+        [HttpGet("board")]
+        [PageAccess(Pages.Field)]
+        public async Task<IActionResult> Board(CancellationToken ct)
+        {
+            var panchayats = await _db.Panchayats.AsNoTracking().Where(p => p.IsActiveForMarketing)
+                .Select(p => new { p.PanchayatId, p.District, p.Block }).ToListAsync(ct);
+            var active = await _db.BlockAssignments.AsNoTracking().Where(a => a.Status == "Active").ToListAsync(ct);
+            var agents = await FieldAgentsAsync(ct);
+            var names = agents.ToDictionary(a => a.AgentId, a => a.Name);
+            var since = DateTime.UtcNow.AddDays(-30);
+            var visited30 = (await _db.Visits.AsNoTracking().Where(v => v.CheckInAt >= since).Select(v => v.PanchayatId).Distinct().ToListAsync(ct)).ToHashSet();
+
+            var blocks = panchayats.GroupBy(p => (p.District, p.Block)).Select(g =>
+            {
+                var ids = g.Select(p => p.PanchayatId).ToHashSet();
+                var here = active.Where(a => a.District == g.Key.District && a.Block == g.Key.Block && names.ContainsKey(a.AgentId)).ToList();
+                var covered = new HashSet<string>();
+                var who = here.Select(a =>
+                {
+                    var sc = Scope(a);
+                    var mine = sc == null ? ids : ids.Where(sc.Contains).ToHashSet();
+                    covered.UnionWith(mine);
+                    return new { agentId = a.AgentId, name = names[a.AgentId], panchayats = mine.Count, whole = sc == null };
+                }).OrderByDescending(x => x.panchayats).ToList();
+                return new
+                {
+                    district = g.Key.District,
+                    block = g.Key.Block,
+                    panchayats = ids.Count,
+                    assigned = covered.Count,
+                    visited30 = ids.Count(visited30.Contains),
+                    agents = who,
+                };
+            }).OrderBy(b => b.district).ThenBy(b => b.block).ToList();
+
+            var withBlock = active.Where(a => names.ContainsKey(a.AgentId)).Select(a => a.AgentId).ToHashSet();
+            return Ok(new
+            {
+                kpis = new
+                {
+                    blocks = blocks.Count,
+                    blocksWithAgent = blocks.Count(b => b.agents.Count > 0),
+                    panchayats = blocks.Sum(b => b.panchayats),
+                    panchayatsAssigned = blocks.Sum(b => b.assigned),
+                    agentsWithoutBlock = agents.Count(a => !withBlock.Contains(a.AgentId)),
+                },
+                districts = blocks.Select(b => b.district).Distinct().ToList(),
+                blocks,
+                agents = agents.Select(a =>
+                {
+                    var cur = active.Where(x => x.AgentId == a.AgentId).OrderByDescending(x => x.AssignedAt).FirstOrDefault();
+                    return new { agentId = a.AgentId, name = a.Name, block = cur?.Block, district = cur?.District, partial = cur != null && Scope(cur) != null };
+                }),
+            });
+        }
+
+        [HttpGet("block")]
+        [PageAccess(Pages.Field)]
+        public async Task<IActionResult> BlockDetail([FromQuery] string district, [FromQuery] string block, CancellationToken ct)
+        {
+            var panchayats = await _db.Panchayats.AsNoTracking()
+                .Where(p => p.District == district && p.Block == block && p.IsActiveForMarketing)
+                .OrderBy(p => p.Name).Select(p => new { p.PanchayatId, p.Name }).ToListAsync(ct);
+            var ids = panchayats.Select(p => p.PanchayatId).ToList();
+            var active = await _db.BlockAssignments.AsNoTracking()
+                .Where(a => a.Status == "Active" && a.District == district && a.Block == block).ToListAsync(ct);
+            var agentIds = active.Select(a => a.AgentId).Distinct().ToList();
+            var names = await _db.Agents.AsNoTracking().Where(a => agentIds.Contains(a.AgentId) && a.IsActive)
+                .ToDictionaryAsync(a => a.AgentId, a => a.Name, ct);
+            var lastVisit = await _db.Visits.AsNoTracking().Where(v => ids.Contains(v.PanchayatId))
+                .GroupBy(v => v.PanchayatId).Select(g => new { g.Key, at = g.Max(v => v.CheckInAt) }).ToDictionaryAsync(x => x.Key, x => x.at, ct);
+            var partners = await _db.Contacts.AsNoTracking().Where(c => ids.Contains(c.PanchayatId) && !c.IsMerged)
+                .GroupBy(c => c.PanchayatId).Select(g => new { g.Key, n = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.n, ct);
+
+            string? Owner(string pid)
+            {
+                foreach (var a in active.Where(a => names.ContainsKey(a.AgentId)).OrderByDescending(a => a.AssignedAt))
+                {
+                    var sc = Scope(a);
+                    if (sc == null || sc.Contains(pid)) return a.AgentId;
+                }
+                return null;
+            }
+
+            return Ok(new
+            {
+                district,
+                block,
+                panchayats = panchayats.Select(p =>
+                {
+                    var owner = Owner(p.PanchayatId);
+                    return new
+                    {
+                        panchayatId = p.PanchayatId,
+                        name = p.Name,
+                        agentId = owner,
+                        agentName = owner == null ? null : names[owner],
+                        lastVisitAt = lastVisit.TryGetValue(p.PanchayatId, out var lv) ? lv : (DateTime?)null,
+                        partners = partners.GetValueOrDefault(p.PanchayatId),
+                    };
+                }),
+            });
+        }
+
+        public class AssignBlockDto
+        {
+            [Required] public string District { get; set; } = string.Empty;
+            [Required] public string Block { get; set; } = string.Empty;
+            /// <summary>Agent to give the panchayats to; empty = take them away from whoever has them.</summary>
+            public string? AgentId { get; set; }
+            /// <summary>Null = the whole block.</summary>
+            public List<string>? PanchayatIds { get; set; }
+            public string? Notes { get; set; }
+        }
+
+        /// <summary>
+        /// Give a whole block, or some of its panchayats, to one agent. Whoever covered those panchayats
+        /// before loses them (an assignment left with none is closed). An agent works one block at a time,
+        /// so giving them a different block closes their old one.
+        /// </summary>
+        [HttpPost("assign")]
+        [PageAccess(Pages.Field)]
+        public async Task<IActionResult> Assign([FromBody] AssignBlockDto dto, CancellationToken ct)
+        {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+            var blockIds = await _db.Panchayats.AsNoTracking()
+                .Where(p => p.District == dto.District && p.Block == dto.Block && p.IsActiveForMarketing)
+                .Select(p => p.PanchayatId).ToListAsync(ct);
+            if (blockIds.Count == 0) return NotFound(new { message = "That block has no active panchayats." });
+            var moving = dto.PanchayatIds == null ? blockIds.ToHashSet() : dto.PanchayatIds.Where(blockIds.Contains).ToHashSet();
+            if (moving.Count == 0) return BadRequest(new { message = "Pick at least one panchayat." });
+            bool whole = moving.Count == blockIds.Count;
+
+            Domain.Entities.FieldAgent? agent = null;
+            if (!string.IsNullOrWhiteSpace(dto.AgentId))
+            {
+                agent = await _db.Agents.FirstOrDefaultAsync(a => a.AgentId == dto.AgentId && a.IsActive, ct);
+                if (agent == null) return NotFound(new { message = "Agent not found." });
+            }
+            var now = DateTime.UtcNow;
+            var by = User.FindFirst("agentId")?.Value;
+
+            // Take the panchayats away from everyone else on this block.
+            var others = await _db.BlockAssignments
+                .Where(a => a.Status == "Active" && a.District == dto.District && a.Block == dto.Block && a.AgentId != (dto.AgentId ?? ""))
+                .ToListAsync(ct);
+            foreach (var o in others)
+            {
+                var left = (Scope(o) ?? blockIds.ToHashSet()).Where(id => blockIds.Contains(id) && !moving.Contains(id)).ToList();
+                if (left.Count == 0) { o.Status = "Completed"; o.CompletedAt = now; }
+                else o.PanchayatIdsJson = left.Count == blockIds.Count ? null : ScopeJson(left);
+            }
+
+            if (agent != null)
+            {
+                var mine = await _db.BlockAssignments.Where(a => a.AgentId == agent.AgentId && a.Status == "Active").ToListAsync(ct);
+                var same = mine.FirstOrDefault(a => a.District == dto.District && a.Block == dto.Block);
+                foreach (var m in mine.Where(m => m != same)) { m.Status = "Completed"; m.CompletedAt = now; }
+                if (same != null)
+                {
+                    var had = Scope(same) ?? blockIds.ToHashSet();
+                    var union = had.Concat(moving).Where(blockIds.Contains).ToHashSet();
+                    same.PanchayatIdsJson = union.Count == blockIds.Count ? null : ScopeJson(union);
+                    if (!string.IsNullOrWhiteSpace(dto.Notes)) same.Notes = dto.Notes.Trim();
+                }
+                else
+                {
+                    _db.BlockAssignments.Add(new BlockAssignment
+                    {
+                        AgentId = agent.AgentId,
+                        District = dto.District,
+                        Block = dto.Block,
+                        PanchayatIdsJson = whole ? null : ScopeJson(moving),
+                        Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim(),
+                        AssignedByAgentId = by,
+                    });
+                }
+                agent.District = dto.District;
+                agent.Block = dto.Block;
+            }
+
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { moved = moving.Count, whole, agentId = agent?.AgentId });
+        }
+}
 }

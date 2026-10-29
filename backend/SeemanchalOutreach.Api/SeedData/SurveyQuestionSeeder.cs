@@ -26,9 +26,9 @@ namespace SeemanchalOutreach.Api.SeedData
         public const string CoreSection = "Panchayat snapshot";
 
         /// <summary>
-        /// Keeps the questionnaire in line with this file on every start-up. Questions are
-        /// matched by QuestionId and updated in place, so their ids stay the same between
-        /// restarts; questions no longer listed here are removed.
+        /// Seeds the questionnaire. Questions are matched by QuestionId so their ids stay the same
+        /// between restarts; questions no longer listed here are removed. The first run switches on
+        /// the six core questions; after that admins manage the questionnaire from the CRM.
         /// </summary>
         public static async Task SeedIfEmptyAsync(Infrastructure.Persistence.MarketingDbContext db)
         {
@@ -230,12 +230,18 @@ namespace SeemanchalOutreach.Api.SeedData
             }
 
             var existing = await db.SurveyQuestions.ToListAsync();
+            // Once the six core questions have been switched on, admins manage the questionnaire from the
+            // CRM (Surveys › Questions: edit wording, add choices, reorder, swap). From then on start-up
+            // only adds missing rows and never resets the wording, the choices, which six are asked or their order.
+            bool managedInCrm = existing.Any(q => q.Section == CoreSection);
             var byId = existing.GroupBy(q => q.QuestionId).ToDictionary(g => g.Key, g => g.ToList());
             foreach (var q in all)
             {
                 if (byId.TryGetValue(q.QuestionId, out var rows))
                 {
                     var row = rows[0];
+                    db.SurveyQuestions.RemoveRange(rows.Skip(1)); // duplicates from older seeding
+                    if (managedInCrm) continue;
                     row.Text = q.Text;
                     row.Type = q.Type;
                     row.Section = q.Section;
@@ -243,10 +249,15 @@ namespace SeemanchalOutreach.Api.SeedData
                     row.IsOptional = q.IsOptional;
                     row.IsActive = q.IsActive;
                     row.Order = q.Order;
-                    db.SurveyQuestions.RemoveRange(rows.Skip(1)); // duplicates from older seeding
                 }
                 else
                 {
+                    if (managedInCrm && !existing.Any(e => e.IsActive && e.QuestionId == q.QuestionId))
+                    {
+                        // A question added to this file later starts switched off; an admin can swap it in.
+                        q.IsActive = false;
+                        if (q.Order < 100) q.Order += 100;
+                    }
                     db.SurveyQuestions.Add(q);
                 }
             }

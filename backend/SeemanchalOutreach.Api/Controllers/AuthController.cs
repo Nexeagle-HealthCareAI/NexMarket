@@ -42,6 +42,9 @@ namespace SeemanchalOutreach.Api.Controllers
         // — it's never exposed to client JS, so the client has no way to send it
         // here even if it wanted to. AgentId/DeviceId are just identifiers (not
         // secrets), needed to look up which session to refresh.
+
+        /// <summary>Only from the phone app (X-Client: mobile), which keeps it in the device keystore. Browsers leave it empty.</summary>
+        public string? RefreshToken { get; set; }
     }
 
     public class ChangePasswordRequestDto
@@ -68,6 +71,10 @@ namespace SeemanchalOutreach.Api.Controllers
             _db = db;
             _config = config;
         }
+
+        /// <summary>The NexEagle Field phone app sends "X-Client: mobile".</summary>
+        private bool IsMobileClient =>
+            string.Equals(Request.Headers["X-Client"].ToString(), "mobile", StringComparison.OrdinalIgnoreCase);
 
         [HttpPost("login")]
         public async Task<ActionResult<object>> Login([FromBody] LoginRequestDto request, CancellationToken cancellationToken)
@@ -97,7 +104,8 @@ namespace SeemanchalOutreach.Api.Controllers
             string refreshToken = await IssueRefreshTokenAsync(agent.AgentId, deviceId, cancellationToken);
             await _db.SaveChangesAsync(cancellationToken);
 
-            SetAuthCookies(GenerateJwt(agent), refreshToken);
+            string jwt = GenerateJwt(agent);
+            SetAuthCookies(jwt, refreshToken);
 
             return Ok(new
             {
@@ -109,6 +117,11 @@ namespace SeemanchalOutreach.Api.Controllers
                 deviceId,
                 profileCompleted = agent.ProfileCompleted,
                 mustChangePassword = agent.MustChangePassword,
+                // The phone app has no cookie jar it can trust across restarts: it keeps both
+                // tokens in the device keystore and sends "Authorization: Bearer". Browsers
+                // never get them in the body.
+                accessToken = IsMobileClient ? jwt : null,
+                refreshToken = IsMobileClient ? refreshToken : null,
             });
         }
 
@@ -117,8 +130,10 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-            if (!Request.Cookies.TryGetValue(AuthCookies.RefreshToken, out var refreshTokenCookie)
-                || string.IsNullOrEmpty(refreshTokenCookie))
+            string? refreshTokenCookie = IsMobileClient && !string.IsNullOrEmpty(request.RefreshToken)
+                ? request.RefreshToken
+                : (Request.Cookies.TryGetValue(AuthCookies.RefreshToken, out var cookieValue) ? cookieValue : null);
+            if (string.IsNullOrEmpty(refreshTokenCookie))
             {
                 return Unauthorized("Refresh token is invalid or expired — sign in again.");
             }
@@ -144,10 +159,13 @@ namespace SeemanchalOutreach.Api.Controllers
             string newRefreshToken = await IssueRefreshTokenAsync(agent.AgentId, request.DeviceId, cancellationToken); // rotate — the old token can't be reused
             await _db.SaveChangesAsync(cancellationToken);
 
-            SetAuthCookies(GenerateJwt(agent), newRefreshToken);
+            string newJwt = GenerateJwt(agent);
+            SetAuthCookies(newJwt, newRefreshToken);
 
             return Ok(new
             {
+                accessToken = IsMobileClient ? newJwt : null,
+                refreshToken = IsMobileClient ? newRefreshToken : null,
                 agentId = agent.AgentId,
                 name = agent.Name,
                 role = agent.Role,
@@ -163,7 +181,20 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> Logout(CancellationToken cancellationToken)
         {
             string? agentId = User.FindFirst("agentId")?.Value;
-            if (!string.IsNullOrEmpty(agentId) && Request.Cookies.TryGetValue(AuthCookies.RefreshToken, out var refreshTokenCookie))
+            string? refreshTokenCookie = Request.Cookies.TryGetValue(AuthCookies.RefreshToken, out var fromCookie) ? fromCookie : null;
+            if (IsMobileClient)
+            {
+                // The phone app sends {"refreshToken": "..."} in the body (it has no cookies).
+                try
+                {
+                    using var doc = await System.Text.Json.JsonDocument.ParseAsync(Request.Body, cancellationToken: cancellationToken);
+                    if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                        && doc.RootElement.TryGetProperty("refreshToken", out var rt) && rt.ValueKind == System.Text.Json.JsonValueKind.String)
+                        refreshTokenCookie = rt.GetString();
+                }
+                catch (System.Text.Json.JsonException) { /* empty or invalid body: nothing to revoke */ }
+            }
+            if (!string.IsNullOrEmpty(agentId) && !string.IsNullOrEmpty(refreshTokenCookie))
             {
                 // Best-effort: revoke this device's session server-side too, not just
                 // the client-side cookies, so the (now-cleared) refresh token can't

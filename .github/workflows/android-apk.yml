@@ -1,0 +1,145 @@
+# NexEagle Field — Android build.
+# Move this file to .github/workflows/android-apk.yml in the repository.
+#
+# Push to develop/main (changes under mobile/) → a signed release APK as a build artifact.
+# Push a tag v* (e.g. v1.0.0) → also an .aab for Play and a GitHub release with both files.
+#
+# Secrets (Settings → Secrets and variables → Actions → Secrets):
+#   ANDROID_KEYSTORE_BASE64   base64 of the upload keystore (.jks)
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+#   Without them the APK is signed with the debug key (installable for testing, not for Play).
+# Variables (… → Variables):
+#   EXPO_PUBLIC_API_URL             e.g. https://nexmarket-api.nexeagle.com
+#   EXPO_PUBLIC_DUTY_DOCTOR_PHONE   optional, shown on urgent referrals
+
+name: Android APK
+
+on:
+  push:
+    branches: [develop, main]
+    paths: ['mobile/**', '.github/workflows/android-apk.yml']
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # for the GitHub release on tags
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+      EXPO_PUBLIC_DUTY_DOCTOR_PHONE: ${{ vars.EXPO_PUBLIC_DUTY_DOCTOR_PHONE }}
+      ANDROID_VERSION_CODE: ${{ github.run_number }}
+      NODE_OPTIONS: --max-old-space-size=4096
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Version
+        id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+            cat >> android/app/build.gradle <<'GRADLE'
+
+          android {
+              signingConfigs {
+                  release {
+                      storeFile file('release.keystore')
+                      storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                      keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                      keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          GRADLE
+            echo "Signing with the release keystore."
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set — the APK is signed with the debug key."
+          fi
+
+      - name: Build APK
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Build AAB (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease --no-daemon
+
+      - name: Collect outputs
+        id: out
+        run: |
+          name="nexeagle-field-${{ steps.ver.outputs.version }}-${{ github.run_number }}"
+          mkdir -p ../dist-android
+          cp android/app/build/outputs/apk/release/app-release.apk "../dist-android/$name.apk"
+          if [ -f android/app/build/outputs/bundle/release/app-release.aab ]; then
+            cp android/app/build/outputs/bundle/release/app-release.aab "../dist-android/$name.aab"
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.out.outputs.name }}
+          path: dist-android/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: GitHub release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: NexEagle Field ${{ github.ref_name }}
+          files: dist-android/*
+          generate_release_notes: true

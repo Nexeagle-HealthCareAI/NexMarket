@@ -22,6 +22,7 @@ export interface CoverageRow {
   admitted: number;
   surveys: number;
   status: CoverageStatus;
+  inScope?: boolean;
 }
 
 export interface Coverage {
@@ -68,6 +69,9 @@ export interface PanchayatDetail {
   block: string;
   district: string;
   lgdCode: string;
+  inScope?: boolean;
+  canDelete?: boolean;
+  createdBy?: string;
   lat: number | null;
   lng: number | null;
   source: LocationSource;
@@ -165,6 +169,8 @@ export interface CoverageFilter {
   agentId?: string;
   from?: string;
   to?: string;
+  /** default: in marketing scope · 'out' taken out · 'all' */
+  scope?: 'out' | 'all';
 }
 
 function qs(f: Record<string, string | undefined>): string {

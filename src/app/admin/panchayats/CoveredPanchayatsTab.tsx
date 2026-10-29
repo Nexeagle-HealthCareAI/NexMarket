@@ -319,7 +319,7 @@ export default function CoveredPanchayatsTab() {
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
                             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#10b981', background: '#d1fae5', padding: '0.2rem 0.5rem', borderRadius: '12px' }}>{c.status}</span>
-                            <a href={`/admin/pipeline/${c.clientId}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4f46e5', textDecoration: 'none', background: '#e0e7ff', padding: '0.25rem 0.6rem', borderRadius: '6px' }}>View Profile →</a>
+                            <a href={`/admin/partners?id=${encodeURIComponent(c.clientId)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4f46e5', textDecoration: 'none', background: '#e0e7ff', padding: '0.25rem 0.6rem', borderRadius: '6px' }}>View Profile →</a>
                           </div>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem', color: '#475569' }}>

@@ -30,7 +30,17 @@ interface ContactPanel {
   patients: { clientId: string; patientName: string; department: string; status: string; label: string; createdAt: string }[];
   payments: { id: string; purpose: string; period?: string | null; amount: number; status: string; createdAt: string; paidAt?: string | null }[];
   history: { outcome: string; responses: string[]; note?: string | null; attempt: number; createdAt: string; by: string }[];
+  priority?: 'very_high' | 'high' | 'normal' | 'low' | null;
+  followUpDate?: string | null;
+  notes?: { text: string; source: string; createdAt: string; by?: string | null }[];
 }
+
+const PRIORITY: Record<string, { label: string; tone: 'bad' | 'warn' | 'accent' | 'neutral' }> = {
+  very_high: { label: 'Very important', tone: 'bad' },
+  high: { label: 'High priority', tone: 'warn' },
+  normal: { label: 'Normal', tone: 'accent' },
+  low: { label: 'Low', tone: 'neutral' },
+};
 
 const FILTERS = [
   { key: 'due', label: 'Due today' },
@@ -222,7 +232,7 @@ function ContactCallPanel({ clientId, editable, maxAttempts, importantEvery, onS
   clientId: string; editable: boolean; maxAttempts: number; importantEvery: number; onSaved: (msg: string) => void; onImportantChanged: () => void;
 }) {
   const { data: c, error, reload, setData } = useLoader(() => crm.get<ContactPanel>(`/api/v1/calls/contact/${encodeURIComponent(clientId)}`), [clientId]);
-  const [tab, setTab] = useState<'call' | 'patients' | 'payments' | 'history'>('call');
+  const [tab, setTab] = useState<'call' | 'patients' | 'notes' | 'payments' | 'history'>('call');
   const [outcome, setOutcome] = useState<string | null>(null);
   const [responses, setResponses] = useState<string[]>([]);
   const [note, setNote] = useState('');
@@ -279,6 +289,12 @@ function ContactCallPanel({ clientId, editable, maxAttempts, importantEvery, onS
           <h2 style={{ fontSize: 22, fontWeight: 800 }}>{c.name}</h2>
           <span className="crm-sub">{[contactTypeLabel(c.type), c.profession, c.panchayat, c.block].filter(Boolean).join(' · ')}</span>
           <span className="crm-sub">{c.phone ?? 'No phone'}{c.agentName ? ` · field agent ${c.agentName}` : ''}</span>
+          {(c.priority || c.followUpDate) && (
+            <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+              {c.priority && PRIORITY[c.priority] && <Pill tone={PRIORITY[c.priority].tone}>{PRIORITY[c.priority].label}</Pill>}
+              {c.followUpDate && <span className="crm-cell-sub">Agent follow-up {fmt.date(c.followUpDate)}</span>}
+            </span>
+          )}
         </div>
         <button type="button" className="crm-btn is-secondary" onClick={toggleImportant} aria-pressed={c.isImportant} disabled={!editable}
           style={c.isImportant ? { borderColor: 'var(--warn)', background: 'var(--warn-soft)', color: 'var(--warn-ink)' } : undefined}>
@@ -306,7 +322,7 @@ function ContactCallPanel({ clientId, editable, maxAttempts, importantEvery, onS
       )}
 
       <div className="crm-tabs" role="tablist" aria-label="Partner">
-        {([['call', 'Log this call'], ['patients', `Patients (${c.patients.length})`], ['payments', 'Payments'], ['history', 'Call history']] as const).map(([k, l]) => (
+        {([['call', 'Log this call'], ['patients', `Patients (${c.patients.length})`], ['notes', `Agent notes (${c.notes?.length ?? 0})`], ['payments', 'Payments'], ['history', 'Call history']] as const).map(([k, l]) => (
           <button key={k} type="button" role="tab" className="crm-tab" aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -414,6 +430,19 @@ function ContactCallPanel({ clientId, editable, maxAttempts, importantEvery, onS
             </li>
           ))}
         </ul>
+      ))}
+
+      {tab === 'notes' && (!c.notes || c.notes.length === 0 ? <Empty title="No notes yet">Notes the field agent writes in the app show here.</Empty> : (
+        <ol className="crm-list">
+          {c.notes.map((n, i) => (
+            <li key={i} style={{ alignItems: 'flex-start' }}>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: 14 }}>“{n.text}”</span>
+                <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{fmt.dateTime(n.createdAt)} · {n.source}{n.by ? ` · ${n.by}` : ''}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
       ))}
 
       {tab === 'history' && (c.history.length === 0 ? <Empty title="No calls yet" /> : (

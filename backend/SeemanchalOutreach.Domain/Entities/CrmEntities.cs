@@ -134,4 +134,101 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime? ReadAt { get; set; }
         public DateTime? RepliedAt { get; set; }
     }
+
+    /// <summary>
+    /// A field agent's leave request. Urgent = today/tomorrow, for emergencies; holiday = planned.
+    /// Both come out of one yearly allowance (Leave:YearlyAllowance, 24 days by default).
+    /// Approved by an Admin or Marketing manager on the CRM.
+    /// </summary>
+    public class LeaveRequest
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        public string Type { get; set; } = "holiday";        // urgent | holiday
+        public DateOnly FromDate { get; set; }
+        public DateOnly ToDate { get; set; }
+        public bool HalfDay { get; set; }
+        public decimal Days { get; set; }                     // working days, Sundays and holidays excluded
+        public string Reason { get; set; } = string.Empty;
+        public string Status { get; set; } = "pending";      // pending | approved | rejected | cancelled
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string? DecidedBy { get; set; }
+        public DateTime? DecidedAt { get; set; }
+        public string? DecisionNote { get; set; }
+        public int FollowUpsMoved { get; set; }
+    }
+
+    /// <summary>A dated note on a partner, written by an agent in the app (or on the CRM).</summary>
+    public class ContactNote
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string ClientId { get; set; } = string.Empty;  // idempotency key from the device
+        public string ContactClientId { get; set; } = string.Empty;
+        public string AgentId { get; set; } = string.Empty;
+        public string Text { get; set; } = string.Empty;
+        public string Source { get; set; } = "note";          // note | visit | call
+        public DateTime CreatedAt { get; set; }
+        public DateTime ServerReceivedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>One run of the AI analyst: what it was shown, what it said, and how it went.</summary>
+    public class AiBriefing
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string CreatedBy { get; set; } = string.Empty;    // AgentId, or "auto" for the daily run
+        public string Scope { get; set; } = "business";          // business | surveys
+        public DateTime PeriodFrom { get; set; }
+        public DateTime PeriodTo { get; set; }
+        public string Model { get; set; } = string.Empty;
+        public string Status { get; set; } = "running";           // running | ok | failed
+        public string? Error { get; set; }
+        public string? Health { get; set; }                       // good | watch | bad
+        public string? Summary { get; set; }
+        public string? ResultJson { get; set; }                   // the analyst's full answer
+        public string? DataJson { get; set; }                     // the figures it was given
+        public int ToolCalls { get; set; }
+        public int TokensUsed { get; set; }
+        public DateTime? FinishedAt { get; set; }
+    }
+
+    /// <summary>An issue, opportunity or planned action the analyst raised, tracked until someone closes it.</summary>
+    public class AiItem
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Key { get; set; } = string.Empty;           // stable slug so the same issue isn't raised twice
+        public string Kind { get; set; } = "issue";               // issue | opportunity | plan
+        public string Scope { get; set; } = "business";          // business | surveys
+        public string Title { get; set; } = string.Empty;
+        public string Detail { get; set; } = string.Empty;
+        public string? Area { get; set; }                         // e.g. "Thakurganj block", "ASHA workers", "Gynae"
+        public string? Metric { get; set; }                       // the number it's watching, as text
+        public string Severity { get; set; } = "medium";          // high | medium | low
+        public string Status { get; set; } = "open";              // open | in_progress | done | dismissed
+        public string? Owner { get; set; }                        // free text: a person or a role
+        public DateOnly? DueDate { get; set; }
+        public string? Trend { get; set; }                        // the analyst's latest read: better | same | worse | resolved
+        public string? TrendNote { get; set; }
+        public string? Note { get; set; }                         // the team's own note
+        public Guid FirstBriefingId { get; set; }
+        public Guid LastBriefingId { get; set; }
+        public int TimesRaised { get; set; } = 1;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public string? UpdatedBy { get; set; }
+        public DateTime? ClosedAt { get; set; }
+    }
+
+    /// <summary>A change an admin made to a survey response (an edit, or the copy kept when one is deleted).</summary>
+    public class SurveyEdit
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid ResponseId { get; set; }
+        public string Action { get; set; } = "edit";              // edit | delete
+        public string ChangedBy { get; set; } = string.Empty;
+        public DateTime ChangedAt { get; set; } = DateTime.UtcNow;
+        public string BeforeJson { get; set; } = "{}";            // answers before (for delete: the whole response)
+        public string? AfterJson { get; set; }
+        public string? Summary { get; set; }                      // e.g. "Where patients go today: Purnea → Siliguri"
+    }
 }

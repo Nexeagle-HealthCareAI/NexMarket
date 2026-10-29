@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Crosshair, MapPin, Navigation, Phone, Star, X } from 'lucide-react';
 import { geo, SOURCE_LABEL, STATUS_META, type PanchayatDetail, type PanchayatPerson } from '@/lib/crm/geo';
+import { crm } from '@/lib/sync/api-client';
 import { contactTypeLabel, Empty, ErrorBox, fmt, friendlyError, Pill, Skeleton, stageTone, useLoader } from '@/components/crm/ui';
 
-type Tab = 'people' | 'snapshot' | 'visits' | 'referrals';
+type Tab = 'people' | 'snapshot' | 'visits' | 'referrals' | 'record';
 
 interface Props {
   id: string;
@@ -22,9 +23,11 @@ interface Props {
   onToast: (msg: string) => void;
   /** Bumped by the parent to force a reload (e.g. after the pin moved). */
   version?: number;
+  /** The panchayat's record changed (renamed, scope, deleted) — the parent should reload its list. */
+  onRecordChanged?: () => void;
 }
 
-export default function PanchayatPanel({ id, from, to, canEditPartners, canEditField, onClose, onMovePin, showMapLink, onToast, version = 0 }: Props) {
+export default function PanchayatPanel({ id, from, to, canEditPartners, canEditField, onClose, onMovePin, showMapLink, onToast, version = 0, onRecordChanged }: Props) {
   const [tab, setTab] = useState<Tab>('people');
   const detail = useLoader(() => geo.panchayat(id, { from, to }), [id, from, to, version]);
   const d = detail.data;
@@ -49,6 +52,7 @@ export default function PanchayatPanel({ id, from, to, canEditPartners, canEditF
               <span className="geo-swatch" aria-hidden="true" />
               {STATUS_META[d.metrics.status].label}
             </span>
+            {d.inScope === false && <Pill tone="warn">Out of marketing scope</Pill>}
             {d.metrics.champions > 0 && <Pill tone="ok">{d.metrics.champions} champion{d.metrics.champions === 1 ? '' : 's'}</Pill>}
             {d.metrics.lastVisitAt && <span className="crm-sub" style={{ fontSize: 12 }}>Last visit {fmt.date(d.metrics.lastVisitAt)}</span>}
           </div>
@@ -92,6 +96,7 @@ export default function PanchayatPanel({ id, from, to, canEditPartners, canEditF
               ['snapshot', 'Snapshot'],
               ['visits', `Visits (${d.metrics.visitsAllTime})`],
               ['referrals', 'Referrals'],
+              ...(canEditField ? [['record', 'Record'] as [Tab, string]] : []),
             ] as [Tab, string][]).map(([k, label]) => (
               <button key={k} type="button" role="tab" className="crm-tab" aria-selected={tab === k} onClick={() => setTab(k)}>{label}</button>
             ))}
@@ -99,6 +104,11 @@ export default function PanchayatPanel({ id, from, to, canEditPartners, canEditF
 
           {tab === 'people' && <People d={d} canEdit={canEditPartners || canEditField} onToast={onToast} onChanged={detail.reload} />}
           {tab === 'snapshot' && <Snapshot d={d} />}
+          {tab === 'record' && canEditField && (
+            <RecordTab key={d.id + d.name + d.block + String(d.inScope)} d={d} onToast={onToast}
+              onSaved={() => { void detail.reload(); onRecordChanged?.(); }}
+              onDeleted={() => { onRecordChanged?.(); onClose(); }} />
+          )}
           {tab === 'visits' && <Visits d={d} />}
           {tab === 'referrals' && (
             d.referrals.length === 0 ? <Empty title="No referrals yet">Nobody from this panchayat has been referred to the hospital.</Empty> : (
@@ -239,5 +249,73 @@ function Visits({ d }: { d: PanchayatDetail }) {
         ))}
       </ul>
     </>
+  );
+}
+
+function RecordTab({ d, onToast, onSaved, onDeleted }: { d: PanchayatDetail; onToast: (m: string) => void; onSaved: () => void; onDeleted: () => void }) {
+  const [name, setName] = useState(d.name);
+  const [block, setBlock] = useState(d.block);
+  const [district, setDistrict] = useState(d.district);
+  const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const dirty = name.trim() !== d.name || block.trim() !== d.block || district.trim() !== d.district;
+
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    try { await fn(); } catch (e) { onToast(friendlyError(e)); } finally { setBusy(false); }
+  };
+  const save = () => run(async () => {
+    if (!name.trim() || !block.trim() || !district.trim()) throw new Error('Name, block and district are all needed.');
+    await crm.put(`/api/v1/panchayats/${encodeURIComponent(d.id)}`, { name: name.trim(), block: block.trim(), district: district.trim() });
+    onToast('Panchayat saved.');
+    onSaved();
+  });
+  const setScope = (active: boolean) => run(async () => {
+    await crm.patch(`/api/v1/panchayats/marketing-status`, { panchayatIds: [d.id], isActive: active });
+    onToast(active ? `${d.name} is back in marketing scope.` : `${d.name} taken out of scope. It no longer shows in agents’ block lists.`);
+    onSaved();
+  });
+  const remove = () => run(async () => {
+    await crm.del(`/api/v1/panchayats/${encodeURIComponent(d.id)}`);
+    onToast(`${d.name} deleted.`);
+    onDeleted();
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="crm-form-grid">
+        <label className="crm-field">Panchayat name<input className="crm-input" value={name} onChange={(e) => setName(e.target.value)} /></label>
+        <label className="crm-field">Block<input className="crm-input" value={block} onChange={(e) => setBlock(e.target.value)} /></label>
+        <label className="crm-field">District<input className="crm-input" value={district} onChange={(e) => setDistrict(e.target.value)} /></label>
+      </div>
+      <span className="crm-cell-sub">{d.lgdCode ? `LGD code ${d.lgdCode}` : 'Added by hand (no LGD code)'}{d.createdBy && !d.lgdCode ? ` · by ${d.createdBy}` : ''}</span>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button type="button" className="crm-btn" disabled={!dirty || busy} onClick={save}>Save record</button>
+      </div>
+
+      <div className="crm-note" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ flex: '1 1 220px' }}>
+          <strong>{d.inScope === false ? 'Out of marketing scope' : 'In marketing scope'}</strong><br />
+          {d.inScope === false ? 'Agents don’t see it in their block list and it isn’t counted in coverage.' : 'Shown in agents’ block lists and counted in coverage.'}
+        </span>
+        <button type="button" className="crm-btn is-secondary is-sm" disabled={busy} onClick={() => setScope(d.inScope === false)}>
+          {d.inScope === false ? 'Bring back into scope' : 'Take out of scope'}
+        </button>
+      </div>
+
+      {d.canDelete ? (
+        confirmDelete ? (
+          <div className="crm-note" style={{ background: 'var(--bad-soft)', color: 'var(--bad)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ flex: 1 }}>Delete {d.name}? It has no partners or visits, so nothing else is lost.</span>
+            <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setConfirmDelete(false)}>Keep it</button>
+            <button type="button" className="crm-btn is-danger is-sm" disabled={busy} onClick={remove}>Delete</button>
+          </div>
+        ) : (
+          <button type="button" className="crm-btn is-danger is-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setConfirmDelete(true)}>Delete panchayat</button>
+        )
+      ) : (
+        <span className="crm-cell-sub">This panchayat has partners or visits, so it can’t be deleted. Take it out of scope instead.</span>
+      )}
+    </div>
   );
 }

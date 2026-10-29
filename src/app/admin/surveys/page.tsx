@@ -1,712 +1,632 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { PencilIcon, TrashIcon, PlusIcon, FileDownIcon, FilterIcon, XIcon } from 'lucide-react';
-import { useAgentStore } from '@/store/agent-store';
-import { getAdminSurveys, type AdminSurveyDto, getAdminSurveyQuestions, createAdminSurveyQuestion, updateAdminSurveyQuestion, deleteAdminSurveyQuestion, deleteAdminSurveyResponse, updateAdminSurveyResponse, type SurveyQuestionDto, getPanchayats, type PanchayatDto } from '@/lib/sync/api-client';
-import EditSurveyResponseModal from '@/components/admin/EditSurveyResponseModal';
-import { HealthcareDashboard } from '@/components/admin/HealthcareDashboard';
-import { HistoricalAnalyticsDashboard } from '@/components/admin/HistoricalAnalyticsDashboard';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { MultiSelectDropdown, PaginationControls } from './components/SharedComponents';
-import { SurveyResponsesTab } from './components/SurveyResponsesTab';
-import { SurveyDataManagementTab } from './components/SurveyDataManagementTab';
-import { SurveyQuestionnaireTab } from './components/SurveyQuestionnaireTab';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowDown, ArrowLeft, ArrowUp, Search, Sparkles } from 'lucide-react';
+import { crm } from '@/lib/sync/api-client';
+import AnalystPanel from '@/components/crm/AnalystPanel';
+import { contactTypeLabel, Empty, ErrorBox, fmt, friendlyError, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 
-const CONTACT_ROLE_LABELS: Record<string, string> = {
-  asha_worker: 'ASHA Worker',
-  rmp_doctor: 'RMP Doctor',
-  ward_member: 'Ward Member',
-  medicine_shop: 'Medicine Shop',
-  mukhiya: 'Mukhiya',
-  prominent_person: 'Prominent Person',
-  lab: 'Lab/Pathology',
-  nursing_home: 'Nursing Home',
-  independent_doctor: 'Independent Doctor',
-  hospital: 'Hospital',
-  other: 'Other',
+// ─── Types ──────────────────────────────────────────────────────────────────
+interface QMeta { id: string; questionId: string; title: string; text: string; type: string; options: { full: string; label: string }[] }
+interface Unit {
+  id: string; name: string; sub: string; responses: number; lastAt?: string | null; score: number;
+  topSpecialist?: string | null; topSpecialistWeHave: boolean; topDestination?: string | null;
+  answered: Record<string, number>; counts: Record<string, Record<string, number>>;
+}
+interface InsightsRes {
+  unit: 'block' | 'panchayat'; district?: string | null; block?: string | null;
+  blocks: { district: string; block: string }[]; departments: string[]; questions: QMeta[];
+  totals: { responses: number; places: number; placesWithAnswers: number; panchayats: number; panchayatsWithAnswers: number; thisMonth: number; skippedThisMonth: number };
+  units: Unit[];
+}
+interface RespRow { id: string; kind: string; contactId?: string | null; contactName?: string | null; contactType?: string | null; panchayat?: string | null; block?: string | null; agentId: string; agent: string; createdAt: string; answered: number; answerCount: number; skipReason?: string | null }
+interface RespList { counts: { current: number; skipped: number; older: number }; total: number; page: number; pageSize: number; asked: number; canEdit: boolean; agents: { agentId: string; agent: string }[]; blocks: string[]; rows: RespRow[] }
+interface RespDetail {
+  id: string; kind: string; contact?: { clientId: string; name: string; type: string } | null; panchayat?: string | null; block?: string | null; agent: string; createdAt: string; skipReason?: string | null;
+  canEdit: boolean; canDelete: boolean;
+  questions: { questionId: string; title: string; text: string; type: string; options: { full: string; label: string }[]; values: string[]; labels: string[] }[];
+  extra: { questionId: string; value: string }[];
+  history: { action: string; summary?: string | null; by: string; at: string }[];
+}
+interface QRow { id: string; questionId: string; title: string; text: string; type: string; order: number; options: string[]; answers: number }
+interface QRes { canEdit: boolean; asked: QRow[]; retired: QRow[] }
+
+type Tab = 'insights' | 'responses' | 'questions' | 'ai';
+const TABS: { k: Tab; l: string }[] = [{ k: 'insights', l: 'Panchayat insights' }, { k: 'responses', l: 'Responses' }, { k: 'questions', l: 'Questions' }, { k: 'ai', l: 'AI analyst' }];
+const shortLabel = (s: string) => {
+  const cut = [s.indexOf(' ('), s.indexOf(': ')].filter((i) => i > 3);
+  const t = cut.length ? s.slice(0, Math.min(...cut)) : s;
+  return t.length > 60 ? `${t.slice(0, 57)}…` : t;
 };
+const pct = (a: number, b: number) => (b ? Math.round((100 * a) / b) : 0);
 
-function contactRoleLabel(role?: string | null): string | null {
-  if (!role) return null;
-  return CONTACT_ROLE_LABELS[role] ?? role.replace(/_/g, ' ');
+export default function SurveysWrap() {
+  return (
+    <Suspense fallback={<main className="crm-page"><Skeleton h={120} /></main>}>
+      <SurveysPage />
+    </Suspense>
+  );
 }
 
-function panchayatLocationLabel(survey: AdminSurveyDto): string | null {
-  if (!survey.locationName || survey.locationName === 'Unknown') return null;
-  const parts = [survey.block, survey.district].filter(Boolean);
-  return parts.length > 0 ? `${survey.locationName} (${parts.join(', ')})` : survey.locationName;
-}
-
-export default function AdminSurveysPage() {
-  const agentId = useAgentStore((s) => s.agentId);
-  const [activeTab, setActiveTab] = useState<'responses' | 'history' | 'data_management' | 'questionnaire' | 'insights'>('responses');
-
-  const queryClient = useQueryClient();
-
-  // Responses State
-  const { data: surveys = [], isLoading: surveysLoading, error: surveysQueryError } = useQuery({
-    queryKey: ['surveys'],
-    queryFn: () => getAdminSurveys() as Promise<AdminSurveyDto[]>,
-    enabled: !!agentId,
-    staleTime: 1000 * 60 * 5,
-  });
-  const surveysError = surveysQueryError?.message || null;
-
-  const { data: allPanchayats = [] } = useQuery({
-    queryKey: ['panchayats'],
-    queryFn: () => getPanchayats() as Promise<PanchayatDto[]>,
-    enabled: !!agentId,
-    staleTime: 1000 * 60 * 60, // Panchayats rarely change
-  });
-
-  // Filter States
-  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
-  const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
-  const [selectedBlocks, setSelectedBlocks] = useState<string[]>([]);
-  const [selectedPanchayats, setSelectedPanchayats] = useState<string[]>([]);
-  const [dateFilterMode, setDateFilterMode] = useState<'all' | 'custom'>('all');
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
-
-  // Sort + Pagination
-  const [sortField, setSortField] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [currentPage, setCurrentPage] = useState(1);
-  const PAGE_SIZE = 10;
-
-  // Questionnaire State
-  const { data: questions = [], isLoading: questionsLoading, error: questionsQueryError } = useQuery({
-    queryKey: ['survey-questions'],
-    queryFn: () => getAdminSurveyQuestions() as Promise<SurveyQuestionDto[]>,
-    enabled: !!agentId,
-    staleTime: 1000 * 60 * 5,
-  });
-  const questionsError = questionsQueryError?.message || null;
-  
-  // Editor State
-  const [editingQuestion, setEditingQuestion] = useState<Partial<SurveyQuestionDto> | null>(null);
-  const [editingResponse, setEditingResponse] = useState<AdminSurveyDto | null>(null);
-
-  // Delete safety net
-  const [deletingResponse, setDeletingResponse] = useState<AdminSurveyDto | null>(null);
-  const [deleteConfirmName, setDeleteConfirmName] = useState('');
-  const [deleteError, setDeleteError] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  // Any filter/sort/tab change invalidates the current page — jumping back
-  // to page 1 avoids landing on a now-empty page.
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedDistricts, selectedBlocks, selectedPanchayats, dateFilterMode, customStartDate, customEndDate, sortField, sortDirection, activeTab]);
-
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
-
-  const saveQuestionMutation = useMutation({
-    mutationFn: async (payload: any) => {
-      if (editingQuestion?.id) return updateAdminSurveyQuestion(editingQuestion.id, payload);
-      return createAdminSurveyQuestion(payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['survey-questions'] });
-      setEditingQuestion(null);
-    },
-    onError: (err: any) => alert(err.message || 'Failed to save question')
-  });
-
-  const handleSaveQuestion = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingQuestion) return;
-    
-    const payload = {
-      questionId: editingQuestion.questionId || '',
-      text: editingQuestion.text || '',
-      type: editingQuestion.type || 'single',
-      optionsJson: editingQuestion.optionsJson ?? undefined,
-      isOptional: editingQuestion.isOptional || false,
-      isActive: editingQuestion.isActive ?? true,
-      order: editingQuestion.order || 0
-    };
-    saveQuestionMutation.mutate(payload);
-  };
-
-  const deleteResponseMutation = useMutation({
-    mutationFn: (id: string) => deleteAdminSurveyResponse(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['surveys'] });
-      setDeletingResponse(null);
-      setDeleteConfirmName('');
-      setIsDeleting(false);
-    },
-    onError: (err: any) => {
-      setDeleteError(err.message || 'Failed to delete response');
-      setIsDeleting(false);
-    }
-  });
-
-  const confirmDeleteResponse = () => {
-    if (!deletingResponse) return;
-    const expected = (deletingResponse.contactName || '').trim().toLowerCase();
-    if (!expected || deleteConfirmName.trim().toLowerCase() !== expected) {
-      setDeleteError('Name does not match — type it exactly as shown to confirm.');
-      return;
-    }
-    setIsDeleting(true);
-    setDeleteError('');
-    deleteResponseMutation.mutate(deletingResponse.id);
-  };
-
-  const updateResponseMutation = useMutation({
-    mutationFn: ({ id, newAnswersJson }: { id: string, newAnswersJson: string }) => updateAdminSurveyResponse(id, newAnswersJson),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['surveys'] })
-  });
-
-  const handleUpdateResponse = async (id: string, newAnswersJson: string) => {
-    await updateResponseMutation.mutateAsync({ id, newAnswersJson });
-  };
-
-  const deleteQuestionMutation = useMutation({
-    mutationFn: (id: string) => deleteAdminSurveyQuestion(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['survey-questions'] }),
-    onError: (err: any) => alert(err.message || 'Failed to delete question')
-  });
-
-  const handleDeleteQuestion = (id: string) => {
-    if (!confirm('Are you sure you want to delete this question?')) return;
-    deleteQuestionMutation.mutate(id);
-  };
-
-  if (!agentId) return <div style={{ padding: '2rem' }}>Not authenticated</div>;
-
-  // Column list for the Responses table = every configured question, PLUS any
-  // answer key that shows up in actual response data but has no matching
-  // SurveyQuestionDto (e.g. responses submitted while the questionnaire had
-  // zero questions configured — the agent app falls back to a hardcoded
-  // legacy q1..q6 set in that case). Without this, those answers exist in the
-  // data but never get a column to render under, and the table looks like it
-  // only has Person Name / Added By / Date Added.
-  const knownQuestionIds = new Set(questions.map(q => q.questionId));
-  const orphanAnswerKeys = new Set<string>();
-  surveys.forEach((s) => {
-    try {
-      Object.keys(JSON.parse(s.answersJson)).forEach((k) => {
-        if (!knownQuestionIds.has(k)) orphanAnswerKeys.add(k);
-      });
-    } catch {}
-  });
-  const currentColumns: { questionId: string; text: string }[] = questions.map((q) => ({ questionId: q.questionId, text: q.text }));
-  const historyColumns: { questionId: string; text: string }[] = [
-    ...[...orphanAnswerKeys].sort().map((k) => ({ questionId: k, text: `(unconfigured: ${k})` })),
-  ];
-  
-  const activeColumns = activeTab === 'history' ? historyColumns : currentColumns;
-
-  // Compute unique regions for filters
-  const uniqueDistricts = Array.from(new Set(allPanchayats.map(p => p.district))).sort();
-  
-  const filteredBlocks = allPanchayats
-    .filter(p => selectedDistricts.length === 0 || selectedDistricts.includes(p.district))
-    .map(p => p.block);
-  const uniqueBlocks = Array.from(new Set(filteredBlocks)).sort();
-
-  const filteredPanchayatList = allPanchayats
-    .filter(p => (selectedDistricts.length === 0 || selectedDistricts.includes(p.district)) &&
-                 (selectedBlocks.length === 0 || selectedBlocks.includes(p.block)));
-  const uniquePanchayats = Array.from(new Set(filteredPanchayatList.map(p => p.id))).sort();
-
-  // Apply filters
-  const filteredSurveys = surveys.filter(survey => {
-    const panchayat = allPanchayats.find(p => p.id === survey.panchayatId);
-    if (panchayat) {
-      if (selectedDistricts.length > 0 && !selectedDistricts.includes(panchayat.district)) return false;
-      if (selectedBlocks.length > 0 && !selectedBlocks.includes(panchayat.block)) return false;
-      if (selectedPanchayats.length > 0 && !selectedPanchayats.includes(panchayat.id)) return false;
-    }
-    // else: unknown panchayat — never excluded by the location filters (unchanged from before)
-
-    if (dateFilterMode === 'custom') {
-      const created = new Date(survey.createdAt);
-      if (customStartDate && created < new Date(`${customStartDate}T00:00:00`)) return false;
-      if (customEndDate && created > new Date(`${customEndDate}T23:59:59.999`)) return false;
-    }
-
-    return true;
-  });
-
-  // Apply sort — question columns sort by that question's answer text.
-  const sortedSurveys = [...filteredSurveys].sort((a, b) => {
-    if (!sortField) return 0;
-    let aVal: string | number;
-    let bVal: string | number;
-
-    if (sortField === 'contactName') {
-      aVal = (a.contactName || 'Unknown').toLowerCase();
-      bVal = (b.contactName || 'Unknown').toLowerCase();
-    } else if (sortField === 'agentName') {
-      aVal = (a.agentName || a.agentId).toLowerCase();
-      bVal = (b.agentName || b.agentId).toLowerCase();
-    } else if (sortField === 'createdAt') {
-      aVal = new Date(a.createdAt).getTime();
-      bVal = new Date(b.createdAt).getTime();
-    } else {
-      let aAns: Record<string, unknown> = {};
-      let bAns: Record<string, unknown> = {};
-      try { aAns = JSON.parse(a.answersJson); } catch {}
-      try { bAns = JSON.parse(b.answersJson); } catch {}
-      aVal = String(aAns[sortField] ?? '').toLowerCase();
-      bVal = String(bAns[sortField] ?? '').toLowerCase();
-    }
-
-    if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-    if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-    return 0;
-  });
-
-  // Paginate — 10 per page, shared across both tabs.
-  const totalPages = Math.max(1, Math.ceil(sortedSurveys.length / PAGE_SIZE));
-  const pageSafe = Math.min(currentPage, totalPages);
-  const paginatedSurveys = sortedSurveys.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
-
-  // Insights — aggregated per-question breakdowns over the filtered (unpaginated)
-  // response set, so admins see distributions for the whole filtered region/date
-  // range rather than just the current page.
-  const insightsByQuestion = questions
-    .slice()
-    .sort((a, b) => a.order - b.order)
-    .map((q) => {
-      const raw: string[] = [];
-      filteredSurveys.forEach((s) => {
-        try {
-          const parsed = JSON.parse(s.answersJson || '{}');
-          const val = parsed[q.questionId];
-          if (val === undefined || val === null || val === '') return;
-          if (Array.isArray(val)) val.forEach((v) => raw.push(String(v)));
-          else raw.push(String(val));
-        } catch {}
-      });
-      return { question: q, raw, answeredCount: raw.length };
-    });
+function SurveysPage() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const tab = (TABS.find((t) => t.k === params.get('tab'))?.k ?? 'insights') as Tab;
+  const go = (t: Tab) => router.replace(t === 'insights' ? '/admin/surveys' : `/admin/surveys?tab=${t}`, { scroll: false });
+  const [toast, showToast] = useToast();
 
   return (
-    <div style={{ padding: '2rem', height: '100%', display: 'flex', flexDirection: 'column', minWidth: 0, width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '0.5rem', color: '#0f172a' }}>Surveys</h1>
-          <p style={{ color: '#64748b' }}>Manage survey responses and the dynamic questionnaire</p>
-        </div>
-        {activeTab === 'questionnaire' && (
-          <button 
-            onClick={() => setEditingQuestion({ type: 'single', isOptional: false, isActive: true, order: questions.length + 1 })}
-            style={{ background: '#4f46e5', color: 'white', padding: '0.6rem 1.2rem', borderRadius: '8px', fontWeight: 600, border: 'none', cursor: 'pointer' }}
-          >
-            + Add Question
+    <main className="crm-page">
+      <PageHead title="Surveys" sub="Agents ask six questions to every new contact. Here they add up to a picture of each panchayat: what people fall ill with, which doctors they lack and where they go today." />
+      <div className="crm-tabs" role="tablist" aria-label="Survey views">
+        {TABS.map((t) => (
+          <button key={t.k} type="button" role="tab" className="crm-tab" aria-selected={tab === t.k} onClick={() => go(t.k)}>
+            {t.k === 'ai' && <Sparkles size={14} aria-hidden style={{ verticalAlign: -2, marginRight: 6 }} />}{t.l}
           </button>
-        )}
+        ))}
+      </div>
+      {tab === 'insights' && <Insights />}
+      {tab === 'responses' && <Responses showToast={showToast} />}
+      {tab === 'questions' && <Questions showToast={showToast} />}
+      {tab === 'ai' && (
+        <AnalystPanel scope="surveys"
+          intro="The analyst reads every survey answer, matches the needs to the hospital's departments and admissions, and checks whether the survey is being done properly. It writes a new survey briefing every week."
+          suggestions={[
+            'Which block should get our next health camp, and for which specialty?',
+            'Where are we losing patients to Siliguri or Purnea, and why?',
+            'Which agents are skipping the survey or adding contacts without one?',
+            'What do families say about paying, and what package should we offer?',
+          ]} />
+      )}
+      {toast}
+    </main>
+  );
+}
+
+// ─── Insights ───────────────────────────────────────────────────────────────
+
+function Insights() {
+  const [district, setDistrict] = useState('');
+  const [block, setBlock] = useState('');
+  const [sel, setSel] = useState<string | null>(null);
+  const [cmpQ, setCmpQ] = useState('');
+  const data = useLoader(() => {
+    const sp = new URLSearchParams();
+    if (district) sp.set('district', district);
+    if (block) sp.set('block', block);
+    return crm.get<InsightsRes>(`/api/v1/surveys/insights?${sp}`);
+  }, [district, block]);
+  const d = data.data;
+  const districts = useMemo(() => [...new Set((d?.blocks ?? []).map((b) => b.district))].sort(), [d]);
+  const blockOptions = (d?.blocks ?? []).filter((b) => !district || b.district === district);
+
+  if (data.error) return <ErrorBox message={data.error} onRetry={data.reload} />;
+  if (!d) return <Skeleton h={480} />;
+  const unitWord = d.unit === 'panchayat' ? 'panchayat' : 'block';
+  const withAnswers = d.units.filter((u) => u.responses > 0);
+  const cur = d.units.find((u) => u.id === sel) ?? withAnswers[0] ?? null;
+  const qCmp = d.questions.find((q) => q.questionId === cmpQ) ?? d.questions.find((q) => q.questionId === 'specialist_deficit') ?? d.questions[0];
+
+  // Average share per answer across the whole scope, for the "compared with" line.
+  const scopeShare = (qid: string, label: string) => {
+    let n = 0, hit = 0;
+    for (const u of d.units) { n += u.answered[qid] ?? 0; hit += u.counts[qid]?.[label] ?? 0; }
+    return pct(hit, n);
+  };
+
+  return (
+    <>
+      <div className="crm-chips" style={{ alignItems: 'center' }}>
+        <label className="crm-sr" htmlFor="sv-d">District</label>
+        <select id="sv-d" className="crm-select" style={{ width: 'auto' }} value={district} onChange={(e) => { setDistrict(e.target.value); setBlock(''); setSel(null); }}>
+          <option value="">All districts</option>
+          {districts.map((x) => <option key={x}>{x}</option>)}
+        </select>
+        <label className="crm-sr" htmlFor="sv-b">Block</label>
+        <select id="sv-b" className="crm-select" style={{ width: 'auto' }} value={block} onChange={(e) => { setBlock(e.target.value); setSel(null); }}>
+          <option value="">All blocks</option>
+          {blockOptions.map((b) => <option key={`${b.district}|${b.block}`} value={b.block}>{b.block}</option>)}
+        </select>
+        <span className="crm-sub" style={{ fontSize: 13 }}>{d.unit === 'panchayat' ? `Showing the panchayats of ${block}` : 'Showing blocks. Pick a block to see its panchayats.'}</span>
       </div>
 
-      <div style={{ display: 'flex', gap: '1rem', borderBottom: '2px solid #e2e8f0', marginBottom: '1.5rem', overflowX: 'auto', whiteSpace: 'nowrap', paddingBottom: '2px' }}>
-        <button
-          onClick={() => setActiveTab('responses')}
-          style={{
-            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
-            fontSize: '1rem', fontWeight: 700, color: activeTab === 'responses' ? '#4f46e5' : '#64748b',
-            borderBottom: activeTab === 'responses' ? '3px solid #4f46e5' : '3px solid transparent',
-            marginBottom: '-2px', transition: 'all 0.2s'
-          }}
-        >
-          📊 Responses
-        </button>
-        <button
-          onClick={() => setActiveTab('history')}
-          style={{
-            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
-            fontSize: '1rem', fontWeight: 700, color: activeTab === 'history' ? '#4f46e5' : '#64748b',
-            borderBottom: activeTab === 'history' ? '3px solid #4f46e5' : '3px solid transparent',
-            marginBottom: '-2px', transition: 'all 0.2s'
-          }}
-        >
-          🕰️ History
-        </button>
-        <button
-          onClick={() => setActiveTab('questionnaire')}
-          style={{
-            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
-            fontSize: '1rem', fontWeight: 700, color: activeTab === 'questionnaire' ? '#4f46e5' : '#64748b',
-            borderBottom: activeTab === 'questionnaire' ? '3px solid #4f46e5' : '3px solid transparent',
-            marginBottom: '-2px', transition: 'all 0.2s'
-          }}
-        >
-          📋 Questionnaire
-        </button>
-        <button
-          onClick={() => setActiveTab('data_management')}
-          style={{
-            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
-            fontSize: '1rem', fontWeight: 700, color: activeTab === 'data_management' ? '#4f46e5' : '#64748b',
-            borderBottom: activeTab === 'data_management' ? '3px solid #4f46e5' : '3px solid transparent',
-            marginBottom: '-2px', transition: 'all 0.2s'
-          }}
-        >
-          🛠️ Data Management
-        </button>
-        <button
-          onClick={() => setActiveTab('insights')}
-          style={{
-            background: 'none', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer',
-            fontSize: '1rem', fontWeight: 700, color: activeTab === 'insights' ? '#4f46e5' : '#64748b',
-            borderBottom: activeTab === 'insights' ? '3px solid #4f46e5' : '3px solid transparent',
-            marginBottom: '-2px', transition: 'all 0.2s'
-          }}
-        >
-          💡 Insights
-        </button>
+      <div className="crm-kpis">
+        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Contacts surveyed</span><span className="crm-kpi-value">{d.totals.responses.toLocaleString('en-IN')}</span></div>
+        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Panchayats with answers</span><span className="crm-kpi-value">{d.totals.panchayatsWithAnswers}<span className="crm-kpi-unit">of {d.totals.panchayats}</span></span></div>
+        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Answered this month</span><span className="crm-kpi-value">{d.totals.thisMonth}</span></div>
+        <div className="crm-card crm-kpi" style={d.totals.skippedThisMonth ? { background: 'var(--warn-soft)', borderColor: '#f0c98a' } : undefined}>
+          <span className="crm-kpi-label">Skipped this month</span><span className="crm-kpi-value" style={{ color: d.totals.skippedThisMonth ? 'var(--warn-ink)' : undefined }}>{d.totals.skippedThisMonth}</span>
+        </div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <style>{`
-          .survey-filters-desktop { display: flex; }
-          .survey-filters-mobile-toggle { display: none; }
-          @media (max-width: 768px) {
-            .survey-filters-desktop.closed { display: none; }
-            .survey-filters-mobile-toggle { display: flex; }
-          }
-        `}</style>
-        {(activeTab === 'responses' || activeTab === 'history' || activeTab === 'data_management' || activeTab === 'insights') && (
-          <>
-            <button 
-              className="survey-filters-mobile-toggle"
-              onClick={() => setIsFilterDrawerOpen(!isFilterDrawerOpen)}
-              style={{ background: 'white', border: '1px solid #e2e8f0', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontWeight: 600, color: '#334155', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}
-            >
-              <FilterIcon size={18} /> {isFilterDrawerOpen ? 'Hide Filters' : 'Show Filters'}
-            </button>
-            <div className={`survey-filters-desktop ${!isFilterDrawerOpen ? 'closed' : ''}`} style={{ marginBottom: '1.5rem', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', background: 'white', padding: '1rem 1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', flexShrink: 0 }}>
-              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Filter By Location:</span>
-              <div style={{ flex: 1, minWidth: '180px' }}>
-                <MultiSelectDropdown
-                  label="District"
-                  options={uniqueDistricts.map(d => ({ value: d, label: d }))}
-                  selected={selectedDistricts}
-                  onChange={(val) => { setSelectedDistricts(val); setSelectedBlocks([]); setSelectedPanchayats([]); }}
-                  placeholder="All Districts"
-                />
-              </div>
-              <div style={{ flex: 1, minWidth: '180px' }}>
-                <MultiSelectDropdown
-                  label="Block"
-                  options={uniqueBlocks.map(b => ({ value: b, label: b }))}
-                  selected={selectedBlocks}
-                  onChange={(val) => { setSelectedBlocks(val); setSelectedPanchayats([]); }}
-                  disabled={selectedDistricts.length === 0 && uniqueBlocks.length === 0}
-                  placeholder="All Blocks"
-                />
-              </div>
-              <div style={{ flex: 1, minWidth: '180px' }}>
-                <MultiSelectDropdown
-                  label="Panchayat"
-                  options={uniquePanchayats.map(pId => {
-                    const p = allPanchayats.find(x => x.id === pId);
-                    return { value: pId, label: p ? `${p.name} (${p.district})` : pId };
-                  })}
-                  selected={selectedPanchayats}
-                  onChange={(val) => setSelectedPanchayats(val)}
-                  disabled={selectedBlocks.length === 0 && uniquePanchayats.length === 0}
-                  placeholder="All Panchayats"
-                />
-              </div>
-
-              <div style={{ width: 1, alignSelf: 'stretch', background: '#e2e8f0' }} />
-
-              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Date:</span>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Range</label>
-                <select
-                  value={dateFilterMode}
-                  onChange={(e) => {
-                    const mode = e.target.value as 'all' | 'custom';
-                    setDateFilterMode(mode);
-                    if (mode === 'all') { setCustomStartDate(''); setCustomEndDate(''); }
-                  }}
-                  style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: 'white', fontSize: '0.85rem', height: '38px' }}
-                >
-                  <option value="all">All</option>
-                  <option value="custom">Custom Range</option>
-                </select>
-              </div>
-              {dateFilterMode === 'custom' && (
-                <>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>From</label>
-                    <input
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      style={{ padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem', height: '38px' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.25rem' }}>To</label>
-                    <input
-                      type="date"
-                      value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      style={{ padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem', height: '38px' }}
-                    />
-                  </div>
-                </>
-              )}
+      {withAnswers.length === 0 ? <section className="crm-card"><Empty title="No survey answers here yet">Answers appear as agents survey new contacts.</Empty></section> : (
+        <div className="crm-row">
+          <section className="crm-card grow-1" aria-labelledby="fz-h" style={{ flexBasis: 320, padding: '18px 0 6px' }}>
+            <div style={{ padding: '0 20px 10px' }}>
+              <h2 id="fz-h" className="crm-h2">Where to focus</h2>
+              <span className="crm-sub" style={{ fontSize: 13 }}>{unitWord === 'block' ? 'Blocks' : 'Panchayats'} that miss a specialist we have and send patients far away today. More answers, more confidence.</span>
             </div>
-          </>
-        )}
-
-        {/* KPI — respects every active filter (district/block/panchayat/date),
-            since it's just the length of the already-filtered response list
-            the table itself renders from. */}
-        {(activeTab === 'responses' || activeTab === 'history' || activeTab === 'data_management') && (
-          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', width: 'fit-content' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '10px', background: 'rgba(79,70,229,0.1)', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0 }}>
-              📋
-            </div>
-            <div>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Added</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>{surveysLoading ? '…' : filteredSurveys.length.toLocaleString()}</div>
-            </div>
-          </div>
-        )}
-
-        {(activeTab === 'responses' || activeTab === 'history') && (
-          <div style={{ flex: 1, overflowY: 'auto', width: '100%', minWidth: 0 }}>
-            {activeTab === 'history' && (
-              <HistoricalAnalyticsDashboard surveys={filteredSurveys} orphanAnswerKeys={Array.from(orphanAnswerKeys)} />
-            )}
-            {questionsError && <p style={{ color: '#b91c1c', fontSize: '0.85rem' }}>⚠️ Question columns may be incomplete — failed to load the questionnaire: {questionsError}</p>}
-            
-            {surveysLoading && <p>Loading responses...</p>}
-            {surveysError && <p style={{ color: 'red' }}>{surveysError}</p>}
-            {!surveysLoading && !surveysError && sortedSurveys.length === 0 && <p style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No responses match the selected filters.</p>}
-            {!surveysLoading && sortedSurveys.length > 0 && (
-
-              <SurveyResponsesTab
-                surveysLoading={surveysLoading}
-                surveysError={surveysError}
-                sortedSurveys={sortedSurveys}
-                activeColumns={activeColumns}
-                sortField={sortField}
-                sortDirection={sortDirection}
-                handleSort={handleSort}
-                paginatedSurveys={paginatedSurveys}
-                pageSafe={pageSafe}
-                totalPages={totalPages}
-                setCurrentPage={setCurrentPage}
-                PAGE_SIZE={PAGE_SIZE}
-                contactRoleLabel={contactRoleLabel}
-                panchayatLocationLabel={panchayatLocationLabel}
-              />
-            )}
-          </div>
-        )}
-
-        {activeTab === 'questionnaire' && (
-          <div style={{ flex: 1, overflowY: 'auto', minWidth: 0, width: '100%' }}>
-            {questionsLoading && <p>Loading questions...</p>}
-            {questionsError && <p style={{ color: 'red' }}>{questionsError}</p>}
-            {!questionsLoading && !questionsError && questions.length === 0 && <p>No questions defined. Add one!</p>}
-            <SurveyQuestionnaireTab
-              questionsLoading={questionsLoading}
-              questionsError={questionsError}
-              questions={questions}
-              setEditingQuestion={setEditingQuestion}
-              handleDeleteQuestion={handleDeleteQuestion}
-            />
-          </div>
-        )}
-
-        {activeTab === 'insights' && (
-          <div style={{ flex: 1, overflowY: 'auto', minWidth: 0, width: '100%', paddingBottom: '1rem' }}>
-            <HealthcareDashboard />
-          </div>
-        )}
-
-        {activeTab === 'data_management' && (
-          <div style={{ flex: 1, overflowY: 'auto', minWidth: 0, width: '100%' }}>
-            {surveysLoading && <p>Loading responses...</p>}
-            {surveysError && <p style={{ color: 'red' }}>{surveysError}</p>}
-            {!surveysLoading && !surveysError && sortedSurveys.length === 0 && <p style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No responses match the selected filters.</p>}
-            <SurveyDataManagementTab
-              surveysLoading={surveysLoading}
-              surveysError={surveysError}
-              sortedSurveys={sortedSurveys}
-              historyColumns={historyColumns}
-              sortField={sortField}
-              sortDirection={sortDirection}
-              handleSort={handleSort}
-              paginatedSurveys={paginatedSurveys}
-              pageSafe={pageSafe}
-              totalPages={totalPages}
-              setCurrentPage={setCurrentPage}
-              PAGE_SIZE={PAGE_SIZE}
-              contactRoleLabel={contactRoleLabel}
-              panchayatLocationLabel={panchayatLocationLabel}
-              setEditingResponse={setEditingResponse}
-              setDeletingResponse={setDeletingResponse}
-              setDeleteConfirmName={setDeleteConfirmName}
-              setDeleteError={setDeleteError}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Editor Modal */}
-      <AnimatePresence>
-        {editingQuestion && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditingQuestion(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' }} />
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} style={{ position: 'relative', background: 'white', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '500px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1.5rem', color: '#0f172a' }}>
-                {editingQuestion.id ? 'Edit Question' : 'Add Question'}
-              </h2>
-              <form onSubmit={handleSaveQuestion} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem' }}>Question Key (ID)</label>
-                  <input required value={editingQuestion.questionId || ''} onChange={e => setEditingQuestion({...editingQuestion, questionId: e.target.value})} placeholder="e.g. q1, current_party" style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                  <small style={{ color: '#64748b' }}>A unique identifier used for saving responses.</small>
-                </div>
-                
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem' }}>Question Text</label>
-                  <input required value={editingQuestion.text || ''} onChange={e => setEditingQuestion({...editingQuestion, text: e.target.value})} placeholder="What is your favorite color?" style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                </div>
-
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem' }}>Type</label>
-                    <select value={editingQuestion.type || 'single'} onChange={e => setEditingQuestion({...editingQuestion, type: e.target.value as any})} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: 'white' }}>
-                      <option value="single">Single Choice (one answer)</option>
-                      <option value="multi">Multiple Choice (many answers)</option>
-                      <option value="text">Free Text Input</option>
-                    </select>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem' }}>Order</label>
-                    <input type="number" required value={editingQuestion.order || 0} onChange={e => setEditingQuestion({...editingQuestion, order: parseInt(e.target.value) || 0})} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                  </div>
-                </div>
-
-                {(editingQuestion.type === 'single' || editingQuestion.type === 'multi') && (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem' }}>Options (JSON Array)</label>
-                    <textarea 
-                      required 
-                      value={editingQuestion.optionsJson || ''} 
-                      onChange={e => setEditingQuestion({...editingQuestion, optionsJson: e.target.value})} 
-                      placeholder='["Red", "Blue", "Green"]' 
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', minHeight: '80px', fontFamily: 'monospace' }} 
-                    />
-                    <small style={{ color: '#64748b' }}>Must be a valid JSON array of strings.</small>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#334155', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={editingQuestion.isOptional || false} onChange={e => setEditingQuestion({...editingQuestion, isOptional: e.target.checked})} />
-                    Is Optional?
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#334155', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={editingQuestion.isActive ?? true} onChange={e => setEditingQuestion({...editingQuestion, isActive: e.target.checked})} />
-                    Is Active?
-                  </label>
-                </div>
-
-                <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
-                  <button type="button" onClick={() => setEditingQuestion(null)} style={{ background: 'transparent', color: '#64748b', fontWeight: 700, border: 'none', cursor: 'pointer', padding: '0.75rem 1.5rem' }}>
-                    Cancel
+            <ul className="sv-focus">
+              {d.units.map((u) => (
+                <li key={u.id}>
+                  <button type="button" aria-pressed={cur?.id === u.id} onClick={() => setSel(u.id)} disabled={u.responses === 0}>
+                    <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{u.name}</span>
+                      <span className="crm-cell-sub" style={{ display: 'block' }}>
+                        {u.responses === 0 ? 'No answers yet' : [u.topSpecialist, u.topDestination && `goes to ${u.topDestination}`].filter(Boolean).join(' · ')}
+                        {u.responses > 0 && ` · ${u.responses} answer${u.responses === 1 ? '' : 's'}`}
+                      </span>
+                    </span>
+                    {u.responses > 0 && <Pill tone={u.score >= 60 ? 'ok' : u.score >= 35 ? 'accent' : 'neutral'}>{u.score}</Pill>}
                   </button>
-                  <button type="submit" style={{ background: '#4f46e5', color: 'white', fontWeight: 700, border: 'none', borderRadius: '8px', cursor: 'pointer', padding: '0.75rem 1.5rem' }}>
-                    Save Question
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+                </li>
+              ))}
+            </ul>
+          </section>
 
-      <EditSurveyResponseModal
-        response={editingResponse}
-        questions={questions}
-        isOpen={!!editingResponse}
-        onClose={() => setEditingResponse(null)}
-        onSave={handleUpdateResponse}
-      />
-
-      {/* Delete confirmation — type the person's name to unlock the button */}
-      <AnimatePresence>
-        {deletingResponse && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => { if (!isDeleting) { setDeletingResponse(null); setDeleteConfirmName(''); setDeleteError(''); } }}
-              style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' }}
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
-              style={{ position: 'relative', background: 'white', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '440px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
-            >
-              <h2 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '0.5rem', color: '#0f172a' }}>Delete this response?</h2>
-              <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
-                This permanently removes the survey response for{' '}
-                <strong style={{ color: '#0f172a' }}>{deletingResponse.contactName || 'Unknown'}</strong>. This cannot be undone.
-              </p>
-
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem' }}>
-                Type <strong>{deletingResponse.contactName || 'Unknown'}</strong> to confirm
-              </label>
-              <input
-                autoFocus
-                value={deleteConfirmName}
-                onChange={(e) => { setDeleteConfirmName(e.target.value); setDeleteError(''); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') confirmDeleteResponse(); }}
-                placeholder={deletingResponse.contactName || 'Unknown'}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.95rem', marginBottom: '0.5rem' }}
-              />
-              {deleteError && <p style={{ color: '#b91c1c', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{deleteError}</p>}
-
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.25rem', justifyContent: 'flex-end' }}>
-                <button
-                  type="button"
-                  onClick={() => { setDeletingResponse(null); setDeleteConfirmName(''); setDeleteError(''); }}
-                  disabled={isDeleting}
-                  style={{ background: 'transparent', color: '#64748b', fontWeight: 700, border: 'none', cursor: isDeleting ? 'not-allowed' : 'pointer', padding: '0.75rem 1.5rem' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmDeleteResponse}
-                  disabled={isDeleting || deleteConfirmName.trim().toLowerCase() !== (deletingResponse.contactName || '').trim().toLowerCase()}
-                  style={{
-                    background: deleteConfirmName.trim().toLowerCase() === (deletingResponse.contactName || '').trim().toLowerCase() ? '#b91c1c' : '#fca5a5',
-                    color: 'white', fontWeight: 700, border: 'none', borderRadius: '8px',
-                    cursor: (isDeleting || deleteConfirmName.trim().toLowerCase() !== (deletingResponse.contactName || '').trim().toLowerCase()) ? 'not-allowed' : 'pointer',
-                    padding: '0.75rem 1.5rem'
-                  }}
-                >
-                  {isDeleting ? 'Deleting...' : 'Delete Permanently'}
-                </button>
+          {cur && (
+            <section className="crm-card grow-3" aria-labelledby="un-h" style={{ flexBasis: 560, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <h2 id="un-h" style={{ fontSize: 20, fontWeight: 800 }}>{cur.name}</h2>
+                <span className="crm-sub" style={{ fontSize: 13, flex: 1 }}>{cur.sub} · {cur.responses} contact{cur.responses === 1 ? '' : 's'} answered{cur.lastAt ? ` · last on ${fmt.date(cur.lastAt)}` : ''}</span>
+                {d.unit === 'block' && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => { setBlock(cur.name); setSel(null); }}>See its panchayats</button>}
+                {d.unit === 'panchayat' && <Link href="/admin/coverage" style={{ fontSize: 13, fontWeight: 600 }}>Open in coverage</Link>}
               </div>
-            </motion.div>
+              <Tells u={cur} d={d} />
+              <div className="sv-cards">
+                {d.questions.map((q) => {
+                  const n = cur.answered[q.questionId] ?? 0;
+                  const top = Object.entries(cur.counts[q.questionId] ?? {}).slice(0, 4);
+                  const lead = top[0];
+                  return (
+                    <div key={q.questionId} className="sv-card">
+                      <span style={{ fontSize: 13, fontWeight: 700 }}>{q.title}</span>
+                      {n === 0 ? <span className="crm-cell-sub">Nobody answered this.</span> : top.map(([label, c]) => (
+                        <span key={label} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <span style={{ display: 'flex', fontSize: 13, gap: 8 }}><span style={{ flex: 1 }}>{shortLabel(label)}</span><strong>{c} of {n}</strong></span>
+                          <span className="crm-bar" style={{ height: 8 }}><span style={{ display: 'block', height: '100%', width: `${pct(c, n)}%`, background: 'var(--accent)' }} /></span>
+                        </span>
+                      ))}
+                      {lead && <span className="crm-cell-sub">Across {d.unit === 'panchayat' ? d.block : 'the region'}: {shortLabel(lead[0])} {scopeShare(q.questionId, lead[0])}%</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+
+      {withAnswers.length > 1 && qCmp && (
+        <section className="crm-card" aria-labelledby="cmp-h">
+          <div className="crm-card-head">
+            <h2 id="cmp-h" className="crm-h2" style={{ flex: 1 }}>Compare {unitWord}s</h2>
+            <label className="crm-sr" htmlFor="cmp-q">Question</label>
+            <select id="cmp-q" className="crm-select" style={{ width: 'auto' }} value={qCmp.questionId} onChange={(e) => setCmpQ(e.target.value)}>
+              {d.questions.map((q) => <option key={q.questionId} value={q.questionId}>{q.title}</option>)}
+            </select>
           </div>
-        )}
-      </AnimatePresence>
+          <CompareTable d={d} q={qCmp} />
+          <span className="crm-cell-sub">Share of contacts in each {unitWord} who gave that answer. Darker means more.</span>
+        </section>
+      )}
+    </>
+  );
+}
+
+/** Plain-language reading of one place's answers. Rules, not AI: the AI analyst tab goes further. */
+function Tells({ u, d }: { u: Unit; d: InsightsRes }) {
+  const lines: string[] = [];
+  const top = (qid: string) => { const e = Object.entries(u.counts[qid] ?? {})[0]; const n = u.answered[qid] ?? 0; return e ? { label: shortLabel(e[0]), c: e[1], n } : null; };
+  const spec = top('specialist_deficit');
+  if (spec) lines.push(`${spec.label} is the specialist people miss most (${spec.c} of ${spec.n})${u.topSpecialistWeHave ? ', and the hospital has that department.' : '. Check whether the hospital offers it.'}`);
+  const dest = top('treatment_destination');
+  if (dest) lines.push(`For serious cases most go to ${dest.label} today (${dest.c} of ${dest.n}).`);
+  const dec = top('referral_decision_maker');
+  if (dec) lines.push(`${dec.label} usually decides the hospital, so start there.`);
+  const pay = top('payment_funding_source');
+  if (pay) lines.push(`Most families pay by ${pay.label.toLowerCase()} (${pay.c} of ${pay.n}).`);
+  if (u.responses < 5) lines.push(`Only ${u.responses} answer${u.responses === 1 ? '' : 's'} so far, so treat this as a first look.`);
+  if (lines.length === 0) return null;
+  return (
+    <div className="crm-note" style={{ background: 'var(--accent-tint)', color: 'var(--text)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <strong style={{ color: 'var(--accent-ink)' }}>What this tells us</strong>
+      {lines.map((l) => <span key={l}>• {l}</span>)}
+      {d.departments.length === 0 && <span className="crm-cell-sub">Add departments under Departments &amp; doctors so this can match needs to what the hospital offers.</span>}
     </div>
   );
 }
 
+function CompareTable({ d, q }: { d: InsightsRes; q: QMeta }) {
+  const totals = new Map<string, number>();
+  for (const u of d.units) for (const [k, v] of Object.entries(u.counts[q.questionId] ?? {})) totals.set(k, (totals.get(k) ?? 0) + v);
+  const cols = [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k]) => k);
+  const rows = d.units.filter((u) => (u.answered[q.questionId] ?? 0) > 0).sort((a, b) => b.responses - a.responses).slice(0, 15);
+  if (cols.length === 0) return <span className="crm-cell-sub">No answers to this question yet.</span>;
+  return (
+    <div className="crm-table-wrap">
+      <table className="crm-table sv-heat">
+        <thead><tr><th>{d.unit === 'panchayat' ? 'Panchayat' : 'Block'}</th>{cols.map((c) => <th key={c} style={{ textAlign: 'center', whiteSpace: 'normal', minWidth: 110 }}>{shortLabel(c)}</th>)}</tr></thead>
+        <tbody>
+          {rows.map((u) => {
+            const n = u.answered[q.questionId] ?? 0;
+            return (
+              <tr key={u.id}>
+                <td><span className="crm-cell-main">{u.name}</span><div className="crm-cell-sub">{n} answer{n === 1 ? '' : 's'}</div></td>
+                {cols.map((c) => {
+                  const v = pct(u.counts[q.questionId]?.[c] ?? 0, n);
+                  const l = 97 - Math.round(v * 0.55);
+                  return <td key={c} style={{ textAlign: 'center' }}><span className="sv-cell" style={{ background: `hsl(210, 80%, ${l}%)`, color: l < 65 ? '#fff' : 'var(--text)' }}>{v}%</span></td>;
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Responses ──────────────────────────────────────────────────────────────
+
+function Responses({ showToast }: { showToast: (m: string) => void }) {
+  const [view, setView] = useState<'current' | 'skipped' | 'older'>('current');
+  const [block, setBlock] = useState('');
+  const [agentId, setAgentId] = useState('');
+  const [search, setSearch] = useState('');
+  const [q, setQ] = useState('');
+  const [page, setPage] = useState(1);
+  const [sel, setSel] = useState<string | null>(null);
+  useEffect(() => { const t = setTimeout(() => { setQ(search.trim()); setPage(1); }, 300); return () => clearTimeout(t); }, [search]);
+  const list = useLoader(() => {
+    const sp = new URLSearchParams({ view, page: String(page), pageSize: '25' });
+    if (block) sp.set('block', block);
+    if (agentId) sp.set('agentId', agentId);
+    if (q) sp.set('q', q);
+    return crm.get<RespList>(`/api/v1/surveys/responses?${sp}`);
+  }, [view, block, agentId, q, page]);
+  const d = list.data;
+  const pages = d ? Math.max(1, Math.ceil(d.total / d.pageSize)) : 1;
+
+  return (
+    <>
+      <div className="crm-chips" style={{ alignItems: 'center' }}>
+        <label className="crm-search" style={{ flex: '1 1 240px' }}>
+          <Search size={16} aria-hidden color="var(--text-2)" />
+          <span className="crm-sr">Search responses</span>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Contact, panchayat or agent" style={{ border: 0, outline: 0, flex: 1, font: 'inherit', fontSize: 14, background: 'transparent' }} />
+        </label>
+        <div className="pt-seg" role="group" aria-label="Show">
+          {([['current', 'Six questions'], ['skipped', 'Skipped'], ['older', 'Older questionnaire']] as const).map(([k, l]) => (
+            <button key={k} type="button" aria-pressed={view === k} onClick={() => { setView(k); setPage(1); setSel(null); }}>{l}{d ? ` ${d.counts[k].toLocaleString('en-IN')}` : ''}</button>
+          ))}
+        </div>
+        <label className="crm-sr" htmlFor="rs-b">Block</label>
+        <select id="rs-b" className="crm-select" style={{ width: 'auto' }} value={block} onChange={(e) => { setBlock(e.target.value); setPage(1); }}>
+          <option value="">All blocks</option>
+          {d?.blocks.map((b) => <option key={b}>{b}</option>)}
+        </select>
+        <label className="crm-sr" htmlFor="rs-a">Agent</label>
+        <select id="rs-a" className="crm-select" style={{ width: 'auto' }} value={agentId} onChange={(e) => { setAgentId(e.target.value); setPage(1); }}>
+          <option value="">All agents</option>
+          {d?.agents.map((a) => <option key={a.agentId} value={a.agentId}>{a.agent}</option>)}
+        </select>
+      </div>
+      {view === 'older' && <div className="crm-note" style={{ background: 'var(--accent-tint)', color: 'var(--text)' }}>These answers were given to the longer questionnaire used before the six questions. They are kept as they were and can be read and exported, but they aren&apos;t counted in Panchayat insights.</div>}
+      {list.error && <ErrorBox message={list.error} onRetry={list.reload} />}
+
+      <div className={`crm-row pt-split${sel ? ' has-sel' : ''}`}>
+        <section className="crm-card grow-3 pt-list" aria-label="Responses" style={{ padding: 0, overflow: 'hidden' }}>
+          {!d ? <div style={{ padding: 20 }}><Skeleton h={300} /></div> : d.rows.length === 0 ? <Empty title="No responses match">Try clearing a filter.</Empty> : (
+            <>
+              <div className="crm-table-wrap">
+                <table className="crm-table">
+                  <thead><tr><th>Contact</th><th>Panchayat · block</th><th>Agent</th><th>Date</th><th>Answers</th></tr></thead>
+                  <tbody>
+                    {d.rows.map((r) => (
+                      <tr key={r.id} className={`pt-tr${r.id === sel ? ' is-sel' : ''}`} onClick={() => setSel(r.id)}>
+                        <td><button type="button" className="pt-name" onClick={(e) => { e.stopPropagation(); setSel(r.id); }}>{r.contactName ?? 'Unknown contact'}</button><div className="crm-cell-sub">{contactTypeLabel(r.contactType)}</div></td>
+                        <td style={{ fontSize: 13 }}>{[r.panchayat, r.block].filter(Boolean).join(' · ') || '—'}</td>
+                        <td style={{ fontSize: 13 }}>{r.agent}</td>
+                        <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{fmt.date(r.createdAt)}</td>
+                        <td>{r.kind === 'skipped' ? <Pill tone="warn">Skipped</Pill> : r.kind === 'older' ? <Pill>{r.answerCount} answers</Pill> : <Pill tone={r.answered >= d.asked ? 'ok' : 'accent'}>{r.answered} of {d.asked}</Pill>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="pt-pager">
+                <span>{d.total.toLocaleString('en-IN')} response{d.total === 1 ? '' : 's'} · page {page} of {pages}</span>
+                <span style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" className="crm-btn is-secondary is-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</button>
+                  <button type="button" className="crm-btn is-secondary is-sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Next</button>
+                </span>
+              </div>
+            </>
+          )}
+        </section>
+        <aside className="crm-card grow-2 pt-panel" aria-label="Response" style={{ flexBasis: 400 }}>
+          {sel ? <ResponsePanel key={sel} id={sel} onBack={() => setSel(null)} showToast={showToast} onChanged={() => void list.reload()} onDeleted={() => { setSel(null); void list.reload(); }} />
+            : <Empty title="Pick a response">Read the answers, and if you are an admin, correct or remove them.</Empty>}
+        </aside>
+      </div>
+    </>
+  );
+}
+
+function ResponsePanel({ id, onBack, showToast, onChanged, onDeleted }: { id: string; onBack: () => void; showToast: (m: string) => void; onChanged: () => void; onDeleted: () => void }) {
+  const d = useLoader(() => crm.get<RespDetail>(`/api/v1/surveys/responses/${id}`), [id]);
+  const [edit, setEdit] = useState<Record<string, string[]> | null>(null);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (d.error) return <ErrorBox message={d.error} onRetry={d.reload} />;
+  const r = d.data;
+  if (!r) return <Skeleton h={380} />;
+
+  const startEdit = () => setEdit(Object.fromEntries(r.questions.map((q) => [q.questionId, q.values.filter((v) => q.options.some((o) => o.full === v))])));
+  const toggle = (qid: string, full: string, single: boolean) => setEdit((e) => {
+    if (!e) return e;
+    const cur = e[qid] ?? [];
+    return { ...e, [qid]: single ? [full] : cur.includes(full) ? cur.filter((x) => x !== full) : [...cur, full] };
+  });
+  const save = async () => {
+    if (!edit) return;
+    // Only send questions whose choices changed; keep any "Other: …" text the agent typed.
+    const changed: Record<string, string[]> = {};
+    for (const q of r.questions) {
+      const keepOther = q.values.filter((v) => !q.options.some((o) => o.full === v));
+      const next = [...(edit[q.questionId] ?? []), ...keepOther];
+      if ([...next].sort().join('|') !== [...q.values].sort().join('|')) changed[q.questionId] = next;
+    }
+    setBusy(true);
+    try {
+      const res = await crm.put<{ changed: number }>(`/api/v1/surveys/responses/${id}`, { answers: changed });
+      setEdit(null);
+      await d.reload();
+      onChanged();
+      showToast(res.changed ? `Saved ${res.changed} change${res.changed === 1 ? '' : 's'}.` : 'Nothing changed.');
+    } catch (e) { showToast(friendlyError(e)); } finally { setBusy(false); }
+  };
+  const remove = async () => {
+    setBusy(true);
+    try { await crm.del(`/api/v1/surveys/responses/${id}`); showToast('Response deleted. A copy is kept in the change history.'); onDeleted(); }
+    catch (e) { showToast(friendlyError(e)); } finally { setBusy(false); setConfirmDel(false); }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <button type="button" className="crm-btn is-secondary is-sm pt-back" onClick={onBack}><ArrowLeft size={16} aria-hidden /> All responses</button>
+      <div>
+        <h2 style={{ fontSize: 20, fontWeight: 800 }}>{r.contact?.name ?? 'Unknown contact'}</h2>
+        <span className="crm-sub" style={{ fontSize: 13, display: 'block' }}>{[contactTypeLabel(r.contact?.type), r.panchayat, r.block].filter(Boolean).join(' · ')}</span>
+        <span className="crm-sub" style={{ fontSize: 13, display: 'block' }}>Asked by {r.agent} on {fmt.dateTime(r.createdAt)}</span>
+      </div>
+      <div className="crm-chips">
+        {r.contact && <Link href={`/admin/partners?id=${encodeURIComponent(r.contact.clientId)}`} className="crm-btn is-secondary is-sm">Open partner</Link>}
+        {r.canEdit && !edit && <button type="button" className="crm-btn is-sm" onClick={startEdit}>Edit answers</button>}
+      </div>
+      {r.kind === 'skipped' && <div className="crm-note" style={{ background: 'var(--warn-soft)', color: 'var(--warn-ink)' }}>The agent skipped the survey. Reason: “{r.skipReason || 'none given'}”</div>}
+
+      {!edit ? (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {r.questions.map((q) => (
+            <div key={q.questionId} style={{ padding: '10px 0', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>{q.title}</span>
+              {q.labels.length === 0 ? <span className="crm-cell-sub">Not answered</span> : (
+                <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{q.labels.map((l, i) => <span key={i} className="sv-chip">{l}</span>)}</span>
+              )}
+            </div>
+          ))}
+          {r.extra.length > 0 && r.extra.map((x) => (
+            <div key={x.questionId} style={{ padding: '10px 0', borderTop: '1px solid var(--line)' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>{x.questionId}</span>
+              <div style={{ fontSize: 14 }}>{x.value}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {r.questions.map((q) => {
+            const single = q.type !== 'multi';
+            return (
+              <fieldset key={q.questionId} className="sv-fieldset">
+                <legend>{q.title}{single ? '' : ' (pick any)'}</legend>
+                {q.options.filter((o) => o.full !== 'Other').map((o) => (
+                  <label key={o.full} className="sv-opt">
+                    <input type={single ? 'radio' : 'checkbox'} name={`q-${q.questionId}`} checked={(edit[q.questionId] ?? []).includes(o.full)} onChange={() => toggle(q.questionId, o.full, single)} />
+                    {o.label}
+                  </label>
+                ))}
+                {q.values.filter((v) => !q.options.some((o) => o.full === v)).map((v) => <span key={v} className="crm-cell-sub">Kept as typed: {v}</span>)}
+              </fieldset>
+            );
+          })}
+          <span className="crm-cell-sub">Every change is saved with your name and the time.</span>
+          <div className="crm-chips" style={{ justifyContent: 'flex-end' }}>
+            <button type="button" className="crm-btn is-secondary" onClick={() => setEdit(null)}>Cancel</button>
+            <button type="button" className="crm-btn is-ok" disabled={busy} onClick={save}>Save changes</button>
+          </div>
+        </div>
+      )}
+
+      {r.canDelete && !edit && (
+        confirmDel ? (
+          <div className="crm-note" style={{ background: 'var(--bad-soft)', color: 'var(--bad)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ flex: 1 }}>Delete this response? It stops counting in insights. A full copy is kept in the change history.</span>
+            <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setConfirmDel(false)}>Keep it</button>
+            <button type="button" className="crm-btn is-danger is-sm" disabled={busy} onClick={remove}>Delete</button>
+          </div>
+        ) : <button type="button" className="crm-btn is-danger is-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setConfirmDel(true)}>Delete response</button>
+      )}
+
+      <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>Change history</span>
+        {r.history.length === 0 ? <span className="crm-cell-sub">No changes since the agent submitted it.</span> : r.history.map((h, i) => (
+          <span key={i} style={{ fontSize: 13 }}>{h.summary} <span className="crm-cell-sub" style={{ display: 'inline' }}>· {h.by} · {fmt.dateTime(h.at)}</span></span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Questions ──────────────────────────────────────────────────────────────
+
+function Questions({ showToast }: { showToast: (m: string) => void }) {
+  const data = useLoader(() => crm.get<QRes>('/api/v1/surveys/questions'), []);
+  const [selId, setSelId] = useState<string | null>(null);
+  const [swapIn, setSwapIn] = useState<QRow | null>(null);
+  const [showRetired, setShowRetired] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const d = data.data;
+  if (data.error) return <ErrorBox message={data.error} onRetry={data.reload} />;
+  if (!d) return <Skeleton h={420} />;
+  const sel = d.asked.find((q) => q.id === selId) ?? d.asked[0];
+
+  const move = async (i: number, by: number) => {
+    const ids = d.asked.map((q) => q.id);
+    const j = i + by;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    setBusy(true);
+    try { await crm.post('/api/v1/surveys/questions/order', { ids }); await data.reload(); } catch (e) { showToast(friendlyError(e)); } finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      {!d.canEdit && <div className="crm-note">Only an admin can change the questions.</div>}
+      <div className="crm-row">
+        <section className="grow-3" aria-labelledby="ask-h" style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: '3 1 540px', minWidth: 0 }}>
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <h2 id="ask-h" className="crm-h2" style={{ flex: 1 }}>Asked in the app</h2>
+            <span className="crm-sub" style={{ fontSize: 13 }}>{d.asked.length} questions, in this order. Changes reach phones at their next sync.</span>
+          </span>
+          {d.asked.map((q, i) => (
+            <div key={q.id} className="sv-q" data-sel={sel?.id === q.id || undefined}>
+              <span className="sv-q-n">{i + 1}</span>
+              <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><strong style={{ fontSize: 15 }}>{q.title}</strong><Pill>{q.type === 'multi' ? 'Several answers' : q.type === 'text' ? 'Typed answer' : 'One answer'}</Pill></span>
+                <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{q.text}</span>
+                <span style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{q.options.slice(0, 8).map((o) => <span key={o} className="sv-chip is-line">{shortLabel(o)}</span>)}</span>
+                <span className="crm-cell-sub">{q.answers.toLocaleString('en-IN')} answers so far</span>
+              </span>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setSelId(q.id)}>{d.canEdit ? 'Edit' : 'View'}</button>
+                {d.canEdit && (
+                  <span style={{ display: 'flex', gap: 4 }}>
+                    <button type="button" className="crm-btn is-secondary is-sm" style={{ width: 36, padding: 0 }} aria-label={`Move ${q.title} up`} disabled={busy || i === 0} onClick={() => move(i, -1)}><ArrowUp size={14} aria-hidden /></button>
+                    <button type="button" className="crm-btn is-secondary is-sm" style={{ width: 36, padding: 0 }} aria-label={`Move ${q.title} down`} disabled={busy || i === d.asked.length - 1} onClick={() => move(i, 1)}><ArrowDown size={14} aria-hidden /></button>
+                  </span>
+                )}
+              </span>
+            </div>
+          ))}
+
+          <div className="crm-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <strong style={{ flex: 1 }}>Retired questions ({d.retired.length})</strong>
+              <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setShowRetired((v) => !v)}>{showRetired ? 'Hide' : 'Show'}</button>
+            </span>
+            <span className="crm-sub" style={{ fontSize: 13 }}>From the older questionnaire. Their answers are kept under Responses › Older questionnaire. Swapping one in replaces one of the six, so the app always asks six.</span>
+            {showRetired && (
+              <ul className="crm-list">
+                {d.retired.map((q) => (
+                  <li key={q.id}>
+                    <span style={{ flex: 1, minWidth: 0 }}><span style={{ fontWeight: 600, fontSize: 14 }}>{q.title}</span><div className="crm-cell-sub">{q.answers.toLocaleString('en-IN')} older answers</div></span>
+                    {d.canEdit && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setSwapIn(q)}>Swap in</button>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+
+        {sel && <QuestionEditor key={sel.id} q={sel} canEdit={d.canEdit} n={d.asked.findIndex((x) => x.id === sel.id) + 1} onSaved={(m) => { showToast(m); void data.reload(); }} showToast={showToast} />}
+      </div>
+      {swapIn && <SwapModal bringIn={swapIn} asked={d.asked} onClose={() => setSwapIn(null)} onDone={(m) => { setSwapIn(null); showToast(m); void data.reload(); }} />}
+    </>
+  );
+}
+
+function QuestionEditor({ q, n, canEdit, onSaved, showToast }: { q: QRow; n: number; canEdit: boolean; onSaved: (m: string) => void; showToast: (m: string) => void }) {
+  const [text, setText] = useState(q.text);
+  const [type, setType] = useState(q.type);
+  const [newOpt, setNewOpt] = useState('');
+  const [adding, setAdding] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const dirty = text.trim() !== q.text || type !== q.type || adding.length > 0;
+  const save = async () => {
+    setBusy(true);
+    try {
+      await crm.put(`/api/v1/surveys/questions/${q.id}`, { text: text.trim() !== q.text ? text.trim() : undefined, type: type !== q.type ? type : undefined, addOptions: adding.length ? adding : undefined });
+      setAdding([]);
+      onSaved('Question saved. Phones pick it up at their next sync.');
+    } catch (e) { showToast(friendlyError(e)); } finally { setBusy(false); }
+  };
+  return (
+    <aside className="crm-card grow-2" aria-label="Edit question" style={{ flexBasis: 400, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}><h2 className="crm-h2" style={{ flex: 1 }}>Question {n}</h2><span className="crm-cell-sub">{q.answers.toLocaleString('en-IN')} answers so far</span></span>
+      <label className="crm-field">What the agent reads out
+        <textarea className="crm-textarea" rows={4} value={text} disabled={!canEdit} onChange={(e) => setText(e.target.value)} />
+      </label>
+      {q.type !== 'text' && (
+        <fieldset className="sv-fieldset" disabled={!canEdit}>
+          <legend>Answer type</legend>
+          <label className="sv-opt"><input type="radio" name="qtype" checked={type === 'single'} onChange={() => setType('single')} />One answer</label>
+          <label className="sv-opt"><input type="radio" name="qtype" checked={type === 'multi'} onChange={() => setType('multi')} />Several answers</label>
+        </fieldset>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>Answer choices</span>
+        {q.options.map((o) => <span key={o} className="sv-chip is-line" style={{ alignSelf: 'flex-start' }}>{o}</span>)}
+        {adding.map((o) => <span key={o} className="sv-chip" style={{ alignSelf: 'flex-start' }}>{o} (new)</span>)}
+        {canEdit && (
+          <span style={{ display: 'flex', gap: 6 }}>
+            <label className="crm-sr" htmlFor="new-opt">New choice</label>
+            <input id="new-opt" className="crm-input" value={newOpt} onChange={(e) => setNewOpt(e.target.value)} placeholder="Add a choice" />
+            <button type="button" className="crm-btn is-secondary" disabled={!newOpt.trim()} onClick={() => { setAdding((a) => [...a, newOpt.trim()]); setNewOpt(''); }}>Add</button>
+          </span>
+        )}
+        <span className="crm-cell-sub">Existing choices can&apos;t be renamed or removed here, because past answers are stored by their wording and would stop being counted.</span>
+      </div>
+      <div style={{ background: 'var(--grey-soft)', borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span className="crm-cell-sub" style={{ fontWeight: 600 }}>How it looks in the app</span>
+        <div style={{ background: '#fff', borderRadius: 14, border: '1px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 340 }}>
+          <span className="crm-cell-sub">{n} / 6</span>
+          <strong style={{ fontSize: 15, lineHeight: 1.4 }}>{text}</strong>
+          {[...q.options, ...adding].slice(0, 3).map((o) => <span key={o} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: '9px 12px', fontSize: 13 }}>{shortLabel(o)}</span>)}
+        </div>
+      </div>
+      {canEdit && <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button type="button" className="crm-btn" disabled={!dirty || busy} onClick={save}>Save question</button></div>}
+    </aside>
+  );
+}
+
+function SwapModal({ bringIn, asked, onClose, onDone }: { bringIn: QRow; asked: QRow[]; onClose: () => void; onDone: (m: string) => void }) {
+  const [retireId, setRetireId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const go = async () => {
+    setBusy(true); setError('');
+    try {
+      await crm.post('/api/v1/surveys/questions/swap', { retireId, bringInId: bringIn.id });
+      onDone(`“${bringIn.title}” is now asked instead of “${asked.find((q) => q.id === retireId)?.title}”.`);
+    } catch (e) { setError(friendlyError(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Modal title="Swap a question in" onClose={onClose} actions={<>
+      <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
+      <button type="button" className="crm-btn" disabled={!retireId || busy} onClick={go}>Swap</button>
+    </>}>
+      <span style={{ fontSize: 14 }}>Bring in <strong>{bringIn.title}</strong>. The app keeps asking six, so pick the one it replaces. Answers to the replaced question are kept.</span>
+      <fieldset className="sv-fieldset">
+        <legend>Replace</legend>
+        {asked.map((q) => (
+          <label key={q.id} className="sv-opt"><input type="radio" name="retire" checked={retireId === q.id} onChange={() => setRetireId(q.id)} />{q.title} <span className="crm-cell-sub" style={{ display: 'inline' }}>· {q.answers} answers</span></label>
+        ))}
+      </fieldset>
+      {error && <div className="crm-error" role="alert">{error}</div>}
+    </Modal>
+  );
+}
