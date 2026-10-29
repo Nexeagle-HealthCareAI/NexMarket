@@ -186,7 +186,7 @@ export function setFollowUp(clientId: string, date: string | null) {
   updateContact(clientId, { followUpDate: date });
 }
 
-export function addNote(contactId: string, text: string, source: 'note' | 'visit' | 'call' = 'note') {
+export function addNote(contactId: string, text: string, source: 'note' | 'visit' | 'revisit' | 'call' = 'note') {
   const t = text.trim();
   if (!t) return;
   const { agentId, deviceId } = me();

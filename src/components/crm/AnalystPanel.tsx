@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bot, ClipboardCheck, Send, Sparkles } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit, useAccess } from '@/lib/crm/access';
+import { canEdit, useAccess, canAssignBlocks } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, Pill, Skeleton, useLoader, useToast, type Tone } from '@/components/crm/ui';
 import { TaskModal, type TaskPreset } from '@/components/crm/Tasks';
 
@@ -219,7 +219,7 @@ const STATUS_LABEL: Record<ItemStatus, string> = { open: 'Open', in_progress: 'I
 
 function Tracker({ scope, editable, showToast, onChanged }: { scope: string; editable: boolean; showToast: (m: string) => void; onChanged?: () => void }) {
   const { access } = useAccess();
-  const canTask = canEdit(access, 'field');
+  const canTask = canAssignBlocks(access);
   const [taskFor, setTaskFor] = useState<TaskPreset | null>(null);
   const [filter, setFilter] = useState('active');
   const items = useLoader(() => crm.get<ItemsRes>(`/api/v1/analytics/analyst/items?status=${filter}&scope=${scope}`), [filter, scope]);

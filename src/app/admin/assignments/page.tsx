@@ -4,7 +4,7 @@ import { Suspense, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ClipboardCheck } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit, useAccess } from '@/lib/crm/access';
+import { canAssignBlocks, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { TaskList, TaskModal, type TaskPreset } from '@/components/crm/Tasks';
 
@@ -38,7 +38,7 @@ function AssignmentsPage() {
   const params = useSearchParams();
   const router = useRouter();
   const { access } = useAccess();
-  const editable = canEdit(access, 'field');
+  const editable = canAssignBlocks(access);
   const board = useLoader(() => crm.get<Board>('/api/v1/assignments/board'), []);
   const [district, setDistrict] = useState(params.get('district') ?? '');
   const [onlyEmpty, setOnlyEmpty] = useState(false);

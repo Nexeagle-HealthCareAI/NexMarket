@@ -680,7 +680,7 @@ namespace SeemanchalOutreach.Application.Handlers
                         ContactClientId = GetString(root, "contactId", ""),
                         AgentId = agentId,
                         Text = text.Length > 2000 ? text[..2000] : text,
-                        Source = source is "visit" or "call" ? source : "note",
+                        Source = source is "visit" or "revisit" or "call" ? source : "note",
                         CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
                         ServerReceivedAt = syncedAt,
                     };

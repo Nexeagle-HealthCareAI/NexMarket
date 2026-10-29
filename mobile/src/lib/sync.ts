@@ -260,7 +260,7 @@ interface MyAssignment {
   assignmentId?: string;
   district?: string;
   block?: string;
-  panchayats?: { panchayatId: string; name: string; visited: boolean; lastVisitedAt: string | null; centroidLat: number | null; centroidLng: number | null; locationSource: string | null }[];
+  panchayats?: { panchayatId: string; name: string; visited: boolean; lastVisitedAt: string | null; centroidLat: number | null; centroidLng: number | null; locationSource: string | null; visitCount?: number }[];
 }
 
 export async function refreshReference() {
@@ -290,8 +290,8 @@ export async function refreshReference() {
       const localVisited = new Set(d.getAllSync<{ panchayatId: string }>('SELECT panchayatId FROM assigned WHERE visited = 1').map((x) => x.panchayatId));
       d.runSync('DELETE FROM assigned');
       for (const p of mine.panchayats ?? []) {
-        d.runSync('INSERT INTO assigned (panchayatId, name, visited, lastVisitedAt, lat, lng, source) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          p.panchayatId, p.name, p.visited || localVisited.has(p.panchayatId) ? 1 : 0, p.lastVisitedAt, p.centroidLat, p.centroidLng, p.locationSource);
+        d.runSync('INSERT INTO assigned (panchayatId, name, visited, lastVisitedAt, lat, lng, source, visitCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          p.panchayatId, p.name, p.visited || localVisited.has(p.panchayatId) ? 1 : 0, p.lastVisitedAt, p.centroidLat, p.centroidLng, p.locationSource, p.visitCount ?? 0);
       }
     }
   });

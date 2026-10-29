@@ -14,6 +14,7 @@ import { C, PRIORITY_COLOR, type Priority } from '../../theme';
 import { stageTone } from '../../components/stage';
 import { MoveSheet } from '../../components/MoveSheet';
 import { WhatsAppSheet } from '../../components/WhatsAppSheet';
+import { RevisitSheet } from '../../components/RevisitSheet';
 
 const PRIOS: Priority[] = ['very_high', 'high', 'normal', 'low'];
 
@@ -23,6 +24,7 @@ export default function PartnerProfile() {
   const [prioOpen, setPrioOpen] = useState(false);
   const [waOpen, setWaOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [revisitOpen, setRevisitOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
 
   const d = useDb(() => {
@@ -86,6 +88,7 @@ export default function PartnerProfile() {
           <Btn flex small kind="secondary" icon="whatsapp" label={t('whatsapp')} disabled={!c.phone} onPress={() => setWaOpen(true)} />
           <Btn flex small icon="hospital" label={t('referPatient')} onPress={() => router.push({ pathname: '/refer', params: { contactId: c.clientId } })} />
         </View>
+        <Btn kind="ok" icon="check" label={t('revisitPerson')} onPress={() => setRevisitOpen(true)} />
       </Card>
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -150,6 +153,7 @@ export default function PartnerProfile() {
         ))}
       </Sheet>
       <MoveSheet visible={moveOpen} onClose={() => setMoveOpen(false)} onPick={(date) => { setFollowUp(c.clientId, date); setMoveOpen(false); toast(t('savedOnPhone')); }} />
+      <RevisitSheet visible={revisitOpen} onClose={() => setRevisitOpen(false)} contactId={c.clientId} name={c.name} />
       <WhatsAppSheet visible={waOpen} onClose={() => setWaOpen(false)} name={c.name} phone={c.phone} />
     </Screen>
   );

@@ -4,9 +4,12 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Btn, Card, Chip, Empty, Field, Pill, Screen, T, TopBar, toast } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { useDb, useSession } from '../lib/session';
-import { q } from '../lib/db';
-import { addNote, addPhoto, checkIn, checkOut, setFollowUp } from '../lib/repo';
-import { currentPosition, recordPoint } from '../lib/location';
+import { lastVisited, q, timesVisited } from '../lib/db';
+import { PanchayatList, sortPanchayats } from '../components/PanchayatList';
+import { tryCheckIn } from '../lib/visit';
+import { relDay } from '../lib/format';
+import { addNote, addPhoto, checkOut, setFollowUp } from '../lib/repo';
+import { currentPosition } from '../lib/location';
 import { takePhoto } from '../lib/photo';
 import { useHere } from '../lib/useHere';
 import { CHECK_IN_RADIUS_M } from '../lib/config';
@@ -19,7 +22,7 @@ type Met = 'met' | 'notMet';
 type Interest = 'interestHigh' | 'interestSome' | 'interestNone';
 
 export default function CheckIn() {
-  const { t } = useSession();
+  const { t, lang } = useSession();
   const params = useLocalSearchParams<{ panchayatId?: string; contactId?: string }>();
   const [panchayatId, setPanchayatId] = useState(params.panchayatId || '');
   const here = useHere(true);
@@ -33,6 +36,8 @@ export default function CheckIn() {
       lat: a?.lat ?? p?.lat ?? null,
       lng: a?.lng ?? p?.lng ?? null,
       approx: (a?.source ?? 'block') === 'block' && a != null,
+      times: a ? timesVisited(a) : 0,
+      last: a ? lastVisited(a) : null,
       shift: q.activeShift(),
       visit: q.activeVisit(),
       partners: panchayatId ? q.contactsIn(panchayatId) : [],
@@ -42,26 +47,12 @@ export default function CheckIn() {
 
   // No panchayat chosen yet: pick one (nearest first).
   if (!panchayatId) {
-    const list = [...info.assigned].sort((a, b) => {
-      const da = here && a.lat != null && a.lng != null ? haversineM(here, { lat: a.lat, lng: a.lng }) : 1e12;
-      const db_ = here && b.lat != null && b.lng != null ? haversineM(here, { lat: b.lat, lng: b.lng }) : 1e12;
-      return da - db_;
-    });
+    const list = sortPanchayats(info.assigned, here);
+    const done = list.filter((p) => timesVisited(p) > 0).length;
     return (
-      <Screen header={<TopBar title={t('choosePanchayat')} />}>
-        {list.length === 0 ? <Empty text={t('noBlock')} icon="map" /> : null}
-        {list.map((p) => (
-          <Card key={p.panchayatId} onPress={() => setPanchayatId(p.panchayatId)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Icon name="pin" color={p.visited ? C.ok : C.blue} />
-            <View style={{ flex: 1 }}>
-              <T style={{ fontWeight: '700' }}>{p.name}</T>
-              <T style={{ color: C.text2, fontSize: 13 }}>
-                {formatDist(here && p.lat != null && p.lng != null ? haversineM(here, { lat: p.lat, lng: p.lng }) : null, t)}
-              </T>
-            </View>
-            <Icon name="chevron" color={C.muted} />
-          </Card>
-        ))}
+      <Screen header={<TopBar title={t('choosePanchayat')} sub={list.length ? t('blockProgress', { done, total: list.length }) : undefined} />}>
+        {list.length === 0 ? <Empty text={t('noBlock')} icon="map" /> : <T style={{ color: C.text2, fontSize: 13 }}>{t('revisitHint')}</T>}
+        <PanchayatList list={list} here={here} current={info.visit?.panchayatId ?? null} onPick={setPanchayatId} />
       </Screen>
     );
   }
@@ -75,16 +66,11 @@ export default function CheckIn() {
   const doCheckIn = async () => {
     setBusy(true);
     try {
-      const pos = await currentPosition();
-      if (!pos) { Alert.alert(t('locationOff'), t('turnOnLocation')); return; }
-      if (!info.approx && info.lat != null && info.lng != null && haversineM(pos, { lat: info.lat, lng: info.lng }) > CHECK_IN_RADIUS_M) {
-        Alert.alert(t('checkIn'), t('tooFar', { name: info.name, dist: formatDist(haversineM(pos, { lat: info.lat, lng: info.lng }), t) }));
-        return;
-      }
-      if (info.visit) checkOut(info.visit.clientId, pos.lat, pos.lng); // leaving the previous panchayat
-      checkIn(panchayatId, pos.lat, pos.lng);
-      recordPoint(pos.lat, pos.lng, pos.accuracy);
-      toast(t('savedOnPhone'));
+      // Leaves the panchayat they were in (if any) and checks in here, first visit or revisit.
+      const r = await tryCheckIn(panchayatId);
+      if (!r.ok && r.why === 'no-fix') Alert.alert(t('locationOff'), t('turnOnLocation'));
+      else if (!r.ok && r.why === 'far') Alert.alert(t('checkIn'), t('tooFar', { name: info.name, dist: formatDist(r.distM, t) }));
+      else toast(t('savedOnPhone'));
     } finally {
       setBusy(false);
     }
@@ -98,6 +84,7 @@ export default function CheckIn() {
         </View>
         <T style={{ fontSize: 22, fontWeight: '800', textAlign: 'center' }}>{info.name}</T>
         {dist != null ? <T style={{ color: C.text2 }}>{formatDist(dist, t)}</T> : null}
+        {info.times ? <Pill label={t('visitedTimes', { n: info.times, when: info.last ? relDay(t, lang, info.last) : '—' })} tone="ok" icon="check" /> : <Pill label={t('notVisitedYet')} tone="blue" />}
         {info.approx ? <T style={{ color: C.text2, textAlign: 'center', fontSize: 13 }}>{t('approxPin')}</T> : null}
         {!info.shift ? (
           <>
@@ -107,7 +94,8 @@ export default function CheckIn() {
         ) : !canCheckIn && dist != null ? (
           <T style={{ color: C.warnInk, textAlign: 'center' }}>{t('tooFar', { name: info.name, dist: formatDist(dist, t) })}</T>
         ) : null}
-        {info.shift ? <Btn label={t('checkIn')} icon="pin" onPress={doCheckIn} loading={busy} disabled={!canCheckIn && dist != null} style={{ alignSelf: 'stretch' }} /> : null}
+        {info.shift ? <Btn label={info.times ? t('revisitCheckIn') : t('checkIn')} icon="pin" onPress={doCheckIn} loading={busy} disabled={!canCheckIn && dist != null} style={{ alignSelf: 'stretch' }} /> : null}
+        {info.visit && info.visit.panchayatId !== panchayatId ? <T style={{ color: C.text2, textAlign: 'center', fontSize: 13 }}>{t('willLeaveCurrent')}</T> : null}
       </Card>
       {info.partners.length ? (
         <>
@@ -146,10 +134,17 @@ function InVisit({ visit, name, partners, initialContact }: {
 
   const reset = () => { setMet(null); setInterest(null); setNote(''); };
 
+  // Someone added before this visit is a revisit: show what was said last time.
+  const picked = useDb(() => {
+    if (!contactId) return null;
+    const c = q.contact(contactId);
+    return c ? { revisit: c.createdAt < visit.checkInAt, history: q.notesFor(contactId).slice(0, 3) } : null;
+  }, [contactId, visit.checkInAt]);
+
   const save = (days: number) => {
     if (!contactId || !met) return;
     const text = [t('visitNoteText', { met: t(met), interest: interest ? t(interest) : '–' }), note.trim()].filter(Boolean).join('\n');
-    addNote(contactId, text, 'visit');
+    addNote(contactId, text, picked?.revisit ? 'revisit' : 'visit');
     setFollowUp(contactId, ymd(addDays(new Date(), days)));
     toast(t('visitSaved'));
     reset();
@@ -184,16 +179,32 @@ function InVisit({ visit, name, partners, initialContact }: {
         </View>
       </Card>
 
-      <T style={{ fontSize: 17, fontWeight: '700' }}>{t('whoDidYouMeet')}</T>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Btn flex icon="plus" label={t('addNewPerson')} onPress={() => router.push({ pathname: '/partner-new', params: { panchayatId: visit.panchayatId } })} />
+        <Btn flex kind="secondary" icon="pin" label={t('otherPanchayat')} onPress={() => router.push('/checkin')} />
+      </View>
+
+      <T style={{ fontSize: 17, fontWeight: '700' }}>{partners.length ? t('revisitWho', { n: partners.length }) : t('noOneHereYet')}</T>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {partners.map((c) => <Chip key={c.clientId} label={c.name} selected={contactId === c.clientId} onPress={() => { setContactId(c.clientId); reset(); }} />)}
-        <Chip label={`+ ${t('newPartner')}`} onPress={() => router.push({ pathname: '/partner-new', params: { panchayatId: visit.panchayatId } })} />
       </View>
+
+      {picked?.history.length ? (
+        <Card style={{ gap: 6, backgroundColor: C.bg }}>
+          <T style={{ fontWeight: '700', color: C.text2, fontSize: 13 }}>{t('earlierComments')}</T>
+          {picked.history.map((n) => (
+            <View key={n.clientId} style={{ gap: 2 }}>
+              <T style={{ color: C.text2, fontSize: 12 }}>{relDay(t, lang, n.createdAt)} · {t(`source_${n.source}` as never)}</T>
+              <T numberOfLines={3}>{n.text}</T>
+            </View>
+          ))}
+        </Card>
+      ) : null}
 
       {contactId ? (
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <T style={{ flex: 1, fontSize: 17, fontWeight: '700' }}>{t('howWasIt')}</T>
+            <T style={{ flex: 1, fontSize: 17, fontWeight: '700' }}>{picked?.revisit ? t('howWasRevisit') : t('howWasIt')}</T>
             <Pill label={t('threeTaps')} tone="blue" />
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>

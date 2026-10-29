@@ -16,7 +16,7 @@ export function db(): SQLite.SQLiteDatabase {
   return _db;
 }
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 function migrate(d: SQLite.SQLiteDatabase) {
   const row = d.getFirstSync<{ user_version: number }>('PRAGMA user_version');
@@ -63,6 +63,10 @@ function migrate(d: SQLite.SQLiteDatabase) {
         payload TEXT NOT NULL, createdAt TEXT NOT NULL, attempts INTEGER DEFAULT 0, lastError TEXT);
       CREATE INDEX IF NOT EXISTS ix_outbox_client ON outbox(clientId, type);
     `);
+  }
+  if (v < 2) {
+    // How many times the agent has checked in at each panchayat (revisits count), from the server.
+    try { d.execSync('ALTER TABLE assigned ADD COLUMN visitCount INTEGER DEFAULT 0'); } catch { /* already there */ }
   }
   if (v < SCHEMA_VERSION) d.execSync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
@@ -121,13 +125,22 @@ export interface Contact {
   createdAt: string;
   updatedAt: string;
 }
-export interface Note { clientId: string; contactId: string; text: string; source: 'note' | 'visit' | 'call'; createdAt: string }
+export interface Note { clientId: string; contactId: string; text: string; source: 'note' | 'visit' | 'revisit' | 'call'; createdAt: string }
 export interface Shift { clientId: string; startTime: string; startLat: number; startLng: number; endTime: string | null; endLat: number | null; endLng: number | null }
 export interface Visit { clientId: string; panchayatId: string; shiftId: string | null; checkInAt: string; checkInLat: number; checkInLng: number; checkOutAt: string | null; checkOutLat: number | null; checkOutLng: number | null }
 export interface Referral { clientId: string; contactId: string; patientName: string; patientAge: number | null; patientSex: string | null; clientPhone: string | null; department: string; urgent: number; notes: string | null; status: string; createdAt: string; updatedAt: string | null }
 export interface Question { id: string; questionId: string; text: string; type: string; optionsJson: string | null; section: string; isOptional: number; ord: number }
 export interface Panchayat { id: string; name: string; block: string; district: string; lat: number | null; lng: number | null }
-export interface Assigned { panchayatId: string; name: string; visited: number; lastVisitedAt: string | null; lat: number | null; lng: number | null; source: string | null }
+export interface Assigned { panchayatId: string; name: string; visited: number; lastVisitedAt: string | null; lat: number | null; lng: number | null; source: string | null; visitCount: number | null; localVisits?: number; localLastAt?: string | null }
+
+/** Times checked in here: the server's count, or this phone's own if more are still waiting to sync. */
+export function timesVisited(a: Assigned): number {
+  return Math.max(a.visitCount ?? 0, a.localVisits ?? 0, a.visited ? 1 : 0);
+}
+export function lastVisited(a: Assigned): string | null {
+  const x = [a.lastVisitedAt, a.localLastAt].filter(Boolean) as string[];
+  return x.length ? x.sort()[x.length - 1] : null;
+}
 export interface OutboxRow { id: number; clientId: string; type: string; payload: string; createdAt: string; attempts: number; lastError: string | null }
 
 // ─── Queries used by screens ───
@@ -151,8 +164,14 @@ export const q = {
   visitsSince: (iso: string) => db().getAllSync<Visit>('SELECT * FROM visits WHERE checkInAt >= ?', iso),
   questions: () => db().getAllSync<Question>('SELECT * FROM questions ORDER BY ord, questionId'),
   panchayat: (id: string) => db().getFirstSync<Panchayat>('SELECT * FROM panchayats WHERE id = ?', id),
-  assigned: () => db().getAllSync<Assigned>('SELECT * FROM assigned ORDER BY name COLLATE NOCASE'),
-  assignedOne: (id: string) => db().getFirstSync<Assigned>('SELECT * FROM assigned WHERE panchayatId = ?', id),
+  assigned: () => db().getAllSync<Assigned>(`SELECT a.*,
+      (SELECT COUNT(*) FROM visits v WHERE v.panchayatId = a.panchayatId) AS localVisits,
+      (SELECT MAX(checkInAt) FROM visits v WHERE v.panchayatId = a.panchayatId) AS localLastAt
+    FROM assigned a ORDER BY a.name COLLATE NOCASE`),
+  assignedOne: (id: string) => db().getFirstSync<Assigned>(`SELECT a.*,
+      (SELECT COUNT(*) FROM visits v WHERE v.panchayatId = a.panchayatId) AS localVisits,
+      (SELECT MAX(checkInAt) FROM visits v WHERE v.panchayatId = a.panchayatId) AS localLastAt
+    FROM assigned a WHERE a.panchayatId = ?`, id),
   outbox: () => db().getAllSync<OutboxRow>('SELECT * FROM outbox ORDER BY id'),
   outboxCount: () => db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM outbox')?.n ?? 0,
   trajectorySince: (iso: string) =>

@@ -178,7 +178,7 @@ namespace SeemanchalOutreach.Api.Controllers
 
             var timeline = notes.Select(n => new TimelineItem
                 {
-                    Kind = n.Source == "visit" ? "visit" : n.Source == "call" ? "call" : "note",
+                    Kind = n.Source is "visit" or "revisit" ? n.Source : n.Source == "call" ? "call" : "note",
                     Text = n.Text,
                     By = Who(n.AgentId),
                     At = n.CreatedAt,

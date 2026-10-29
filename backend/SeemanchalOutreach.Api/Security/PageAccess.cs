@@ -139,6 +139,10 @@ namespace SeemanchalOutreach.Api.Security
         /// <summary>0 = infer from the HTTP method (GET/HEAD → view, others → edit).</summary>
         public int Level { get; set; }
 
+        /// <summary>Comma-separated dashboard roles that may always use this, whatever Users &amp; roles says
+        /// (e.g. marketing managers run block assignments even when they can only view the field pages).</summary>
+        public string? AlsoRoles { get; set; }
+
         public PageAccessAttribute(params string[] pages)
         {
             PageKeys = pages;
@@ -156,6 +160,11 @@ namespace SeemanchalOutreach.Api.Security
                 return;
             }
             if (user.IsAdmin()) return;
+            if (!string.IsNullOrWhiteSpace(AlsoRoles))
+            {
+                var role = RoleChecks.CanonicalDashboardRole(user.RoleOf());
+                if (role != null && AlsoRoles.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Contains(role)) return;
+            }
 
             int needed = Level > 0
                 ? Level
