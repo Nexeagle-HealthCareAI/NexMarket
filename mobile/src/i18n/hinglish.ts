@@ -2,7 +2,7 @@ import type { Strings } from './en';
 
 // Hinglish — Hindi written in Roman letters, as agents type it on WhatsApp.
 const hinglish: Strings = {
-  appName: 'NexEagle Field',
+  appName: 'NexMarket AI',
   hospital: 'Glisan Akbari SuperSpeciality Hospital',
   fieldTeamApp: 'Field team app',
 
@@ -62,7 +62,7 @@ const hinglish: Strings = {
   turnOnLocation: 'Location chalu karein',
   battery: 'Battery',
   batterySaverWarn: 'Battery saver app ko rok sakta hai',
-  batterySaverHint: 'Kuch phone (Xiaomi, Vivo, Oppo, Realme) background mein tracking rok dete hain. NexEagle Field ke liye battery “No restrictions” par rakhein.',
+  batterySaverHint: 'Kuch phone (Xiaomi, Vivo, Oppo, Realme) background mein tracking rok dete hain. NexMarket AI ke liye battery “No restrictions” par rakhein.',
   fix: 'Theek karein',
   locationNotice: 'Aapki location sirf shift ke dauran record hoti hai, taaki hospital aapke daure aur doori dekh sake. Shift khatam karte hi band.',
   locationNoticeEn: 'Location is recorded only while your shift is on, also with the screen off.',
@@ -345,7 +345,7 @@ const hinglish: Strings = {
   dateOrder: '“Kab tak” ki tareekh “Kab se” ke baad honi chahiye.',
 
   // AI helper
-  aiHelper: "AI Sahayak",
+  aiHelper: "Vita · AI Sahayak",
   aiHelperSub: "Apne partner, panchayat, doctor aur results ke baare mein poochhein",
   aiTodayTips: "Aaj ke tips",
   aiAskPlaceholder: "Apne kaam ke baare mein kuch bhi poochhein…",
@@ -375,6 +375,35 @@ const hinglish: Strings = {
   taskNoteHint: "Chahein to: kisse mile, kya hua",
   taskMarkDone: "Poora hua",
   taskDoneSaved: "Kaam poora · manager ko bheja gaya",
+
+  // Home screen
+  goodAfternoon: "Namaste, {name}",
+  goodEvening: "Shubh sandhya, {name}",
+  ringVisits: "Visit aaj",
+  ringPartners: "Naye partner",
+  ringPatients: "Mareez is hafte",
+  startShiftSub: "Aaj {n} stop · manager se {m} kaam",
+  aiAskHome: "Vita se kuch bhi poochhein…",
+  aiTipToday: "Aaj ka sujhaav",
+  quickActions: "Jaldi karein",
+  qaLeave: "Chhutti",
+  shiftLive: "{km} · location chalu",
+
+  // Vita and branding
+  poweredBy: "Powered by NexEagle",
+  liveOn: "Live",
+  liveSyncing: "Bhej rahe",
+  liveOffline: "Offline",
+  vitaMorning: "Suprabhat! Pehle chai, phir aaj {n} stop. Aap taiyaar hon to chalein.",
+  vitaReady: "Aaj {n} stop baaki hain. Shift shuru karein, main raasta dikhaunga.",
+  vitaFly: "Chaliye! Agla stop: {name}",
+  vitaFlyNone: "Udaan jaari! Paas mein partner jodein ya check-in karein.",
+  vitaLate: "{n} kaam der se chal rahe hain. Pehle inhe nipta dein.",
+  vitaLunch: "Lunch break! Achhe se khaiye, phir agla stop.",
+  vitaCheer: "Aaj ke saare stop poore. Shabash!",
+  vitaDone: "Shift poori, aaj {n} visit. Aaram karein!",
+  vitaNight: "Aaram ka samay. Kal milte hain!",
+  celebrateTask: "Shabash! Kaam poora hua.",
 };
 
 export default hinglish;

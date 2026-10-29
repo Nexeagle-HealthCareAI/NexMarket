@@ -2,7 +2,7 @@ import type { Strings } from './en';
 
 // हिंदी — the app's default language.
 const hi: Strings = {
-  appName: 'NexEagle Field',
+  appName: 'NexMarket AI',
   hospital: 'ग्लिसन अकबरी सुपर स्पेशलिटी हॉस्पिटल',
   fieldTeamApp: 'फील्ड टीम ऐप',
 
@@ -62,7 +62,7 @@ const hi: Strings = {
   turnOnLocation: 'लोकेशन चालू करें',
   battery: 'बैटरी',
   batterySaverWarn: 'बैटरी सेवर ऐप को रोक सकता है',
-  batterySaverHint: 'कुछ फ़ोन (Xiaomi, Vivo, Oppo, Realme) बैकग्राउंड में ट्रैकिंग रोक देते हैं। NexEagle Field के लिए बैटरी को “No restrictions” पर रखें।',
+  batterySaverHint: 'कुछ फ़ोन (Xiaomi, Vivo, Oppo, Realme) बैकग्राउंड में ट्रैकिंग रोक देते हैं। NexMarket AI के लिए बैटरी को “No restrictions” पर रखें।',
   fix: 'ठीक करें',
   locationNotice: 'आपकी लोकेशन सिर्फ़ शिफ्ट के दौरान रिकॉर्ड होती है, ताकि अस्पताल आपके दौरे और दूरी देख सके। शिफ्ट खत्म करते ही बंद।',
   locationNoticeEn: 'Location is recorded only while your shift is on, also with the screen off.',
@@ -345,7 +345,7 @@ const hi: Strings = {
   dateOrder: '“कब तक” की तारीख “कब से” के बाद होनी चाहिए।',
 
   // AI helper
-  aiHelper: "AI सहायक",
+  aiHelper: "Vita · AI सहायक",
   aiHelperSub: "अपने पार्टनर, पंचायत, डॉक्टर और नतीजों के बारे में पूछें",
   aiTodayTips: "आज के सुझाव",
   aiAskPlaceholder: "अपने काम के बारे में कुछ भी पूछें…",
@@ -375,6 +375,35 @@ const hi: Strings = {
   taskNoteHint: "चाहें तो: किससे मिले, क्या हुआ",
   taskMarkDone: "पूरा हुआ",
   taskDoneSaved: "काम पूरा · मैनेजर को भेजा गया",
+
+  // Home screen
+  goodAfternoon: "नमस्ते, {name}",
+  goodEvening: "शुभ संध्या, {name}",
+  ringVisits: "आज विज़िट",
+  ringPartners: "नए पार्टनर",
+  ringPatients: "इस हफ़्ते मरीज़",
+  startShiftSub: "आज {n} स्टॉप · मैनेजर से {m} काम",
+  aiAskHome: "Vita से कुछ भी पूछें…",
+  aiTipToday: "आज का सुझाव",
+  quickActions: "जल्दी करें",
+  qaLeave: "छुट्टी",
+  shiftLive: "{km} · लोकेशन चालू",
+
+  // Vita and branding
+  poweredBy: "NexEagle द्वारा",
+  liveOn: "लाइव",
+  liveSyncing: "भेज रहे",
+  liveOffline: "ऑफ़लाइन",
+  vitaMorning: "सुप्रभात! पहले चाय, फिर आज {n} स्टॉप। आप तैयार हों तो चलें।",
+  vitaReady: "आज {n} स्टॉप बाकी हैं। शिफ्ट शुरू करें, मैं रास्ता दिखाऊँगा।",
+  vitaFly: "चलिए! अगला स्टॉप: {name}",
+  vitaFlyNone: "उड़ान जारी! पास में पार्टनर जोड़ें या चेक-इन करें।",
+  vitaLate: "{n} काम देर से चल रहे हैं। पहले इन्हें निपटाएँ।",
+  vitaLunch: "लंच ब्रेक! अच्छे से खाइए, फिर अगला स्टॉप।",
+  vitaCheer: "आज के सारे स्टॉप पूरे। शाबाश!",
+  vitaDone: "शिफ्ट पूरी, आज {n} विज़िट। आराम करें!",
+  vitaNight: "आराम का समय। कल मिलते हैं!",
+  celebrateTask: "शाबाश! काम पूरा हुआ।",
 };
 
 export default hi;

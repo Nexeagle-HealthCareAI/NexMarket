@@ -5,6 +5,8 @@ import { Icon } from '../components/Icon';
 import { useSession } from '../lib/session';
 import { api, ApiError, OfflineError, post } from '../lib/api';
 import { errorMessage } from '../lib/util';
+import { saveTips } from '../lib/aiTips';
+import { Vita } from '../components/Vita';
 import type { StringKey } from '../i18n';
 import { C } from '../theme';
 
@@ -34,7 +36,9 @@ export default function Assistant() {
     setTipsBusy(true);
     setTipsError(null);
     try {
-      setTips(await api<Tips>(`/api/v1/me/assistant/tips?lang=${lang}${refresh ? '&refresh=true' : ''}`, { timeoutMs: 90000 }));
+      const got = await api<Tips>(`/api/v1/me/assistant/tips?lang=${lang}${refresh ? '&refresh=true' : ''}`, { timeoutMs: 90000 });
+      setTips(got);
+      saveTips(lang, got);
     } catch (e) {
       setTipsError(e instanceof OfflineError || (e instanceof ApiError && e.status === 503) ? explain(e) : t('aiTipsFailed'));
     } finally {
@@ -95,7 +99,7 @@ export default function Assistant() {
         {/* Today's tips */}
         <View style={{ backgroundColor: C.ink, borderRadius: 18, padding: 16, gap: 12 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Icon name="sparkle" color={C.mint} size={18} />
+            <Vita mood="ai" height={52} />
             <T style={{ color: '#fff', fontSize: 16, fontWeight: '700', flex: 1 }}>{t('aiTodayTips')}</T>
             {tips && !tipsBusy ? (
               <Pressable onPress={() => void loadTips(true)} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -155,7 +159,7 @@ export default function Assistant() {
         ))}
         {asking ? (
           <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10 }}>
-            <ActivityIndicator color={C.blue} size="small" />
+            <Vita mood="think" height={36} />
             <T style={{ color: C.text2 }}>{t('aiThinking')}</T>
           </View>
         ) : null}

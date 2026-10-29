@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
-import { Btn, Field, Pill, Sheet, T, toast } from './ui';
+import { Btn, Field, Pill, Sheet, T } from './ui';
+import { celebrate } from './Vita';
 import { Icon } from './Icon';
 import { useDb, useSession } from '../lib/session';
 import { cachedTasks, refreshTasks, setTaskDone, type Task } from '../lib/tasks';
@@ -33,10 +34,10 @@ export function TasksSection() {
   if (open.length === 0 && doneToday === 0) return null;
 
   return (
-    <View style={{ paddingHorizontal: 16, paddingTop: 20, gap: 10 }}>
+    <View style={{ paddingHorizontal: 14, paddingTop: 20, gap: 8 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 }}>
         <Icon name="flag" size={18} color={C.purple} />
-        <T style={{ fontSize: 18, fontWeight: '700', flex: 1 }}>{t('tasksFromManager')}</T>
+        <T style={{ fontSize: 18, fontWeight: '800', flex: 1 }}>{t('tasksFromManager')}</T>
         {doneToday > 0 ? <Pill tone="ok" icon="check" label={t('tasksDoneToday', { n: doneToday })} /> : null}
       </View>
       {open.map((task) => {
@@ -45,12 +46,15 @@ export function TasksSection() {
         return (
           <Pressable key={task.id} onPress={() => setOpenId(task.id)}
             style={({ pressed }) => [{ backgroundColor: C.card, borderRadius: 16, padding: 14, gap: 6, borderWidth: 1, borderColor: due?.tone === 'bad' ? '#f3c5c0' : C.border, borderLeftWidth: 4, borderLeftColor: task.priority === 'high' ? C.bad : C.purple }, pressed && { opacity: 0.85 }]}>
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-              <T style={{ flex: 1, fontSize: 16, fontWeight: '700' }} numberOfLines={2}>{task.title}</T>
+            <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+              <View style={{ width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: C.borderStrong }} />
+              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <T style={{ fontSize: 15, fontWeight: '700' }} numberOfLines={2}>{task.title}</T>
+                {where ? <T style={{ fontSize: 12, color: C.text2 }} numberOfLines={1}>{where}</T> : null}
+              </View>
               <Icon name="chevron" size={18} color={C.muted} />
             </View>
-            {where ? <T style={{ fontSize: 13, color: C.text2 }} numberOfLines={1}>{where}</T> : null}
-            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', paddingLeft: 38 }}>
               {task.priority === 'high' ? <Pill tone="bad" icon="alert" label={t('taskUrgent')} /> : null}
               {due ? <Pill tone={due.tone} icon="clock" label={due.text} /> : null}
             </View>
@@ -70,8 +74,8 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose: () => void }
   const done = () => {
     setTaskDone(task.id, note);
     setNote('');
-    toast(t('taskDoneSaved'));
     onClose();
+    setTimeout(() => celebrate(t('celebrateTask')), 350);
   };
   const firstPlace = task.panchayats.find((p) => p.lat != null && p.lng != null);
 

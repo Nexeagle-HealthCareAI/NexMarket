@@ -7,6 +7,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SessionProvider, useSession } from '../lib/session';
 import { ToastHost } from '../components/ui';
+import { CelebrateHost } from '../components/Vita';
 import { C } from '../theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -38,6 +39,7 @@ function Gate() {
         <Stack.Screen name="add" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
       </Stack>
       <ToastHost />
+      <CelebrateHost />
     </>
   );
 }
