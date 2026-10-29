@@ -32,6 +32,15 @@ builder.Services.AddSignalR();
 // CRM: page permissions, cyclic calling, live dashboard events, WhatsApp broadcasts.
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<CallCycleService>();
+builder.Services.Configure<SeemanchalOutreach.Api.Services.LeaveSettings>(builder.Configuration.GetSection("Leave"));
+builder.Services.AddScoped<SeemanchalOutreach.Api.Services.AttendanceService>();
+builder.Services.Configure<SeemanchalOutreach.Api.Services.AnalystSettings>(builder.Configuration.GetSection("Groq"));
+builder.Services.AddHttpClient("groq", c => c.Timeout = TimeSpan.FromSeconds(90));
+builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.GroqClient>();
+builder.Services.AddScoped<SeemanchalOutreach.Api.Services.BusinessData>();
+builder.Services.AddScoped<SeemanchalOutreach.Api.Services.AnalystAgent>();
+builder.Services.AddScoped<SeemanchalOutreach.Api.Services.FieldAssistant>();
+builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.AnalystScheduler>();
 builder.Services.AddSingleton<ILiveEvents, LiveEventPublisher>();
 builder.Services.AddHostedService<BroadcastDispatcher>();
 

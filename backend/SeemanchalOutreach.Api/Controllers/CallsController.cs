@@ -203,12 +203,20 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Select(v => new { v.CheckInAt })
                 .ToListAsync(ct);
 
+            var notes = await _db.ContactNotes.AsNoTracking()
+                .Where(n => n.ContactClientId == clientId)
+                .OrderByDescending(n => n.CreatedAt).Take(20)
+                .Select(n => new { n.Text, n.Source, n.CreatedAt, n.AgentId })
+                .ToListAsync(ct);
+
             int admitted = patients.Count(p => p.Status == "admitted" || p.Status == "converted" || p.Status == "procedure" || p.Status == "discharged");
             decimal due = payments.Where(p => p.Status == "pending_approval" || p.Status == "approved").Sum(p => p.Amount);
 
             return Ok(new
             {
                 c.ClientId, c.Name, type = c.Role, c.Profession, c.Phone, c.IsImportant, c.Status, c.Comments,
+                priority = c.Priority, c.FollowUpDate,
+                notes = notes.Select(n => new { n.Text, n.Source, n.CreatedAt, by = n.AgentId == c.AgentId ? agent : n.AgentId }),
                 block = panchayat?.Block, panchayat = panchayat?.Name, district = panchayat?.District,
                 agentId = c.AgentId, agentName = agent,
                 c.CallAttempts, c.LastCallOutcome, c.LastCalledAt, c.LastConnectedAt, c.NextCallAt, c.NeedsVisit, c.WhatsappOptOut,

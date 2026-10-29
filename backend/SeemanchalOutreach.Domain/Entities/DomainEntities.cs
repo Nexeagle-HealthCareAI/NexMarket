@@ -133,6 +133,9 @@ namespace SeemanchalOutreach.Domain.Entities
 
         // Patient-flow champion: the person in this panchayat who most helps patients reach
         // the hospital. Marked by an admin, manager or agent; at most a few per panchayat.
+        // very_high | high | normal | low — set by the agent; null = not set (treated as normal).
+        public string? Priority { get; set; }
+
         public bool IsChampion { get; set; }
         public string? ChampionNote { get; set; }
         public DateTime? ChampionSetAt { get; set; }
@@ -266,6 +269,8 @@ namespace SeemanchalOutreach.Domain.Entities
         public string District { get; set; } = string.Empty;
         public string Block { get; set; } = string.Empty;
         public string Status { get; set; } = "Active"; // Active | Completed | Cancelled
+        // JSON array of PanchayatIds when a block is split between agents; null = the whole block.
+        public string? PanchayatIdsJson { get; set; }
         public string? AssignedByAgentId { get; set; }
         public string? Notes { get; set; }
         public DateTime AssignedAt { get; set; } = DateTime.UtcNow;

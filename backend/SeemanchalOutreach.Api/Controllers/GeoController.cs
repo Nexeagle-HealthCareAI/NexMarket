@@ -57,10 +57,13 @@ namespace SeemanchalOutreach.Api.Controllers
         [HttpGet("panchayats")]
         public async Task<IActionResult> Coverage(
             [FromQuery] string? district, [FromQuery] string? block, [FromQuery] string? agentId,
-            [FromQuery] string? from, [FromQuery] string? to, CancellationToken ct)
+            [FromQuery] string? from, [FromQuery] string? to, [FromQuery] string? scope, CancellationToken ct)
         {
             var (start, end) = Range(from, to);
-            var pq = _db.Panchayats.AsNoTracking().Where(p => p.IsActiveForMarketing);
+            // scope: (default) in marketing scope · "out" taken out of scope · "all"
+            var pq = _db.Panchayats.AsNoTracking();
+            if (scope == "out") pq = pq.Where(p => !p.IsActiveForMarketing);
+            else if (scope != "all") pq = pq.Where(p => p.IsActiveForMarketing);
             if (!string.IsNullOrWhiteSpace(district)) pq = pq.Where(p => p.District == district);
             if (!string.IsNullOrWhiteSpace(block)) pq = pq.Where(p => p.Block == block);
             var panchayats = await pq.OrderBy(p => p.District).ThenBy(p => p.Block).ThenBy(p => p.Name).ToListAsync(ct);
@@ -111,6 +114,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     name = p.Name,
                     block = p.Block,
                     district = p.District,
+                    inScope = p.IsActiveForMarketing,
                     lat = spot.Lat,
                     lng = spot.Lng,
                     source = spot.Source,
@@ -164,7 +168,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Select(c => new
                 {
                     c.ClientId, c.Name, c.Role, c.Profession, c.Phone, c.IsImportant, c.IsChampion, c.ChampionNote,
-                    c.AgentId, c.Relation, c.CreatedAt, c.LastConnectedAt,
+                    c.AgentId, c.Relation, c.CreatedAt, c.LastConnectedAt, c.Priority, c.FollowUpDate,
                 }).ToListAsync(ct);
             var contactIds = contacts.Select(c => c.ClientId).ToList();
             var referrals = await _db.Referrals.AsNoTracking().Where(r => contactIds.Contains(r.ContactId))
@@ -185,6 +189,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     phone = c.Phone,
                     important = c.IsImportant,
                     champion = c.IsChampion,
+                    priority = c.Priority,
+                    followUpDate = c.FollowUpDate,
                     championNote = c.ChampionNote,
                     relation = c.Relation,
                     addedBy = NameOf(c.AgentId),
@@ -209,6 +215,9 @@ namespace SeemanchalOutreach.Api.Controllers
                 block = p.Block,
                 district = p.District,
                 lgdCode = p.LgdCode,
+                inScope = p.IsActiveForMarketing,
+                canDelete = allVisits.Count == 0 && !await _db.Contacts.AnyAsync(c => c.PanchayatId == id, ct),
+                createdBy = p.CreatedBy,
                 lat = spot.Lat,
                 lng = spot.Lng,
                 source = spot.Source,
@@ -267,7 +276,7 @@ namespace SeemanchalOutreach.Api.Controllers
         private async Task<object> SnapshotAsync(string panchayatId, CancellationToken ct)
         {
             var questions = await _db.SurveyQuestions.AsNoTracking()
-                .Where(q => SurveyQuestionSeeder.CoreQuestionIds.Contains(q.QuestionId)).ToListAsync(ct);
+                .Where(q => q.IsActive).OrderBy(q => q.Order).ToListAsync(ct);
             var answers = await _db.SurveyResponses.AsNoTracking()
                 .Where(s => s.PanchayatId == panchayatId && !s.IsSkipped)
                 .OrderByDescending(s => s.CreatedAt).Take(500)
@@ -279,7 +288,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 catch (JsonException) { return new Dictionary<string, JsonElement>(); }
             }).ToList();
 
-            var result = SurveyQuestionSeeder.CoreQuestionIds.Select(qid =>
+            var result = questions.Select(q0 => q0.QuestionId).ToList().Select(qid =>
             {
                 var q = questions.FirstOrDefault(x => x.QuestionId == qid);
                 if (q == null) return null;
@@ -313,7 +322,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 return new
                 {
                     questionId = qid,
-                    title = ShortTitle(qid),
+                    title = SurveyCore.Title(q),
                     text = q.Text,
                     type = q.Type,
                     respondents,

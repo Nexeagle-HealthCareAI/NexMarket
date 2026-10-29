@@ -1,11 +1,6 @@
-'use client';
-import dynamic from 'next/dynamic';
+import { redirect } from 'next/navigation';
 
-const DuplicatesClient = dynamic(() => import('./DuplicatesClient'), {
-  ssr: false,
-  loading: () => <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Duplicate Contact Review…</div>,
-});
-
-export default function AdminDuplicatesPage() {
-  return <DuplicatesClient />;
+/** Duplicate review is now a tab on the Partners page. */
+export default function OldDuplicatesPage() {
+  redirect('/admin/partners?tab=dup');
 }

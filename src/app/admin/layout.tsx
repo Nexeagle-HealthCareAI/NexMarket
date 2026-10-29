@@ -7,8 +7,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, useSyncExternalStore, type ComponentType } from 'react';
 import {
   LayoutDashboard, PhoneCall, Inbox, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
-  Map as MapIcon, Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal, AlertTriangle,
-  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check,
+  Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
+  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck,
 } from 'lucide-react';
 import { logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useAgentStore } from '@/store/agent-store';
@@ -40,9 +40,8 @@ const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'Network',
     items: [
-      { href: '/admin/pipeline', label: 'Partners', page: 'partners', icon: Users },
+      { href: '/admin/partners', label: 'Partners', page: 'partners', icon: Users, match: ['/admin/pipeline', '/admin/duplicates'] },
       { href: '/admin/broadcasts', label: 'WhatsApp broadcasts', page: 'whatsapp', icon: MessageCircle },
-      { href: '/admin/duplicates', label: 'Duplicates', page: 'partners', icon: AlertTriangle },
     ],
   },
   {
@@ -50,10 +49,10 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/map', label: 'Live map', page: 'field', icon: MapPin },
       { href: '/admin/activity', label: 'Agent activity', page: 'field', icon: Activity },
-      { href: '/admin/coverage', label: 'Panchayat coverage', page: 'field', icon: Grid2x2Check },
+      { href: '/admin/coverage', label: 'Panchayat coverage', page: 'field', icon: Grid2x2Check, match: ['/admin/panchayats'] },
+      { href: '/admin/leave', label: 'Attendance & leave', page: 'field', icon: CalendarCheck },
       { href: '/admin/agents', label: 'Field agents', page: 'field', icon: Smartphone },
       { href: '/admin/assignments', label: 'Block assignments', page: 'field', icon: ClipboardList },
-      { href: '/admin/panchayats', label: 'Panchayats', page: 'field', icon: MapIcon },
     ],
   },
   {

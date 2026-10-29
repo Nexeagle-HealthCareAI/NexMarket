@@ -206,7 +206,7 @@ export default function CommandCentrePage() {
               <Alert count={data.alerts.notArrived48} tone="warn" title="Referrals not arrived in 48 h" sub="Call the patient or the partner" href={canView(access, 'desk') ? '/admin/desk' : undefined} />
               <Alert count={data.alerts.overdueFollowUps} tone="accent" title="Overdue partner calls" sub="Past their call date" href={canView(access, 'calls') ? '/admin/calls' : undefined} />
               <Alert count={data.alerts.needsVisit} tone="bad" title="Partners who need a visit" sub="3 calls missed in a row" href={canView(access, 'calls') ? '/admin/calls?filter=needs_visit' : undefined} />
-              <Alert count={data.alerts.openEscalations} tone="neutral" title="Open escalations from agents" sub="Waiting for a reply" href={canView(access, 'partners') ? '/admin/pipeline' : undefined} />
+              <Alert count={data.alerts.openEscalations} tone="neutral" title="Open escalations from agents" sub="Waiting for a reply" href={canView(access, 'partners') ? '/admin/partners?tab=escalated' : undefined} />
             </ul>
           )}
         </section>

@@ -66,6 +66,7 @@ namespace SeemanchalOutreach.Api.Controllers
         [HttpDelete("{id:guid}")]
         public async Task<IActionResult> DeleteSurvey(Guid id)
         {
+            if (!User.IsAdmin()) return StatusCode(403, new { message = "Only an admin can delete survey answers." });
             var survey = await _db.SurveyResponses.FirstOrDefaultAsync(s => s.Id == id);
             if (survey == null) return NotFound();
 
@@ -77,6 +78,7 @@ namespace SeemanchalOutreach.Api.Controllers
         [HttpPut("{id:guid}")]
         public async Task<IActionResult> UpdateSurvey(Guid id, [FromBody] UpdateSurveyResponseDto dto)
         {
+            if (!User.IsAdmin()) return StatusCode(403, new { message = "Only an admin can change survey answers." });
             var survey = await _db.SurveyResponses.FirstOrDefaultAsync(s => s.Id == id);
             if (survey == null) return NotFound();
 

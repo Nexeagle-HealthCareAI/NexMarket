@@ -133,8 +133,16 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Skip(skip).Take(take)
                 .ToListAsync(cancellationToken);
             var referrals = await _db.Referrals.AsNoTracking()
-                .Where(r => r.AgentId == request.AgentId && r.ServerReceivedAt >= request.Since)
+                // Also re-send referrals whose stage the hospital changed since the last pull,
+                // so the agent sees "arrived / admitted" on their phone.
+                .Where(r => r.AgentId == request.AgentId && (r.ServerReceivedAt >= request.Since || (r.UpdatedAt != null && r.UpdatedAt >= request.Since)))
                 .OrderBy(r => r.Id)
+                .Skip(skip).Take(take)
+                .ToListAsync(cancellationToken);
+            var myContactIds = _db.Contacts.Where(c => c.AgentId == request.AgentId).Select(c => c.ClientId);
+            var contactNotes = await _db.ContactNotes.AsNoTracking()
+                .Where(n => n.ServerReceivedAt >= request.Since && myContactIds.Contains(n.ContactClientId))
+                .OrderBy(n => n.Id)
                 .Skip(skip).Take(take)
                 .ToListAsync(cancellationToken);
             var panchayats = await _db.Panchayats.AsNoTracking()
@@ -152,7 +160,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Skip(skip).Take(take)
                 .ToListAsync(cancellationToken);
                 
-            bool hasMore = contacts.Count == take || visits.Count == take || shifts.Count == take || referrals.Count == take || panchayats.Count == take || surveys.Count == take || surveyQuestions.Count == take;
+            bool hasMore = contactNotes.Count == take || contacts.Count == take || visits.Count == take || shifts.Count == take || referrals.Count == take || panchayats.Count == take || surveys.Count == take || surveyQuestions.Count == take;
 
             return Ok(new
             {
@@ -166,12 +174,19 @@ namespace SeemanchalOutreach.Api.Controllers
                     role = c.Role,
                     name = c.Name,
                     phone = c.Phone,
+                    profession = c.Profession,
                     whatsappAdded = c.WhatsappAdded,
                     cardGiven = c.CardGiven,
+                    status = c.Status,
+                    photoUrl = c.PhotoUrl,
+                    lat = c.Latitude,
+                    lng = c.Longitude,
                     createdAt = c.CreatedAt.ToString("o"),
-                    updatedAt = c.CreatedAt.ToString("o"),
+                    updatedAt = c.LastModifiedAt.ToString("o"),
                     potentialDuplicateOf = c.PotentialDuplicateOf,
                     isImportant = c.IsImportant,
+                    priority = c.Priority,
+                    followUpDate = c.FollowUpDate,
                 }),
                 visits = visits.Select(v => new
                 {
@@ -194,12 +209,27 @@ namespace SeemanchalOutreach.Api.Controllers
                     startAt = s.StartTime.ToString("o"),
                     endAt = s.EndTime?.ToString("o"),
                 }),
+                contactNotes = contactNotes.Select(n => new
+                {
+                    clientId = n.ClientId,
+                    contactId = n.ContactClientId,
+                    text = n.Text,
+                    source = n.Source,
+                    agentId = n.AgentId,
+                    createdAt = n.CreatedAt.ToString("o"),
+                }),
                 referrals = referrals.Select(r => new
                 {
                     clientId = r.ClientId,
                     deviceId = r.DeviceId,
                     contactId = r.ContactId,
                     referralDate = r.CreatedAt.ToString("yyyy-MM-dd"),
+                    patientName = r.PatientName,
+                    department = r.Department,
+                    urgent = r.Urgent,
+                    patientAge = r.PatientAge,
+                    patientSex = r.PatientSex,
+                    updatedAt = (r.UpdatedAt ?? r.CreatedAt).ToString("o"),
                     status = r.Status,
                     notes = r.Notes,
                     createdAt = r.CreatedAt.ToString("o"),

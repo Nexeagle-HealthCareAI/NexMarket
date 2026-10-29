@@ -33,6 +33,11 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<ReferralStatusEntry> ReferralStatusEntries => Set<ReferralStatusEntry>();
         public DbSet<Broadcast> Broadcasts => Set<Broadcast>();
         public DbSet<BroadcastRecipient> BroadcastRecipients => Set<BroadcastRecipient>();
+        public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
+        public DbSet<ContactNote> ContactNotes => Set<ContactNote>();
+        public DbSet<AiBriefing> AiBriefings => Set<AiBriefing>();
+        public DbSet<AiItem> AiItems => Set<AiItem>();
+        public DbSet<SurveyEdit> SurveyEdits => Set<SurveyEdit>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -219,6 +224,44 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.BroadcastId);
                 entity.HasIndex(e => e.ProviderMessageId);
                 entity.HasIndex(e => e.Phone);
+            });
+
+            modelBuilder.Entity<LeaveRequest>(entity =>
+            {
+                entity.ToTable("leave_requests");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Days).HasPrecision(4, 1);
+                entity.HasIndex(e => new { e.AgentId, e.FromDate });
+                entity.HasIndex(e => e.Status);
+            });
+
+            modelBuilder.Entity<ContactNote>(entity =>
+            {
+                entity.ToTable("contact_notes");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.ClientId).IsUnique();
+                entity.HasIndex(e => new { e.ContactClientId, e.CreatedAt });
+            });
+
+            // ─── AI analyst ──────────────────────────────────────────
+            modelBuilder.Entity<AiBriefing>(entity =>
+            {
+                entity.ToTable("ai_briefings");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.CreatedAt);
+            });
+            modelBuilder.Entity<AiItem>(entity =>
+            {
+                entity.ToTable("ai_items");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Key).IsUnique();
+                entity.HasIndex(e => new { e.Status, e.Kind });
+            });
+            modelBuilder.Entity<SurveyEdit>(entity =>
+            {
+                entity.ToTable("survey_edits");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.ResponseId);
             });
 
             // ─── SurveyQuestion ──────────────────────────────────────

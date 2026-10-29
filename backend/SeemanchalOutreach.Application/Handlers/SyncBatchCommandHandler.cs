@@ -349,6 +349,7 @@ namespace SeemanchalOutreach.Application.Handlers
                     double? lat = GetOptionalDouble(root, "lat");
                     double? lng = GetOptionalDouble(root, "lng");
                     bool isImportant = GetBool(root, "isImportant", false);
+                    string? priority = NormalizePriority(root.TryGetProperty("priority", out var prProp) && prProp.ValueKind == JsonValueKind.String ? prProp.GetString() : null);
                     bool agentEscalated = GetBool(root, "agentEscalated", false);
                     string? agentEscalationNote = root.TryGetProperty("agentEscalationNote", out var aenProp) && aenProp.ValueKind == JsonValueKind.String ? aenProp.GetString() : null;
                     string? photoUrl = root.TryGetProperty("photoUrl", out var pProp) && pProp.ValueKind == JsonValueKind.String ? pProp.GetString() : null;
@@ -386,7 +387,8 @@ namespace SeemanchalOutreach.Application.Handlers
                             Longitude = lng,
                             AgentEscalated = agentEscalated,
                             AgentEscalationNote = agentEscalationNote,
-                            IsImportant = isImportant,
+                            IsImportant = isImportant || priority == "very_high",
+                            Priority = priority,
                             PhotoUrl = photoUrl,
                             CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
                             ServerReceivedAt = syncedAt
@@ -468,6 +470,11 @@ namespace SeemanchalOutreach.Application.Handlers
                             existing.WhatsappAdded = whatsapp;
                             existing.CardGiven = card;
                             existing.IsImportant = isImportant;
+                            if (priority != null)
+                            {
+                                existing.Priority = priority;
+                                if (priority == "very_high") existing.IsImportant = true;
+                            }
                             existing.Latitude = lat ?? existing.Latitude;
                             existing.Longitude = lng ?? existing.Longitude;
                             if (!string.IsNullOrEmpty(photoUrl)) existing.PhotoUrl = photoUrl;
@@ -487,8 +494,13 @@ namespace SeemanchalOutreach.Application.Handlers
 
                             if (isNewerThanServer)
                             {
-                                existing.AgentEscalated = agentEscalated;
-                                existing.AgentEscalationNote = agentEscalationNote;
+                                // Only touch the escalation when the device actually sent it — an
+                                // ordinary edit after "raise issue" must not clear the flag.
+                                if (root.TryGetProperty("agentEscalated", out _))
+                                {
+                                    existing.AgentEscalated = agentEscalated;
+                                    existing.AgentEscalationNote = agentEscalationNote;
+                                }
 
                                 var previousStatus = existing.Status;
                                 var previousComments = existing.Comments;
@@ -654,6 +666,28 @@ namespace SeemanchalOutreach.Application.Handlers
                     return Result(clientId, deviceId, existing.Id, syncedAt, "already_exists");
                 }
 
+                case "contact_note":
+                {
+                    string clientId = GetString(root, "clientId", item.ClientId);
+                    var existingNote = await _db.ContactNotes.FirstOrDefaultAsync(n => n.ClientId == clientId, cancellationToken);
+                    if (existingNote != null) return Result(clientId, deviceId, existingNote.Id, syncedAt, "already_exists");
+                    string text = GetString(root, "text", "").Trim();
+                    if (text.Length == 0) return Result(clientId, deviceId, Guid.Empty, syncedAt, "skipped");
+                    string source = GetString(root, "source", "note");
+                    var note = new ContactNote
+                    {
+                        ClientId = clientId,
+                        ContactClientId = GetString(root, "contactId", ""),
+                        AgentId = agentId,
+                        Text = text.Length > 2000 ? text[..2000] : text,
+                        Source = source is "visit" or "call" ? source : "note",
+                        CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
+                        ServerReceivedAt = syncedAt,
+                    };
+                    _db.ContactNotes.Add(note);
+                    return Result(clientId, deviceId, note.Id, syncedAt, "created");
+                }
+
                 case "contact_document":
                 {
                     string clientId = GetString(root, "clientId", item.ClientId);
@@ -767,6 +801,13 @@ namespace SeemanchalOutreach.Application.Handlers
 
         private static bool GetBool(JsonElement el, string prop, bool def)
             => el.TryGetProperty(prop, out var p) && (p.ValueKind == JsonValueKind.True || p.ValueKind == JsonValueKind.False) ? p.GetBoolean() : def;
+
+        /// <summary>very_high | high | normal | low, or null when the app didn't send one.</summary>
+        private static string? NormalizePriority(string? p)
+        {
+            var v = (p ?? string.Empty).Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_');
+            return v is "very_high" or "high" or "normal" or "low" ? v : null;
+        }
 
         private static DateTime GetDateTime(JsonElement el, string prop, DateTime def)
             => el.TryGetProperty(prop, out var p) && p.TryGetDateTime(out var dt) ? dt.ToUniversalTime() : def;

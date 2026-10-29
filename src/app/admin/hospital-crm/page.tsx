@@ -1,9 +1,6 @@
-import HospitalCrmClient from './HospitalCrmClient';
+import { redirect } from 'next/navigation';
 
-export const metadata = {
-  title: 'Hospital CRM | Seemanchal Outreach',
-};
-
-export default function HospitalCrmPage() {
-  return <HospitalCrmClient />;
+/** The old Hospital CRM board was replaced by the Referral pipeline. */
+export default function OldHospitalCrmPage() {
+  redirect('/admin/referrals');
 }

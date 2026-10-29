@@ -30,6 +30,11 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<ReferralStatusEntry> ReferralStatusEntries { get; }
         DbSet<Broadcast> Broadcasts { get; }
         DbSet<BroadcastRecipient> BroadcastRecipients { get; }
+        DbSet<LeaveRequest> LeaveRequests { get; }
+        DbSet<ContactNote> ContactNotes { get; }
+        DbSet<AiBriefing> AiBriefings { get; }
+        DbSet<AiItem> AiItems { get; }
+        DbSet<SurveyEdit> SurveyEdits { get; }
 
         ChangeTracker ChangeTracker { get; }
 

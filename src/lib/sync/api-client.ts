@@ -973,6 +973,7 @@ export const crm = {
   get: <T>(path: string) => get<T>(path),
   post: <T>(path: string, body?: unknown) => post<unknown, T>(path, body ?? {}),
   put: <T>(path: string, body?: unknown) => put<unknown, T>(path, body ?? {}),
+  patch: <T>(path: string, body?: unknown) => patch<unknown, T>(path, body ?? {}),
   del: <T>(path: string) => del<T>(path),
   /** Downloads a file (e.g. CSV export) with the session cookie and saves it. */
   async download(path: string, fileName: string): Promise<void> {

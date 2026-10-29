@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { Download, MapPin, Search } from 'lucide-react';
+import { Download, ListChecks, MapPin, Plus, Search } from 'lucide-react';
+import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { geo, istDate, STATUS_META, type CoverageRow, type CoverageStatus } from '@/lib/crm/geo';
 import PanchayatPanel from '@/components/crm/geo/PanchayatPanel';
-import { Empty, ErrorBox, fmt, PageHead, Skeleton, useLoader, useToast } from '@/components/crm/ui';
+import { Empty, ErrorBox, fmt, friendlyError, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 
 const PERIODS = [
   { key: '7', label: '7 days' },
@@ -31,10 +32,14 @@ export default function CoveragePage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [allBlocks, setAllBlocks] = useState(false);
   const [limit, setLimit] = useState(100);
+  const [scope, setScope] = useState<'in' | 'out'>('in');
+  const [adding, setAdding] = useState(false);
+  const [scoping, setScoping] = useState(false);
+  const editField = canEdit(access, 'field');
 
   const from = istDate(Number(period) - 1);
   const to = istDate(0);
-  const data = useLoader(() => geo.coverage({ agentId: agentId || undefined, from, to }), [agentId, from, to]);
+  const data = useLoader(() => geo.coverage({ agentId: agentId || undefined, from, to, scope: scope === 'out' ? 'out' : undefined }), [agentId, from, to, scope]);
   const agents = useLoader(() => geo.live(), []);
   const rows = useMemo(() => data.data?.items ?? [], [data.data]);
 
@@ -113,6 +118,8 @@ export default function CoveragePage() {
         <div className="crm-chips">
           <Link className="crm-btn is-secondary" href="/admin/map"><MapPin size={16} aria-hidden /> Live map</Link>
           <button type="button" className="crm-btn is-secondary" onClick={exportCsv} disabled={!filtered.length}><Download size={16} aria-hidden /> Export</button>
+          {editField && block && <button type="button" className="crm-btn is-secondary" onClick={() => setScoping(true)}><ListChecks size={16} aria-hidden /> Panchayats in {block}</button>}
+          {editField && <button type="button" className="crm-btn" onClick={() => setAdding(true)}><Plus size={16} aria-hidden /> Add panchayat</button>}
         </div>
       </PageHead>
 
@@ -132,6 +139,9 @@ export default function CoveragePage() {
         <div className="crm-chips" role="group" aria-label="Period">
           {PERIODS.map((p) => <button key={p.key} type="button" className="crm-chip" aria-pressed={period === p.key} onClick={() => setPeriod(p.key)}>{p.label}</button>)}
         </div>
+        <button type="button" className="crm-chip is-soft" aria-pressed={scope === 'out'} onClick={() => { setScope((v) => (v === 'out' ? 'in' : 'out')); setOpenId(null); }} style={{ marginLeft: 'auto' }}>
+          {scope === 'out' ? 'Showing panchayats out of scope' : 'Show panchayats out of scope'}
+        </button>
       </section>
 
       {data.error && <ErrorBox message={data.error} onRetry={data.reload} />}
@@ -238,10 +248,14 @@ export default function CoveragePage() {
           <div className="geo-drawer" role="dialog" aria-modal="true" aria-label="Panchayat details">
             <PanchayatPanel id={openId} from={from} to={to}
               canEditField={canEdit(access, 'field')} canEditPartners={canEdit(access, 'partners')}
-              onClose={() => setOpenId(null)} showMapLink onToast={showToast} />
+              onClose={() => setOpenId(null)} showMapLink onToast={showToast} onRecordChanged={() => void data.reload()} />
           </div>
         </>
       )}
+      {adding && <AddPanchayat districts={districts} blocks={[...new Set(rows.map((r) => `${r.district}|${r.block}`))]} defaultDistrict={district} defaultBlock={block}
+        onClose={() => setAdding(false)} onDone={(m) => { setAdding(false); showToast(m); void data.reload(); }} />}
+      {scoping && block && <ScopeModal block={block} district={district || rows.find((r) => r.block === block)?.district || ''}
+        onClose={() => setScoping(false)} onDone={(m) => { setScoping(false); showToast(m); void data.reload(); }} />}
       {toast}
     </main>
   );
@@ -277,5 +291,89 @@ function Row({ r, onOpen }: { r: CoverageRow; onOpen: () => void }) {
       <td className="num" style={{ textAlign: 'right', fontWeight: r.referrals ? 700 : 400 }}>{r.referrals}</td>
       <td className="num" style={{ textAlign: 'right' }}>{r.admitted}</td>
     </tr>
+  );
+}
+
+function AddPanchayat({ districts, blocks, defaultDistrict, defaultBlock, onClose, onDone }: {
+  districts: string[]; blocks: string[]; defaultDistrict: string; defaultBlock: string; onClose: () => void; onDone: (m: string) => void;
+}) {
+  const [name, setName] = useState('');
+  const [district, setDistrict] = useState(defaultDistrict);
+  const [block, setBlock] = useState(defaultBlock);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const blockOptions = blocks.filter((b) => !district || b.startsWith(`${district}|`)).map((b) => b.split('|')[1]).sort();
+  const save = async () => {
+    if (!name.trim() || !district.trim() || !block.trim()) { setError('Fill in the name, district and block.'); return; }
+    setBusy(true); setError('');
+    try {
+      await crm.post('/api/v1/panchayats', { name: name.trim(), district: district.trim(), block: block.trim() });
+      onDone(`${name.trim()} added to ${block}. Place its pin on the live map when you can.`);
+    } catch (e) { setError(friendlyError(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Modal title="Add panchayat" onClose={onClose} actions={<>
+      <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
+      <button type="button" className="crm-btn" disabled={busy} onClick={save}>Add</button>
+    </>}>
+      <span className="crm-sub" style={{ fontSize: 13 }}>Only for a panchayat missing from the list. Agents can also add one from the app.</span>
+      <label className="crm-field">Panchayat name<input className="crm-input" value={name} onChange={(e) => setName(e.target.value)} /></label>
+      <label className="crm-field">District
+        <input className="crm-input" list="ap-districts" value={district} onChange={(e) => setDistrict(e.target.value)} />
+        <datalist id="ap-districts">{districts.map((d) => <option key={d} value={d} />)}</datalist>
+      </label>
+      <label className="crm-field">Block
+        <input className="crm-input" list="ap-blocks" value={block} onChange={(e) => setBlock(e.target.value)} />
+        <datalist id="ap-blocks">{blockOptions.map((b) => <option key={b} value={b} />)}</datalist>
+      </label>
+      {error && <div className="crm-error" role="alert">{error}</div>}
+    </Modal>
+  );
+}
+
+function ScopeModal({ block, district, onClose, onDone }: { block: string; district: string; onClose: () => void; onDone: (m: string) => void }) {
+  const all = useLoader(() => geo.coverage({ block, district: district || undefined, scope: 'all' }), [block, district]);
+  const [on, setOn] = useState<Set<string> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const items = all.data?.items ?? [];
+  const current = on ?? new Set(items.filter((r) => r.inScope !== false).map((r) => r.id));
+  const toggle = (id: string) => { const n = new Set(current); if (n.has(id)) n.delete(id); else n.add(id); setOn(n); };
+  const save = async () => {
+    const turnOn = items.filter((r) => r.inScope === false && current.has(r.id)).map((r) => r.id);
+    const turnOff = items.filter((r) => r.inScope !== false && !current.has(r.id)).map((r) => r.id);
+    setBusy(true);
+    try {
+      if (turnOn.length) await crm.patch('/api/v1/panchayats/marketing-status', { panchayatIds: turnOn, isActive: true });
+      if (turnOff.length) await crm.patch('/api/v1/panchayats/marketing-status', { panchayatIds: turnOff, isActive: false });
+      onDone(turnOn.length + turnOff.length === 0 ? 'No changes.' : `${current.size} of ${items.length} panchayats in ${block} are now in scope.`);
+    } catch (e) { onDone(friendlyError(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Modal title={`Panchayats in ${block}`} wide onClose={onClose} actions={<>
+      <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
+      <button type="button" className="crm-btn" disabled={busy || !all.data} onClick={save}>Save</button>
+    </>}>
+      <span className="crm-sub" style={{ fontSize: 13 }}>Ticked panchayats show in agents’ block lists and count in coverage. Unticked ones keep all their partners and history.</span>
+      {all.error ? <ErrorBox message={all.error} onRetry={all.reload} /> : !all.data ? <Skeleton h={240} /> : (
+        <>
+          <div className="crm-chips">
+            <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setOn(new Set(items.map((r) => r.id)))}>Tick all</button>
+            <span className="crm-sub" style={{ fontSize: 13, alignSelf: 'center' }}>{current.size} of {items.length} ticked</span>
+          </div>
+          <ul className="crm-list" style={{ maxHeight: 420, overflowY: 'auto' }}>
+            {items.map((r) => (
+              <li key={r.id} style={{ padding: 0, display: 'block' }}>
+                <label style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 0', width: '100%', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={current.has(r.id)} onChange={() => toggle(r.id)} style={{ width: 18, height: 18 }} />
+                  <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{r.name}</span>
+                  <span className="crm-cell-sub">{r.partners} partner{r.partners === 1 ? '' : 's'}</span>
+                  {r.inScope === false && <Pill tone="warn">Out now</Pill>}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Modal>
   );
 }
