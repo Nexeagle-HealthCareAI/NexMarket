@@ -50,6 +50,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<Lead> Leads => Set<Lead>();
         public DbSet<LeadActivity> LeadActivities => Set<LeadActivity>();
         public DbSet<WaMessage> WaMessages => Set<WaMessage>();
+        public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -296,6 +297,12 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.Token).IsUnique();
                 entity.HasIndex(e => e.UserId);
+            });
+            modelBuilder.Entity<AppSetting>(entity =>
+            {
+                entity.ToTable("app_settings");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Key).IsUnique();
             });
             modelBuilder.Entity<Lead>(entity =>
             {

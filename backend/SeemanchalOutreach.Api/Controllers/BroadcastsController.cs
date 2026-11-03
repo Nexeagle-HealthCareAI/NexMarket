@@ -156,9 +156,11 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IPermissionService _perms;
         private readonly INotifier _notifier;
         private readonly IWhatsAppSender _wa;
+        private readonly IAppSettings _settings;
 
-        public WhatsAppWebhookController(IMarketingDbContext db, IConfiguration config, ILiveEvents live, IPermissionService perms, INotifier notifier, IWhatsAppSender wa)
+        public WhatsAppWebhookController(IMarketingDbContext db, IConfiguration config, ILiveEvents live, IPermissionService perms, INotifier notifier, IWhatsAppSender wa, IAppSettings settings)
         {
+            _settings = settings;
             _db = db;
             _config = config;
             _live = live;
@@ -170,7 +172,7 @@ namespace SeemanchalOutreach.Api.Controllers
         [HttpGet]
         public IActionResult Verify([FromQuery(Name = "hub.mode")] string? mode, [FromQuery(Name = "hub.verify_token")] string? token, [FromQuery(Name = "hub.challenge")] string? challenge)
         {
-            var expected = _config["WhatsApp:VerifyToken"];
+            var expected = LeadInbox.Wa(_settings, _config).VerifyToken;
             if (mode == "subscribe" && !string.IsNullOrEmpty(expected) && token == expected) return Content(challenge ?? "", "text/plain");
             return Forbid();
         }
@@ -181,7 +183,7 @@ namespace SeemanchalOutreach.Api.Controllers
             using var reader = new StreamReader(Request.Body, Encoding.UTF8);
             var body = await reader.ReadToEndAsync(ct);
 
-            var secret = _config["WhatsApp:AppSecret"];
+            var secret = LeadInbox.Wa(_settings, _config).AppSecret;
             if (string.IsNullOrEmpty(secret)) return Unauthorized();
             var signature = Request.Headers["X-Hub-Signature-256"].ToString();
             using (var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret)))
@@ -333,7 +335,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 adRef = (rf.TryGetProperty("headline", out var h) ? h.GetString() : null)
                     ?? (rf.TryGetProperty("source_id", out var sid) ? "Ad " + sid.GetString() : "Ad");
             }
-            var lead = await LeadInbox.IngestAsync(_db, _perms, _notifier, _config, _wa, new LeadInbox.Inbound
+            var lead = await LeadInbox.IngestAsync(_db, _perms, _notifier, LeadInbox.Wa(_settings, _config), _wa, new LeadInbox.Inbound
             {
                 From = from, ProfileName = profileName, Type = type, Text = text,
                 WaMessageId = m.TryGetProperty("id", out var mid) ? mid.GetString() : null, AdRef = adRef,

@@ -37,7 +37,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
             ["ContactHistoryEntry"] = "Partner history", ["ReferralStatusEntry"] = "Referral status", ["SurveyResponse"] = "Survey",
             ["SurveyEdit"] = "Survey edit", ["LeaveRequest"] = "Leave request", ["CallLog"] = "Call", ["CallCycle"] = "Call cycle",
             ["RolePermission"] = "Role permission", ["AiItem"] = "AI item", ["BroadcastRecipient"] = "Broadcast recipient",
-            ["SurveyQuestion"] = "Survey question",
+            ["SurveyQuestion"] = "Survey question", ["AppSetting"] = "Setting",
         };
 
         private static bool Secret(string prop) =>
@@ -85,6 +85,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                     object? to = e.State == EntityState.Deleted ? null : p.CurrentValue;
                     if (e.State == EntityState.Added && to == null) continue;
                     if (e.State == EntityState.Deleted && from == null) continue;
+                    // Settings: the WhatsApp access token and app secret never reach the log (they're encrypted anyway).
+                    if (e.Entity is AppSetting st && st.IsSecret && name == "Value") { changes[name] = new { from = from == null || (string)from == "" ? null : "••••", to = to == null || (string)to == "" ? null : "•••• (changed)" }; continue; }
                     if (Secret(name)) { changes[name] = new { from = from == null ? null : "••••", to = to == null ? null : "•••• (changed)" }; continue; }
                     changes[name] = new { from = Show(name, from), to = Show(name, to) };
                 }
@@ -115,6 +117,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
 
         private static string? NameOf(EntityEntry e)
         {
+            if (e.Entity is AppSetting setting) return setting.Key;
             foreach (var n in NameProps)
             {
                 var p = e.Properties.FirstOrDefault(x => x.Metadata.Name == n);

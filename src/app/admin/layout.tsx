@@ -74,6 +74,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/departments', label: 'Departments & doctors', page: 'departments', icon: Building2 },
       { href: '/admin/users', label: 'Users & roles', page: 'users', icon: ShieldCheck },
+      { href: '/admin/whatsapp-setup', label: 'WhatsApp setup', page: 'admin', icon: MessageCircle },
       { href: '/admin/audit', label: 'Activity log', page: 'admin', icon: History },
       { href: '/admin/sync', label: 'Sync health', page: 'admin', icon: RefreshCw },
     ],

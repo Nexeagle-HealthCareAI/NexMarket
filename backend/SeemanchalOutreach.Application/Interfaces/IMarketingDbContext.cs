@@ -47,6 +47,7 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<Lead> Leads { get; }
         DbSet<LeadActivity> LeadActivities { get; }
         DbSet<WaMessage> WaMessages { get; }
+        DbSet<AppSetting> AppSettings { get; }
 
         ChangeTracker ChangeTracker { get; }
 
