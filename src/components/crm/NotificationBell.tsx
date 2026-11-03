@@ -15,6 +15,9 @@ interface SettingsRes { kinds: { kind: string; label: string; on: boolean }[]; p
 
 /** The layout re-broadcasts live notifications on window as this event, so one socket serves the whole CRM. */
 export const NOTIFY_EVENT = 'nx-notify';
+const READ_EVENT = 'nx-notify-read';
+const SOUND_KEY = 'nx-popup-sound';
+const soundOn = () => { try { return localStorage.getItem(SOUND_KEY) !== 'off'; } catch { return true; } };
 
 const KIND: Record<string, { icon: typeof Bell; tone: string }> = {
   chat: { icon: MessageCircle, tone: 'blue' },
@@ -60,10 +63,8 @@ export function NotificationBell({ placement = 'nav' }: { placement?: 'nav' | 'i
   const [items, setItems] = useState<Item[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [unread, setUnread] = useState(0);
-  const [toast, setToast] = useState<Item | null>(null);
   const [error, setError] = useState<string | null>(null);
   const panel = useRef<HTMLDivElement>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadCount = useCallback(() => {
     crm.get<{ total: number }>('/api/v1/notifications/unread').then((r) => setUnread(r.total)).catch(() => undefined);
@@ -92,23 +93,17 @@ export function NotificationBell({ placement = 'nav' }: { placement?: 'nav' | 'i
       const item: Item = { id: n.id, kind: n.kind, title: n.title, body: n.body, link: n.link, createdAt: n.createdAt, read: false };
       setUnread((u) => u + 1);
       setItems((x) => (x ? [item, ...x.filter((i) => i.id !== item.id)] : x));
-      if (n.muted) return;
-      // Already looking at that chat: no pop-up.
-      const href = crmHref(n.link);
-      if (href && typeof window !== 'undefined' && `${window.location.pathname}${window.location.search}` === href && !document.hidden) return;
-      setToast(item);
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-      toastTimer.current = setTimeout(() => setToast(null), 7000);
-      if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        try {
-          const d = new Notification(n.title, { body: n.body, tag: n.link ?? n.id, icon: '/brand/nexeagle-mark.png' });
-          d.onclick = () => { window.focus(); if (href) router.push(href); d.close(); };
-        } catch { /* some browsers only allow this from a service worker */ }
-      }
+    };
+    // A pop-up marked one read: keep the count right.
+    const read = (ev: Event) => {
+      const id = (ev as CustomEvent<string>).detail;
+      setItems((x) => x?.map((y) => (y.id === id ? { ...y, read: true } : y)) ?? x);
+      setUnread((u) => Math.max(0, u - 1));
     };
     window.addEventListener(NOTIFY_EVENT, on);
-    return () => window.removeEventListener(NOTIFY_EVENT, on);
-  }, [router]);
+    window.addEventListener(READ_EVENT, read);
+    return () => { window.removeEventListener(NOTIFY_EVENT, on); window.removeEventListener(READ_EVENT, read); };
+  }, []);
 
   // Close on outside click / Esc.
   useEffect(() => {
@@ -127,7 +122,6 @@ export function NotificationBell({ placement = 'nav' }: { placement?: 'nav' | 'i
   };
   const openItem = async (i: Item) => {
     setOpen(false);
-    setToast(null);
     if (!i.read) {
       setItems((x) => x?.map((y) => (y.id === i.id ? { ...y, read: true } : y)) ?? x);
       setUnread((u) => Math.max(0, u - 1));
@@ -197,18 +191,6 @@ export function NotificationBell({ placement = 'nav' }: { placement?: 'nav' | 'i
         </div>
       )}
 
-      {toast && !open && (
-        <div className="nt-toast" role="status">
-          <button type="button" className="nt-toast-main" onClick={() => void openItem(toast)}>
-            {(() => { const k = KIND[toast.kind] ?? KIND.note; const Icon = k.icon; return <span className={`nt-ic tone-${k.tone}`} aria-hidden><Icon size={16} /></span>; })()}
-            <span className="nt-main">
-              <span className="nt-title">{toast.title}</span>
-              {toast.body && <span className="nt-body">{toast.body}</span>}
-            </span>
-          </button>
-          <button type="button" className="nt-iconbtn" onClick={() => setToast(null)} aria-label="Dismiss"><X size={15} /></button>
-        </div>
-      )}
     </div>
   );
 }
@@ -218,6 +200,7 @@ function BellSettings({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [perm, setPerm] = useState<NotificationPermission | 'unsupported'>(() => (typeof Notification === 'undefined' ? 'unsupported' : Notification.permission));
   const [tested, setTested] = useState(false);
+  const [sound, setSound] = useState(soundOn);
 
   useEffect(() => {
     crm.get<SettingsRes>('/api/v1/notifications/settings').then(setS).catch((e) => setError(friendlyError(e)));
@@ -259,6 +242,14 @@ function BellSettings({ onBack }: { onBack: () => void }) {
           ))}
         </ul>
       )}
+      <label className="nt-block" style={{ cursor: 'pointer' }}>
+        <Bell size={16} aria-hidden />
+        <span style={{ flex: 1 }}>
+          <strong>Sounds</strong>
+          <span className="nt-hint" style={{ display: 'block', margin: 0 }}>A chime for every chat message and each pop-up.</span>
+        </span>
+        <input type="checkbox" checked={sound} onChange={(e) => { setSound(e.target.checked); try { localStorage.setItem(SOUND_KEY, e.target.checked ? 'on' : 'off'); } catch { /* storage off */ } }} />
+      </label>
       <div className="nt-block">
         <Monitor size={16} aria-hidden />
         <span style={{ flex: 1 }}>
@@ -285,3 +276,163 @@ function BellSettings({ onBack }: { onBack: () => void }) {
     </div>
   );
 }
+
+interface Popup extends Item { leaving?: boolean }
+
+/** A short, soft two-note chime (no audio file needed). */
+export function chime(kind: 'chat' | 'alert' | 'soft' = 'alert') {
+  try {
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    // chat: a quick rising pair; alert: three notes; soft: one low note for the chat you're reading.
+    const notes = kind === 'chat' ? [[988, 0], [1480, 0.09]] : kind === 'soft' ? [[740, 0]] : [[880, 0], [1320, 0.12], [1760, 0.24]];
+    notes.forEach(([f, at]) => {
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, ctx.currentTime + at);
+      g.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + at + 0.35);
+      o.connect(g).connect(ctx.destination);
+      o.start(ctx.currentTime + at); o.stop(ctx.currentTime + at + 0.4);
+    });
+    setTimeout(() => void ctx.close().catch(() => undefined), 900);
+  } catch { /* the browser blocked sound until the page is clicked */ }
+}
+
+const STAY_MS = 9000;
+
+/**
+ * Pop-ups at the bottom right for each new notification: up to three stacked, newest at the bottom,
+ * each with Open, Mark read and (for chat) a quick reply. They stay while the mouse is over them.
+ * Mounted once in the CRM layout.
+ */
+export function NotificationPopups() {
+  const router = useRouter();
+  const [list, setList] = useState<Popup[]>([]);
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  const remove = useCallback((id: string) => {
+    setList((x) => x.map((p) => (p.id === id ? { ...p, leaving: true } : p)));
+    setTimeout(() => setList((x) => x.filter((p) => p.id !== id)), 220);
+    const t = timers.current.get(id);
+    if (t) clearTimeout(t);
+    timers.current.delete(id);
+  }, []);
+  const schedule = useCallback((id: string, ms = STAY_MS) => {
+    const old = timers.current.get(id);
+    if (old) clearTimeout(old);
+    timers.current.set(id, setTimeout(() => remove(id), ms));
+  }, [remove]);
+  const hold = (id: string) => { const t = timers.current.get(id); if (t) clearTimeout(t); timers.current.delete(id); };
+
+  useEffect(() => {
+    const on = (ev: Event) => {
+      const n = (ev as CustomEvent<LiveNotification>).detail;
+      if (n.muted) return;
+      const href = crmHref(n.link);
+      const isChat = n.kind === 'chat' || n.kind === 'team_chat';
+      // Every chat message pings, even in the chat that's open (a softer, single note there).
+      const looking = !!href && `${window.location.pathname}${window.location.search}` === href && !document.hidden;
+      if (soundOn() && !document.hidden) chime(looking ? 'soft' : isChat ? 'chat' : 'alert');
+      // Already looking at that chat: no pop-up.
+      if (looking) return;
+      const item: Popup = { id: n.id, kind: n.kind, title: n.title, body: n.body, link: n.link, createdAt: n.createdAt, read: false };
+      setList((x) => {
+        // A second message in the same chat replaces the first pop-up.
+        const rest = x.filter((p) => p.id !== item.id && !(item.link?.startsWith('chat:') && p.link === item.link));
+        const next = [...rest, item];
+        next.slice(0, Math.max(0, next.length - 3)).forEach((p) => remove(p.id));
+        return next;
+      });
+      schedule(item.id);
+      if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try {
+          const d = new Notification(n.title, { body: n.body, tag: n.link ?? n.id, icon: '/brand/nexeagle-mark.png' });
+          d.onclick = () => { window.focus(); if (href) router.push(href); d.close(); };
+        } catch { /* some browsers only allow this from a service worker */ }
+      }
+    };
+    window.addEventListener(NOTIFY_EVENT, on);
+    const all = timers.current;
+    return () => { window.removeEventListener(NOTIFY_EVENT, on); all.forEach(clearTimeout); };
+  }, [router, schedule, remove]);
+
+  const markRead = (p: Popup) => {
+    void crm.post(`/api/v1/notifications/${p.id}/read`).catch(() => undefined);
+    window.dispatchEvent(new CustomEvent(READ_EVENT, { detail: p.id }));
+  };
+  const open = (p: Popup) => {
+    markRead(p);
+    remove(p.id);
+    const href = crmHref(p.link);
+    if (href) router.push(href);
+  };
+
+  if (list.length === 0) return null;
+  return (
+    <div className="nt-stack" aria-live="polite" aria-label="New notifications">
+      {list.length > 1 && (
+        <button type="button" className="nt-stack-clear" onClick={() => list.forEach((p) => remove(p.id))}>Dismiss all</button>
+      )}
+      {list.map((p) => <PopupCard key={p.id} p={p} onOpen={() => open(p)} onRead={() => { markRead(p); remove(p.id); }}
+        onClose={() => remove(p.id)} onHold={() => hold(p.id)} onRelease={() => schedule(p.id, 4000)} />)}
+    </div>
+  );
+}
+
+function PopupCard({ p, onOpen, onRead, onClose, onHold, onRelease }: {
+  p: Popup; onOpen: () => void; onRead: () => void; onClose: () => void; onHold: () => void; onRelease: () => void;
+}) {
+  const k = KIND[p.kind] ?? KIND.note;
+  const Icon = k.icon;
+  const chatId = p.link?.startsWith('chat:') ? p.link.slice(5) : null;
+  const [replying, setReplying] = useState(false);
+  const [text, setText] = useState('');
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+
+  const send = async () => {
+    if (!chatId || !text.trim()) return;
+    setState('sending');
+    try {
+      const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`;
+      await crm.post(`/api/v1/chat/threads/${chatId}/messages`, { clientId: id, text: text.trim() });
+      setState('sent');
+      setTimeout(onRead, 900);
+    } catch { setState('error'); }
+  };
+
+  return (
+    <div className={`nt-pop tone-${k.tone}${p.leaving ? ' is-leaving' : ''}`} role="status" onMouseEnter={onHold} onMouseLeave={() => { if (!replying) onRelease(); }}
+      onFocus={onHold}>
+      <div className="nt-pop-row">
+        <span className={`nt-ic tone-${k.tone}`} aria-hidden><Icon size={17} /></span>
+        <button type="button" className="nt-pop-main" onClick={onOpen}>
+          <span className="nt-pop-kind">{KIND_LABEL[p.kind] ?? 'Notification'} · now</span>
+          <span className="nt-title">{p.title}</span>
+          {p.body && <span className="nt-body">{p.body}</span>}
+        </button>
+        <button type="button" className="nt-iconbtn" onClick={onClose} aria-label="Dismiss"><X size={15} /></button>
+      </div>
+      {replying ? (
+        <form className="nt-reply" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+          <input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a reply…" maxLength={4000} disabled={state === 'sending' || state === 'sent'} />
+          <button type="submit" className="crm-btn is-sm" disabled={!text.trim() || state === 'sending' || state === 'sent'}>
+            {state === 'sending' ? 'Sending…' : state === 'sent' ? 'Sent ✓' : 'Send'}
+          </button>
+          {state === 'error' && <span className="nt-reply-err">Not sent. Try again.</span>}
+        </form>
+      ) : (
+        <div className="nt-pop-actions">
+          <button type="button" className="nt-link" onClick={onOpen}>Open</button>
+          {chatId && <button type="button" className="nt-link" onClick={() => { onHold(); setReplying(true); }}>Reply</button>}
+          <button type="button" className="nt-link is-muted" onClick={onRead}><Check size={14} aria-hidden /> Mark read</button>
+        </div>
+      )}
+      {!replying && <span className="nt-pop-timer" aria-hidden />}
+    </div>
+  );
+}
+
+const KIND_LABEL: Record<string, string> = {
+  chat: 'Message', team_chat: 'Field team', escalation: 'Escalation', assignment: 'Block', task: 'Task', leave: 'Leave', referral: 'Patient', note: 'Note',
+};

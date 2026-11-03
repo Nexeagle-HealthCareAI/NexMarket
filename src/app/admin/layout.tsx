@@ -1,7 +1,7 @@
 'use client';
 
 import VitaChat, { openVita } from '@/components/crm/VitaChat';
-import { NotificationBell, NOTIFY_EVENT } from '@/components/crm/NotificationBell';
+import { NotificationBell, NotificationPopups, NOTIFY_EVENT } from '@/components/crm/NotificationBell';
 import type { LiveNotification } from '@/lib/crm/live';
 import './crm.css';
 import Image from 'next/image';
@@ -331,6 +331,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </div>
 
       <VitaChat />
+      <NotificationPopups />
 
       <nav className="crm-bottom" aria-label="Main">
         {phoneItems.map((item) => {
