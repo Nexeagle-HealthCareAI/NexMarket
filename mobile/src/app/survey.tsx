@@ -3,6 +3,7 @@ import { BackHandler, Pressable, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Btn, Card, Chip, Empty, Field, Screen, Sheet, T, TopBar, toast } from '../components/ui';
 import { Icon } from '../components/Icon';
+import { NewPartnerSteps } from '../components/NewPartnerSteps';
 import { useDb, useSession } from '../lib/session';
 import { q, type Question } from '../lib/db';
 import { saveSurvey } from '../lib/repo';
@@ -32,10 +33,8 @@ export default function Survey() {
   const [skipText, setSkipText] = useState('');
 
   const done = () => {
-    // Added during a visit: go straight back to the panchayat, where the new person is picked.
-    const v = q.activeVisit();
-    if (isNew === '1' && v && v.panchayatId === contact?.panchayatId && router.canGoBack()) router.back();
-    else if (isNew === '1') router.replace({ pathname: '/partner/[id]', params: { id: contactId } });
+    // A new partner: the optional photo is the last step.
+    if (isNew === '1') router.replace({ pathname: '/partner-photo', params: { contactId } });
     else if (router.canGoBack()) router.back();
     else router.replace('/today');
   };
@@ -105,6 +104,7 @@ export default function Survey() {
           </Pressable>
         </View>
       }>
+      {isNew === '1' ? <NewPartnerSteps step={1} /> : null}
       <View style={{ flexDirection: 'row', gap: 4 }}>
         {questions.map((x, k) => <View key={x.id} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: k <= i ? C.blue : C.line }} />)}
       </View>

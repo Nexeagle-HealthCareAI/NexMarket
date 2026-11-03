@@ -7,6 +7,7 @@ import { PanchayatList, sortPanchayats } from '../components/PanchayatList';
 import { tryCheckIn } from '../lib/visit';
 import { useHere } from '../lib/useHere';
 import { formatDist } from '../lib/plan';
+import { CHECK_IN_RADIUS_M } from '../lib/config';
 import { Icon } from '../components/Icon';
 import { useDb, useSession } from '../lib/session';
 import { db, q } from '../lib/db';
@@ -69,12 +70,12 @@ export default function StartShift() {
       else if (r === 'no-fix') Alert.alert(t('locationOff'), t('turnOnLocation'));
       else if (!picked) router.replace('/today');
       else {
-        // Check in straight away, so new partners land in this panchayat.
-        const c = await tryCheckIn(picked);
-        if (c.ok) toast(t('shiftStartedIn', { name: pickedName }));
-        else Alert.alert(t('shiftStarted'), c.why === 'far'
-          ? t('startedNotCheckedIn', { name: pickedName, dist: formatDist(c.distM, t) })
-          : t('turnOnLocation'));
+        // Check in straight away, wherever the agent is, so they can add or revisit at once.
+        // If they are still far off, the real location goes with the check-in for the office to see.
+        const c = await tryCheckIn(picked, { anyDistance: true });
+        if (!c.ok) Alert.alert(t('shiftStarted'), t('turnOnLocation'));
+        else if (c.distM != null && c.distM > CHECK_IN_RADIUS_M) toast(t('shiftStartedFar', { name: pickedName, dist: formatDist(c.distM, t) }));
+        else toast(t('shiftStartedIn', { name: pickedName }));
         router.replace({ pathname: '/checkin', params: { panchayatId: picked } });
       }
     } finally {
