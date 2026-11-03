@@ -5,6 +5,7 @@ import { Check, Send } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { CONTACT_TYPES, Empty, ErrorBox, fmt, friendlyError, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 interface Doctor { id: string; name: string; department?: string | null; opdDays?: string | null; opdTimings?: string | null }
 interface AudienceInfo { total: number; excluded: number; byType: { type: string; count: number }[]; blocks: string[] }
@@ -34,6 +35,7 @@ export default function BroadcastsPage() {
 
   const status = useLoader(() => crm.get<{ connected: boolean }>('/api/v1/broadcasts/status'));
   const history = useLoader(() => crm.get<BroadcastRow[]>('/api/v1/broadcasts'));
+  const histPg = usePaged(history.data ?? [], '', 25);
   const doctors = useLoader(() => crm.get<Doctor[]>('/api/v1/doctors'));
 
   const [kind, setKind] = useState('doctor_availability');
@@ -288,11 +290,11 @@ export default function BroadcastsPage() {
         <div className="crm-card-head"><h2 id="hist-h" className="crm-h2">Recent broadcasts</h2></div>
         {history.error && <div style={{ padding: '0 22px' }}><ErrorBox message={history.error} onRetry={history.reload} /></div>}
         {!history.data ? <div style={{ padding: '0 22px 16px' }}><Skeleton h={120} /></div> : history.data.length === 0 ? <Empty title="No broadcasts yet" /> : (
-          <div className="crm-table-wrap">
+          <><div className="crm-table-wrap">
             <table className="crm-table" style={{ minWidth: 760 }}>
               <thead><tr><th>Message</th><th className="num">Sent to</th><th className="num">Delivered</th><th className="num">Read</th><th className="num">Replies</th><th>Status</th></tr></thead>
               <tbody>
-                {history.data.map((b) => (
+                {histPg.rows.map((b) => (
                   <tr key={b.id}>
                     <td>
                       <div className="crm-cell-main">{b.title}</div>
@@ -316,6 +318,7 @@ export default function BroadcastsPage() {
               </tbody>
             </table>
           </div>
+            <Pager {...histPg.pager} noun="broadcasts" /></>
         )}
       </section>
       {toast}

@@ -7,6 +7,7 @@ import { crm } from '@/lib/sync/api-client';
 import { canAssignBlocks, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { TaskList, TaskModal, type TaskPreset } from '@/components/crm/Tasks';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 interface BoardBlock {
   district: string; block: string; panchayats: number; assigned: number; visited30: number;
@@ -62,6 +63,7 @@ function AssignmentsPage() {
   const rows = useMemo(() => (b?.blocks ?? [])
     .filter((x) => !district || x.district === district)
     .filter((x) => !onlyEmpty || x.assigned < x.panchayats), [b, district, onlyEmpty]);
+  const pg = usePaged(rows, [district, onlyEmpty], 25);
   const sel = b?.blocks.find((x) => key(x) === selected) ?? null;
 
   return (
@@ -104,11 +106,11 @@ function AssignmentsPage() {
       <div className={`crm-row pt-split${sel ? ' has-sel' : ''}`}>
         <section className="crm-card grow-3 pt-list" aria-label="Blocks" style={{ padding: 0, overflow: 'hidden' }}>
           {!b ? <div style={{ padding: 20 }}><Skeleton h={300} /></div> : rows.length === 0 ? <Empty title="No blocks match">Clear the filter to see every block.</Empty> : (
-            <div className="crm-table-wrap">
+            <><div className="crm-table-wrap">
               <table className="crm-table">
                 <thead><tr><th>Block</th><th>Agent</th><th style={{ textAlign: 'right' }}>Panchayats</th><th>Visited in 30 days</th></tr></thead>
                 <tbody>
-                  {rows.map((r) => {
+                  {pg.rows.map((r) => {
                     const v = pct(r.visited30, r.panchayats);
                     const gap = r.panchayats - r.assigned;
                     return (
@@ -138,6 +140,7 @@ function AssignmentsPage() {
                 </tbody>
               </table>
             </div>
+            <Pager {...pg.pager} noun="blocks" /></>
           )}
         </section>
 

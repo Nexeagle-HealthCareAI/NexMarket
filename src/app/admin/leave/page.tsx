@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
 import { Empty, ErrorBox, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 type DayStatus = 'worked' | 'leave' | 'absent' | 'off' | 'today' | 'future';
 
@@ -53,6 +54,7 @@ export default function LeavePage() {
 
   const b = board.data;
   const dayNumbers = useMemo(() => (b?.team[0]?.days ?? []).map((d) => Number(d.date.slice(8))), [b]);
+  const pg = usePaged(b?.team ?? [], month, 25);
 
   const decide = async () => {
     if (!deciding) return;
@@ -159,7 +161,7 @@ export default function LeavePage() {
           </div>
         </div>
         {!b ? <Skeleton h={220} /> : b.team.length === 0 ? <Empty title="No field agents" /> : (
-          <div className="crm-table-wrap">
+          <><div className="crm-table-wrap">
             <table className="crm-table" style={{ minWidth: 980 }}>
               <thead>
                 <tr>
@@ -175,7 +177,7 @@ export default function LeavePage() {
                 </tr>
               </thead>
               <tbody>
-                {b.team.map((t) => (
+                {pg.rows.map((t) => (
                   <tr key={t.agentId}>
                     <td><span className="crm-cell-main" style={{ fontWeight: 600 }}>{t.name}</span>{t.block && <span className="crm-cell-sub" style={{ display: 'block' }}>{t.block}</span>}</td>
                     <td>
@@ -194,6 +196,7 @@ export default function LeavePage() {
               </tbody>
             </table>
           </div>
+            <Pager {...pg.pager} noun="agents" /></>
         )}
       </section>
 

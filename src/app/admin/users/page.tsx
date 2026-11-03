@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { crm } from '@/lib/sync/api-client';
 import { useAccess, type PageKey } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 interface RoleInfo { role: string; label: string; users: number; editable: boolean; pages: Record<PageKey, number> }
 interface RolesResponse { pages: PageKey[]; roles: RoleInfo[]; fieldAgents: number }
@@ -85,6 +86,7 @@ export default function UsersPage() {
   };
 
   const visiblePeople = useMemo(() => (people.data ?? []).filter((p) => kindFilter === 'all' || p.kind === kindFilter), [people.data, kindFilter]);
+  const pg = usePaged(visiblePeople, kindFilter, 25);
 
   const signOut = async (p: Person) => {
     try { const r = await crm.post<{ signedOutDevices: number }>(`/api/v1/access/people/${encodeURIComponent(p.agentId)}/sign-out`); showToast(`${p.name} signed out of ${r.signedOutDevices} device(s).`); void people.reload(); }
@@ -180,11 +182,11 @@ export default function UsersPage() {
         </div>
         {people.error && <div style={{ padding: '0 22px' }}><ErrorBox message={people.error} onRetry={people.reload} /></div>}
         {!people.data ? <div style={{ padding: '0 22px 16px' }}><Skeleton h={200} /></div> : visiblePeople.length === 0 ? <Empty title="Nobody here yet" /> : (
-          <div className="crm-table-wrap">
+          <><div className="crm-table-wrap">
             <table className="crm-table" style={{ minWidth: 760 }}>
               <thead><tr><th>Person</th><th>Role</th><th>Signed in now</th><th>Last sign-in</th><th className="num">Actions</th></tr></thead>
               <tbody>
-                {visiblePeople.map((p) => (
+                {pg.rows.map((p) => (
                   <tr key={p.agentId} style={p.isActive ? undefined : { opacity: 0.55 }}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -240,6 +242,7 @@ export default function UsersPage() {
               </tbody>
             </table>
           </div>
+            <Pager {...pg.pager} noun="people" /></>
         )}
       </section>
 

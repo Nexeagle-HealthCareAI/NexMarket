@@ -5,6 +5,7 @@ import { Pencil, Plus } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 interface Department { id: string; name: string; isActive: boolean; order: number }
 interface Doctor { id: string; name: string; departmentId?: string | null; department?: string | null; qualification?: string | null; opdDays?: string | null; opdTimings?: string | null; isActive: boolean }
@@ -22,6 +23,7 @@ export default function DepartmentsPage() {
   const [toast, showToast] = useToast();
 
   const list = (doctors.data ?? []).filter((d) => !deptFilter || d.departmentId === deptFilter);
+  const pg = usePaged(list, deptFilter, 25);
 
   return (
     <main className="crm-page">
@@ -61,11 +63,11 @@ export default function DepartmentsPage() {
           </div>
           {doctors.error && <div style={{ padding: '0 22px' }}><ErrorBox message={doctors.error} onRetry={doctors.reload} /></div>}
           {!doctors.data ? <div style={{ padding: '0 22px 16px' }}><Skeleton h={200} /></div> : list.length === 0 ? <Empty title="No doctors yet" /> : (
-            <div className="crm-table-wrap">
+            <><div className="crm-table-wrap">
               <table className="crm-table" style={{ minWidth: 620 }}>
                 <thead><tr><th>Doctor</th><th>Department</th><th>OPD</th><th></th></tr></thead>
                 <tbody>
-                  {list.map((d) => (
+                  {pg.rows.map((d) => (
                     <tr key={d.id} style={d.isActive ? undefined : { opacity: 0.55 }}>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -81,6 +83,7 @@ export default function DepartmentsPage() {
                 </tbody>
               </table>
             </div>
+            <Pager {...pg.pager} noun="doctors" /></>
           )}
         </section>
       </div>

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronRight, History, Laptop, LogIn, LogOut, Minus, Pencil, Plus, RotateCcw, Search, Smartphone, Tablet, UserX, KeyRound } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, fmt, initials, Modal, PageHead, Pill, Skeleton, useLoader, type Tone } from '@/components/crm/ui';
+import { Pager } from '@/components/crm/Pager';
 
 type Change = { from: unknown; to: unknown };
 interface AuditRow {
@@ -103,7 +104,8 @@ function AuditLog() {
   const [to, setTo] = useState(() => daysAgo(0));
   const [q, setQ] = useState('');
   const [term, setTerm] = useState('');
-  const [pages, setPages] = useState(1);
+  const [pages, setPages] = useState(1); // the page being shown
+  const [size, setSize] = useState(50);
   const [open, setOpen] = useState<string | null>(null);
   const [record, setRecord] = useState<AuditRow | null>(null);
 
@@ -121,15 +123,9 @@ function AuditLog() {
     return p.toString();
   }, [actor, entity, entityId, action, device, from, to, term]);
   const list = useLoader(async () => {
-    const all: AuditRow[] = [];
-    let total = 0;
-    for (let i = 1; i <= pages; i++) {
-      const r = await crm.get<Page>(`/api/v1/audit?${qs}&page=${i}&size=100`);
-      all.push(...r.items); total = r.total;
-      if (r.items.length < 100) break;
-    }
-    return { total, items: all };
-  }, [qs, pages]);
+    const r = await crm.get<Page>(`/api/v1/audit?${qs}&page=${pages}&size=${size}`);
+    return { total: r.total, items: r.items };
+  }, [qs, pages, size]);
 
   const history = useLoader(
     () => (record?.entityId ? crm.get<AuditRow[]>(`/api/v1/audit/record?entity=${encodeURIComponent(record.entity)}&id=${encodeURIComponent(record.entityId)}`) : Promise.resolve([])),
@@ -269,12 +265,9 @@ function AuditLog() {
               </tbody>
             </table>
           </div>
-          {list.data && rows.length < list.data.total && (
-            <div style={{ padding: 12, display: 'flex', justifyContent: 'center' }}>
-              <button type="button" className="crm-btn is-secondary" disabled={list.loading} onClick={() => setPages((p) => p + 1)}>
-                {list.loading ? 'Loading…' : `Show more (${(list.data.total - rows.length).toLocaleString('en-IN')} older)`}
-              </button>
-            </div>
+          {list.data && (
+            <Pager page={pages} pages={Math.max(1, Math.ceil(list.data.total / size))} total={list.data.total} size={size}
+              onPage={(n) => { setPages(n); setOpen(null); }} onSize={(n) => { setSize(n); setPages(1); }} noun="events" />
           )}
         </section>
       )}

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Download, Plus, Search } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
+import { Pager, usePaged } from '@/components/crm/Pager';
 import {
   contactTypeLabel, Empty, ErrorBox, fmt, friendlyError, initials, Modal, PageHead, Pill, rupees, Skeleton, useLoader, useToast,
 } from '@/components/crm/ui';
@@ -40,6 +41,7 @@ export default function PaymentsPage() {
     () => crm.get<PaymentRow[]>(`/api/v1/payments?status=${filter}${search.trim() ? `&search=${encodeURIComponent(search.trim())}` : ''}`),
     [filter, search],
   );
+  const pg = usePaged(list.data ?? [], [filter, search], 25);
   const refresh = () => { void summary.reload(); void list.reload(); };
 
   const act = async (row: PaymentRow, action: 'approve' | 'reject') => {
@@ -90,13 +92,13 @@ export default function PaymentsPage() {
         {!list.data ? <div style={{ padding: '0 22px 16px' }}><Skeleton h={200} /></div> : list.data.length === 0 ? (
           <Empty title="Nothing here">{editable ? 'Use “Add amount owed” to record what a partner should be paid.' : ''}</Empty>
         ) : (
-          <div className="crm-table-wrap">
+          <><div className="crm-table-wrap">
             <table className="crm-table" style={{ minWidth: 900 }}>
               <thead>
                 <tr><th>Partner</th><th>Patients sent · admitted</th><th>For</th><th className="num">Amount</th><th>Status</th><th className="num">Action</th></tr>
               </thead>
               <tbody>
-                {list.data.map((r) => (
+                {pg.rows.map((r) => (
                   <tr key={r.id}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -136,6 +138,7 @@ export default function PaymentsPage() {
               </tbody>
             </table>
           </div>
+            <Pager {...pg.pager} noun="payments" /></>
         )}
       </section>
 

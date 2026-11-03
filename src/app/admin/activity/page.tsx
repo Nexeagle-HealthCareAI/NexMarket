@@ -10,6 +10,7 @@ import { geo, istDate, type AgentActivity, type DaySegment, type TimelineEvent, 
 import { DayRibbon, TimeGrid } from '@/components/crm/geo/DayTime';
 import { useLiveEvents, type LiveLocation } from '@/lib/crm/live';
 import { Empty, ErrorBox, fmt, PageHead, Skeleton, useLoader } from '@/components/crm/ui';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 const RouteMap = dynamic(() => import('@/components/crm/geo/RouteMap'), { ssr: false, loading: () => <div className="act-map"><Skeleton h={520} /></div> });
 
@@ -63,6 +64,8 @@ function ActivityInner() {
   const [replayIdx, setReplayIdx] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const route = act.data?.route ?? [];
+  const partnerRows = (act.data?.events ?? []).filter((e) => e.kind === 'partner');
+  const partnerPg = usePaged(partnerRows, `${effectiveAgent}|${date}`, 10);
 
   // Today's timeline keeps itself current.
   const isToday = date === today;
@@ -192,7 +195,7 @@ function ActivityInner() {
                 <table className="crm-table">
                   <thead><tr><th>#</th><th>Time</th><th>Partner</th><th>Type · panchayat</th><th>Location</th></tr></thead>
                   <tbody>
-                    {d.events.filter((e) => e.kind === 'partner').map((e, i) => (
+                    {partnerPg.rows.map((e, k) => { const i = partnerPg.offset + k; return (
                       <tr key={`${e.at}-${i}`} style={{ cursor: e.lat != null ? 'pointer' : undefined }} aria-selected={focus === e}
                         onClick={() => { if (e.lat != null) { setFocus(e); document.getElementById('act-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }}>
                         <td><span className="rt-num">{i + 1}</span></td>
@@ -204,10 +207,11 @@ function ActivityInner() {
                           {e.lat != null && <div><a href={`https://www.google.com/maps?q=${e.lat},${e.lng}`} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()}>{e.lat.toFixed(5)}, {e.lng!.toFixed(5)}</a></div>}
                         </td>
                       </tr>
-                    ))}
+                    ); })}
                   </tbody>
                 </table>
               </div>
+              <Pager {...partnerPg.pager} noun="partners" />
             </section>
           )}
 

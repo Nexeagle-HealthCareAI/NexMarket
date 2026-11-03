@@ -8,6 +8,7 @@ import { canEdit, useAccess } from '@/lib/crm/access';
 import { geo, istDate, STATUS_META, type CoverageRow, type CoverageStatus } from '@/lib/crm/geo';
 import PanchayatPanel from '@/components/crm/geo/PanchayatPanel';
 import { Empty, ErrorBox, fmt, friendlyError, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 const PERIODS = [
   { key: '7', label: '7 days' },
@@ -31,7 +32,6 @@ export default function CoveragePage() {
   const [blockSort, setBlockSort] = useState<'least' | 'patients'>('least');
   const [openId, setOpenId] = useState<string | null>(null);
   const [allBlocks, setAllBlocks] = useState(false);
-  const [limit, setLimit] = useState(100);
   const [scope, setScope] = useState<'in' | 'out'>('in');
   const [adding, setAdding] = useState(false);
   const [scoping, setScoping] = useState(false);
@@ -88,11 +88,7 @@ export default function CoveragePage() {
 
   // Back to the first page whenever the filters change.
   const filterKey = [district, block, statuses.join(), q, agentId, period].join('|');
-  const [limitKey, setLimitKey] = useState(filterKey);
-  if (limitKey !== filterKey) {
-    setLimitKey(filterKey);
-    setLimit(100);
-  }
+  const pg = usePaged(filtered, [filterKey, sort.key, sort.desc, scope], 50);
 
   const exportCsv = () => {
     const head = ['Panchayat', 'Block', 'District', 'Status', 'Visits', 'Last visit', 'Agents', 'Partners', 'Important', 'Champions', 'Referrals', 'Admitted', 'Survey answers', 'Location'];
@@ -214,7 +210,7 @@ export default function CoveragePage() {
         {!data.data ? <div style={{ padding: 22 }}><Skeleton h={300} /></div> : filtered.length === 0 ? (
           <div style={{ padding: 22 }}><Empty title="Nothing matches">Try another status or clear the search.</Empty></div>
         ) : (
-          <div className="crm-table-wrap">
+          <><div className="crm-table-wrap">
             <table className="crm-table">
               <thead>
                 <tr>
@@ -230,15 +226,11 @@ export default function CoveragePage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.slice(0, limit).map((r) => <Row key={r.id} r={r} onOpen={() => setOpenId(r.id)} />)}
+                {pg.rows.map((r) => <Row key={r.id} r={r} onOpen={() => setOpenId(r.id)} />)}
               </tbody>
             </table>
-            {filtered.length > limit && (
-              <div style={{ padding: 16, textAlign: 'center' }}>
-                <button type="button" className="crm-btn is-secondary" onClick={() => setLimit((l) => l + 200)}>Show more ({filtered.length - limit} left)</button>
-              </div>
-            )}
           </div>
+          <Pager {...pg.pager} noun="panchayats" /></>
         )}
       </section>
 

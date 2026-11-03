@@ -686,3 +686,16 @@
 .pt-visit-dot { position: absolute; left: -13px; top: 4px; width: 12px; height: 12px; border-radius: 999px; background: #16a36a; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
 .pt-visits li[data-kind='added'] .pt-visit-dot { background: #7c3aed; }
 .pt-visits li[data-kind='visit'] .pt-visit-dot { background: #0a72d6; }
+
+/* ─── Table pager (shared) ─── */
+.crm-pager { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--text-2); }
+.crm-pager-count { margin-right: auto; }
+.crm-pager-pages { display: inline-flex; align-items: center; gap: 4px; }
+.crm-pager-pages button { min-width: 34px; height: 34px; padding: 0 8px; border-radius: 9px; border: 1px solid var(--border); background: #fff; color: var(--text); font: 600 13px inherit; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.crm-pager-pages button:hover:not(:disabled) { background: var(--grey-soft, #f4f6fa); }
+.crm-pager-pages button:disabled { opacity: .4; cursor: default; }
+.crm-pager-pages button[aria-current='page'] { background: var(--ink, #0e1525); border-color: var(--ink, #0e1525); color: #fff; }
+.crm-pager-gap { padding: 0 4px; }
+.crm-pager-size { display: inline-flex; align-items: center; gap: 6px; }
+.crm-pager-size select { height: 34px; border-radius: 9px; border: 1px solid var(--border); padding: 0 8px; font: inherit; background: #fff; color: var(--text); }
+@media (max-width: 640px) { .crm-pager { padding: 10px 12px; } .crm-pager-count { width: 100%; } }

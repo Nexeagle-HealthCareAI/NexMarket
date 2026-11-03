@@ -6,6 +6,7 @@ import { ArrowLeft, CalendarDays, MapPin, MessageCircle, Phone, Search, Star } f
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, contactTypeLabel, fmt, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast, type Tone } from '@/components/crm/ui';
+import { Pager } from '@/components/crm/Pager';
 
 type Tab = 'all' | 'follow' | 'champ' | 'escalated' | 'dup';
 type Priority = 'very_high' | 'high' | 'normal' | 'low';
@@ -110,6 +111,7 @@ function PartnersPage() {
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [range, setRange] = useState<Range>('');
   const [dateBy, setDateBy] = useState<'added' | 'visited'>('added');
   const [from, setFrom] = useState('');
@@ -130,7 +132,7 @@ function PartnersPage() {
   };
 
   const qs = useMemo(() => {
-    const sp = new URLSearchParams({ tab: tab === 'dup' ? 'all' : tab, page: String(page), pageSize: '25' });
+    const sp = new URLSearchParams({ tab: tab === 'dup' ? 'all' : tab, page: String(page), pageSize: String(pageSize) });
     if (priority) sp.set('priority', priority);
     if (block) sp.set('block', block);
     if (type) sp.set('type', type);
@@ -139,7 +141,7 @@ function PartnersPage() {
     const r = rangeDates(range, from, to);
     if (r) { if (r[0]) sp.set('from', r[0]); if (r[1]) sp.set('to', r[1]); sp.set('dateBy', dateBy); }
     return sp.toString();
-  }, [tab, page, priority, block, type, agentId, q, range, from, to, dateBy]);
+  }, [tab, page, pageSize, priority, block, type, agentId, q, range, from, to, dateBy]);
 
   const list = useLoader(() => crm.get<ListRes>(`/api/v1/partners?${qs}`), [qs]);
   const filters = useLoader(() => crm.get<Filters>('/api/v1/partners/filters'), []);
@@ -270,13 +272,7 @@ function PartnersPage() {
                       </tbody>
                     </table>
                   </div>
-                  <div className="pt-pager">
-                    <span>{list.data.total.toLocaleString('en-IN')} partner{list.data.total === 1 ? '' : 's'} · page {page} of {pages}</span>
-                    <span style={{ display: 'flex', gap: 6 }}>
-                      <button type="button" className="crm-btn is-secondary is-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</button>
-                      <button type="button" className="crm-btn is-secondary is-sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Next</button>
-                    </span>
-                  </div>
+                  <Pager page={page} pages={pages} total={list.data.total} size={list.data.pageSize} onPage={setPage} onSize={(n) => { setPageSize(n); setPage(1); }} noun="partners" />
                 </>
               )}
             </section>

@@ -8,6 +8,7 @@ import { crm } from '@/lib/sync/api-client';
 import { canView, useAccess } from '@/lib/crm/access';
 import { timeAgo, useNow } from '@/lib/crm/live';
 import { Empty, ErrorBox, fmt, initials, PageHead, Pill, Skeleton, useLoader, type Tone } from '@/components/crm/ui';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 type Status = 'shift' | 'leave' | 'off';
 type DayStatus = 'worked' | 'leave' | 'absent' | 'off' | 'today' | 'future';
@@ -79,6 +80,7 @@ function AgentsPage() {
     const val = (r: AgentRow) => (sort === 'coverage' ? pct(r.visited30, r.panchayats) : r[sort]);
     return list.sort((a, b) => val(b) - val(a) || a.name.localeCompare(b.name));
   }, [team.data, sort]);
+  const pg = usePaged(rows, [month, sort], 25);
   const t = team.data;
 
   return (
@@ -111,11 +113,11 @@ function AgentsPage() {
             {SORTS.map((s) => <button key={s.key} type="button" className="crm-chip" aria-pressed={sort === s.key} onClick={() => setSort(s.key)}>{s.label}</button>)}
           </div>
           {!t ? <div style={{ padding: 20 }}><Skeleton h={300} /></div> : rows.length === 0 ? <Empty title="No field agents yet">Onboard agents from Users &amp; roles.</Empty> : (
-            <div className="crm-table-wrap">
+            <><div className="crm-table-wrap">
               <table className="crm-table">
                 <thead><tr><th>Agent</th><th>Now</th><th style={{ textAlign: 'right' }}>Visits</th><th style={{ textAlign: 'right' }}>Refs → adm.</th><th style={{ textAlign: 'right' }}>Days</th></tr></thead>
                 <tbody>
-                  {rows.map((r) => {
+                  {pg.rows.map((r) => {
                     const c = pct(r.visited30, r.panchayats);
                     return (
                       <tr key={r.agentId} className={`pt-tr${r.agentId === selected ? ' is-sel' : ''}`} onClick={() => select(r.agentId)}>
@@ -147,6 +149,7 @@ function AgentsPage() {
                 </tbody>
               </table>
             </div>
+            <Pager {...pg.pager} noun="agents" /></>
           )}
         </section>
 
