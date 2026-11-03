@@ -186,6 +186,21 @@ namespace SeemanchalOutreach.Api.Controllers
             }
 
             session.DeviceType ??= DeviceKinds.Detect(Request);
+            // One sign-in per kind of device also holds for sessions from before that rule (they never
+            // went through a new sign-in): the device that is in use keeps going, other ones of the
+            // same kind are ended.
+            var sameKind = session.DeviceType;
+            var nowUtc = DateTime.UtcNow;
+            var duplicates = await _db.AgentRefreshTokens
+                .Where(t => t.AgentId == agent.AgentId && t.Id != session.Id && t.RevokedAt == null && t.ExpiresAt > nowUtc)
+                .Where(t => t.DeviceType == sameKind || (t.DeviceType == null && sameKind == DeviceKinds.Desktop))
+                .ToListAsync(cancellationToken);
+            foreach (var old in duplicates)
+            {
+                SessionGuard.End(old, $"You were signed out because this account is signed in on another {DeviceKinds.Label(sameKind)}.", _cache);
+                _db.AuditLogs.Add(AuthAudit.Event(HttpContext, agent, "session_replaced",
+                    $"Older {DeviceKinds.Label(sameKind)} session ended (one sign-in per device type)", old.DeviceId, sameKind));
+            }
             var (newRefreshToken, _) = await IssueRefreshTokenAsync(agent.AgentId, request.DeviceId, cancellationToken); // rotate — the old token can't be reused
             await _db.SaveChangesAsync(cancellationToken);
 
