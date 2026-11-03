@@ -16,14 +16,15 @@ const TYPES = ['asha_worker', 'rmp_doctor', 'medicine_shop', 'nursing_home', 'wa
 
 export default function NewPartner() {
   const { t } = useSession();
-  const params = useLocalSearchParams<{ panchayatId?: string }>();
+  const params = useLocalSearchParams<{ panchayatId?: string; name?: string }>();
   const visit = useDb(() => q.activeVisit());
   const onShift = useDb(() => !!q.activeShift());
   const [panchayatId, setPanchayatId] = useState(params.panchayatId || visit?.panchayatId || '');
   const [busy, setBusy] = useState(false);
   const [role, setRole] = useState<string | null>(null);
   const [moreTypes, setMoreTypes] = useState(false);
-  const [name, setName] = useState('');
+  // Typed in the panchayat's search box: carried over so it isn't typed twice.
+  const [name, setName] = useState(params.name && !/^\d+$/.test(params.name) ? params.name : '');
   const [phone, setPhone] = useState('');
   const [wa, setWa] = useState(false);
   const [card, setCard] = useState(false);
