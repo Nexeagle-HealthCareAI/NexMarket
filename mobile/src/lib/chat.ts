@@ -5,12 +5,19 @@ import { lastKnown } from './location';
 import { uuid } from './util';
 
 /**
- * Chat with the office (and the Field team group). Messages go straight to the server when there's
+ * Chat with the office, the Field team group, and one-to-one ("direct") chats with anyone — an admin,
+ * a manager or another field agent. Only the two people in a direct chat can read it. Messages go straight to the server when there's
  * signal; without it they wait on the phone (kv "chatQueue") and are sent by the sync loop.
  * The last messages of each chat are kept on the phone so they can be read offline.
  */
 
-export interface ChatThread { id: string; kind: 'agent' | 'team'; title: string; sub?: string | null; lastMessageAt?: string | null; lastPreview?: string | null; unread: number }
+export interface ChatThread {
+  id: string; kind: 'agent' | 'team' | 'direct'; title: string; sub?: string | null; lastMessageAt?: string | null; lastPreview?: string | null; unread: number;
+  /** Direct chats: the other person, and their photo. */
+  agentId?: string | null; photoUrl?: string | null;
+}
+/** Someone this person can message directly. */
+export interface ChatPerson { agentId: string; name: string; role: string; kind: 'dashboard' | 'field'; block?: string | null; photoUrl?: string | null }
 export interface ChatFile { name: string; mime: string; size?: number | null; url: string; localUri?: string }
 export interface ChatMsg {
   id: string; clientId: string; threadId: string; senderId: string; senderName: string; fromOffice: boolean; mine: boolean;
@@ -72,6 +79,25 @@ export async function refreshThreads(): Promise<ChatThread[]> {
   kvSet('chatUnread', String(r.threads.reduce((n, t) => n + t.unread, 0)));
   changed();
   return r.threads;
+}
+
+export const cachedPeople = (): ChatPerson[] => kvJson<ChatPerson[]>('chatPeople', []);
+
+/** Everyone the agent can message: the office first, then the field team. Kept on the phone for offline browsing. */
+export async function refreshPeople(): Promise<ChatPerson[]> {
+  const list = await api<ChatPerson[]>('/api/v1/chat/people', { timeoutMs: 15000 });
+  kvSet('chatPeople', JSON.stringify(list));
+  changed();
+  return list;
+}
+
+/** Opens the direct chat with this person (creating it the first time); returns the chat's id. Needs signal. */
+export async function startDirect(agentId: string): Promise<string> {
+  const existing = cachedThreads().find((x) => x.kind === 'direct' && x.agentId === agentId);
+  if (existing) return existing.id;
+  const r = await api<{ id: string }>('/api/v1/chat/direct', { method: 'POST', body: JSON.stringify({ agentId }), timeoutMs: 15000 });
+  try { await refreshThreads(); } catch { /* the chat still opens */ }
+  return r.id;
 }
 
 export async function refreshUnread(): Promise<void> {

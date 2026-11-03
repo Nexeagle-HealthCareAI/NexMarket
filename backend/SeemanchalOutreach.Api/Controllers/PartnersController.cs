@@ -192,7 +192,10 @@ namespace SeemanchalOutreach.Api.Controllers
             var history = await _db.ContactHistory.AsNoTracking().Where(h => h.ContactClientId == clientId)
                 .OrderByDescending(h => h.Timestamp).Take(30).ToListAsync(ct);
             // Chat messages and files that someone tagged with this partner.
-            var chat = await _db.ChatMessages.AsNoTracking().Where(m => m.ContactClientId == clientId)
+            // Direct (one-to-one) chats stay between their two people.
+            var meId = User.AgentIdOf() ?? "";
+            var openThreads = _db.ChatThreads.Where(t => t.Kind != "direct" || t.AgentId == meId || t.PeerId == meId).Select(t => t.Id);
+            var chat = await _db.ChatMessages.AsNoTracking().Where(m => m.ContactClientId == clientId && openThreads.Contains(m.ThreadId))
                 .OrderByDescending(m => m.CreatedAt).Take(50).ToListAsync(ct);
             var lastVisit = await _db.Visits.AsNoTracking()
                 .Where(v => v.PanchayatId == c.PanchayatId && v.AgentId == c.AgentId)
@@ -210,6 +213,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     By = Who(n.AgentId),
                     At = n.CreatedAt,
                     FromApp = !n.ClientId.StartsWith("crm-", StringComparison.Ordinal),
+                    EditedAt = n.EditedAt,
+                    OriginalText = n.EditedAt != null ? n.OriginalText : null,
                 })
                 .Concat(calls.Select(l => new TimelineItem
                 {
@@ -389,6 +394,9 @@ namespace SeemanchalOutreach.Api.Controllers
             public string By { get; set; } = "";
             public DateTime At { get; set; }
             public bool FromApp { get; set; }
+            /// <summary>The agent changed this comment later; the first wording is in <see cref="OriginalText"/>.</summary>
+            public DateTime? EditedAt { get; set; }
+            public string? OriginalText { get; set; }
         }
 
         private static string CallText(CallLog l)

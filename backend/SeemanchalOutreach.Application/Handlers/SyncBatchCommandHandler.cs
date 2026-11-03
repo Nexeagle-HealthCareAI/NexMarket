@@ -498,6 +498,8 @@ namespace SeemanchalOutreach.Application.Handlers
                                 // ordinary edit after "raise issue" must not clear the flag.
                                 if (root.TryGetProperty("agentEscalated", out _))
                                 {
+                                    // A fresh escalation re-opens it for the office, even if an earlier one was resolved.
+                                    if (agentEscalated && (!existing.AgentEscalated || existing.AgentEscalationNote != agentEscalationNote)) existing.IsEscalationResolved = false;
                                     existing.AgentEscalated = agentEscalated;
                                     existing.AgentEscalationNote = agentEscalationNote;
                                 }
@@ -688,6 +690,30 @@ namespace SeemanchalOutreach.Application.Handlers
                         ServerReceivedAt = syncedAt,
                     };
                     _db.ContactNotes.Add(note);
+                    return Result(clientId, deviceId, note.Id, syncedAt, "created");
+                }
+
+                case "contact_note_edit":
+                {
+                    // An agent changing their own visit / revisit comment from the app. The first wording
+                    // is kept (OriginalText) — nothing is lost — and the newest edit wins.
+                    string clientId = GetString(root, "clientId", item.ClientId);
+                    var note = await _db.ContactNotes.FirstOrDefaultAsync(n => n.ClientId == clientId, cancellationToken);
+                    if (note == null)
+                    {
+                        // The comment itself hasn't reached the server yet: try again on the next sync.
+                        return new SyncResultDto { ClientId = item.ClientId, DeviceId = deviceId, Status = "error", ErrorMessage = "Comment not synced yet." };
+                    }
+                    // Only the agent who wrote it can change it; anything else is dropped (the app treats it as done).
+                    if (note.AgentId != agentId) return Result(clientId, deviceId, note.Id, syncedAt, "already_exists");
+                    string text = GetString(root, "text", "").Trim();
+                    if (text.Length == 0) return Result(clientId, deviceId, note.Id, syncedAt, "already_exists");
+                    var editedAt = GetDateTime(root, "editedAt", DateTime.UtcNow);
+                    if (note.EditedAt != null && note.EditedAt >= editedAt) return Result(clientId, deviceId, note.Id, syncedAt, "already_exists");
+                    note.OriginalText ??= note.Text;
+                    note.Text = text.Length > 2000 ? text[..2000] : text;
+                    note.EditedAt = editedAt;
+                    note.ServerReceivedAt = syncedAt; // so the agent's other devices pull the new wording
                     return Result(clientId, deviceId, note.Id, syncedAt, "created");
                 }
 

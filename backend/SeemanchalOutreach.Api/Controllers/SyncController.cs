@@ -187,6 +187,11 @@ namespace SeemanchalOutreach.Api.Controllers
                     isImportant = c.IsImportant,
                     priority = c.Priority,
                     followUpDate = c.FollowUpDate,
+                    // The agent's escalation and what the office did about it.
+                    agentEscalated = c.AgentEscalated,
+                    agentEscalationNote = c.AgentEscalationNote,
+                    isEscalationResolved = c.IsEscalationResolved,
+                    agentEscalationResolution = c.AgentEscalationResolution,
                 }),
                 visits = visits.Select(v => new
                 {
@@ -220,6 +225,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     lat = n.Lat,
                     lng = n.Lng,
                     accuracyM = n.AccuracyM,
+                    editedAt = n.EditedAt == null ? null : n.EditedAt.Value.ToString("o"),
                 }),
                 referrals = referrals.Select(r => new
                 {

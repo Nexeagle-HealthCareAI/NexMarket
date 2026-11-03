@@ -173,6 +173,9 @@ namespace SeemanchalOutreach.Domain.Entities
         public double? Lng { get; set; }
         public double? AccuracyM { get; set; }
         public DateTime ServerReceivedAt { get; set; } = DateTime.UtcNow;
+        /// <summary>When the agent last changed the comment from the app; the first wording is kept in <see cref="OriginalText"/>.</summary>
+        public DateTime? EditedAt { get; set; }
+        public string? OriginalText { get; set; }
     }
 
     /// <summary>One run of the AI analyst: what it was shown, what it said, and how it went.</summary>
@@ -292,8 +295,9 @@ namespace SeemanchalOutreach.Domain.Entities
     public class ChatThread
     {
         public Guid Id { get; set; } = Guid.NewGuid();
-        public string Kind { get; set; } = "agent";          // agent | team
-        public string? AgentId { get; set; }                 // for Kind = agent
+        public string Kind { get; set; } = "agent";          // agent | team | direct
+        public string? AgentId { get; set; }                 // Kind = agent: the agent; Kind = direct: one of the two people
+        public string? PeerId { get; set; }                  // Kind = direct: the other person (AgentId < PeerId)
         public string Title { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime LastMessageAt { get; set; } = DateTime.UtcNow;

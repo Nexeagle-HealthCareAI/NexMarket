@@ -15,6 +15,9 @@ import { stageTone } from '../../components/stage';
 import { MoveSheet } from '../../components/MoveSheet';
 import { WhatsAppSheet } from '../../components/WhatsAppSheet';
 import { RevisitSheet } from '../../components/RevisitSheet';
+import { NoteList } from '../../components/NoteList';
+import { EscalateSheet } from '../../components/EscalateSheet';
+import { EscalationStatus } from '../../components/EscalationStatus';
 
 const PRIOS: Priority[] = ['very_high', 'high', 'normal', 'low'];
 
@@ -25,6 +28,7 @@ export default function PartnerProfile() {
   const [waOpen, setWaOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [revisitOpen, setRevisitOpen] = useState(false);
+  const [escOpen, setEscOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
 
   const d = useDb(() => {
@@ -93,8 +97,13 @@ export default function PartnerProfile() {
           <Btn flex small kind="secondary" icon="whatsapp" label={t('whatsapp')} disabled={!c.phone} onPress={() => setWaOpen(true)} />
           <Btn flex small icon="hospital" label={t('referPatient')} onPress={() => router.push({ pathname: '/refer', params: { contactId: c.clientId } })} />
         </View>
-        <Btn kind="ok" icon="check" label={t('revisitPerson')} onPress={() => setRevisitOpen(true)} />
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Btn flex kind="ok" icon="check" label={t('revisitPerson')} onPress={() => setRevisitOpen(true)} />
+          <Btn kind="danger" icon="flag" label={t('escalate')} onPress={() => setEscOpen(true)} />
+        </View>
       </Card>
+
+      <EscalationStatus c={c} />
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <MiniStat n={d.refs.length} label={t('patientsSent')} color={C.text} />
@@ -167,13 +176,7 @@ export default function PartnerProfile() {
       <T style={{ fontSize: 17, fontWeight: '700', marginTop: 4 }}>{t('notes')} · {d.notes.length}</T>
       <Field placeholder={t('writeNote')} value={noteText} onChangeText={setNoteText} multiline />
       <Btn kind="ghost" icon="note" label={t('addNote')} onPress={saveNote} disabled={!noteText.trim()} />
-      {d.notes.length === 0 ? <T style={{ color: C.text2 }}>{t('noNotes')}</T> : null}
-      {d.notes.map((n) => (
-        <Card key={n.clientId} style={{ gap: 4 }}>
-          <T style={{ color: C.text2, fontSize: 12 }}>{dayShort(lang, new Date(n.createdAt))} · {t(`source_${n.source}` as never)}</T>
-          <T>{n.text}</T>
-        </Card>
-      ))}
+      <Card><NoteList notes={d.notes} bare /></Card>
 
       <Sheet visible={prioOpen} onClose={() => setPrioOpen(false)} title={t('changePriority')}>
         {PRIOS.map((p) => (
@@ -187,6 +190,7 @@ export default function PartnerProfile() {
         ))}
       </Sheet>
       <MoveSheet visible={moveOpen} onClose={() => setMoveOpen(false)} onPick={(date) => { setFollowUp(c.clientId, date); setMoveOpen(false); toast(t('savedOnPhone')); }} />
+      <EscalateSheet visible={escOpen} onClose={() => setEscOpen(false)} contactId={c.clientId} name={c.name} />
       <RevisitSheet visible={revisitOpen} onClose={() => setRevisitOpen(false)} contactId={c.clientId} name={c.name} />
       <WhatsAppSheet visible={waOpen} onClose={() => setWaOpen(false)} name={c.name} phone={c.phone} />
     </Screen>

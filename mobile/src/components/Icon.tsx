@@ -5,7 +5,7 @@ export type IconName =
   | 'home' | 'users' | 'plus' | 'patients' | 'user' | 'globe' | 'map' | 'nav' | 'check' | 'phone' | 'whatsapp'
   | 'camera' | 'star' | 'back' | 'chevron' | 'close' | 'calendar' | 'clock' | 'upload' | 'alert' | 'note' | 'pin'
   | 'search' | 'refresh' | 'logout' | 'battery' | 'hospital' | 'flag' | 'cloudOff' | 'trash' | 'leave' | 'sparkle' | 'send'
-  | 'chat' | 'attach' | 'smile' | 'tag' | 'doc' | 'image' | 'reply' | 'checks' | 'lock' | 'download';
+  | 'chat' | 'attach' | 'smile' | 'tag' | 'doc' | 'image' | 'reply' | 'checks' | 'lock' | 'download' | 'pencil' | 'newChat';
 
 /** Line icons drawn on a 24×24 grid, 2 px stroke, matching the design canvas. */
 export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { name: IconName; size?: number; color?: string; strokeWidth?: number }) {
@@ -44,6 +44,8 @@ export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { 
     case 'trash': body = <><Path {...p} d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></>; break;
     case 'sparkle': body = <><Path {...p} d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" /><Path {...p} d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" /></>; break;
     case 'chat': body = <Path {...p} d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.5-4.9A8 8 0 1 1 21 12z" />; break;
+    case 'pencil': body = <><Path {...p} d="M4 20h4L19 9l-4-4L4 16v4z" /><Path {...p} d="M13.5 6.5l4 4" /></>; break;
+    case 'newChat': body = <><Path {...p} d="M20 11.5a8 8 0 0 1-11.6 7.1L3 20l1.5-4.9A8 8 0 0 1 12 3.5" /><Path {...p} d="M18 3v6M15 6h6" /></>; break;
     case 'attach': body = <Path {...p} d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9" />; break;
     case 'smile': body = <><Circle {...p} cx={12} cy={12} r={9} /><Path {...p} d="M8 14.5a5 5 0 0 0 8 0M9 9.5h.01M15 9.5h.01" /></>; break;
     case 'tag': body = <><Path {...p} d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><Circle {...p} cx={7.5} cy={7.5} r={1.5} /></>; break;

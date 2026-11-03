@@ -281,6 +281,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("chat_threads");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.AgentId);
+                entity.HasIndex(e => e.PeerId);
                 entity.HasIndex(e => e.LastMessageAt);
             });
             modelBuilder.Entity<ChatMessage>(entity =>

@@ -731,6 +731,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("LastPreview")
                         .HasColumnType("text");
 
+                    b.Property<string>("PeerId")
+                        .HasColumnType("text");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("text");
@@ -740,6 +743,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.HasIndex("AgentId");
 
                     b.HasIndex("LastMessageAt");
+
+                    b.HasIndex("PeerId");
 
                     b.ToTable("chat_threads", "marketing");
                 });
@@ -865,11 +870,17 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("EditedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<double?>("Lat")
                         .HasColumnType("double precision");
 
                     b.Property<double?>("Lng")
                         .HasColumnType("double precision");
+
+                    b.Property<string>("OriginalText")
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("ServerReceivedAt")
                         .HasColumnType("timestamp with time zone");

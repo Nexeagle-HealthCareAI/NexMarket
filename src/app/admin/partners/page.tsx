@@ -29,7 +29,7 @@ interface Detail {
   escalation?: { note?: string | null; resolved: boolean; resolution?: string | null } | null;
   stats: { referrals90: number; admitted90: number; referralsAll: number; admittedAll: number };
   referrals: { clientId: string; patientName: string; department?: string | null; createdAt: string; status: string; label: string }[];
-  timeline: { kind: 'note' | 'visit' | 'revisit' | 'call' | 'change' | 'chat'; text: string; by: string; at: string; fromApp: boolean }[];
+  timeline: { kind: 'note' | 'visit' | 'revisit' | 'call' | 'change' | 'chat'; text: string; by: string; at: string; fromApp: boolean; editedAt?: string | null; originalText?: string | null }[];
   survey: { done: boolean; skipped: boolean; at?: string | null; answers: { question: string; answer: string }[] };
   timesMet?: number;
   chat?: { id: string; threadId: string; at: string; by: string; fromOffice: boolean; text?: string | null; file?: { name: string; mime: string; size?: number | null; url: string } | null }[];
@@ -531,7 +531,13 @@ function Profile({ id, editable, showToast, onBack, onChange }: {
                   <span aria-hidden style={{ width: 30, height: 30, borderRadius: 999, background: m.bg, color: m.fg, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{m.letter}</span>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
                     <span style={{ fontSize: 14, lineHeight: 1.45, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{t.text}</span>
-                    <span className="crm-cell-sub">{m.label} · {t.by} · {fmt.dateTime(t.at)}{t.kind === 'note' || t.kind === 'visit' || t.kind === 'revisit' || t.kind === 'chat' ? (t.fromApp ? ' · from app' : ' · from CRM') : ''}</span>
+                    <span className="crm-cell-sub">{m.label} · {t.by} · {fmt.dateTime(t.at)}{t.kind === 'note' || t.kind === 'visit' || t.kind === 'revisit' || t.kind === 'chat' ? (t.fromApp ? ' · from app' : ' · from CRM') : ''}{t.editedAt ? ` · edited ${fmt.dateTime(t.editedAt)}` : ''}</span>
+                    {t.editedAt && t.originalText && (
+                      <details className="pt-orig">
+                        <summary>First wording</summary>
+                        <span style={{ whiteSpace: 'pre-wrap' }}>{t.originalText}</span>
+                      </details>
+                    )}
                   </span>
                 </li>
               );

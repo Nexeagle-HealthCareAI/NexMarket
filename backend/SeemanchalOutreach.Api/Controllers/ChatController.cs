@@ -25,10 +25,13 @@ namespace SeemanchalOutreach.Api.Controllers
         public double? Lng { get; set; }
     }
 
+    public class StartDirectDto { public string AgentId { get; set; } = ""; }
+
     /// <summary>
     /// Chat between the office (CRM) and field agents. Each agent has one private chat with the office;
-    /// everyone shares the Team group. Agents only ever see their own chat and Team. Office users are
-    /// admins, marketing managers, and anyone with access to the field pages.
+    /// everyone shares the Team group; and any two people can have a direct (one-to-one) chat, which only
+    /// those two can read — not even admins. Agents only ever see their own office chat, Team and their own
+    /// direct chats. Office users are admins, marketing managers, and anyone with access to the field pages.
     /// Files are kept private and only streamed through <see cref="File"/> after the same check.
     /// </summary>
     [ApiController]
@@ -93,14 +96,75 @@ namespace SeemanchalOutreach.Api.Controllers
             return t;
         }
 
-        /// <summary>The thread, if this person may see it.</summary>
+        /// <summary>The thread, if this person may see it. A direct chat is only ever open to its two people.</summary>
         private async Task<(ChatThread? Thread, bool Office)> AccessAsync(Guid id, CancellationToken ct)
         {
             var t = await _db.ChatThreads.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (t == null) return (null, false);
             var office = await IsOfficeAsync();
+            if (t.Kind == "direct") return t.AgentId == Me || t.PeerId == Me ? (t, office) : (null, false);
             if (office || t.Kind == "team" || t.AgentId == Me) return (t, office);
             return (null, false);
+        }
+
+        /// <summary>The other person in a direct chat.</summary>
+        private string? PeerOf(ChatThread t) => t.Kind != "direct" ? null : t.AgentId == Me ? t.PeerId : t.AgentId;
+
+        private static string RoleLabel(string? role) => RoleChecks.CanonicalDashboardRole(role) switch
+        {
+            RoleChecks.Admin => "Admin",
+            RoleChecks.MarketingManager => "Marketing manager",
+            RoleChecks.HospitalRep => "Hospital representative",
+            _ => string.IsNullOrWhiteSpace(role) ? "Field agent" : role.Trim(),
+        };
+
+        // ─── Direct chats ────────────────────────────────────────────────────
+
+        /// <summary>Everyone this person can start a direct chat with: every other active user.</summary>
+        [HttpGet("people")]
+        public async Task<IActionResult> People(CancellationToken ct)
+        {
+            var me = Me;
+            var people = await _db.Agents.AsNoTracking().Where(a => a.IsActive && a.AgentId != me)
+                .Select(a => new { a.AgentId, a.Name, a.Role, a.Block, a.District, a.PhotoUrl }).ToListAsync(ct);
+            return Ok(people
+                .Select(a => new
+                {
+                    agentId = a.AgentId,
+                    name = a.Name,
+                    role = RoleLabel(a.Role),
+                    kind = RoleChecks.IsDashboardRole(a.Role) ? "dashboard" : "field",
+                    block = RoleChecks.IsDashboardRole(a.Role) ? null : a.Block,
+                    photoUrl = a.PhotoUrl,
+                })
+                // The office first (admins, then managers…), then the field team, by name.
+                .OrderBy(a => a.kind == "dashboard" ? 0 : 1).ThenBy(a => a.role == "Admin" ? 0 : 1).ThenBy(a => a.name));
+        }
+
+        /// <summary>Opens (or creates) the direct chat between me and this person.</summary>
+        [HttpPost("direct")]
+        public async Task<IActionResult> StartDirect([FromBody] StartDirectDto dto, CancellationToken ct)
+        {
+            var other = (dto.AgentId ?? "").Trim();
+            if (other.Length == 0 || other == Me) return BadRequest(new { message = "Choose someone to message." });
+            var person = await _db.Agents.AsNoTracking().Where(a => a.AgentId == other && a.IsActive).Select(a => new { a.AgentId, a.Name }).FirstOrDefaultAsync(ct);
+            if (person == null) return NotFound(new { message = "That person isn't active any more." });
+            var (a, b) = string.CompareOrdinal(Me, other) < 0 ? (Me, other) : (other, Me);
+            var t = await _db.ChatThreads.FirstOrDefaultAsync(x => x.Kind == "direct" && x.AgentId == a && x.PeerId == b, ct);
+            if (t == null)
+            {
+                t = new ChatThread { Kind = "direct", AgentId = a, PeerId = b, Title = "", LastMessageAt = DateTime.UtcNow };
+                _db.ChatThreads.Add(t);
+                try { await _db.SaveChangesAsync(ct); }
+                catch (DbUpdateException)
+                {
+                    // Both people started the chat at the same moment: use the one that was saved.
+                    _db.ChatThreads.Remove(t);
+                    t = await _db.ChatThreads.FirstOrDefaultAsync(x => x.Kind == "direct" && x.AgentId == a && x.PeerId == b, ct);
+                    if (t == null) return Conflict(new { message = "Please try again." });
+                }
+            }
+            return Ok(new { id = t.Id });
         }
 
         // ─── Threads ─────────────────────────────────────────────────────────
@@ -110,6 +174,7 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             var office = await IsOfficeAsync();
             var team = await TeamAsync(ct);
+            var me = Me;
             List<ChatThread> threads;
             Dictionary<string, (string Name, string? Block)> agents = new();
             if (office)
@@ -131,6 +196,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 var mine = await AgentThreadAsync(Me, MyName, ct);
                 threads = new List<ChatThread> { mine, team };
             }
+            // My direct chats (only once something was said, or I opened them).
+            threads.AddRange(await _db.ChatThreads.AsNoTracking().Where(x => x.Kind == "direct" && (x.AgentId == me || x.PeerId == me)).ToListAsync(ct));
+            var peerIds = threads.Select(PeerOf).Where(x => x != null).Cast<string>().Distinct().ToList();
+            var peers = peerIds.Count == 0 ? new Dictionary<string, (string Name, string? Role, string? Block, string? Photo, bool Active)>()
+                : (await _db.Agents.AsNoTracking().Where(a => peerIds.Contains(a.AgentId)).Select(a => new { a.AgentId, a.Name, a.Role, a.Block, a.PhotoUrl, a.IsActive }).ToListAsync(ct))
+                    .ToDictionary(a => a.AgentId, a => (Name: a.Name, Role: (string?)a.Role, Block: (string?)a.Block, Photo: a.PhotoUrl, Active: a.IsActive));
 
             var ids = threads.Select(t => t.Id).ToList();
             var reads = await _db.ChatReads.AsNoTracking().Where(r => ids.Contains(r.ThreadId) && r.UserId == Me)
@@ -150,16 +221,27 @@ namespace SeemanchalOutreach.Api.Controllers
                 threads = threads
                     .OrderByDescending(t => t.Kind == "team" && !office)
                     .ThenByDescending(t => t.LastMessageAt)
-                    .Select(t => new
+                    .Select(t =>
                     {
-                        id = t.Id,
-                        kind = t.Kind,
-                        agentId = t.AgentId,
-                        title = t.Kind == "team" ? "Field team" : office ? (agents.TryGetValue(t.AgentId ?? "", out var a) ? a.Name : t.Title) : "Office",
-                        sub = t.Kind == "team" ? "Everyone in the field team and the office" : office ? (agents.TryGetValue(t.AgentId ?? "", out var b) ? b.Block : null) : "Marketing office",
-                        lastMessageAt = t.LastPreview == null ? (DateTime?)null : t.LastMessageAt,
-                        lastPreview = t.LastPreview,
-                        unread = unread.GetValueOrDefault(t.Id),
+                        var peerId = PeerOf(t);
+                        var peer = peerId != null && peers.TryGetValue(peerId, out var pp) ? pp : default;
+                        var hasPeer = peerId != null && peers.ContainsKey(peerId);
+                        return new
+                        {
+                            id = t.Id,
+                            kind = t.Kind,
+                            agentId = t.Kind == "direct" ? peerId : t.AgentId,
+                            title = t.Kind == "team" ? "Field team"
+                                : t.Kind == "direct" ? (hasPeer ? peer.Name : peerId ?? "")
+                                : office ? (agents.TryGetValue(t.AgentId ?? "", out var a) ? a.Name : t.Title) : "Office",
+                            sub = t.Kind == "team" ? "Everyone in the field team and the office"
+                                : t.Kind == "direct" ? (hasPeer ? string.Join(" · ", new[] { RoleLabel(peer.Role), RoleChecks.IsDashboardRole(peer.Role) ? null : peer.Block }.Where(x => !string.IsNullOrWhiteSpace(x))) + (peer.Active ? "" : " · inactive") : null)
+                                : office ? (agents.TryGetValue(t.AgentId ?? "", out var b) ? b.Block : null) : "Marketing office",
+                            photoUrl = t.Kind == "direct" && hasPeer ? peer.Photo : null,
+                            lastMessageAt = t.LastPreview == null ? (DateTime?)null : t.LastMessageAt,
+                            lastPreview = t.LastPreview,
+                            unread = unread.GetValueOrDefault(t.Id),
+                        };
                     }),
             });
         }
@@ -168,9 +250,10 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> Unread(CancellationToken ct)
         {
             var office = await IsOfficeAsync();
+            var me = Me;
             var visible = office
-                ? _db.ChatThreads.AsNoTracking()
-                : _db.ChatThreads.AsNoTracking().Where(t => t.Kind == "team" || t.AgentId == Me);
+                ? _db.ChatThreads.AsNoTracking().Where(t => t.Kind != "direct" || t.AgentId == me || t.PeerId == me)
+                : _db.ChatThreads.AsNoTracking().Where(t => t.Kind == "team" || (t.Kind == "agent" && t.AgentId == me) || (t.Kind == "direct" && (t.AgentId == me || t.PeerId == me)));
             var list = await visible.Select(t => new { t.Id, t.LastMessageAt }).ToListAsync(ct);
             var reads = await _db.ChatReads.AsNoTracking().Where(r => r.UserId == Me).ToDictionaryAsync(r => r.ThreadId, r => r.LastReadAt, ct);
             int total = 0;
@@ -234,6 +317,7 @@ namespace SeemanchalOutreach.Api.Controllers
             // The other side: for an agent's chat, the agent vs. the office; in Team, anyone else.
             var others = _db.ChatReads.AsNoTracking().Where(r => r.ThreadId == id && r.UserId != Me);
             if (t.Kind == "agent") others = office ? others.Where(r => r.UserId == t.AgentId) : others.Where(r => r.IsOffice);
+            else if (t.Kind == "direct") { var peer = PeerOf(t); others = others.Where(r => r.UserId == peer); }
             var otherReadAt = await others.MaxAsync(r => (DateTime?)r.LastReadAt, ct);
             var otherSeenAt = await others.MaxAsync(r => r.LastSeenAt, ct);
 
@@ -329,7 +413,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var tracked = t; // loaded with tracking in AccessAsync
             tracked.LastMessageAt = m.CreatedAt;
             var preview = file != null ? $"📎 {file.Value.Name}" : text ?? "";
-            tracked.LastPreview = $"{(t.Kind == "team" || office ? MyName.Split(' ')[0] + ": " : "")}{(preview.Length > 80 ? preview[..80] + "…" : preview)}";
+            tracked.LastPreview = $"{(t.Kind != "direct" && (t.Kind == "team" || office) ? MyName.Split(' ')[0] + ": " : "")}{(preview.Length > 80 ? preview[..80] + "…" : preview)}";
             await _db.SaveChangesAsync(ct);
             // Sending means I've read everything up to now.
             await TouchAsync(t.Id, office, seen: true, read: true, ct);
@@ -393,12 +477,13 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> ForPartner(string clientId, CancellationToken ct)
         {
             var office = await IsOfficeAsync();
+            var me = Me;
             var q = _db.ChatMessages.AsNoTracking().Where(m => m.ContactClientId == clientId);
-            if (!office)
-            {
-                var mine = _db.ChatThreads.Where(t => t.Kind == "team" || t.AgentId == Me).Select(t => t.Id);
-                q = q.Where(m => mine.Contains(m.ThreadId));
-            }
+            // Direct chats stay between their two people; otherwise as for the chats themselves.
+            var visible = office
+                ? _db.ChatThreads.Where(t => t.Kind != "direct" || t.AgentId == me || t.PeerId == me).Select(t => t.Id)
+                : _db.ChatThreads.Where(t => t.Kind == "team" || (t.Kind == "agent" && t.AgentId == me) || (t.Kind == "direct" && (t.AgentId == me || t.PeerId == me))).Select(t => t.Id);
+            q = q.Where(m => visible.Contains(m.ThreadId));
             var list = await q.OrderByDescending(m => m.CreatedAt).Take(100).ToListAsync(ct);
             return Ok(list.Select(m => Shape(m, new())));
         }

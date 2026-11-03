@@ -824,3 +824,49 @@
 .ep-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .ep-group { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .ep-group legend { font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2); padding: 0; margin-bottom: 8px; }
+
+/* Partner timeline: an agent's edited comment keeps its first wording */
+.pt-orig { font-size: 13px; color: var(--text-2); }
+.pt-orig summary { cursor: pointer; font-weight: 600; font-size: 12px; }
+.pt-orig span { display: block; margin-top: 4px; padding: 8px 10px; background: var(--grey-soft); border-radius: 8px; }
+
+/* Chat: NexEagle look (navy, blue and mint), not WhatsApp's green */
+.ch-avatar { object-fit: cover; }
+.ch-avatar.is-team { background: #0e1525; color: #38f6a9; }
+.ch-avatar.is-direct { background: var(--accent-soft); color: var(--accent-ink); }
+.ch-thread[aria-current='true'] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.ch-thread:hover { background: #f4f7fb; }
+.ch-thread-top span.is-unread { color: var(--accent); }
+.ch-badge { background: var(--accent); }
+.ch-direct-dot { display: inline-flex; vertical-align: middle; margin-left: 6px; color: var(--text-3); }
+.ch-search { background: #f1f4f9; }
+.ch-head { background: #0e1525; color: #fff; border-bottom: 3px solid #38f6a9; }
+.ch-head .crm-cell-sub { color: rgba(255,255,255,.72); }
+.ch-head .ch-icon { color: #fff; }
+.ch-body { background-color: #eaf0f7; background-image: radial-gradient(rgba(10,114,214,.07) 1px, transparent 1px); background-size: 20px 20px; gap: 4px; }
+.ch-secure { background: var(--accent-soft); color: var(--accent-ink); border-radius: 10px; }
+.ch-day span { background: rgba(14,21,37,.72); color: #fff; font-weight: 700; border-radius: 999px; box-shadow: none; }
+.ch-bubble { border-radius: 18px; border-bottom-left-radius: 6px; border-top-left-radius: 18px; border: 1px solid var(--border); box-shadow: none; padding: 8px 12px 6px; color: var(--text); }
+.ch-msg.is-mine .ch-bubble { background: var(--accent); color: #fff; border-color: var(--accent); border-radius: 18px; border-bottom-right-radius: 6px; box-shadow: 0 2px 6px rgba(10,114,214,.22); }
+.ch-msg.is-mine .ch-meta { color: rgba(255,255,255,.8); }
+.ch-msg.is-mine .ch-meta .is-read { color: #38f6a9; }
+.ch-meta .is-read { color: var(--accent); }
+.ch-sender { color: var(--accent-ink); font-weight: 800; }
+.ch-quote { background: var(--accent-soft); border-left-color: var(--accent); color: var(--text-2); border-radius: 8px; }
+.ch-quote strong { color: var(--accent-ink); }
+.ch-msg.is-mine .ch-quote { background: rgba(255,255,255,.16); border-left-color: #38f6a9; color: rgba(255,255,255,.85); }
+.ch-msg.is-mine .ch-quote strong { color: #38f6a9; }
+.ch-msg.is-mine .ch-tag { background: rgba(255,255,255,.18); color: #fff !important; }
+.ch-msg.is-mine .ch-doc { background: rgba(255,255,255,.14); color: rgba(255,255,255,.85); }
+.ch-msg.is-mine .ch-doc strong { color: #fff; }
+.ch-compose { background: #f7f9fc; border-top: 1px solid var(--border); }
+.ch-compose textarea { border: 1px solid var(--border-strong, #d5dbe6); border-radius: 14px; }
+.ch-compose textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,114,214,.15); }
+.ch-send { background: var(--accent); border-radius: 14px; }
+.ch-emoji-tabs button[aria-selected='true'] { background: var(--accent-soft); }
+.ch-people { display: flex; flex-direction: column; gap: 12px; max-height: 420px; overflow-y: auto; }
+.ch-people-title { font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2); }
+.ch-people ul { list-style: none; margin: 6px 0 0; padding: 0; }
+.ch-people li button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 8px; border: 0; border-radius: 12px; background: transparent; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+.ch-people li button:hover { background: var(--accent-soft); }
+.ch-people .ch-avatar { width: 40px; height: 40px; }

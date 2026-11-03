@@ -1,4 +1,4 @@
-import { db, kvGet, notifyChange, q, type Contact, type Referral } from './db';
+import { db, kvGet, notifyChange, q, type Contact, type Note, type Referral } from './db';
 import { nowIso, uuid, ymd } from './util';
 import type { Priority } from '../theme';
 
@@ -113,7 +113,10 @@ function contactPayload(c: Contact, extra: Record<string, unknown> = {}) {
 /** Queue the contact's current state: as the not-yet-sent "new" item, or as an update. */
 function queueContact(c: Contact, extra: Record<string, unknown> = {}) {
   if (c.synced) {
-    enqueue('contact_update', c.clientId, contactPayload(c, extra), ['contact_update']);
+    const pending = db().getFirstSync<{ payload: string }>(
+      "SELECT payload FROM outbox WHERE clientId = ? AND type = 'contact_update' ORDER BY id DESC LIMIT 1", c.clientId);
+    const keep = pending ? (JSON.parse(pending.payload) as Record<string, unknown>) : {};
+    enqueue('contact_update', c.clientId, contactPayload(c, { ...carryEscalation(keep), ...extra }), ['contact_update']);
   } else {
     // Still unsent: fold the change into the queued contact_new (the server ignores a
     // contact_new for a row it already has, so an update must not be sent before it).
@@ -121,8 +124,13 @@ function queueContact(c: Contact, extra: Record<string, unknown> = {}) {
       "SELECT payload FROM outbox WHERE clientId = ? AND type = 'contact_new' ORDER BY id DESC LIMIT 1", c.clientId);
     const keep = pending ? (JSON.parse(pending.payload) as Record<string, unknown>) : {};
     const photo = keep.photoDataUri ? { photoDataUri: keep.photoDataUri } : {};
-    enqueue('contact_new', c.clientId, contactPayload(c, { ...photo, ...extra }), ['contact_new']);
+    enqueue('contact_new', c.clientId, contactPayload(c, { ...photo, ...carryEscalation(keep), ...extra }), ['contact_new']);
   }
+}
+
+/** A queued escalation must survive a later edit of the same partner (follow-up date, priority…) that replaces the queued item. */
+function carryEscalation(queued: Record<string, unknown>): Record<string, unknown> {
+  return queued.agentEscalated !== undefined ? { agentEscalated: queued.agentEscalated, agentEscalationNote: queued.agentEscalationNote } : {};
 }
 
 export interface NewContactInput {
@@ -193,12 +201,42 @@ export function addNote(contactId: string, text: string, source: 'note' | 'visit
   const { agentId, deviceId } = me();
   const clientId = uuid();
   const at = nowIso();
-  db().runSync('INSERT INTO notes (clientId, contactId, text, source, createdAt, lat, lng, accuracy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    clientId, contactId, t, source, at, pos?.lat ?? null, pos?.lng ?? null, pos?.accuracy ?? null);
+  db().runSync('INSERT INTO notes (clientId, contactId, text, source, createdAt, lat, lng, accuracy, agentId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    clientId, contactId, t, source, at, pos?.lat ?? null, pos?.lng ?? null, pos?.accuracy ?? null, agentId);
   enqueue('contact_note', clientId, { clientId, deviceId, agentId, contactId, text: t, source, createdAt: at,
     lat: pos?.lat ?? null, lng: pos?.lng ?? null, accuracyM: pos?.accuracy ?? null });
   notifyChange();
 }
+
+/** Whether this agent may change the comment: only their own (comments from the office or call desk stay as they are). */
+export function canEditNote(n: Note): boolean {
+  return n.source !== 'call' && (!n.agentId || n.agentId === me().agentId);
+}
+
+/**
+ * The agent corrects or adds to an earlier comment. Saved on the phone at once; the server keeps the
+ * first wording too, so nothing is lost. A comment still waiting to be sent is simply rewritten.
+ */
+export function editNote(noteId: string, text: string) {
+  const t = text.trim();
+  const n = db().getFirstSync<Note>('SELECT * FROM notes WHERE clientId = ?', noteId);
+  if (!t || !n || !canEditNote(n) || t === n.text) return;
+  const at = nowIso();
+  const d = db();
+  d.runSync('UPDATE notes SET text = ?, editedAt = ? WHERE clientId = ?', t, at, noteId);
+  const queued = d.getFirstSync<{ id: number; payload: string }>(
+    "SELECT id, payload FROM outbox WHERE clientId = ? AND type = 'contact_note' ORDER BY id DESC LIMIT 1", noteId);
+  if (queued) {
+    const p = JSON.parse(queued.payload) as Record<string, unknown>;
+    d.runSync('UPDATE outbox SET payload = ? WHERE id = ?', JSON.stringify({ ...p, text: t }), queued.id);
+  } else {
+    enqueue('contact_note_edit', noteId, { clientId: noteId, text: t, editedAt: at }, ['contact_note_edit']);
+  }
+  notifyChange();
+}
+
+export const ESCALATION_KINDS = ['escPartnerUnhappy', 'escPayment', 'escPatient', 'escSeniorVisit', 'escCompetitor', 'escOther'] as const;
+export type EscalationKind = typeof ESCALATION_KINDS[number];
 
 // ─── Referrals ─────────────────────────────────────────────────────────────
 
@@ -251,10 +289,17 @@ export function saveSurvey(contactId: string, panchayatId: string | null, answer
   notifyChange();
 }
 
-/** An agent's escalation: carried on the contact so the admin's escalation queue picks it up. */
-export function raiseIssue(contactId: string, note: string) {
+/**
+ * An agent's escalation: carried on the contact so the office's escalation queue picks it up, and
+ * written into the partner's history (with where the agent was). `label` is the kind of issue in words.
+ */
+export function raiseIssue(contactId: string, note: string, label?: string, pos?: { lat: number; lng: number; accuracy: number | null } | null) {
   const c = q.contact(contactId);
   if (!c) return;
-  queueContact({ ...c, updatedAt: nowIso() }, { agentEscalated: true, agentEscalationNote: note.trim() });
-  addNote(contactId, note, 'note');
+  const text = [label ? `[${label}]` : null, note.trim()].filter(Boolean).join(' ');
+  if (!text) return;
+  const at = nowIso();
+  db().runSync('UPDATE contacts SET escalated = 1, escalationNote = ?, escalatedAt = ?, escalationResolved = 0, escalationResolution = NULL WHERE clientId = ?', text, at, contactId);
+  queueContact({ ...c, updatedAt: at }, { agentEscalated: true, agentEscalationNote: text });
+  addNote(contactId, `⚑ ${text}`, 'note', pos);
 }

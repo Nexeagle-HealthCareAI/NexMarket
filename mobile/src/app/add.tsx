@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Btn, Field, Sheet, T, toast } from '../components/ui';
+import { T, toast } from '../components/ui';
 import { Icon, type IconName } from '../components/Icon';
 import { PartnerPicker } from '../components/PartnerPicker';
 import { RevisitSheet } from '../components/RevisitSheet';
+import { EscalateSheet } from '../components/EscalateSheet';
 import { useDb, useSession } from '../lib/session';
 import { q, type Contact } from '../lib/db';
-import { addPhoto, raiseIssue } from '../lib/repo';
+import { addPhoto } from '../lib/repo';
 import { takePhoto } from '../lib/photo';
 import { C } from '../theme';
 
@@ -21,7 +22,6 @@ export default function AddSheet() {
   const visit = useDb(() => q.activeVisit());
   const [picking, setPicking] = useState<Pending>(null);
   const [issueFor, setIssueFor] = useState<Contact | null>(null);
-  const [issue, setIssue] = useState('');
   const [revisitFor, setRevisitFor] = useState<Contact | null>(null);
   const place = useDb(() => (visit ? q.assignedOne(visit.panchayatId)?.name ?? q.panchayat(visit.panchayatId)?.name ?? '' : ''), [visit?.panchayatId]);
 
@@ -73,18 +73,7 @@ export default function AddSheet() {
       </View>
       <PartnerPicker visible={picking != null} onClose={() => setPicking(null)} onPick={onPick} panchayatFirst={visit?.panchayatId} />
       <RevisitSheet visible={!!revisitFor} onClose={() => { setRevisitFor(null); close(); }} contactId={revisitFor?.clientId ?? ''} name={revisitFor?.name ?? ''} />
-      <Sheet visible={!!issueFor} onClose={() => setIssueFor(null)} title={`${t('raiseIssue')} · ${issueFor?.name ?? ''}`}>
-        <T style={{ color: C.text2 }}>{t('issuePrompt')}</T>
-        <Field value={issue} onChangeText={setIssue} multiline autoFocus />
-        <Btn label={t('sendRequest')} kind="danger" icon="flag" disabled={!issue.trim()} onPress={() => {
-          if (!issueFor) return;
-          raiseIssue(issueFor.clientId, issue);
-          setIssue('');
-          setIssueFor(null);
-          toast(t('savedOnPhone'));
-          close();
-        }} />
-      </Sheet>
+      <EscalateSheet visible={!!issueFor} onClose={() => setIssueFor(null)} contactId={issueFor?.clientId ?? ''} name={issueFor?.name ?? ''} onDone={close} />
     </View>
   );
 }

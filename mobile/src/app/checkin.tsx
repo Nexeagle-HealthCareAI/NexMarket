@@ -6,6 +6,9 @@ import { Icon } from '../components/Icon';
 import { useDb, useSession } from '../lib/session';
 import { lastVisited, q, timesVisited } from '../lib/db';
 import { PanchayatList, sortPanchayats } from '../components/PanchayatList';
+import { NoteList } from '../components/NoteList';
+import { EscalateSheet } from '../components/EscalateSheet';
+import { EscalationStatus } from '../components/EscalationStatus';
 import { tryCheckIn } from '../lib/visit';
 import { relDay } from '../lib/format';
 import { addNote, addPhoto, checkOut, setFollowUp } from '../lib/repo';
@@ -145,6 +148,7 @@ function InVisit({ visit, name, partners, initialContact }: {
     if (fresh) setContactId(fresh.clientId);
   }, [partners]);
   const [met, setMet] = useState<Met | null>(null);
+  const [escOpen, setEscOpen] = useState(false);
   const [interest, setInterest] = useState<Interest | null>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -165,7 +169,7 @@ function InVisit({ visit, name, partners, initialContact }: {
   const picked = useDb(() => {
     if (!contactId) return null;
     const c = q.contact(contactId);
-    return c ? { name: c.name, role: c.role, revisit: c.createdAt < visit.checkInAt, history: q.notesFor(contactId).slice(0, 3) } : null;
+    return c ? { c, name: c.name, role: c.role, revisit: c.createdAt < visit.checkInAt, history: q.notesFor(contactId) } : null;
   }, [contactId, visit.checkInAt]);
   const stats = useDb(() => new Map(q.visitStatsIn(visit.panchayatId).map((r) => [r.contactId, r])), [visit.panchayatId, partners.length]);
   const shown = useMemo(() => {
@@ -285,17 +289,8 @@ function InVisit({ visit, name, partners, initialContact }: {
             <Btn small kind="secondary" label={t('change')} onPress={() => { setContactId(null); reset(); }} />
           </Card>
 
-          {picked?.history.length ? (
-            <Card style={{ gap: 6, backgroundColor: C.bg }}>
-              <T style={{ fontWeight: '700', color: C.text2, fontSize: 13 }}>{t('earlierComments')}</T>
-              {picked.history.map((n) => (
-                <View key={n.clientId} style={{ gap: 2 }}>
-                  <T style={{ color: C.text2, fontSize: 12 }}>{relDay(t, lang, n.createdAt)} · {t(`source_${n.source}` as never)}</T>
-                  <T numberOfLines={3}>{n.text}</T>
-                </View>
-              ))}
-            </Card>
-          ) : null}
+          {picked ? <EscalationStatus c={picked.c} /> : null}
+          {picked?.history.length ? <NoteList notes={picked.history} limit={3} title={t('earlierComments')} /> : null}
 
           <Card>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -336,20 +331,22 @@ function InVisit({ visit, name, partners, initialContact }: {
             <Action icon="hospital" label={t('referPatient')} onPress={() => router.push({ pathname: '/refer', params: { contactId } })} />
             <Action icon="note" label={t('survey')} onPress={() => router.push({ pathname: '/survey', params: { contactId } })} />
             <Action icon="camera" label={t('photoOptional')} onPress={photo} />
+            <Action icon="flag" label={t('escalate')} onPress={() => setEscOpen(true)} danger />
           </View>
+          <EscalateSheet visible={escOpen} onClose={() => setEscOpen(false)} contactId={contactId} name={picked?.name ?? ''} />
         </>
       )}
     </Screen>
   );
 }
 
-function Action({ icon, label, onPress, disabled }: { icon: 'hospital' | 'note' | 'camera'; label: string; onPress: () => void; disabled?: boolean }) {
+function Action({ icon, label, onPress, disabled, danger }: { icon: 'hospital' | 'note' | 'camera' | 'flag'; label: string; onPress: () => void; disabled?: boolean; danger?: boolean }) {
   return (
     <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => [{
       flex: 1, alignItems: 'center', gap: 6, paddingVertical: 14, borderRadius: 14, backgroundColor: C.card, borderWidth: 1, borderColor: C.border,
     }, disabled && { opacity: 0.4 }, pressed && { opacity: 0.8 }]}>
-      <Icon name={icon} color={C.blue} />
-      <T style={{ fontSize: 13, fontWeight: '600', textAlign: 'center' }}>{label}</T>
+      <Icon name={icon} color={danger ? C.bad : C.blue} />
+      <T style={{ fontSize: 13, fontWeight: '600', textAlign: 'center', color: danger ? C.bad : C.text }}>{label}</T>
     </Pressable>
   );
 }
