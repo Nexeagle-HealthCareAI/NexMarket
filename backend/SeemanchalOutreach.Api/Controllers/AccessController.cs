@@ -105,6 +105,7 @@ namespace SeemanchalOutreach.Api.Controllers
         /// <summary>Field job titles that come with the app.</summary>
         public static readonly (string Name, string Description)[] DefaultFieldRoles =
         {
+            ("Field Agent", "Works in the field from the app: visits panchayats, adds and revisits partners, refers patients."),
             ("Marketing Executive", "Visits panchayats, adds partners and refers patients."),
             ("Field Officer", "Works a block day to day: visits, surveys and partner follow-ups."),
             ("Regional Representative", "Looks after partners across several blocks."),

@@ -396,6 +396,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 "marketingmanager" => "MGR",
                 "hospitalrep" => "HRP",
                 "field officer" => "FLD",
+                "field agent" => "FAG",
                 "marketing executive" => "MKT",
                 "regional representative" => "REG",
                 _ => "AGT",

@@ -32,6 +32,7 @@ const ROLE_OPTIONS = [
   { value: 'MarketingManager', label: 'Marketing manager', kind: 'dashboard' },
   { value: 'HospitalRep', label: 'Hospital representative', kind: 'dashboard' },
   { value: 'Admin', label: 'Admin (full control)', kind: 'dashboard' },
+  { value: 'Field Agent', label: 'Field agent', kind: 'field' },
   { value: 'Marketing Executive', label: 'Field agent · Marketing executive', kind: 'field' },
   { value: 'Field Officer', label: 'Field agent · Field officer', kind: 'field' },
   { value: 'Regional Representative', label: 'Field agent · Regional representative', kind: 'field' },
@@ -52,7 +53,9 @@ export default function UsersPage() {
   const isAdmin = !!access?.isAdmin;
   const roles = useLoader(() => crm.get<RolesResponse>('/api/v1/access/roles'));
   const people = useLoader(() => crm.get<Person[]>('/api/v1/access/people'));
-  const [inviting, setInviting] = useState<'dashboard' | 'field' | null>(null);
+  const [inviting, setInviting] = useState<{ kind: 'dashboard' | 'field'; role?: string } | null>(null);
+  const [tab, setTab] = useState<'dashboard' | 'field' | 'people' | 'access'>('dashboard');
+  const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [addingRole, setAddingRole] = useState(false);
   const [roleFor, setRoleFor] = useState<Person | null>(null);
   const [savingCell, setSavingCell] = useState<string | null>(null);
@@ -88,8 +91,23 @@ export default function UsersPage() {
     }
   };
 
-  const visiblePeople = useMemo(() => (people.data ?? []).filter((p) => kindFilter === 'all' || p.kind === kindFilter), [people.data, kindFilter]);
-  const pg = usePaged(visiblePeople, kindFilter, 25);
+  const visiblePeople = useMemo(() => (people.data ?? []).filter((p) => (kindFilter === 'all' || p.kind === kindFilter)
+    && (!roleFilter || p.role.trim().toLowerCase() === roleFilter.trim().toLowerCase())), [people.data, kindFilter, roleFilter]);
+  const pg = usePaged(visiblePeople, `${kindFilter}|${roleFilter ?? ''}`, 25);
+  // Who holds each role (active people first), so every role card names its people.
+  const holders = useMemo(() => {
+    const m = new Map<string, Person[]>();
+    for (const p of people.data ?? []) {
+      const k = p.role.trim().toLowerCase();
+      m.set(k, [...(m.get(k) ?? []), p]);
+    }
+    for (const list of m.values()) list.sort((a, b) => Number(b.isActive) - Number(a.isActive) || a.name.localeCompare(b.name));
+    return m;
+  }, [people.data]);
+  const membersOf = (role: string) => holders.get(role.trim().toLowerCase()) ?? [];
+  const showPeople = (role: string, kind: 'dashboard' | 'field') => { setRoleFilter(role); setKindFilter(kind); setTab('people'); };
+  const dashCount = (people.data ?? []).filter((p) => p.kind === 'dashboard' && p.isActive).length;
+  const fieldCount = (people.data ?? []).filter((p) => p.kind === 'field' && p.isActive).length;
 
   const signOut = async (p: Person) => {
     try { const r = await crm.post<{ signedOutDevices: number }>(`/api/v1/access/people/${encodeURIComponent(p.agentId)}/sign-out`); showToast(`${p.name} signed out of ${r.signedOutDevices} device(s).`); void people.reload(); }
@@ -107,53 +125,77 @@ export default function UsersPage() {
   return (
     <main className="crm-page">
       <PageHead title="Users & roles" sub="Decide who can open which page. Field roles work in the Android app; anyone, in any role, can also be given a block and add partners from the app.">
-        <button type="button" className="crm-btn is-secondary" onClick={() => setInviting('field')}><Smartphone size={16} aria-hidden /> Onboard field agent</button>
-        {isAdmin && <button type="button" className="crm-btn" onClick={() => setInviting('dashboard')}><UserPlus size={16} aria-hidden /> Invite dashboard user</button>}
+        <button type="button" className="crm-btn" onClick={() => setInviting({ kind: 'field' })}><Smartphone size={16} aria-hidden /> Onboard field agent</button>
+        {isAdmin && <button type="button" className="crm-btn is-secondary" onClick={() => setInviting({ kind: 'dashboard' })}><UserPlus size={16} aria-hidden /> Invite dashboard user</button>}
       </PageHead>
 
       {roles.error && <ErrorBox message={roles.error} onRetry={roles.reload} />}
 
-      <section aria-label="Roles" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 14 }}>
-        {!roles.data ? [0, 1, 2, 3].map((i) => <div key={i} className="crm-card"><Skeleton h={90} /></div>) : (
-          <>
-            {roles.data.roles.map((r) => {
+      <div className="crm-tabs" role="tablist" aria-label="Users and roles">
+        {([
+          ['dashboard', 'Dashboard roles', dashCount],
+          ['field', 'Field roles', fieldCount],
+          ['people', 'People', (people.data ?? []).length],
+          ['access', 'Page access', null],
+        ] as const).map(([k, label, n]) => (
+          <button key={k} type="button" role="tab" className="crm-tab" aria-selected={tab === k}
+            onClick={() => { setTab(k); if (k === 'people') { setRoleFilter(null); setKindFilter('all'); } }}>
+            {label}{n != null && people.data ? <span className="pt-count">{n}</span> : null}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'dashboard' && (
+        <section aria-labelledby="dr-h" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="us-group-head">
+            <h2 id="dr-h" className="crm-h2">Dashboard roles</h2>
+            <span className="crm-sub">Sign in to this CRM (laptop, tablet or phone). Only an admin can invite them. They can also be given a block and work in the app.</span>
+          </div>
+          <div className="us-role-grid">
+            {!roles.data ? [0, 1, 2].map((i) => <div key={i} className="crm-card"><Skeleton h={120} /></div>) : roles.data.roles.map((r) => {
               const count = pages.filter((p) => (r.pages[p] ?? 0) > 0).length;
               return (
-                <RoleCard key={r.role} short={initials(r.label)} name={r.label} users={r.users} tone={ROLE_TONE[r.role] ?? 'accent'}
+                <RoleCard key={r.role} short={initials(r.label)} name={r.label} tone={ROLE_TONE[r.role] ?? 'accent'} members={membersOf(r.role)}
                   desc={r.role === 'Admin' ? 'Full control of every page, setting and user. Approves payments.'
                     : r.role === 'MarketingManager' ? 'Runs the field team, calls, broadcasts and targets.'
                     : 'Front desk and hospital staff: referral arrivals, doctor lists.'}
-                  where={r.role === 'Admin' ? `All ${pages.length} pages` : `${count} of ${pages.length} pages`} />
+                  where={r.role === 'Admin' ? `All ${pages.length} pages` : `${count} of ${pages.length} pages`}
+                  onView={() => showPeople(r.role, 'dashboard')}
+                  action={isAdmin ? { label: 'Invite', icon: UserPlus, onClick: () => setInviting({ kind: 'dashboard', role: r.role }) } : undefined} />
               );
             })}
-          </>
-        )}
-      </section>
+          </div>
+        </section>
+      )}
 
-      <section aria-labelledby="fr-h" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-          <h2 id="fr-h" className="crm-h2" style={{ flex: 1 }}>Field roles</h2>
-          <span className="crm-sub" style={{ fontSize: 13 }}>Onboarded here, work in the Android app. {roles.data ? `${roles.data.fieldAgents} people in field roles.` : ''}</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 14 }}>
-          {!roles.data ? [0, 1, 2].map((i) => <div key={i} className="crm-card"><Skeleton h={80} /></div>) : (
-            <>
-              {(roles.data.fieldRoles ?? []).map((r) => (
-                <RoleCard key={r.role} short={initials(r.label)} name={r.label} users={r.users} tone="warn"
-                  desc={r.description || 'Field work in the app: visits, partners, referrals and surveys.'} where={r.custom ? 'Added by admin · app' : 'Android app'} />
-              ))}
-              {isAdmin && (
-                <button type="button" className="crm-card us-add-role" onClick={() => setAddingRole(true)}>
-                  <Plus size={20} aria-hidden /> <strong>Add a field role</strong>
-                  <span className="crm-sub" style={{ fontSize: 13 }}>e.g. Senior field officer, Camp coordinator</span>
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </section>
+      {tab === 'field' && (
+        <section aria-labelledby="fr-h" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="us-group-head">
+            <h2 id="fr-h" className="crm-h2">Field roles</h2>
+            <span className="crm-sub">Work in the Android app only: start a shift, check in to panchayats, add and revisit partners. Anyone who can manage users can onboard them.</span>
+          </div>
+          <div className="us-role-grid">
+            {!roles.data ? [0, 1, 2, 3].map((i) => <div key={i} className="crm-card"><Skeleton h={120} /></div>) : (
+              <>
+                {(roles.data.fieldRoles ?? []).map((r) => (
+                  <RoleCard key={r.role} short={initials(r.label)} name={r.label} tone="warn" members={membersOf(r.role)}
+                    desc={r.description || 'Field work in the app: visits, partners, referrals and surveys.'} where={r.custom ? 'Added by admin · Android app' : 'Android app'}
+                    onView={() => showPeople(r.role, 'field')}
+                    action={{ label: 'Onboard', icon: Smartphone, onClick: () => setInviting({ kind: 'field', role: r.role }) }} />
+                ))}
+                {isAdmin && (
+                  <button type="button" className="crm-card us-add-role" onClick={() => setAddingRole(true)}>
+                    <Plus size={20} aria-hidden /> <strong>Add a field role</strong>
+                    <span className="crm-sub" style={{ fontSize: 13 }}>e.g. Senior field officer, Camp coordinator</span>
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+      )}
 
-      <section className="crm-card is-flush" aria-labelledby="perm-h">
+      {tab === 'access' && <section className="crm-card is-flush" aria-labelledby="perm-h">
         <div className="crm-card-head">
           <h2 id="perm-h" className="crm-h2">Page access</h2>
           <span className="crm-sub" style={{ fontSize: 13 }}>{isAdmin ? 'Click a cell to switch: No access → Can view → Can edit. Saved instantly.' : 'Only an admin can change access.'}</span>
@@ -192,17 +234,22 @@ export default function UsersPage() {
             </table>
           </div>
         )}
-      </section>
+      </section>}
 
-      <section className="crm-card is-flush" aria-labelledby="people-h">
+      {tab === 'people' && <section className="crm-card is-flush" aria-labelledby="people-h">
         <div className="crm-card-head">
           <h2 id="people-h" className="crm-h2" style={{ marginRight: 'auto' }}>People</h2>
           <div className="crm-chips" role="tablist">
             {(['all', 'dashboard', 'field'] as const).map((k) => (
-              <button key={k} type="button" role="tab" className="crm-chip" aria-selected={kindFilter === k} onClick={() => setKindFilter(k)}>
+              <button key={k} type="button" role="tab" className="crm-chip" aria-selected={kindFilter === k} onClick={() => { setKindFilter(k); setRoleFilter(null); }}>
                 {k === 'all' ? 'Everyone' : k === 'dashboard' ? 'Dashboard users' : 'Field agents'}
               </button>
             ))}
+            {roleFilter && (
+              <button type="button" className="crm-chip" aria-pressed="true" onClick={() => setRoleFilter(null)} aria-label={`Clear role filter ${ROLE_NAME[roleFilter] ?? roleFilter}`}>
+                Role: {ROLE_NAME[roleFilter] ?? roleFilter} <X size={12} aria-hidden />
+              </button>
+            )}
           </div>
         </div>
         {people.error && <div style={{ padding: '0 22px' }}><ErrorBox message={people.error} onRetry={people.reload} /></div>}
@@ -275,10 +322,10 @@ export default function UsersPage() {
           </div>
             <Pager {...pg.pager} noun="people" /></>
         )}
-      </section>
+      </section>}
 
       {sending && <SendLogin person={sending.person} password={sending.password} onClose={() => setSending(null)} />}
-      {inviting && <InviteUser kind={inviting} fieldRoles={roles.data?.fieldRoles?.map((r) => r.role)} onClose={() => setInviting(null)} onDone={() => { void people.reload(); void roles.reload(); }} />}
+      {inviting && <InviteUser kind={inviting.kind} initialRole={inviting.role} fieldRoles={roles.data?.fieldRoles?.map((r) => r.role)} onClose={() => setInviting(null)} onDone={() => { void people.reload(); void roles.reload(); }} />}
       {addingRole && <AddFieldRole onClose={() => setAddingRole(false)} onDone={(name) => { setAddingRole(false); showToast(`Field role “${name}” added.`); void roles.reload(); }} />}
       {roleFor && <ChangeRole person={roleFor} fieldRoles={roles.data?.fieldRoles?.map((r) => r.role) ?? []} onClose={() => setRoleFor(null)}
         onDone={(msg) => { setRoleFor(null); showToast(msg); void people.reload(); void roles.reload(); }} />}
@@ -287,29 +334,50 @@ export default function UsersPage() {
   );
 }
 
-function RoleCard({ short, name, users, desc, where, tone }: { short: string; name: string; users: number; desc: string; where: string; tone: 'accent' | 'info' | 'ok' | 'warn' }) {
+function RoleCard({ short, name, desc, where, tone, members, onView, action }: {
+  short: string; name: string; desc: string; where: string; tone: 'accent' | 'info' | 'ok' | 'warn'; members: Person[];
+  onView: () => void; action?: { label: string; icon: typeof Plus; onClick: () => void };
+}) {
   const bg = { accent: 'var(--accent-soft)', info: 'var(--info-soft)', ok: 'var(--ok-soft)', warn: 'var(--warn-soft)' }[tone];
   const fg = { accent: 'var(--accent-ink)', info: 'var(--info-ink)', ok: 'var(--ok-ink)', warn: 'var(--warn-ink)' }[tone];
+  const active = members.filter((m) => m.isActive);
+  const shown = members.slice(0, 4);
+  const A = action?.icon;
   return (
-    <div className="crm-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div className="crm-card us-role" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ width: 36, height: 36, borderRadius: 10, background: bg, color: fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>{short}</span>
-        <span style={{ display: 'flex', flexDirection: 'column' }}>
+        <span style={{ width: 36, height: 36, borderRadius: 10, background: bg, color: fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{short}</span>
+        <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <span style={{ fontSize: 15, fontWeight: 700 }}>{name}</span>
-          <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{users} {users === 1 ? 'person' : 'people'}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{active.length} active{members.length > active.length ? ` · ${members.length - active.length} inactive` : ''}</span>
         </span>
       </div>
       <span style={{ fontSize: 13, color: 'var(--text-3)', lineHeight: 1.5 }}>{desc}</span>
-      <span style={{ alignSelf: 'flex-start' }}><Pill tone={tone}>{where}</Pill></span>
+      <ul className="us-members" aria-label={`People with the ${name} role`}>
+        {shown.length === 0 ? <li className="crm-cell-sub">Nobody yet</li> : shown.map((m) => (
+          <li key={m.agentId} style={m.isActive ? undefined : { opacity: 0.55 }}>
+            <span className="crm-initials" style={{ width: 26, height: 26, fontSize: 10, background: bg, color: fg }}>{initials(m.name)}</span>
+            <span className="us-m-name">{m.name}</span>
+            <span className="us-id">{m.agentId}</span>
+          </li>
+        ))}
+        {members.length > shown.length && <li className="crm-cell-sub">+{members.length - shown.length} more</li>}
+      </ul>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>
+        <Pill tone={tone}>{where}</Pill>
+        <span style={{ flex: 1 }} />
+        {members.length > 0 && <button type="button" className="crm-btn is-secondary is-sm" onClick={onView}>View all</button>}
+        {action && A && <button type="button" className="crm-btn is-sm" onClick={action.onClick}><A size={14} aria-hidden /> {action.label}</button>}
+      </div>
     </div>
   );
 }
 
-function InviteUser({ kind, fieldRoles, onClose, onDone }: { kind: 'dashboard' | 'field'; fieldRoles?: string[]; onClose: () => void; onDone: () => void }) {
+function InviteUser({ kind, initialRole, fieldRoles, onClose, onDone }: { kind: 'dashboard' | 'field'; initialRole?: string; fieldRoles?: string[]; onClose: () => void; onDone: () => void }) {
   const options = kind === 'field' && fieldRoles?.length
     ? fieldRoles.map((r) => ({ value: r, label: r, kind: 'field' }))
     : ROLE_OPTIONS.filter((r) => r.kind === kind);
-  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', email: '', role: options[0].value, district: kind === 'dashboard' ? 'Hospital' : '', block: kind === 'dashboard' ? 'Hospital' : '' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', email: '', role: initialRole && options.some((o) => o.value === initialRole) ? initialRole : options[0].value, district: kind === 'dashboard' ? 'Hospital' : '', block: kind === 'dashboard' ? 'Hospital' : '' });
   const [password] = useState(tempPassword);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -341,7 +409,7 @@ function InviteUser({ kind, fieldRoles, onClose, onDone }: { kind: 'dashboard' |
   }
 
   return (
-    <Modal title={kind === 'dashboard' ? 'Invite dashboard user' : 'Onboard field agent'} onClose={onClose} actions={
+    <Modal title={kind === 'dashboard' ? 'Invite dashboard user' : `Onboard field agent${form.role ? ` · ${form.role}` : ''}`} onClose={onClose} actions={
       <>
         <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
         <button type="button" className="crm-btn" disabled={saving} onClick={save}>{saving ? 'Creating…' : 'Create account'}</button>
@@ -360,7 +428,9 @@ function InviteUser({ kind, fieldRoles, onClose, onDone }: { kind: 'dashboard' |
         <label className="crm-field">District<input className="crm-input" value={form.district} onChange={(e) => set('district', e.target.value)} /></label>
         <label className="crm-field">Block<input className="crm-input" value={form.block} onChange={(e) => set('block', e.target.value)} /></label>
       </div>
-      {kind === 'field' && <p className="crm-note">They sign in to the Android app with their agent ID and the one-time password, then set their own.</p>}
+      {kind === 'field'
+        ? <p className="crm-note">They sign in to the Android app with their user ID and the one-time password, then set their own. Give them a block on Block assignments so they can start a shift.</p>
+        : <p className="crm-note">They sign in to this dashboard with their user ID and the one-time password, then set their own. Admins see every page; the other roles see what Page access allows.</p>}
       {error && <div className="crm-error" role="alert">{error}</div>}
     </Modal>
   );
