@@ -1133,3 +1133,66 @@
 .qr-msg { white-space: pre-wrap; background: #dcfce7; color: #14532d; border-radius: 12px 12px 12px 4px; padding: 8px 12px; font-size: 13.5px; }
 .qr-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .qr-actions .crm-btn { text-decoration: none; }
+
+/* ─── WhatsApp setup ──────────────────────────────────────────────────────── */
+.wa-page { padding-bottom: 110px; }
+.wa-activity { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; font-size: 13px; color: var(--text-2); }
+.wa-activity strong { color: var(--text); font-size: 18px; margin-right: 3px; }
+.wa-activity .is-bad strong { color: var(--bad); }
+.wa-guide summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; color: var(--accent-ink); }
+.wa-guide summary::-webkit-details-marker { display: none; }
+.wa-guide .wa-chev { margin-left: auto; transition: transform .15s; }
+.wa-guide[open] .wa-chev { transform: rotate(180deg); }
+.wa-guide ol { margin: 14px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.55; color: var(--text-3); }
+.wa-guide a { color: var(--accent); font-weight: 600; }
+.wa-guide code, .wa-page code { background: var(--grey-soft); border-radius: 6px; padding: 1px 6px; font-size: 12.5px; }
+.wa-step { display: flex; flex-direction: column; gap: 16px; }
+.wa-step-head { display: flex; gap: 12px; align-items: flex-start; }
+.wa-step-head .crm-sub { margin: 4px 0 0; font-size: 13.5px; line-height: 1.5; max-width: 820px; }
+.wa-num { width: 32px; height: 32px; border-radius: 10px; background: var(--ink); color: #fff; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.wa-num.is-done { background: var(--ok); }
+.wa-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
+.wa-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wa-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wa-label { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wa-hint { font-size: 12px; color: var(--text-2); }
+.wa-server { font-size: 11px; font-weight: 700; color: var(--info-ink); background: var(--info-soft); border-radius: 999px; padding: 1px 8px; }
+.wa-copy { display: flex; gap: 6px; align-items: center; }
+.wa-copy .crm-input { flex: 1; min-width: 0; }
+.wa-copy .crm-btn { flex-shrink: 0; height: 44px; }
+.wa-secret { display: flex; gap: 8px; align-items: center; min-height: 44px; flex-wrap: wrap; }
+.wa-ok { display: inline-flex; gap: 6px; align-items: center; color: var(--ok-ink); font-weight: 700; font-size: 13.5px; }
+.wa-wait { display: inline-flex; gap: 6px; align-items: flex-start; color: var(--warn-ink); font-size: 13px; line-height: 1.45; }
+.wa-wait svg { flex-shrink: 0; margin-top: 2px; }
+.wa-err { display: inline-flex; gap: 6px; align-items: flex-start; color: var(--bad); font-size: 13px; font-weight: 600; line-height: 1.45; }
+.wa-err svg { flex-shrink: 0; margin-top: 2px; }
+.wa-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.wa-spin { animation: spin .8s linear infinite; }
+.wa-result { display: flex; gap: 10px; align-items: flex-start; border-radius: 14px; padding: 12px 14px; }
+.wa-result.is-ok { background: var(--ok-soft); color: var(--ok-ink); border: 1px solid #bfe6d3; }
+.wa-result.is-bad { background: var(--bad-soft); color: var(--bad); border: 1px solid #f6c7c1; }
+.wa-result > svg { flex-shrink: 0; margin-top: 1px; }
+.wa-result-body { display: flex; flex-direction: column; gap: 6px; color: var(--text); }
+.wa-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.wa-uses { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.wa-use { border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; background: #fbfcfe; }
+.wa-use-head { display: flex; flex-direction: column; gap: 4px; }
+.wa-params { display: flex; gap: 6px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-2); }
+.wa-params span { background: var(--grey-soft); border-radius: 6px; padding: 1px 6px; }
+.wa-tpl-body { font-size: 12.5px; white-space: pre-wrap; background: #dcfce7; color: #14532d; border-radius: 10px 10px 10px 3px; padding: 6px 10px; max-height: 110px; overflow: auto; }
+.wa-preview { display: flex; flex-direction: column; gap: 6px; background: #eaf0f7; border-radius: 14px; padding: 12px; max-width: 520px; }
+.wa-preview-label { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; font-weight: 700; color: var(--text-2); }
+.wa-bubble { white-space: pre-wrap; font-size: 13.5px; line-height: 1.45; padding: 7px 11px; border-radius: 14px; max-width: 85%; }
+.wa-bubble.is-in { background: #fff; border: 1px solid var(--border); align-self: flex-start; border-bottom-left-radius: 4px; }
+.wa-bubble.is-out { background: var(--accent); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+.wa-test { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.wa-test .wa-field { flex: 1 1 220px; }
+.wa-test .crm-btn { height: 44px; }
+.wa-savebar { position: sticky; bottom: 12px; z-index: 20; display: flex; gap: 10px; align-items: center; justify-content: flex-end; background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 10px 14px; box-shadow: 0 8px 24px rgba(14,21,37,.12); }
+.wa-savebar > span { margin-right: auto; font-size: 13.5px; color: var(--text-2); }
+.wa-savebar.is-dirty { border-color: var(--accent); }
+.wa-savebar.is-dirty > span { color: var(--accent-ink); font-weight: 700; }
+@media (max-width: 900px) {
+  .wa-grid, .wa-grid-3 { grid-template-columns: 1fr; }
+  .wa-savebar { bottom: 76px; }
+}

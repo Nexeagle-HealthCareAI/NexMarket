@@ -441,4 +441,19 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? SentBy { get; set; }                        // agentId for outgoing
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
+
+    /// <summary>
+    /// A setting an admin changes from the CRM (WhatsApp connection, templates, messages…), so each hospital can set
+    /// itself up without touching the server. Secrets (access token, app secret) are stored encrypted.
+    /// A setting left empty here falls back to the server's configuration.
+    /// </summary>
+    public class AppSetting
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Key { get; set; } = string.Empty;           // e.g. whatsapp.phoneNumberId
+        public string Value { get; set; } = string.Empty;         // "" = not set; secrets are "enc:v1:…"
+        public bool IsSecret { get; set; }
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public string? UpdatedBy { get; set; }
+    }
 }

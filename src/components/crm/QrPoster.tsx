@@ -92,7 +92,7 @@ ${info.displayPhone ? `<div class="ph">WhatsApp: +${esc(info.displayPhone)}</div
       {intro}
       {!link ? (
         <div className="crm-error" role="alert">
-          The hospital&apos;s WhatsApp number isn&apos;t set yet, so there&apos;s no link to put in a QR code. Ask your admin to set <code>WhatsApp__DisplayPhone</code> on the server.
+          The hospital&apos;s WhatsApp number isn&apos;t set yet, so there&apos;s no link to put in a QR code. An admin can add it in Settings → <a href="/admin/whatsapp-setup">WhatsApp setup</a>.
         </div>
       ) : (
         <div className="qr-wrap">

@@ -149,8 +149,8 @@ export default function BroadcastsPage() {
 
       {status.data && !status.data.connected && (
         <div className="crm-note" style={{ background: 'var(--warn-soft)', color: 'var(--warn-ink)' }}>
-          Messages can be prepared and scheduled, but they will only send once the hospital&apos;s WhatsApp Business number is connected on the server
-          (WhatsApp Cloud API phone number ID and access token) and each message type is approved by WhatsApp as a template.
+          Messages can be prepared and scheduled, but they will only send once the hospital&apos;s WhatsApp Business number is connected
+          and each message type has an approved template.{access?.isAdmin ? <> <a href="/admin/whatsapp-setup" style={{ fontWeight: 700 }}>Open WhatsApp setup →</a></> : ' Ask an admin to set it up in Settings → WhatsApp setup.'}
         </div>
       )}
 

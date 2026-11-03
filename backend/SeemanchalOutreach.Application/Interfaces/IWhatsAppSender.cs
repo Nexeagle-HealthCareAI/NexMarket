@@ -27,5 +27,14 @@ namespace SeemanchalOutreach.Application.Interfaces
         /// hospital (the "customer service window"); after that only an approved template can be sent.
         /// </summary>
         Task<WhatsAppSendResult> SendTextAsync(string toPhone, string text, CancellationToken ct = default);
+
+        /// <summary>A template by its exact name and language code (for the "send a test" button in settings).</summary>
+        Task<WhatsAppSendResult> SendNamedTemplateAsync(string toPhone, string templateName, string languageCode, IReadOnlyList<string> bodyParams, CancellationToken ct = default);
+
+        /// <summary>
+        /// A read from the WhatsApp Graph API (e.g. the phone number's details, the approved templates). Uses the given
+        /// token when set, so settings can be tested before they're saved. Returns the JSON body, or an error message.
+        /// </summary>
+        Task<(bool Ok, string? Json, string? Error)> GraphGetAsync(string pathAndQuery, string? accessToken = null, string? apiVersion = null, CancellationToken ct = default);
     }
 }

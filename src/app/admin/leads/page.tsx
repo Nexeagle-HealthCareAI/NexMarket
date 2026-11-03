@@ -161,7 +161,8 @@ function LeadsPage() {
       {list && !list.whatsappConfigured && (
         <div className="ld-banner">
           <MessageCircle size={18} aria-hidden />
-          <span><strong>WhatsApp isn&apos;t connected yet.</strong> Add calls, walk-ins and camp sign-ups here now. Once the hospital&apos;s WhatsApp Business number is connected, every message to it lands here too, and you can reply from this page.</span>
+          <span><strong>WhatsApp isn&apos;t connected yet.</strong> Add calls, walk-ins and camp sign-ups here now. Once the hospital&apos;s WhatsApp Business number is connected, every message to it lands here too, and you can reply from this page.
+            {access?.isAdmin ? <> <Link href="/admin/whatsapp-setup" style={{ fontWeight: 700 }}>Set up WhatsApp →</Link></> : ' An admin can connect it in Settings → WhatsApp setup.'}</span>
         </div>
       )}
 

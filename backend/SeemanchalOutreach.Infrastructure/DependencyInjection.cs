@@ -42,6 +42,7 @@ namespace SeemanchalOutreach.Infrastructure
             {
                 client.Timeout = TimeSpan.FromSeconds(15);
             });
+            services.AddSingleton<IAppSettings, AppSettingsStore>();
             services.AddSingleton<IWhatsAppSender, WhatsAppCloudSender>();
 
             return services;

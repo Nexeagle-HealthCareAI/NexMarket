@@ -65,9 +65,11 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly INotifier _notifier;
         private readonly ILiveEvents _live;
         private readonly IPermissionService _perms;
+        private readonly IAppSettings _settings;
 
-        public LeadsController(IMarketingDbContext db, IWhatsAppSender wa, IConfiguration config, INotifier notifier, ILiveEvents live, IPermissionService perms)
+        public LeadsController(IMarketingDbContext db, IWhatsAppSender wa, IConfiguration config, INotifier notifier, ILiveEvents live, IPermissionService perms, IAppSettings settings)
         {
+            _settings = settings;
             _db = db;
             _wa = wa;
             _config = config;
@@ -188,7 +190,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 windowOpen = LeadInbox.WindowOpen(l),
                 windowClosesAt = l.LastInboundAt?.AddHours(24),
                 whatsappConfigured = _wa.IsConfigured,
-                templateReady = _wa.IsConfigured && !string.IsNullOrWhiteSpace(_config["WhatsApp:Templates:lead_followup"]),
+                templateReady = _wa.IsConfigured && LeadInbox.Wa(_settings, _config).Template("lead_followup") != null,
             });
         }
 
@@ -442,13 +444,14 @@ namespace SeemanchalOutreach.Api.Controllers
             if (l == null) return NotFound();
             if (l.OptOut) return BadRequest(new { message = "They asked not to get WhatsApp messages." });
             if (!_wa.IsConfigured) return BadRequest(new { message = "WhatsApp isn't connected yet." });
-            if (string.IsNullOrWhiteSpace(_config["WhatsApp:Templates:lead_followup"])) return BadRequest(new { message = "The follow-up template isn't set up yet (WhatsApp:Templates:lead_followup)." });
+            var cfg = LeadInbox.Wa(_settings, _config);
+            if (cfg.Template("lead_followup") == null) return BadRequest(new { message = "No follow-up template is chosen yet. An admin can pick one in Settings → WhatsApp." });
 
             var me = User.AgentIdOf();
-            var hospital = _config["WhatsApp:HospitalName"] ?? "Glisan Akbari Hospital";
+            var hospital = cfg.HospitalName;
             var first = l.Name.StartsWith("+") ? "" : l.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
             var r = await _wa.SendTemplateAsync(l.Phone, "lead_followup", "hi", new[] { first.Length > 0 ? first : "जी", hospital }, ct);
-            var preview = _config["Leads:FollowupPreview"] ?? $"Follow-up template sent to {(first.Length > 0 ? first : "them")}";
+            var preview = $"Follow-up message ({cfg.Template("lead_followup")}) sent to {(first.Length > 0 ? first : "them")}";
             return await SavedAsync(l, me, "template", preview, r, ct);
         }
 
@@ -491,8 +494,9 @@ namespace SeemanchalOutreach.Api.Controllers
         public IActionResult Link([FromQuery] string? camp)
         {
             var c = string.IsNullOrWhiteSpace(camp) ? null : camp.Trim();
-            var message = LeadInbox.QrMessage(_config, null, c);
-            return Ok(new { message, waLink = LeadInbox.WaLink(_config, message), displayPhone = LeadInbox.DisplayPhone(_config) });
+            var cfg = LeadInbox.Wa(_settings, _config);
+            var message = LeadInbox.QrMessage(cfg, null, c);
+            return Ok(new { message, waLink = LeadInbox.WaLink(cfg, message), displayPhone = LeadInbox.DisplayPhone(cfg), hospital = cfg.HospitalName });
         }
 
         private async Task<Dictionary<string, string>> NamesAsync(IEnumerable<string?> ids, CancellationToken ct)
@@ -534,11 +538,13 @@ namespace SeemanchalOutreach.Api.Controllers
     {
         private readonly IMarketingDbContext _db;
         private readonly IConfiguration _config;
+        private readonly IAppSettings _settings;
 
-        public PartnerReferralLinkController(IMarketingDbContext db, IConfiguration config)
+        public PartnerReferralLinkController(IMarketingDbContext db, IConfiguration config, IAppSettings settings)
         {
             _db = db;
             _config = config;
+            _settings = settings;
         }
 
         [HttpGet("{clientId}/referral-link")]
@@ -556,16 +562,17 @@ namespace SeemanchalOutreach.Api.Controllers
                 if (string.IsNullOrEmpty(c.ReferralCode)) return StatusCode(500, new { message = "Could not make a code. Try again." });
                 await _db.SaveChangesAsync(ct);
             }
-            var message = LeadInbox.QrMessage(_config, c.ReferralCode, null);
+            var cfg = LeadInbox.Wa(_settings, _config);
+            var message = LeadInbox.QrMessage(cfg, c.ReferralCode, null);
             var leads = await _db.Leads.AsNoTracking().Where(l => l.PartnerClientId == c.ClientId).Select(l => l.Status).ToListAsync(ct);
             return Ok(new
             {
                 code = c.ReferralCode,
                 name = c.Name,
                 message,
-                waLink = LeadInbox.WaLink(_config, message),
-                displayPhone = LeadInbox.DisplayPhone(_config),
-                hospital = _config["WhatsApp:HospitalName"] ?? "Glisan Akbari Hospital",
+                waLink = LeadInbox.WaLink(cfg, message),
+                displayPhone = LeadInbox.DisplayPhone(cfg),
+                hospital = cfg.HospitalName,
                 leads = leads.Count,
                 arrived = leads.Count(s => s is "arrived" or "admitted"),
                 admitted = leads.Count(s => s == "admitted"),

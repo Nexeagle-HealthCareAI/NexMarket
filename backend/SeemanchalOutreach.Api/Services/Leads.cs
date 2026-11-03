@@ -79,19 +79,22 @@ namespace SeemanchalOutreach.Api.Services
             return (r.Success ? r.Groups[1].Value.ToUpperInvariant() : null, c.Success ? c.Groups[1].Value.Trim().TrimEnd('.', '!') : null);
         }
 
-        /// <summary>The hospital's WhatsApp number as people dial it (WhatsApp:DisplayPhone), digits only.</summary>
-        public static string? DisplayPhone(IConfiguration config) => NormalizePhone(config["WhatsApp:DisplayPhone"]);
+        /// <summary>The WhatsApp connection and messages, from Settings → WhatsApp (or the server configuration).</summary>
+        public static WhatsAppConfig Wa(IAppSettings settings, IConfiguration config) => WhatsAppConfig.Load(settings, k => config[k]);
+
+        /// <summary>The hospital's WhatsApp number as people dial it, digits only.</summary>
+        public static string? DisplayPhone(WhatsAppConfig wa) => NormalizePhone(wa.DisplayPhone);
 
         /// <summary>A wa.me link that opens a chat with the hospital, the message already typed in.</summary>
-        public static string? WaLink(IConfiguration config, string message)
+        public static string? WaLink(WhatsAppConfig wa, string message)
         {
-            var phone = DisplayPhone(config);
+            var phone = DisplayPhone(wa);
             return phone == null ? null : $"https://wa.me/{phone}?text={Uri.EscapeDataString(message)}";
         }
 
-        public static string QrMessage(IConfiguration config, string? code, string? camp)
+        public static string QrMessage(WhatsAppConfig wa, string? code, string? camp)
         {
-            var greeting = config["Leads:QrGreeting"] ?? "नमस्ते, मुझे अस्पताल में दिखाना है। Hello, I would like to visit the hospital.";
+            var greeting = wa.QrGreeting;
             if (!string.IsNullOrWhiteSpace(code)) return $"{greeting}\nRef: {code}";
             if (!string.IsNullOrWhiteSpace(camp)) return $"{greeting}\nCamp: {camp}";
             return greeting;
@@ -137,7 +140,7 @@ namespace SeemanchalOutreach.Api.Services
         /// to a partner when it carries their code), and tells the lead's owner, or the desk when nobody has it yet.
         /// Returns the lead, or null for a STOP message.
         /// </summary>
-        public static async Task<Lead?> IngestAsync(IMarketingDbContext db, IPermissionService perms, INotifier notifier, IConfiguration config,
+        public static async Task<Lead?> IngestAsync(IMarketingDbContext db, IPermissionService perms, INotifier notifier, WhatsAppConfig cfg,
             IWhatsAppSender wa, Inbound m, bool isStop, CancellationToken ct)
         {
             var phone = NormalizePhone(m.From) ?? m.From;
@@ -217,7 +220,7 @@ namespace SeemanchalOutreach.Api.Services
             if (lead.OptOut && !isStop) lead.OptOut = false; // writing to us again means they're happy to hear back
 
             // Optional instant acknowledgement (free inside the 24-hour window), e.g. "Thank you, our desk will call you shortly".
-            var auto = config["Leads:AutoReply"];
+            var auto = cfg.AutoReply;
             if ((isNew || reopened) && !string.IsNullOrWhiteSpace(auto) && wa.IsConfigured)
             {
                 var r = await wa.SendTextAsync(phone, auto, ct);

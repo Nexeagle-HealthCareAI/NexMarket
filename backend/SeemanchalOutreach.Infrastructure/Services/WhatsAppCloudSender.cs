@@ -14,30 +14,32 @@ using SeemanchalOutreach.Application.Interfaces;
 namespace SeemanchalOutreach.Infrastructure.Services
 {
     /// <summary>
-    /// WhatsApp Cloud API sender. Configuration (appsettings "WhatsApp" section or env vars):
+    /// WhatsApp Cloud API sender. Set up from the CRM (Settings → WhatsApp); anything left empty there falls back to
+    /// the server configuration:
     ///   WhatsApp__PhoneNumberId   – the hospital's WhatsApp business phone number id
     ///   WhatsApp__AccessToken     – a permanent system-user access token
     ///   WhatsApp__ApiVersion      – Graph API version, default v21.0
-    ///   WhatsApp__Templates__doctor_availability (etc.) – approved template names per broadcast kind
+    ///   WhatsApp__Templates__doctor_availability (etc.) – approved template names per use
     /// Without PhoneNumberId + AccessToken nothing is sent and broadcasts fail with a clear message.
     /// </summary>
     public class WhatsAppCloudSender : IWhatsAppSender
     {
         private readonly IHttpClientFactory _http;
         private readonly IConfiguration _config;
+        private readonly IAppSettings _settings;
         private readonly ILogger<WhatsAppCloudSender> _logger;
 
-        public WhatsAppCloudSender(IHttpClientFactory http, IConfiguration config, ILogger<WhatsAppCloudSender> logger)
+        public WhatsAppCloudSender(IHttpClientFactory http, IConfiguration config, IAppSettings settings, ILogger<WhatsAppCloudSender> logger)
         {
             _http = http;
             _config = config;
+            _settings = settings;
             _logger = logger;
         }
 
-        private string? PhoneNumberId => _config["WhatsApp:PhoneNumberId"];
-        private string? AccessToken => _config["WhatsApp:AccessToken"];
+        private WhatsAppConfig Cfg => WhatsAppConfig.Load(_settings, k => _config[k]);
 
-        public bool IsConfigured => !string.IsNullOrWhiteSpace(PhoneNumberId) && !string.IsNullOrWhiteSpace(AccessToken);
+        public bool IsConfigured => Cfg.IsConfigured;
 
         public static string? NormalizeIndianPhone(string? phone)
         {
@@ -51,13 +53,20 @@ namespace SeemanchalOutreach.Infrastructure.Services
 
         public async Task<WhatsAppSendResult> SendTemplateAsync(string toPhone, string kind, string language, IReadOnlyList<string> bodyParams, CancellationToken ct = default)
         {
-            if (!IsConfigured) return new WhatsAppSendResult { Ok = false, Error = "WhatsApp is not configured on the server." };
+            var cfg = Cfg;
+            if (!cfg.IsConfigured) return new WhatsAppSendResult { Ok = false, Error = "WhatsApp isn't connected yet (Settings → WhatsApp)." };
+            string? template = cfg.Template(kind);
+            if (template == null) return new WhatsAppSendResult { Ok = false, Error = "No approved template is chosen for this message yet (Settings → WhatsApp)." };
+            string langCode = language == "en" ? cfg.EnglishCode : cfg.HindiCode;
+            return await SendNamedTemplateAsync(toPhone, template, langCode, bodyParams, ct);
+        }
 
+        public async Task<WhatsAppSendResult> SendNamedTemplateAsync(string toPhone, string template, string langCode, IReadOnlyList<string> bodyParams, CancellationToken ct = default)
+        {
+            var cfg = Cfg;
+            if (!cfg.IsConfigured) return new WhatsAppSendResult { Ok = false, Error = "WhatsApp isn't connected yet (Settings → WhatsApp)." };
             var to = NormalizeIndianPhone(toPhone);
             if (to == null) return new WhatsAppSendResult { Ok = false, Error = "Phone number is not a valid Indian mobile number." };
-
-            string template = _config[$"WhatsApp:Templates:{kind}"] ?? kind;
-            string langCode = language == "en" ? (_config["WhatsApp:EnglishCode"] ?? "en") : (_config["WhatsApp:HindiCode"] ?? "hi");
 
             var payload = new
             {
@@ -68,7 +77,7 @@ namespace SeemanchalOutreach.Infrastructure.Services
                 {
                     name = template,
                     language = new { code = langCode },
-                    components = new object[]
+                    components = bodyParams.Count == 0 ? Array.Empty<object>() : new object[]
                     {
                         new
                         {
@@ -79,12 +88,13 @@ namespace SeemanchalOutreach.Infrastructure.Services
                 },
             };
 
-            return await PostAsync(payload, ct);
+            return await PostAsync(cfg, payload, ct);
         }
 
         public async Task<WhatsAppSendResult> SendTextAsync(string toPhone, string text, CancellationToken ct = default)
         {
-            if (!IsConfigured) return new WhatsAppSendResult { Ok = false, Error = "WhatsApp is not configured on the server." };
+            var cfg = Cfg;
+            if (!cfg.IsConfigured) return new WhatsAppSendResult { Ok = false, Error = "WhatsApp isn't connected yet (Settings → WhatsApp)." };
             var to = NormalizeIndianPhone(toPhone);
             if (to == null) return new WhatsAppSendResult { Ok = false, Error = "Phone number is not a valid Indian mobile number." };
             if (string.IsNullOrWhiteSpace(text)) return new WhatsAppSendResult { Ok = false, Error = "Message is empty." };
@@ -96,32 +106,62 @@ namespace SeemanchalOutreach.Infrastructure.Services
                 type = "text",
                 text = new { preview_url = false, body = text.Length > 4000 ? text.Substring(0, 4000) : text },
             };
-            return await PostAsync(payload, ct);
+            return await PostAsync(cfg, payload, ct);
         }
 
-        private async Task<WhatsAppSendResult> PostAsync(object payload, CancellationToken ct)
+        public async Task<(bool Ok, string? Json, string? Error)> GraphGetAsync(string pathAndQuery, string? accessToken = null, string? apiVersion = null, CancellationToken ct = default)
         {
-            string version = _config["WhatsApp:ApiVersion"] ?? "v21.0";
+            var cfg = Cfg;
+            var token = string.IsNullOrWhiteSpace(accessToken) ? cfg.AccessToken : accessToken;
+            if (string.IsNullOrWhiteSpace(token)) return (false, null, "Add the access token first.");
+            var version = string.IsNullOrWhiteSpace(apiVersion) ? cfg.ApiVersion : apiVersion;
             try
             {
                 var client = _http.CreateClient("whatsapp");
-                using var req = new HttpRequestMessage(HttpMethod.Post, $"https://graph.facebook.com/{version}/{PhoneNumberId}/messages");
-                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AccessToken);
+                using var req = new HttpRequestMessage(HttpMethod.Get, $"https://graph.facebook.com/{version}/{pathAndQuery.TrimStart('/')}");
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                using var res = await client.SendAsync(req, ct);
+                var body = await res.Content.ReadAsStringAsync(ct);
+                if (res.IsSuccessStatusCode) return (true, body, null);
+                return (false, null, ErrorOf(body, (int)res.StatusCode));
+            }
+            catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException)
+            {
+                _logger.LogWarning(ex, "WhatsApp Graph read failed");
+                return (false, null, "Could not reach WhatsApp.");
+            }
+        }
+
+        private static string ErrorOf(string body, int status)
+        {
+            string error = $"WhatsApp returned {status}";
+            try
+            {
+                using var errDoc = JsonDocument.Parse(body);
+                if (errDoc.RootElement.TryGetProperty("error", out var err))
+                {
+                    if (err.TryGetProperty("error_user_msg", out var um) && um.GetString() is string u && u.Length > 0) return u;
+                    if (err.TryGetProperty("message", out var msg)) error = msg.GetString() ?? error;
+                }
+            }
+            catch (JsonException) { }
+            return error;
+        }
+
+        private async Task<WhatsAppSendResult> PostAsync(WhatsAppConfig cfg, object payload, CancellationToken ct)
+        {
+            try
+            {
+                var client = _http.CreateClient("whatsapp");
+                using var req = new HttpRequestMessage(HttpMethod.Post, $"https://graph.facebook.com/{cfg.ApiVersion}/{cfg.PhoneNumberId}/messages");
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.AccessToken);
                 req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
                 using var res = await client.SendAsync(req, ct);
                 var body = await res.Content.ReadAsStringAsync(ct);
                 if (!res.IsSuccessStatusCode)
                 {
                     _logger.LogWarning("WhatsApp send failed ({Status}): {Body}", (int)res.StatusCode, body);
-                    string error = $"WhatsApp returned {(int)res.StatusCode}";
-                    try
-                    {
-                        using var errDoc = JsonDocument.Parse(body);
-                        if (errDoc.RootElement.TryGetProperty("error", out var err) && err.TryGetProperty("message", out var msg))
-                            error = msg.GetString() ?? error;
-                    }
-                    catch (JsonException) { }
-                    return new WhatsAppSendResult { Ok = false, Error = error };
+                    return new WhatsAppSendResult { Ok = false, Error = ErrorOf(body, (int)res.StatusCode) };
                 }
 
                 using var doc = JsonDocument.Parse(body);
