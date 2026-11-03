@@ -56,7 +56,8 @@ export async function setupNotifications(): Promise<void> {
     handleNotification: async (n) => {
       const link = String(n.request.content.data?.link ?? '');
       const reading = !!openChat && link === `chat:${openChat}`;
-      return { shouldShowBanner: !reading, shouldShowList: !reading, shouldPlaySound: !reading, shouldSetBadge: true };
+      // Every chat message makes a sound; the chat you're reading just doesn't pop up a banner too.
+      return { shouldShowBanner: !reading, shouldShowList: !reading, shouldPlaySound: true, shouldSetBadge: true };
     },
   });
   if (Platform.OS === 'android') {
