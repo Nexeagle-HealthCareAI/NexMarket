@@ -69,7 +69,24 @@ export default function CheckIn() {
       // Leaves the panchayat they were in (if any) and checks in here, first visit or revisit.
       const r = await tryCheckIn(panchayatId);
       if (!r.ok && r.why === 'no-fix') Alert.alert(t('locationOff'), t('turnOnLocation'));
-      else if (!r.ok && r.why === 'far') Alert.alert(t('checkIn'), t('tooFar', { name: info.name, dist: formatDist(r.distM, t) }));
+      else if (!r.ok && r.why === 'far') confirmFar(r.distM);
+      else toast(t('savedOnPhone'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Too far from the panchayat centre (or its pin is wrong): the agent can still check in; the
+  // location saved with it shows the office where they really were.
+  const confirmFar = (distM: number) => Alert.alert(t('checkIn'), t('farCheckInConfirm', { name: info.name, dist: formatDist(distM, t) }), [
+    { text: t('close'), style: 'cancel' },
+    { text: t('checkInAnyway'), onPress: () => void anyway() },
+  ]);
+  const anyway = async () => {
+    setBusy(true);
+    try {
+      const r = await tryCheckIn(panchayatId, { anyDistance: true });
+      if (!r.ok) Alert.alert(t('locationOff'), t('turnOnLocation'));
       else toast(t('savedOnPhone'));
     } finally {
       setBusy(false);
@@ -94,7 +111,8 @@ export default function CheckIn() {
         ) : !canCheckIn && dist != null ? (
           <T style={{ color: C.warnInk, textAlign: 'center' }}>{t('tooFar', { name: info.name, dist: formatDist(dist, t) })}</T>
         ) : null}
-        {info.shift ? <Btn label={info.times ? t('revisitCheckIn') : t('checkIn')} icon="pin" onPress={doCheckIn} loading={busy} disabled={!canCheckIn && dist != null} style={{ alignSelf: 'stretch' }} /> : null}
+        {info.shift ? <Btn label={info.times ? t('revisitCheckIn') : t('checkIn')} icon="pin" onPress={doCheckIn} loading={busy} style={{ alignSelf: 'stretch' }} /> : null}
+        {info.shift && !canCheckIn && dist != null ? <Btn kind="ghost" label={t('checkInAnyway')} onPress={() => confirmFar(dist)} style={{ alignSelf: 'stretch' }} /> : null}
         {info.visit && info.visit.panchayatId !== panchayatId ? <T style={{ color: C.text2, textAlign: 'center', fontSize: 13 }}>{t('willLeaveCurrent')}</T> : null}
       </Card>
       {info.partners.length ? (
@@ -116,7 +134,9 @@ function InVisit({ visit, name, partners, initialContact }: {
   visit: NonNullable<ReturnType<typeof q.activeVisit>>; name: string; partners: ReturnType<typeof q.contactsIn>; initialContact: string | null;
 }) {
   const { t, lang } = useSession();
-  const [contactId, setContactId] = useState<string | null>(initialContact || partners[0]?.clientId || null);
+  // Nobody is picked to start with: the agent first chooses "add new" or "revisit someone".
+  const [contactId, setContactId] = useState<string | null>(initialContact || null);
+  const [search, setSearch] = useState('');
   // Someone just added here (back from Add person): pick them so the agent can carry on with them.
   const known = useRef(new Set(partners.map((c) => c.clientId)));
   useEffect(() => {
@@ -145,8 +165,18 @@ function InVisit({ visit, name, partners, initialContact }: {
   const picked = useDb(() => {
     if (!contactId) return null;
     const c = q.contact(contactId);
-    return c ? { revisit: c.createdAt < visit.checkInAt, history: q.notesFor(contactId).slice(0, 3) } : null;
+    return c ? { name: c.name, role: c.role, revisit: c.createdAt < visit.checkInAt, history: q.notesFor(contactId).slice(0, 3) } : null;
   }, [contactId, visit.checkInAt]);
+  const stats = useDb(() => new Map(q.visitStatsIn(visit.panchayatId).map((r) => [r.contactId, r])), [visit.panchayatId, partners.length]);
+  const shown = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    const d = s.replace(/\D/g, '');
+    return s ? partners.filter((c) => c.name.toLowerCase().includes(s) || (d.length >= 3 && (c.phone ?? '').replace(/\D/g, '').includes(d))) : partners;
+  }, [partners, search]);
+  const metLine = (id: string) => {
+    const r = stats.get(id);
+    return r?.n ? t('partnerVisits', { n: r.n, when: r.last ? relDay(t, lang, r.last) : '–' }) : t('noVisitNoteYet');
+  };
 
   const savingRef = useRef(false);
   const save = async (days: number) => {
@@ -159,6 +189,7 @@ function InVisit({ visit, name, partners, initialContact }: {
     savingRef.current = false;
     toast(t('visitSaved'));
     reset();
+    setContactId(null);
   };
 
   const photo = async () => {
@@ -177,8 +208,11 @@ function InVisit({ visit, name, partners, initialContact }: {
     router.replace('/today');
   };
 
+  const pickPerson = (id: string) => { setContactId(id); reset(); };
+  const addNew = () => router.push({ pathname: '/partner-new', params: { panchayatId: visit.panchayatId } });
+
   return (
-    <Screen header={<TopBar title={name} sub={t('youAreIn')} dark />}
+    <Screen header={<TopBar title={name} sub={t('youAreIn')} dark onBack={contactId ? () => { setContactId(null); reset(); } : undefined} />}
       footer={<View style={{ padding: 16, backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border }}>
         <Btn kind="secondary" icon="check" label={t('checkOut')} onPress={out} loading={busy} />
       </View>}>
@@ -190,70 +224,121 @@ function InVisit({ visit, name, partners, initialContact }: {
         </View>
       </Card>
 
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Btn flex icon="plus" label={t('newPersonShort')} onPress={() => router.push({ pathname: '/partner-new', params: { panchayatId: visit.panchayatId } })} />
-        <Btn flex kind="secondary" icon="pin" label={t('nextPanchayat')} onPress={() => router.push('/checkin')} />
-      </View>
-
-      <T style={{ fontSize: 17, fontWeight: '700' }}>{partners.length ? t('revisitWho', { n: partners.length }) : t('noOneHereYet')}</T>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {partners.map((c) => <Chip key={c.clientId} label={c.name} selected={contactId === c.clientId} onPress={() => { setContactId(c.clientId); reset(); }} />)}
-      </View>
-
-      {picked?.history.length ? (
-        <Card style={{ gap: 6, backgroundColor: C.bg }}>
-          <T style={{ fontWeight: '700', color: C.text2, fontSize: 13 }}>{t('earlierComments')}</T>
-          {picked.history.map((n) => (
-            <View key={n.clientId} style={{ gap: 2 }}>
-              <T style={{ color: C.text2, fontSize: 12 }}>{relDay(t, lang, n.createdAt)} · {t(`source_${n.source}` as never)}</T>
-              <T numberOfLines={3}>{n.text}</T>
+      {!contactId ? (
+        <>
+          <T style={{ fontSize: 17, fontWeight: '800' }}>{t('whatNow')}</T>
+          {/* 1. Someone new */}
+          <Pressable onPress={addNew} accessibilityRole="button" style={({ pressed }) => [{
+            flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 16, backgroundColor: C.blue,
+          }, pressed && { opacity: 0.85 }]}>
+            <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="plus" color="#fff" size={26} />
             </View>
-          ))}
-        </Card>
-      ) : null}
+            <View style={{ flex: 1, gap: 2 }}>
+              <T style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>{t('addPartner')}</T>
+              <T style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>{t('addNewSub')}</T>
+            </View>
+            <Icon name="chevron" color="#fff" />
+          </Pressable>
 
-      {contactId ? (
-        <Card>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <T style={{ flex: 1, fontSize: 17, fontWeight: '700' }}>{picked?.revisit ? t('howWasRevisit') : t('howWasIt')}</T>
-            <Pill label={t('threeTaps')} tone="blue" />
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {(['met', 'notMet'] as Met[]).map((m) => (
-              <View key={m} style={{ flex: 1 }}>
-                <Chip big label={t(m)} selected={met === m} color={m === 'met' ? C.ok : C.warn} onPress={() => { setMet(m); if (m === 'notMet') setInterest(null); }} />
+          {/* 2. Someone already added here */}
+          <Card style={{ gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: C.okSoft, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="refresh" color={C.okInk} size={24} />
               </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <T style={{ fontSize: 18, fontWeight: '800' }}>{t('revisitPartner')}</T>
+                <T style={{ color: C.text2, fontSize: 13 }}>{partners.length ? t('revisitPartnerSub', { n: partners.length }) : t('noOneHereYet')}</T>
+              </View>
+            </View>
+            {partners.length > 6 ? <Field placeholder={t('searchPartners')} value={search} onChangeText={setSearch} /> : null}
+            {shown.map((c) => (
+              <Pressable key={c.clientId} onPress={() => pickPerson(c.clientId)} accessibilityRole="button"
+                style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, backgroundColor: pressed ? C.line : C.bg }]}>
+                <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: C.blueSoft, alignItems: 'center', justifyContent: 'center' }}>
+                  <T style={{ color: C.blueInk, fontWeight: '800' }}>{c.name.trim().charAt(0).toUpperCase()}</T>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <T style={{ fontWeight: '700' }} numberOfLines={1}>{c.name}</T>
+                  <T style={{ color: C.text2, fontSize: 12 }} numberOfLines={1}>{t(`type_${c.role}` as never)} · {metLine(c.clientId)}</T>
+                </View>
+                <T style={{ color: C.blue, fontWeight: '700', fontSize: 13 }}>{t('revisitBtn')}</T>
+              </Pressable>
             ))}
-          </View>
-          {met === 'met' ? (
-            <>
-              <T style={{ color: C.text2 }}>{t('interest')}</T>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {(['interestHigh', 'interestSome', 'interestNone'] as Interest[]).map((i) => (
-                  <View key={i} style={{ flex: 1 }}><Chip big label={t(i)} selected={interest === i} onPress={() => setInterest(i)} /></View>
-                ))}
-              </View>
-            </>
-          ) : null}
-          {met && (met === 'notMet' || interest) ? (
-            <>
-              <Field placeholder={t('addNote')} value={note} onChangeText={setNote} multiline />
-              <T style={{ color: C.text2 }}>{t('nextFollowUp')}</T>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <View style={{ flex: 1 }}><Chip big label={t('tomorrow')} onPress={() => void save(1)} /></View>
-                <View style={{ flex: 1 }}><Chip big label={t('in3Days')} onPress={() => void save(3)} /></View>
-                <View style={{ flex: 1 }}><Chip big label={t('in1Week')} onPress={() => void save(7)} /></View>
-              </View>
-            </>
-          ) : null}
-        </Card>
-      ) : null}
+            {partners.length && !shown.length ? <T style={{ color: C.text2 }}>{t('noMatches')}</T> : null}
+          </Card>
 
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Action icon="hospital" label={t('referPatient')} disabled={!contactId} onPress={() => router.push({ pathname: '/refer', params: { contactId: contactId ?? '' } })} />
-        <Action icon="note" label={t('survey')} disabled={!contactId} onPress={() => router.push({ pathname: '/survey', params: { contactId: contactId ?? '' } })} />
-        <Action icon="camera" label={t('photo')} disabled={!contactId} onPress={photo} />
-      </View>
+          <Btn kind="ghost" icon="pin" label={t('nextPanchayat')} onPress={() => router.push('/checkin')} />
+        </>
+      ) : (
+        <>
+          <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: picked?.revisit ? C.okSoft : C.blueSoft, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name={picked?.revisit ? 'refresh' : 'user'} color={picked?.revisit ? C.okInk : C.blueInk} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <T style={{ color: C.text2, fontSize: 12, fontWeight: '700' }}>{picked?.revisit ? t('revisiting') : t('firstMeeting')}</T>
+              <T style={{ fontSize: 18, fontWeight: '800' }} numberOfLines={1}>{picked?.name ?? ''}</T>
+              <T style={{ color: C.text2, fontSize: 12 }} numberOfLines={1}>{picked ? `${t(`type_${picked.role}` as never)} · ${metLine(contactId)}` : ''}</T>
+            </View>
+            <Btn small kind="secondary" label={t('change')} onPress={() => { setContactId(null); reset(); }} />
+          </Card>
+
+          {picked?.history.length ? (
+            <Card style={{ gap: 6, backgroundColor: C.bg }}>
+              <T style={{ fontWeight: '700', color: C.text2, fontSize: 13 }}>{t('earlierComments')}</T>
+              {picked.history.map((n) => (
+                <View key={n.clientId} style={{ gap: 2 }}>
+                  <T style={{ color: C.text2, fontSize: 12 }}>{relDay(t, lang, n.createdAt)} · {t(`source_${n.source}` as never)}</T>
+                  <T numberOfLines={3}>{n.text}</T>
+                </View>
+              ))}
+            </Card>
+          ) : null}
+
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <T style={{ flex: 1, fontSize: 17, fontWeight: '700' }}>{picked?.revisit ? t('howWasRevisit') : t('howWasIt')}</T>
+              <Pill label={t('threeTaps')} tone="blue" />
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {(['met', 'notMet'] as Met[]).map((m) => (
+                <View key={m} style={{ flex: 1 }}>
+                  <Chip big label={t(m)} selected={met === m} color={m === 'met' ? C.ok : C.warn} onPress={() => { setMet(m); if (m === 'notMet') setInterest(null); }} />
+                </View>
+              ))}
+            </View>
+            {met === 'met' ? (
+              <>
+                <T style={{ color: C.text2 }}>{t('interest')}</T>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {(['interestHigh', 'interestSome', 'interestNone'] as Interest[]).map((i) => (
+                    <View key={i} style={{ flex: 1 }}><Chip big label={t(i)} selected={interest === i} onPress={() => setInterest(i)} /></View>
+                  ))}
+                </View>
+              </>
+            ) : null}
+            {met && (met === 'notMet' || interest) ? (
+              <>
+                <Field placeholder={t('addNote')} value={note} onChangeText={setNote} multiline />
+                <T style={{ color: C.text2 }}>{t('nextFollowUp')}</T>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}><Chip big label={t('tomorrow')} onPress={() => void save(1)} /></View>
+                  <View style={{ flex: 1 }}><Chip big label={t('in3Days')} onPress={() => void save(3)} /></View>
+                  <View style={{ flex: 1 }}><Chip big label={t('in1Week')} onPress={() => void save(7)} /></View>
+                </View>
+              </>
+            ) : null}
+          </Card>
+
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Action icon="hospital" label={t('referPatient')} onPress={() => router.push({ pathname: '/refer', params: { contactId } })} />
+            <Action icon="note" label={t('survey')} onPress={() => router.push({ pathname: '/survey', params: { contactId } })} />
+            <Action icon="camera" label={t('photoOptional')} onPress={photo} />
+          </View>
+        </>
+      )}
     </Screen>
   );
 }
