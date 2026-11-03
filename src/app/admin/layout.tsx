@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type C
 import {
   LayoutDashboard, PhoneCall, Inbox, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
-  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight,
+  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
@@ -24,7 +24,7 @@ type IconType = ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidde
 interface NavItem {
   href: string;
   label: string;
-  page: PageKey | 'admin' | 'chat';
+  page: PageKey | 'admin' | 'chat' | 'leads';
   icon: IconType;
   /** extra paths that should highlight this item */
   match?: string[];
@@ -36,6 +36,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Overview',
     items: [
       { href: '/admin/dashboard', label: 'Command centre', page: 'dashboard', icon: LayoutDashboard, phone: true },
+      { href: '/admin/leads', label: 'Leads inbox', page: 'leads', icon: UserPlus, phone: true },
       { href: '/admin/calls', label: 'Daily calls', page: 'calls', icon: PhoneCall, phone: true },
       { href: '/admin/desk', label: 'Referral desk', page: 'desk', icon: Inbox, phone: true },
       { href: '/admin/referrals', label: 'Referral pipeline', page: 'pipeline', icon: Columns3, match: ['/admin/hospital-crm'], phone: true },
@@ -174,7 +175,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     // Chat: admins, marketing managers and anyone who can see the field pages (same rule as the API).
     items: g.items.filter((i) => (i.page === 'admin' ? !!access?.isAdmin
       : i.page === 'chat' ? !!access && (access.isAdmin || access.role === 'MarketingManager' || canView(access, 'field'))
-        : canView(access, i.page))),
+        // Leads: whoever works the Referral desk or WhatsApp (same rule as the API).
+        : i.page === 'leads' ? canView(access, 'desk') || canView(access, 'whatsapp')
+          : canView(access, i.page))),
   })).filter((g) => g.items.length > 0), [access]);
 
   const allowedItems = groups.flatMap((g) => g.items);
@@ -191,12 +194,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const t = setInterval(() => { if (!document.hidden) refreshUnread(); }, 30000);
     return () => { clearTimeout(first); clearInterval(t); };
   }, [refreshUnread, pathname]);
+  // New leads and unread WhatsApp messages, for the badge on Leads inbox.
+  const leadsAllowed = canView(access, 'desk') || canView(access, 'whatsapp');
+  const [leadsUnread, setLeadsUnread] = useState(0);
+  const refreshLeads = useCallback(() => {
+    if (!leadsAllowed) return;
+    crm.get<{ unread: number; counts: Record<string, number> }>('/api/v1/leads?status=new&pageSize=1')
+      .then((r) => setLeadsUnread(Math.max(r.unread, r.counts.new ?? 0))).catch(() => undefined);
+  }, [leadsAllowed]);
+  useEffect(() => {
+    const first = setTimeout(refreshLeads, 0);
+    const t = setInterval(() => { if (!document.hidden) refreshLeads(); }, 45000);
+    return () => { clearTimeout(first); clearInterval(t); };
+  }, [refreshLeads, pathname]);
   const noop = useCallback(() => {}, []);
   // My notifications arrive on the same socket; the bell (and any page) listens for them on window.
   const onNotify = useCallback((n: LiveNotification) => {
     window.dispatchEvent(new CustomEvent(NOTIFY_EVENT, { detail: n }));
     if (n.kind === 'chat' || n.kind === 'team_chat') refreshUnread();
-  }, [refreshUnread]);
+    if (n.kind === 'lead') refreshLeads();
+  }, [refreshUnread, refreshLeads]);
   useLiveEvents(noop, undefined, refreshUnread, onNotify);
   const current = allowedItems.find((i) => isActive(pathname, i));
   const phoneItems = allowedItems.filter((i) => i.phone).slice(0, 4);
@@ -262,6 +279,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <Icon size={18} strokeWidth={2} aria-hidden />
                   <span className="crm-nav-text">{item.label}</span>
                   {item.page === 'chat' && chatUnread > 0 && <span className="crm-nav-badge" aria-label={`${chatUnread} unread`}>{chatUnread > 99 ? '99+' : chatUnread}</span>}
+                  {item.page === 'leads' && leadsUnread > 0 && <span className="crm-nav-badge is-lead" aria-label={`${leadsUnread} new`}>{leadsUnread > 99 ? '99+' : leadsUnread}</span>}
                 </Link>
               );
             })}

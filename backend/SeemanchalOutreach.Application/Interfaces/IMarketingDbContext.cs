@@ -44,6 +44,9 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<Notification> Notifications { get; }
         DbSet<PushDevice> PushDevices { get; }
         DbSet<NotificationSetting> NotificationSettings { get; }
+        DbSet<Lead> Leads { get; }
+        DbSet<LeadActivity> LeadActivities { get; }
+        DbSet<WaMessage> WaMessages { get; }
 
         ChangeTracker ChangeTracker { get; }
 

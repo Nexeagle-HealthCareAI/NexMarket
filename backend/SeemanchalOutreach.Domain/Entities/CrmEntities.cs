@@ -386,4 +386,59 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public string? CreatedBy { get; set; }
     }
+
+    /// <summary>
+    /// Someone who might become a patient: a WhatsApp message to the hospital, a scan of a partner's QR code,
+    /// a camp sign-up, a phone call to the desk… One lead per phone number; a later enquiry reopens it.
+    /// </summary>
+    public class Lead
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Name { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;          // 91XXXXXXXXXX
+        public string Source { get; set; } = "whatsapp";           // whatsapp | partner_qr | partner | ad | camp | missed_call | walk_in | desk | agent | web
+        public string? SourceRef { get; set; }                     // the ad, camp name or referral code it came from
+        public string? PartnerClientId { get; set; }               // the partner who sent them (QR code or a partner's own message)
+        public string? Department { get; set; }
+        public string Status { get; set; } = "new";                // new | contacted | appointment | arrived | admitted | lost
+        public string? LostReason { get; set; }
+        public string? OwnerId { get; set; }                       // agentId of the person handling it
+        public string? Note { get; set; }                          // first message or what the caller asked for
+        public string? LastMessage { get; set; }
+        public int Unread { get; set; }
+        public bool OptOut { get; set; }                           // asked not to be messaged
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string? CreatedBy { get; set; }
+        public DateTime? FirstResponseAt { get; set; }
+        public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
+        public DateTime? LastInboundAt { get; set; }               // WhatsApp free replies are allowed for 24h after this
+        public DateTime? ClosedAt { get; set; }
+    }
+
+    /// <summary>What happened to a lead: status and owner changes, notes, calls. WhatsApp messages are in <see cref="WaMessage"/>.</summary>
+    public class LeadActivity
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid LeadId { get; set; }
+        public string Kind { get; set; } = "note";                 // created | status | owner | note | call | reopened | source
+        public string Text { get; set; } = string.Empty;
+        public string? By { get; set; }                            // agentId; null = system
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>One WhatsApp message to or from a person (not broadcasts, which are in BroadcastRecipient).</summary>
+    public class WaMessage
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Phone { get; set; } = string.Empty;          // 91XXXXXXXXXX
+        public Guid? LeadId { get; set; }
+        public string Direction { get; set; } = "in";              // in | out
+        public string Type { get; set; } = "text";                 // text | template | image | audio | document | location | button | other
+        public string Text { get; set; } = string.Empty;
+        public string? WaMessageId { get; set; }
+        public string Status { get; set; } = "received";           // received | sent | delivered | read | failed
+        public string? Error { get; set; }
+        public string? SentBy { get; set; }                        // agentId for outgoing
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
 }

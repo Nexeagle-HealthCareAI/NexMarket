@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, CalendarDays, FileText, Image as ImageIcon, MapPin, MessageCircle, MessagesSquare, Phone, Search, Star } from 'lucide-react';
+import { ArrowLeft, CalendarDays, FileText, Image as ImageIcon, MapPin, MessageCircle, MessagesSquare, Phone, QrCode, Search, Star } from 'lucide-react';
+import { QrPosterModal, type QrPosterInfo } from '@/components/crm/QrPoster';
 import Link from 'next/link';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
@@ -316,6 +317,7 @@ function Profile({ id, editable, showToast, onBack, onChange }: {
   const [date, setDate] = useState('');
   const [reply, setReply] = useState('');
   const [edit, setEdit] = useState<{ name: string; phone: string } | null>(null);
+  const [qr, setQr] = useState<(QrPosterInfo & { leads: number; arrived: number }) | null>(null);
 
   if (d.error) return <ErrorBox message={d.error} onRetry={d.reload} />;
   const c = d.data;
@@ -370,6 +372,11 @@ function Profile({ id, editable, showToast, onBack, onChange }: {
   });
 
   const waPhone = c.phone ? c.phone.replace(/\D/g, '').slice(-10) : '';
+  // This partner's own WhatsApp QR code: patients who scan it reach the leads inbox already credited to them.
+  const openQr = () => run('qr', async () => {
+    const r = await crm.get<{ code: string; name: string; message: string; waLink: string | null; displayPhone?: string | null; hospital: string; leads: number; arrived: number }>(`/api/v1/partners/${encodeURIComponent(id)}/referral-link`);
+    setQr({ title: r.name, sub: `Referral code ${r.code}`, waLink: r.waLink, message: r.message, displayPhone: r.displayPhone, hospital: r.hospital, leads: r.leads, arrived: r.arrived });
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -412,7 +419,16 @@ function Profile({ id, editable, showToast, onBack, onChange }: {
           </button>
         )}
         {editable && <button type="button" className="crm-btn is-secondary" onClick={() => setEdit({ name: c.name, phone: c.phone ?? '' })}>Edit details</button>}
+        <button type="button" className="crm-btn is-secondary" disabled={busy === 'qr'} onClick={openQr}><QrCode size={16} aria-hidden /> WhatsApp QR</button>
       </div>
+      {qr && (
+        <QrPosterModal info={qr} onClose={() => setQr(null)} intro={
+          <p className="crm-sub" style={{ margin: 0 }}>
+            Give {c.name} this poster or link. Patients who scan it message the hospital on WhatsApp and land in the Leads inbox already credited to {c.name}
+            {qr.leads > 0 ? <> · <strong>{qr.leads}</strong> {qr.leads === 1 ? 'lead' : 'leads'} so far, <strong>{qr.arrived}</strong> arrived.</> : '.'}
+          </p>
+        } />
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 600 }} id="prio-l">Priority</span>
