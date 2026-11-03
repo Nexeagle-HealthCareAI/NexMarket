@@ -172,7 +172,7 @@ interface PullResponse {
   }[];
   visits: { clientId: string; panchayatId: string; checkInAt: string; checkInLat: number; checkInLng: number; checkOutAt: string | null; checkOutLat: number | null; checkOutLng: number | null }[];
   shifts: { clientId: string; startAt: string; endAt: string | null }[];
-  contactNotes: { clientId: string; contactId: string; text: string; source: string; createdAt: string }[];
+  contactNotes: { clientId: string; contactId: string; text: string; source: string; createdAt: string; lat?: number | null; lng?: number | null; accuracyM?: number | null }[];
   referrals: { clientId: string; contactId: string; status: string; notes: string | null; createdAt: string; patientName?: string; department?: string; urgent?: boolean; updatedAt?: string }[];
   surveys: { clientId: string; contactId: string; panchayatId: string; answersJson: string; createdAt: string }[];
 }
@@ -227,8 +227,8 @@ function applyPull(r: PullResponse) {
     // A shift the server has never closed but that started on an earlier day is left
     // open on the phone only if the phone itself opened it.
     for (const n of r.contactNotes ?? []) {
-      d.runSync('INSERT OR IGNORE INTO notes (clientId, contactId, text, source, createdAt) VALUES (?, ?, ?, ?, ?)',
-        n.clientId, n.contactId, n.text, n.source || 'note', n.createdAt);
+      d.runSync('INSERT OR IGNORE INTO notes (clientId, contactId, text, source, createdAt, lat, lng, accuracy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        n.clientId, n.contactId, n.text, n.source || 'note', n.createdAt, n.lat ?? null, n.lng ?? null, n.accuracyM ?? null);
     }
     for (const x of r.referrals ?? []) {
       if (skip.has(x.clientId)) continue;

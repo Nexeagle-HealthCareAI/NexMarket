@@ -8,7 +8,7 @@ import { q } from '../../lib/db';
 import { addNote, addPhoto, setFollowUp, setPriority } from '../../lib/repo';
 import { takePhoto } from '../../lib/photo';
 import { callNumber } from '../../lib/links';
-import { dayShort } from '../../lib/format';
+import { dayShort, relDay, timeOf } from '../../lib/format';
 import { daysFromToday } from '../../lib/util';
 import { C, PRIORITY_COLOR, type Priority } from '../../theme';
 import { stageTone } from '../../components/stage';
@@ -40,6 +40,11 @@ export default function PartnerProfile() {
       month: refs.filter((r) => r.createdAt >= monthStart.toISOString()).length,
       notes: q.notesFor(id),
       surveyed: q.hasSurvey(id),
+      // Every time the agent met this person: when added, then each visit / revisit.
+      visits: [
+        ...q.notesFor(id).filter((n) => n.source === 'visit' || n.source === 'revisit'),
+        { clientId: 'added', contactId: id, text: '', source: 'added' as const, createdAt: c.createdAt, lat: c.lat, lng: c.lng },
+      ],
     };
   }, [id]);
 
@@ -108,6 +113,35 @@ export default function PartnerProfile() {
           </View>
           <Btn small kind="ghost" label={t('moveFollowUp')} onPress={() => setMoveOpen(true)} />
         </View>
+      </Card>
+
+      <Card>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.okSoft, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="check" color={C.okInk} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <T style={{ fontWeight: '800', fontSize: 16 }}>{t('metTimes', { n: d.visits.length })}</T>
+            <T style={{ color: C.text2, fontSize: 13 }}>{t('lastMet', { when: `${relDay(t, lang, d.visits[0].createdAt)} ${timeOf(lang, d.visits[0].createdAt)}` })}</T>
+          </View>
+        </View>
+        {d.visits.map((v, i) => (
+          <View key={v.clientId} style={{ flexDirection: 'row', gap: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.line }}>
+            <View style={{ width: 22, alignItems: 'center' }}>
+              <View style={{ width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: v.source === 'added' ? C.purpleSoft : C.okSoft }}>
+                <T style={{ fontSize: 11, fontWeight: '800', color: v.source === 'added' ? C.purple : C.okInk }}>{d.visits.length - i}</T>
+              </View>
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <T style={{ fontWeight: '700' }}>{v.source === 'added' ? t('firstMetAdded') : t(`source_${v.source}` as never)} · <T style={{ fontWeight: '500', color: C.text2 }}>{dayShort(lang, new Date(v.createdAt))} {timeOf(lang, v.createdAt)}</T></T>
+              {v.text ? <T style={{ color: C.text3, fontSize: 14 }} numberOfLines={4}>{v.text}</T> : null}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Icon name="pin" size={12} color={v.lat != null ? C.okInk : C.muted} />
+                <T style={{ fontSize: 12, color: v.lat != null ? C.okInk : C.muted }}>{v.lat != null ? t('locationSaved') : t('noLocationSaved')}</T>
+              </View>
+            </View>
+          </View>
+        ))}
       </Card>
 
       {!d.surveyed ? (

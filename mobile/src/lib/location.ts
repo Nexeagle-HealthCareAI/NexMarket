@@ -99,6 +99,25 @@ export async function currentPosition(): Promise<{ lat: number; lng: number; acc
   }
 }
 
+/**
+ * A position fast enough to use while saving a form: a fix from the last 2 minutes if there is one,
+ * otherwise a fresh one (up to 6 s), otherwise anything from the last 10 minutes.
+ */
+export async function quickPosition(): Promise<{ lat: number; lng: number; accuracy: number | null } | null> {
+  try {
+    const recent = await Location.getLastKnownPositionAsync({ maxAge: 2 * 60_000, requiredAccuracy: 200 });
+    if (recent) return { lat: recent.coords.latitude, lng: recent.coords.longitude, accuracy: recent.coords.accuracy ?? null };
+    const p = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
+      new Promise<null>((r) => setTimeout(() => r(null), 6_000)),
+    ]);
+    const fix = p ?? (await Location.getLastKnownPositionAsync({ maxAge: 10 * 60_000 }));
+    return fix ? { lat: fix.coords.latitude, lng: fix.coords.longitude, accuracy: fix.coords.accuracy ?? null } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Store a point now (e.g. at shift start or check-in) so the route has no gap. */
 export function recordPoint(lat: number, lng: number, accuracy: number | null) {
   const shift = q.activeShift();

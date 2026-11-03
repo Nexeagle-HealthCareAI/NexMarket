@@ -186,14 +186,17 @@ export function setFollowUp(clientId: string, date: string | null) {
   updateContact(clientId, { followUpDate: date });
 }
 
-export function addNote(contactId: string, text: string, source: 'note' | 'visit' | 'revisit' | 'call' = 'note') {
+export function addNote(contactId: string, text: string, source: 'note' | 'visit' | 'revisit' | 'call' = 'note',
+  pos?: { lat: number; lng: number; accuracy: number | null } | null) {
   const t = text.trim();
   if (!t) return;
   const { agentId, deviceId } = me();
   const clientId = uuid();
   const at = nowIso();
-  db().runSync('INSERT INTO notes (clientId, contactId, text, source, createdAt) VALUES (?, ?, ?, ?, ?)', clientId, contactId, t, source, at);
-  enqueue('contact_note', clientId, { clientId, deviceId, agentId, contactId, text: t, source, createdAt: at });
+  db().runSync('INSERT INTO notes (clientId, contactId, text, source, createdAt, lat, lng, accuracy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    clientId, contactId, t, source, at, pos?.lat ?? null, pos?.lng ?? null, pos?.accuracy ?? null);
+  enqueue('contact_note', clientId, { clientId, deviceId, agentId, contactId, text: t, source, createdAt: at,
+    lat: pos?.lat ?? null, lng: pos?.lng ?? null, accuracyM: pos?.accuracy ?? null });
   notifyChange();
 }
 

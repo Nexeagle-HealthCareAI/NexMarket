@@ -67,6 +67,9 @@ namespace SeemanchalOutreach.Api
             return DateTime.SpecifyKind(ist.Date - Offset, DateTimeKind.Utc);
         }
 
+        /// <summary>IST midnight at the start of <paramref name="day"/>, in UTC.</summary>
+        public static DateTime StartOfIstDayUtc(DateOnly day) => DateTime.SpecifyKind(day.ToDateTime(TimeOnly.MinValue) - Offset, DateTimeKind.Utc);
+
         public static DateTime TodayStartUtc => StartOfDayUtc(DateTime.UtcNow);
 
         public static DateTime MonthStartUtc

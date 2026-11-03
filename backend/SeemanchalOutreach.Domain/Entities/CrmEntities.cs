@@ -166,8 +166,12 @@ namespace SeemanchalOutreach.Domain.Entities
         public string ContactClientId { get; set; } = string.Empty;
         public string AgentId { get; set; } = string.Empty;
         public string Text { get; set; } = string.Empty;
-        public string Source { get; set; } = "note";          // note | visit | call
+        public string Source { get; set; } = "note";          // note | visit | revisit | call
         public DateTime CreatedAt { get; set; }
+        /// <summary>Where the agent was when they wrote it (visits and revisits), from the phone's GPS.</summary>
+        public double? Lat { get; set; }
+        public double? Lng { get; set; }
+        public double? AccuracyM { get; set; }
         public DateTime ServerReceivedAt { get; set; } = DateTime.UtcNow;
     }
 

@@ -19,6 +19,7 @@ export default function NewPartner() {
   const { t, lang } = useSession();
   const params = useLocalSearchParams<{ panchayatId?: string }>();
   const visit = useDb(() => q.activeVisit());
+  const onShift = useDb(() => !!q.activeShift());
   const [panchayatId, setPanchayatId] = useState(params.panchayatId || visit?.panchayatId || '');
   const [step, setStep] = useState<0 | 1>(0);
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -70,6 +71,23 @@ export default function NewPartner() {
     // Every new contact is asked the panchayat questions (skippable only with a reason).
     router.replace({ pathname: '/survey', params: { contactId: id, isNew: '1' } });
   };
+
+  // Partners are added in the panchayat the agent is checked in to: no check-in, no adding.
+  if (!visit && !params.panchayatId) {
+    return (
+      <Screen header={<TopBar title={t('addPartner')} />}>
+        <Card style={{ alignItems: 'center', gap: 12, paddingVertical: 28 }}>
+          <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: C.blueSoft, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="pin" size={30} color={C.blue} />
+          </View>
+          <T style={{ fontSize: 20, fontWeight: '800', textAlign: 'center' }}>{onShift ? t('checkInFirst') : t('startShiftFirst')}</T>
+          <T style={{ color: C.text2, textAlign: 'center' }}>{t('checkInFirstSub')}</T>
+          <Btn label={onShift ? t('checkInPanchayat') : t('startShift')} icon={onShift ? 'pin' : 'nav'} kind="ok"
+            onPress={() => router.replace(onShift ? '/checkin' : '/shift')} style={{ alignSelf: 'stretch' }} />
+        </Card>
+      </Screen>
+    );
+  }
 
   const steps = [t('stepPhoto'), t('stepDetails'), t('stepSurvey')];
   const shownTypes = moreTypes ? TYPES : TYPES.slice(0, 5);
