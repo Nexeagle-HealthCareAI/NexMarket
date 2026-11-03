@@ -52,7 +52,7 @@ function ago(iso: string): string {
  * The CRM's notification bell: unread count, a panel with everything (chat, escalations, leave, tasks…),
  * a pop-up for each new one, and desktop alerts when the tab is in the background.
  */
-export function NotificationBell({ placement = 'fixed' }: { placement?: 'fixed' | 'inline' }) {
+export function NotificationBell({ placement = 'nav' }: { placement?: 'nav' | 'inline' }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<'list' | 'settings'>('list');

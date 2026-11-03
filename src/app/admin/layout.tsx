@@ -1,6 +1,6 @@
 'use client';
 
-import VitaChat from '@/components/crm/VitaChat';
+import VitaChat, { openVita } from '@/components/crm/VitaChat';
 import { NotificationBell, NOTIFY_EVENT } from '@/components/crm/NotificationBell';
 import type { LiveNotification } from '@/lib/crm/live';
 import './crm.css';
@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type C
 import {
   LayoutDashboard, PhoneCall, Inbox, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
-  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare,
+  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
@@ -281,19 +281,52 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </nav>
 
       <div className="crm-main">
+        {/* Desktop top bar: where you are, Vita, messages, notifications, you. */}
+        <header className="crm-topnav">
+          <nav className="crm-crumbs" aria-label="Breadcrumb">
+            <span>{groups.find((g) => g.items.includes(current as never))?.group ?? 'NexEagle'}</span>
+            <ChevronRight size={14} aria-hidden />
+            <strong>{current?.label ?? 'Dashboard'}</strong>
+          </nav>
+          <span style={{ flex: 1 }} />
+          {canView(access, 'analytics') && (
+            <button type="button" className="crm-vita-btn" onClick={() => openVita('vita')} title="Ask Vita, the market analyst">
+              <Image src="/brand/vita/wave.webp" alt="" width={34} height={34} unoptimized />
+              <span><strong>Ask Vita</strong><small>Market analyst</small></span>
+            </button>
+          )}
+          {chatAllowed && (
+            <button type="button" className="crm-top-icon" onClick={() => openVita('messages')} aria-label={chatUnread ? `Messages, ${chatUnread} unread` : 'Messages'} title="Messages">
+              <MessagesSquare size={19} aria-hidden />
+              {chatUnread > 0 && <span className="nt-count">{chatUnread > 99 ? '99+' : chatUnread}</span>}
+            </button>
+          )}
+          <NotificationBell placement="nav" />
+          <span className="crm-top-user" title={`${name ?? agentId} · ${roleLabel}`}>
+            <span className="crm-avatar" aria-hidden="true">{initials(name)}</span>
+            <span className="crm-top-user-text"><strong>{name ?? agentId}</strong><small>{roleLabel}</small></span>
+          </span>
+        </header>
+
         <div className="crm-topbar">
           <Image src="/brand/nexeagle-mark.png" alt="NexEagle" width={34} height={34} className="crm-brand-mark" style={{ width: 34, height: 34 }} priority unoptimized />
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <span style={{ fontSize: 12, color: '#aeb7ca', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>NexEagle · Glisan Akbari SuperSpeciality</span>
             <span style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 700, fontSize: 16 }}>{current?.label ?? 'Dashboard'}</span>
           </div>
-          <span style={{ marginLeft: 'auto' }} className="crm-top-bell"><NotificationBell placement="inline" /></span>
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }} className="crm-top-bell">
+            {canView(access, 'analytics') && (
+              <button type="button" className="crm-icon-btn crm-vita-mini" onClick={() => openVita('vita')} aria-label="Ask Vita, the market analyst">
+                <Image src="/brand/vita/wave.webp" alt="" width={30} height={30} unoptimized />
+              </button>
+            )}
+            <NotificationBell placement="inline" />
+          </span>
           <button type="button" className="crm-icon-btn" onClick={handleLogout} aria-label="Sign out">
             <LogOut size={18} aria-hidden />
           </button>
         </div>
 
-        <div className="crm-desk-bell"><NotificationBell /></div>
         {children}
       </div>
 
