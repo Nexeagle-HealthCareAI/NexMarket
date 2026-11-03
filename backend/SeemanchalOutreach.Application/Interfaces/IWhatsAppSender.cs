@@ -21,5 +21,11 @@ namespace SeemanchalOutreach.Application.Interfaces
         /// <param name="language">"hi" or "en".</param>
         /// <param name="bodyParams">Values for the template's {{1}}, {{2}} … in order.</param>
         Task<WhatsAppSendResult> SendTemplateAsync(string toPhone, string kind, string language, IReadOnlyList<string> bodyParams, CancellationToken ct = default);
+
+        /// <summary>
+        /// A free-text reply. WhatsApp only delivers these within 24 hours of the person's last message to the
+        /// hospital (the "customer service window"); after that only an approved template can be sent.
+        /// </summary>
+        Task<WhatsAppSendResult> SendTextAsync(string toPhone, string text, CancellationToken ct = default);
     }
 }

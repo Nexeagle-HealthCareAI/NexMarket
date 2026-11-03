@@ -191,6 +191,7 @@ namespace SeemanchalOutreach.Domain.Entities
         public bool NeedsVisit { get; set; }               // set after 3 missed calls: field agent should visit
         public bool PhoneInvalid { get; set; }             // marked "wrong number" by the call team
         public bool WhatsappOptOut { get; set; }           // replied STOP to a broadcast
+        public string? ReferralCode { get; set; }          // on this partner's QR code / WhatsApp link: patients who use it are credited to them
     }
 
     public class ContactDocument

@@ -60,6 +60,7 @@ export function friendlyError(e: unknown, fallback = 'Something went wrong. Plea
       const j = JSON.parse(body);
       if (typeof j === 'string') return j;
       if (j?.title) return j.title;
+      if (typeof j?.message === 'string') return j.message;
     } catch { /* plain text */ }
     return body.replace(/^"|"$/g, '') || fallback;
   }

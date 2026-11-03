@@ -47,6 +47,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<Notification> Notifications => Set<Notification>();
         public DbSet<PushDevice> PushDevices => Set<PushDevice>();
         public DbSet<NotificationSetting> NotificationSettings => Set<NotificationSetting>();
+        public DbSet<Lead> Leads => Set<Lead>();
+        public DbSet<LeadActivity> LeadActivities => Set<LeadActivity>();
+        public DbSet<WaMessage> WaMessages => Set<WaMessage>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -111,6 +114,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => new { e.PanchayatId, e.Phone });
                 entity.HasIndex(e => new { e.PanchayatId, e.Name });
                 entity.HasIndex(e => e.NextCallAt);
+                entity.HasIndex(e => e.ReferralCode);
             });
 
             // ─── ContactHistoryEntry ─────────────────────────────────
@@ -292,6 +296,29 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.Token).IsUnique();
                 entity.HasIndex(e => e.UserId);
+            });
+            modelBuilder.Entity<Lead>(entity =>
+            {
+                entity.ToTable("leads");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Phone).IsUnique();
+                entity.HasIndex(e => new { e.Status, e.LastActivityAt });
+                entity.HasIndex(e => e.OwnerId);
+                entity.HasIndex(e => e.PartnerClientId);
+            });
+            modelBuilder.Entity<LeadActivity>(entity =>
+            {
+                entity.ToTable("lead_activities");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.LeadId, e.CreatedAt });
+            });
+            modelBuilder.Entity<WaMessage>(entity =>
+            {
+                entity.ToTable("wa_messages");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.Phone, e.CreatedAt });
+                entity.HasIndex(e => e.WaMessageId);
+                entity.HasIndex(e => e.LeadId);
             });
             modelBuilder.Entity<NotificationSetting>(entity =>
             {

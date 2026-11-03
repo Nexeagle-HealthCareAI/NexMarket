@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Alert, Pressable, Share, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Avatar, Btn, Card, Empty, Field, Pill, Screen, Sheet, T, TopBar, toast } from '../../components/ui';
 import { Icon } from '../../components/Icon';
@@ -8,6 +8,7 @@ import { q } from '../../lib/db';
 import { addNote, addPhoto, setFollowUp, setPriority } from '../../lib/repo';
 import { takePhoto } from '../../lib/photo';
 import { callNumber } from '../../lib/links';
+import { api } from '../../lib/api';
 import { dayShort, relDay, timeOf } from '../../lib/format';
 import { daysFromToday } from '../../lib/util';
 import { C, PRIORITY_COLOR, type Priority } from '../../theme';
@@ -30,6 +31,7 @@ export default function PartnerProfile() {
   const [revisitOpen, setRevisitOpen] = useState(false);
   const [escOpen, setEscOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [sharing, setSharing] = useState(false);
 
   const d = useDb(() => {
     const c = q.contact(id);
@@ -104,6 +106,24 @@ export default function PartnerProfile() {
       </Card>
 
       <EscalationStatus c={c} />
+
+      <Card style={{ gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Icon name="whatsapp" color={C.okInk} />
+          <T style={{ fontWeight: '800', fontSize: 16, flex: 1 }}>{t('qrTitle')}</T>
+        </View>
+        <T style={{ color: C.text2, fontSize: 14 }}>{t('qrSub', { name: c.name })}</T>
+        <Btn small kind="secondary" icon="send" label={t('qrShare')} disabled={sharing} onPress={() => {
+          setSharing(true);
+          api<{ waLink: string | null }>(`/api/v1/partners/${encodeURIComponent(c.clientId)}/referral-link`, { timeoutMs: 15000 })
+            .then(async (r) => {
+              if (!r.waLink) { toast(t('qrNotReady')); return; }
+              await Share.share({ message: t('qrShareText', { link: r.waLink }) });
+            })
+            .catch(() => toast(t('qrNeedsNet')))
+            .finally(() => setSharing(false));
+        }} />
+      </Card>
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <MiniStat n={d.refs.length} label={t('patientsSent')} color={C.text} />

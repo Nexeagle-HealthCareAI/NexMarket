@@ -153,12 +153,18 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IMarketingDbContext _db;
         private readonly IConfiguration _config;
         private readonly ILiveEvents _live;
+        private readonly IPermissionService _perms;
+        private readonly INotifier _notifier;
+        private readonly IWhatsAppSender _wa;
 
-        public WhatsAppWebhookController(IMarketingDbContext db, IConfiguration config, ILiveEvents live)
+        public WhatsAppWebhookController(IMarketingDbContext db, IConfiguration config, ILiveEvents live, IPermissionService perms, INotifier notifier, IWhatsAppSender wa)
         {
             _db = db;
             _config = config;
             _live = live;
+            _perms = perms;
+            _notifier = notifier;
+            _wa = wa;
         }
 
         [HttpGet]
@@ -203,7 +209,7 @@ namespace SeemanchalOutreach.Api.Controllers
                         }
                         if (value.TryGetProperty("messages", out var messages) && messages.ValueKind == JsonValueKind.Array)
                         {
-                            foreach (var m in messages.EnumerateArray()) await ApplyReplyAsync(m, ct);
+                            foreach (var m in messages.EnumerateArray()) await ApplyReplyAsync(m, value, ct);
                         }
                     }
                 }
@@ -217,6 +223,21 @@ namespace SeemanchalOutreach.Api.Controllers
             var id = s.TryGetProperty("id", out var idp) ? idp.GetString() : null;
             var status = s.TryGetProperty("status", out var stp) ? stp.GetString() : null;
             if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(status)) return;
+
+            // A message sent from the leads inbox.
+            var wm = await _db.WaMessages.FirstOrDefaultAsync(x => x.WaMessageId == id && x.Direction == "out", ct);
+            if (wm != null)
+            {
+                int rank(string st) => st switch { "sent" => 1, "delivered" => 2, "read" => 3, "failed" => 4, _ => 0 };
+                if (rank(status) > rank(wm.Status)) wm.Status = status;
+                if (status == "failed" && s.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array && errs.GetArrayLength() > 0)
+                {
+                    var e0 = errs[0];
+                    wm.Error = e0.TryGetProperty("title", out var et) ? et.GetString() : "Not delivered";
+                    if (e0.TryGetProperty("error_data", out var ed) && ed.TryGetProperty("details", out var det)) wm.Error = det.GetString() ?? wm.Error;
+                }
+                return;
+            }
 
             var r = await _db.BroadcastRecipients.FirstOrDefaultAsync(x => x.ProviderMessageId == id, ct);
             if (r == null) return;
@@ -243,13 +264,38 @@ namespace SeemanchalOutreach.Api.Controllers
             }
         }
 
-        private async Task ApplyReplyAsync(JsonElement m, CancellationToken ct)
+        /// <summary>What a message says, whatever kind it is: text, a tapped button, a photo's caption…</summary>
+        private static (string Type, string Text) ReadMessage(JsonElement m)
+        {
+            string type = m.TryGetProperty("type", out var tp) ? tp.GetString() ?? "text" : "text";
+            string? s(JsonElement e, params string[] path)
+            {
+                foreach (var p in path) { if (e.ValueKind != JsonValueKind.Object || !e.TryGetProperty(p, out e)) return null; }
+                return e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+            }
+            switch (type)
+            {
+                case "text": return ("text", s(m, "text", "body") ?? "");
+                case "button": return ("button", s(m, "button", "text") ?? "");
+                case "interactive": return ("button", s(m, "interactive", "button_reply", "title") ?? s(m, "interactive", "list_reply", "title") ?? "");
+                case "image": return ("image", s(m, "image", "caption") ?? "📷 Photo");
+                case "video": return ("other", s(m, "video", "caption") ?? "🎥 Video");
+                case "audio": return ("audio", "🎤 Voice message");
+                case "document": return ("document", "📄 " + (s(m, "document", "filename") ?? s(m, "document", "caption") ?? "Document"));
+                case "location": return ("location", "📍 Location" + (s(m, "location", "name") is string n ? ": " + n : ""));
+                case "sticker": return ("other", "Sticker");
+                case "contacts": return ("other", "👤 Shared a contact");
+                default: return ("other", "(" + type + ")");
+            }
+        }
+
+        private async Task ApplyReplyAsync(JsonElement m, JsonElement value, CancellationToken ct)
         {
             var from = m.TryGetProperty("from", out var fp) ? fp.GetString() : null;
             if (string.IsNullOrEmpty(from)) return;
-            string? text = null;
-            if (m.TryGetProperty("text", out var t) && t.TryGetProperty("body", out var tb)) text = tb.GetString();
-            if (m.TryGetProperty("button", out var btn) && btn.TryGetProperty("text", out var bt)) text ??= bt.GetString();
+            var (type, text) = ReadMessage(m);
+            if (m.TryGetProperty("referral", out var refl) && refl.ValueKind == JsonValueKind.Object && string.IsNullOrEmpty(text))
+                text = "(came from an ad)";
 
             var since = DateTime.UtcNow.AddDays(-14);
             var r = await _db.BroadcastRecipients
@@ -263,19 +309,42 @@ namespace SeemanchalOutreach.Api.Controllers
                 if (b != null) b.ReplyCount++;
             }
 
-            var isStop = text != null && new[] { "stop", "unsubscribe", "बंद" }.Contains(text.Trim().ToLowerInvariant());
+            var isStop = new[] { "stop", "unsubscribe", "बंद" }.Contains(text.Trim().ToLowerInvariant());
             var last10 = from.Length >= 10 ? from.Substring(from.Length - 10) : from;
             var contacts = await _db.Contacts.Where(c => c.Phone != null && c.Phone.EndsWith(last10)).ToListAsync(ct);
             if (isStop)
             {
                 foreach (var c in contacts) c.WhatsappOptOut = true;
             }
-            var who = contacts.FirstOrDefault()?.Name ?? from;
+
+            // Every message also lands in the leads inbox, where the desk can reply.
+            string? profileName = null;
+            if (value.TryGetProperty("contacts", out var wc) && wc.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var c in wc.EnumerateArray())
+                {
+                    var waId = c.TryGetProperty("wa_id", out var wi) ? wi.GetString() : null;
+                    if (waId == from && c.TryGetProperty("profile", out var prof) && prof.TryGetProperty("name", out var pn)) profileName = pn.GetString();
+                }
+            }
+            string? adRef = null;
+            if (m.TryGetProperty("referral", out var rf) && rf.ValueKind == JsonValueKind.Object)
+            {
+                adRef = (rf.TryGetProperty("headline", out var h) ? h.GetString() : null)
+                    ?? (rf.TryGetProperty("source_id", out var sid) ? "Ad " + sid.GetString() : "Ad");
+            }
+            var lead = await LeadInbox.IngestAsync(_db, _perms, _notifier, _config, _wa, new LeadInbox.Inbound
+            {
+                From = from, ProfileName = profileName, Type = type, Text = text,
+                WaMessageId = m.TryGetProperty("id", out var mid) ? mid.GetString() : null, AdRef = adRef,
+            }, isStop, ct);
+
+            var who = lead?.Name ?? contacts.FirstOrDefault()?.Name ?? from;
             await _live.PublishAsync(new LiveEvent
             {
-                Kind = "broadcast",
-                Text = isStop ? $"{who} unsubscribed from WhatsApp updates" : $"WhatsApp reply from {who}: {Shorten(text)}",
-                RefId = contacts.FirstOrDefault()?.ClientId,
+                Kind = lead != null ? "lead" : "broadcast",
+                Text = isStop ? $"{who} unsubscribed from WhatsApp updates" : $"WhatsApp from {who}: {Shorten(text)}",
+                RefId = lead?.Id.ToString() ?? contacts.FirstOrDefault()?.ClientId,
             });
         }
 

@@ -57,7 +57,6 @@ namespace SeemanchalOutreach.Infrastructure.Services
             if (to == null) return new WhatsAppSendResult { Ok = false, Error = "Phone number is not a valid Indian mobile number." };
 
             string template = _config[$"WhatsApp:Templates:{kind}"] ?? kind;
-            string version = _config["WhatsApp:ApiVersion"] ?? "v21.0";
             string langCode = language == "en" ? (_config["WhatsApp:EnglishCode"] ?? "en") : (_config["WhatsApp:HindiCode"] ?? "hi");
 
             var payload = new
@@ -80,6 +79,29 @@ namespace SeemanchalOutreach.Infrastructure.Services
                 },
             };
 
+            return await PostAsync(payload, ct);
+        }
+
+        public async Task<WhatsAppSendResult> SendTextAsync(string toPhone, string text, CancellationToken ct = default)
+        {
+            if (!IsConfigured) return new WhatsAppSendResult { Ok = false, Error = "WhatsApp is not configured on the server." };
+            var to = NormalizeIndianPhone(toPhone);
+            if (to == null) return new WhatsAppSendResult { Ok = false, Error = "Phone number is not a valid Indian mobile number." };
+            if (string.IsNullOrWhiteSpace(text)) return new WhatsAppSendResult { Ok = false, Error = "Message is empty." };
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                recipient_type = "individual",
+                to,
+                type = "text",
+                text = new { preview_url = false, body = text.Length > 4000 ? text.Substring(0, 4000) : text },
+            };
+            return await PostAsync(payload, ct);
+        }
+
+        private async Task<WhatsAppSendResult> PostAsync(object payload, CancellationToken ct)
+        {
+            string version = _config["WhatsApp:ApiVersion"] ?? "v21.0";
             try
             {
                 var client = _http.CreateClient("whatsapp");

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Bell, BellOff, CalendarOff, Check, ClipboardList, Flag, HeartPulse, MapPinned, MessageCircle, Monitor, Settings, StickyNote, Users, X,
+  Bell, BellOff, CalendarOff, Check, ClipboardList, Flag, HeartPulse, MapPinned, MessageCircle, Monitor, Settings, StickyNote, UserPlus, Users, X,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import type { LiveNotification } from '@/lib/crm/live';
@@ -28,6 +28,7 @@ const KIND: Record<string, { icon: typeof Bell; tone: string }> = {
   leave: { icon: CalendarOff, tone: 'warn' },
   referral: { icon: HeartPulse, tone: 'ok' },
   note: { icon: StickyNote, tone: 'muted' },
+  lead: { icon: UserPlus, tone: 'ok' },
 };
 
 /** Where a tap on a notification goes in the CRM. */
@@ -35,6 +36,7 @@ export function crmHref(link?: string | null): string | null {
   if (!link) return null;
   const [k, id] = link.split(':');
   if (k === 'chat' && id) return `/admin/chat?t=${encodeURIComponent(id)}`;
+  if (k === 'lead' && id) return `/admin/leads?id=${encodeURIComponent(id)}`;
   if (k === 'partner' && id) return `/admin/partners?id=${encodeURIComponent(id)}`;
   if (k === 'referral') return '/admin/pipeline';
   if (k === 'leave') return '/admin/leave';
@@ -330,7 +332,7 @@ export function NotificationPopups() {
       const n = (ev as CustomEvent<LiveNotification>).detail;
       if (n.muted) return;
       const href = crmHref(n.link);
-      const isChat = n.kind === 'chat' || n.kind === 'team_chat';
+      const isChat = n.kind === 'chat' || n.kind === 'team_chat' || n.kind === 'lead';
       // Every chat message pings, even in the chat that's open (a softer, single note there).
       const looking = !!href && `${window.location.pathname}${window.location.search}` === href && !document.hidden;
       if (soundOn() && !document.hidden) chime(looking ? 'soft' : isChat ? 'chat' : 'alert');
@@ -339,7 +341,7 @@ export function NotificationPopups() {
       const item: Popup = { id: n.id, kind: n.kind, title: n.title, body: n.body, link: n.link, createdAt: n.createdAt, read: false };
       setList((x) => {
         // A second message in the same chat replaces the first pop-up.
-        const rest = x.filter((p) => p.id !== item.id && !(item.link?.startsWith('chat:') && p.link === item.link));
+        const rest = x.filter((p) => p.id !== item.id && !((item.link?.startsWith('chat:') || item.link?.startsWith('lead:')) && p.link === item.link));
         const next = [...rest, item];
         next.slice(0, Math.max(0, next.length - 3)).forEach((p) => remove(p.id));
         return next;
@@ -386,19 +388,26 @@ function PopupCard({ p, onOpen, onRead, onClose, onHold, onRelease }: {
   const k = KIND[p.kind] ?? KIND.note;
   const Icon = k.icon;
   const chatId = p.link?.startsWith('chat:') ? p.link.slice(5) : null;
+  // A patient's WhatsApp message: reply straight from the pop-up (WhatsApp allows it for 24 hours after they write).
+  const leadId = p.kind === 'lead' && p.link?.startsWith('lead:') ? p.link.slice(5) : null;
   const [replying, setReplying] = useState(false);
   const [text, setText] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [err, setErr] = useState('');
 
   const send = async () => {
-    if (!chatId || !text.trim()) return;
+    if ((!chatId && !leadId) || !text.trim()) return;
     setState('sending');
     try {
-      const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`;
-      await crm.post(`/api/v1/chat/threads/${chatId}/messages`, { clientId: id, text: text.trim() });
+      if (leadId) {
+        await crm.post(`/api/v1/leads/${leadId}/whatsapp`, { text: text.trim() });
+      } else {
+        const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`;
+        await crm.post(`/api/v1/chat/threads/${chatId}/messages`, { clientId: id, text: text.trim() });
+      }
       setState('sent');
       setTimeout(onRead, 900);
-    } catch { setState('error'); }
+    } catch (e) { setErr(leadId ? friendlyError(e) : ''); setState('error'); }
   };
 
   return (
@@ -415,16 +424,16 @@ function PopupCard({ p, onOpen, onRead, onClose, onHold, onRelease }: {
       </div>
       {replying ? (
         <form className="nt-reply" onSubmit={(e) => { e.preventDefault(); void send(); }}>
-          <input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a reply…" maxLength={4000} disabled={state === 'sending' || state === 'sent'} />
+          <input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={leadId ? 'Reply on WhatsApp…' : 'Type a reply…'} maxLength={4000} disabled={state === 'sending' || state === 'sent'} />
           <button type="submit" className="crm-btn is-sm" disabled={!text.trim() || state === 'sending' || state === 'sent'}>
             {state === 'sending' ? 'Sending…' : state === 'sent' ? 'Sent ✓' : 'Send'}
           </button>
-          {state === 'error' && <span className="nt-reply-err">Not sent. Try again.</span>}
+          {state === 'error' && <span className="nt-reply-err">{err || 'Not sent. Try again.'}</span>}
         </form>
       ) : (
         <div className="nt-pop-actions">
           <button type="button" className="nt-link" onClick={onOpen}>Open</button>
-          {chatId && <button type="button" className="nt-link" onClick={() => { onHold(); setReplying(true); }}>Reply</button>}
+          {(chatId || leadId) && <button type="button" className="nt-link" onClick={() => { onHold(); setReplying(true); }}>Reply</button>}
           <button type="button" className="nt-link is-muted" onClick={onRead}><Check size={14} aria-hidden /> Mark read</button>
         </div>
       )}
@@ -434,5 +443,5 @@ function PopupCard({ p, onOpen, onRead, onClose, onHold, onRelease }: {
 }
 
 const KIND_LABEL: Record<string, string> = {
-  chat: 'Message', team_chat: 'Field team', escalation: 'Escalation', assignment: 'Block', task: 'Task', leave: 'Leave', referral: 'Patient', note: 'Note',
+  chat: 'Message', team_chat: 'Field team', escalation: 'Escalation', assignment: 'Block', task: 'Task', leave: 'Leave', referral: 'Patient', note: 'Note', lead: 'Lead',
 };

@@ -152,7 +152,8 @@ namespace SeemanchalOutreach.Api.Controllers
             var phones = await _db.PushDevices.CountAsync(d => d.UserId == me && d.Enabled, ct);
             return Ok(new
             {
-                kinds = NotificationKinds.All.Select(k => new { kind = k.Kind, label = k.Label, on = !muted.Contains(k.Kind) }),
+                // Leads only reach the office, so field agents don't see that switch.
+                kinds = NotificationKinds.All.Where(k => k.Kind != "lead" || User.IsDashboardUser()).Select(k => new { kind = k.Kind, label = k.Label, on = !muted.Contains(k.Kind) }),
                 pushConfigured = _fcm.Configured,
                 phones,
             });
