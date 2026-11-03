@@ -7,6 +7,7 @@ import { ArrowDown, ArrowLeft, ArrowUp, Search, Sparkles } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import AnalystPanel from '@/components/crm/AnalystPanel';
 import { contactTypeLabel, Empty, ErrorBox, fmt, friendlyError, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
+import { Pager } from '@/components/crm/Pager';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface QMeta { id: string; questionId: string; title: string; text: string; type: string; options: { full: string; label: string }[] }
@@ -278,15 +279,16 @@ function Responses({ showToast }: { showToast: (m: string) => void }) {
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [sel, setSel] = useState<string | null>(null);
   useEffect(() => { const t = setTimeout(() => { setQ(search.trim()); setPage(1); }, 300); return () => clearTimeout(t); }, [search]);
   const list = useLoader(() => {
-    const sp = new URLSearchParams({ view, page: String(page), pageSize: '25' });
+    const sp = new URLSearchParams({ view, page: String(page), pageSize: String(pageSize) });
     if (block) sp.set('block', block);
     if (agentId) sp.set('agentId', agentId);
     if (q) sp.set('q', q);
     return crm.get<RespList>(`/api/v1/surveys/responses?${sp}`);
-  }, [view, block, agentId, q, page]);
+  }, [view, block, agentId, q, page, pageSize]);
   const d = list.data;
   const pages = d ? Math.max(1, Math.ceil(d.total / d.pageSize)) : 1;
 
@@ -337,13 +339,7 @@ function Responses({ showToast }: { showToast: (m: string) => void }) {
                   </tbody>
                 </table>
               </div>
-              <div className="pt-pager">
-                <span>{d.total.toLocaleString('en-IN')} response{d.total === 1 ? '' : 's'} · page {page} of {pages}</span>
-                <span style={{ display: 'flex', gap: 6 }}>
-                  <button type="button" className="crm-btn is-secondary is-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</button>
-                  <button type="button" className="crm-btn is-secondary is-sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Next</button>
-                </span>
-              </div>
+              <Pager page={page} pages={pages} total={d.total} size={d.pageSize} onPage={setPage} onSize={(n) => { setPageSize(n); setPage(1); }} noun="responses" />
             </>
           )}
         </section>

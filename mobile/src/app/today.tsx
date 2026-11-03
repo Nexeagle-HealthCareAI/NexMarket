@@ -19,6 +19,7 @@ import { dayShort, km, timeOf, weekday } from '../lib/format';
 import { routeKm, startOfDay, ymd } from '../lib/util';
 import { cachedTasks } from '../lib/tasks';
 import { cachedTips, ensureTips } from '../lib/aiTips';
+import { cachedUnread, useChatVersion } from '../lib/chat';
 import { C, PRIORITY_COLOR } from '../theme';
 import type { Lang, TFn } from '../i18n';
 
@@ -37,6 +38,8 @@ const greetingKey = () => {
 export default function Today() {
   const { t, agent, lang } = useSession();
   const sync = useSync();
+  useChatVersion();
+  const chatUnread = cachedUnread();
   const here = useHere();
   const [langOpen, setLangOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -132,6 +135,15 @@ export default function Today() {
                   <T style={{ color: '#ffcf7a', fontSize: 13, fontWeight: '800' }}>{data.unsent}</T>
                 </Pressable>
               ) : null}
+              <Pressable onPress={() => router.push('/chat')} accessibilityRole="button" accessibilityLabel={t('chatTitle')} hitSlop={6}
+                style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>
+                <Icon name="chat" size={18} color="#fff" />
+                {chatUnread > 0 ? (
+                  <View style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#25d366', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: C.ink }}>
+                    <T style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{chatUnread > 99 ? '99+' : chatUnread}</T>
+                  </View>
+                ) : null}
+              </Pressable>
               <LanguageButton onPress={() => setLangOpen(true)} />
             </View>
 

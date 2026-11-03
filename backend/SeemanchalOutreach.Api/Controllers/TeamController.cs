@@ -106,9 +106,10 @@ namespace SeemanchalOutreach.Api.Controllers
             var from = AttendanceService.StartUtc(first);
             var to = AttendanceService.StartUtc(first.AddMonths(1));
 
+            var workers = await SeemanchalOutreach.Api.Services.FieldWorkforce.ActiveIdsAsync(_db, ct);
             var agents = (await _db.Agents.AsNoTracking().Where(a => a.IsActive)
                     .Select(a => new { a.AgentId, a.Name, a.Role, a.Block, a.District, a.Phone, a.PhotoUrl }).ToListAsync(ct))
-                .Where(a => !RoleChecks.IsDashboardRole(a.Role)).OrderBy(a => a.Name).ToList();
+                .Where(a => workers.Contains(a.AgentId)).OrderBy(a => a.Name).ToList();
             var ids = agents.Select(a => a.AgentId).ToList();
 
             var counts = await CountsAsync(ids, from, to, ct);

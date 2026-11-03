@@ -27,11 +27,12 @@ export interface LiveLocation {
  * If the socket can't connect, status becomes "polling" — pages then refresh
  * on their own timer instead, so the screen never goes stale.
  */
-export function useLiveEvents(onEvent: (e: LiveEvent) => void, onLocation?: (l: LiveLocation) => void): LiveStatus {
+export function useLiveEvents(onEvent: (e: LiveEvent) => void, onLocation?: (l: LiveLocation) => void, onChat?: (threadId: string) => void): LiveStatus {
   const [status, setStatus] = useState<LiveStatus>('connecting');
   const handler = useRef(onEvent);
   const locHandler = useRef(onLocation);
-  useEffect(() => { handler.current = onEvent; locHandler.current = onLocation; }, [onEvent, onLocation]);
+  const chatHandler = useRef(onChat);
+  useEffect(() => { handler.current = onEvent; locHandler.current = onLocation; chatHandler.current = onChat; }, [onEvent, onLocation, onChat]);
 
   useEffect(() => {
     let stopped = false;
@@ -47,6 +48,8 @@ export function useLiveEvents(onEvent: (e: LiveEvent) => void, onLocation?: (l: 
           .build();
         connection.on('event', (e: LiveEvent) => handler.current(e));
         connection.on('location', (l: LiveLocation) => locHandler.current?.(l));
+        // Chat pings carry only the conversation id; the page fetches what's new with its own access check.
+        connection.on('chat', (c: { threadId: string }) => chatHandler.current?.(c.threadId));
         connection.onreconnecting(() => !stopped && setStatus('connecting'));
         connection.onreconnected(() => !stopped && setStatus('live'));
         connection.onclose(() => !stopped && setStatus('polling'));

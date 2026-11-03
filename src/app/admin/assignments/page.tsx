@@ -7,6 +7,7 @@ import { crm } from '@/lib/sync/api-client';
 import { canAssignBlocks, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { TaskList, TaskModal, type TaskPreset } from '@/components/crm/Tasks';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 interface BoardBlock {
   district: string; block: string; panchayats: number; assigned: number; visited30: number;
@@ -16,7 +17,7 @@ interface Board {
   kpis: { blocks: number; blocksWithAgent: number; panchayats: number; panchayatsAssigned: number; agentsWithoutBlock: number };
   districts: string[];
   blocks: BoardBlock[];
-  agents: { agentId: string; name: string; block?: string | null; district?: string | null; partial: boolean }[];
+  agents: { agentId: string; name: string; block?: string | null; district?: string | null; partial: boolean; role?: string; fieldRole?: boolean }[];
 }
 interface BlockDetail {
   district: string; block: string;
@@ -62,6 +63,7 @@ function AssignmentsPage() {
   const rows = useMemo(() => (b?.blocks ?? [])
     .filter((x) => !district || x.district === district)
     .filter((x) => !onlyEmpty || x.assigned < x.panchayats), [b, district, onlyEmpty]);
+  const pg = usePaged(rows, [district, onlyEmpty], 25);
   const sel = b?.blocks.find((x) => key(x) === selected) ?? null;
 
   return (
@@ -104,11 +106,11 @@ function AssignmentsPage() {
       <div className={`crm-row pt-split${sel ? ' has-sel' : ''}`}>
         <section className="crm-card grow-3 pt-list" aria-label="Blocks" style={{ padding: 0, overflow: 'hidden' }}>
           {!b ? <div style={{ padding: 20 }}><Skeleton h={300} /></div> : rows.length === 0 ? <Empty title="No blocks match">Clear the filter to see every block.</Empty> : (
-            <div className="crm-table-wrap">
+            <><div className="crm-table-wrap">
               <table className="crm-table">
                 <thead><tr><th>Block</th><th>Agent</th><th style={{ textAlign: 'right' }}>Panchayats</th><th>Visited in 30 days</th></tr></thead>
                 <tbody>
-                  {rows.map((r) => {
+                  {pg.rows.map((r) => {
                     const v = pct(r.visited30, r.panchayats);
                     const gap = r.panchayats - r.assigned;
                     return (
@@ -138,6 +140,7 @@ function AssignmentsPage() {
                 </tbody>
               </table>
             </div>
+            <Pager {...pg.pager} noun="blocks" /></>
           )}
         </section>
 
@@ -167,7 +170,7 @@ function BlockPanel({ blk, agents, editable, onBack, onSaved, showToast, taskVer
   const [busy, setBusy] = useState(false);
 
   const agentLabel = (a: Board['agents'][number]) =>
-    `${a.name}${!a.block ? ' (no block yet)' : a.block === blk.block && a.district === blk.district ? ' (here now)' : ` (now ${a.block})`}`;
+    `${a.name}${a.role ? ` · ${a.role}` : ''}${!a.block ? ' (no block yet)' : a.block === blk.block && a.district === blk.district ? ' (here now)' : ` (now ${a.block})`}`;
   const nameOf = (id: string) => agents.find((a) => a.agentId === id)?.name ?? 'the agent';
 
   const save = async (agentId: string, panchayatIds: string[] | null) => {
@@ -206,7 +209,8 @@ function BlockPanel({ blk, agents, editable, onBack, onSaved, showToast, taskVer
           <label className="crm-field" style={{ flex: '1 1 220px' }}>Give the whole block to
             <select className="crm-select" value={whole} onChange={(e) => setWhole(e.target.value)}>
               <option value="">Choose agent</option>
-              {agents.map((a) => <option key={a.agentId} value={a.agentId}>{agentLabel(a)}</option>)}
+              <optgroup label="Field roles">{agents.filter((a) => a.fieldRole !== false).map((a) => <option key={a.agentId} value={a.agentId}>{agentLabel(a)}</option>)}</optgroup>
+              <optgroup label="Other roles (can also work in the field)">{agents.filter((a) => a.fieldRole === false).map((a) => <option key={a.agentId} value={a.agentId}>{agentLabel(a)}</option>)}</optgroup>
             </select>
           </label>
           <button type="button" className="crm-btn" disabled={!whole || busy} onClick={() => save(whole, null)}>Assign block</button>
@@ -242,7 +246,8 @@ function BlockPanel({ blk, agents, editable, onBack, onSaved, showToast, taskVer
             <label className="crm-sr" htmlFor="split-to">Agent</label>
             <select id="split-to" className="crm-select" style={{ width: 'auto', flex: '1 1 180px' }} value={to} onChange={(e) => setTo(e.target.value)}>
               <option value="">Choose agent</option>
-              {agents.map((a) => <option key={a.agentId} value={a.agentId}>{agentLabel(a)}</option>)}
+              <optgroup label="Field roles">{agents.filter((a) => a.fieldRole !== false).map((a) => <option key={a.agentId} value={a.agentId}>{agentLabel(a)}</option>)}</optgroup>
+              <optgroup label="Other roles (can also work in the field)">{agents.filter((a) => a.fieldRole === false).map((a) => <option key={a.agentId} value={a.agentId}>{agentLabel(a)}</option>)}</optgroup>
               <option value="__none">Nobody (unassign)</option>
             </select>
             <button type="button" className="crm-btn is-sm" disabled={!to || busy} onClick={() => save(to === '__none' ? '' : to, [...checked])}>Move</button>

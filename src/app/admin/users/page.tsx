@@ -1,15 +1,17 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Copy, History, KeyRound, Laptop, Lock, MessageCircle, MessageSquare, Send, Smartphone, Tablet, UserPlus, X } from 'lucide-react';
+import { Copy, History, KeyRound, Laptop, Lock, MessageCircle, MessageSquare, Plus, Send, Smartphone, Tablet, UserCog, UserPlus, X } from 'lucide-react';
 import Link from 'next/link';
 import { crm } from '@/lib/sync/api-client';
 import { useAccess, type PageKey } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 interface RoleInfo { role: string; label: string; users: number; editable: boolean; pages: Record<PageKey, number> }
-interface RolesResponse { pages: PageKey[]; roles: RoleInfo[]; fieldAgents: number }
-interface Person { agentId: string; name: string; phone: string; email?: string | null; role: string; kind: 'field' | 'dashboard'; district: string; block: string; isActive: boolean; lastSignIn?: string | null; onOneTimePassword?: boolean; sessions?: Session[] }
+interface FieldRoleInfo { role: string; label: string; description?: string | null; custom: boolean; users: number }
+interface RolesResponse { pages: PageKey[]; roles: RoleInfo[]; fieldAgents: number; fieldRoles?: FieldRoleInfo[] }
+interface Person { agentId: string; name: string; phone: string; email?: string | null; role: string; kind: 'field' | 'dashboard'; district: string; block: string; isActive: boolean; lastSignIn?: string | null; onOneTimePassword?: boolean; sessions?: Session[]; fieldBlock?: string | null }
 interface Session { id: string; deviceType: 'desktop' | 'tablet' | 'phone'; signedInAt: string; lastSeenAt?: string | null; device?: string | null; ip?: string | null }
 const DEV = { desktop: { label: 'Laptop', icon: Laptop }, tablet: { label: 'Tablet', icon: Tablet }, phone: { label: 'Phone', icon: Smartphone } } as const;
 
@@ -51,6 +53,8 @@ export default function UsersPage() {
   const roles = useLoader(() => crm.get<RolesResponse>('/api/v1/access/roles'));
   const people = useLoader(() => crm.get<Person[]>('/api/v1/access/people'));
   const [inviting, setInviting] = useState<'dashboard' | 'field' | null>(null);
+  const [addingRole, setAddingRole] = useState(false);
+  const [roleFor, setRoleFor] = useState<Person | null>(null);
   const [savingCell, setSavingCell] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<'all' | 'dashboard' | 'field'>('all');
   const [toast, showToast] = useToast();
@@ -85,6 +89,7 @@ export default function UsersPage() {
   };
 
   const visiblePeople = useMemo(() => (people.data ?? []).filter((p) => kindFilter === 'all' || p.kind === kindFilter), [people.data, kindFilter]);
+  const pg = usePaged(visiblePeople, kindFilter, 25);
 
   const signOut = async (p: Person) => {
     try { const r = await crm.post<{ signedOutDevices: number }>(`/api/v1/access/people/${encodeURIComponent(p.agentId)}/sign-out`); showToast(`${p.name} signed out of ${r.signedOutDevices} device(s).`); void people.reload(); }
@@ -101,7 +106,7 @@ export default function UsersPage() {
 
   return (
     <main className="crm-page">
-      <PageHead title="Users & roles" sub="Decide who can open which page. Field agents only ever use the Android app.">
+      <PageHead title="Users & roles" sub="Decide who can open which page. Field roles work in the Android app; anyone, in any role, can also be given a block and add partners from the app.">
         <button type="button" className="crm-btn is-secondary" onClick={() => setInviting('field')}><Smartphone size={16} aria-hidden /> Onboard field agent</button>
         {isAdmin && <button type="button" className="crm-btn" onClick={() => setInviting('dashboard')}><UserPlus size={16} aria-hidden /> Invite dashboard user</button>}
       </PageHead>
@@ -121,9 +126,31 @@ export default function UsersPage() {
                   where={r.role === 'Admin' ? `All ${pages.length} pages` : `${count} of ${pages.length} pages`} />
               );
             })}
-            <RoleCard short="FA" name="Field agent" users={roles.data.fieldAgents} tone="warn" desc="Onboarded here. Works only in the Android app, never this dashboard." where="Android app only" />
           </>
         )}
+      </section>
+
+      <section aria-labelledby="fr-h" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+          <h2 id="fr-h" className="crm-h2" style={{ flex: 1 }}>Field roles</h2>
+          <span className="crm-sub" style={{ fontSize: 13 }}>Onboarded here, work in the Android app. {roles.data ? `${roles.data.fieldAgents} people in field roles.` : ''}</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 14 }}>
+          {!roles.data ? [0, 1, 2].map((i) => <div key={i} className="crm-card"><Skeleton h={80} /></div>) : (
+            <>
+              {(roles.data.fieldRoles ?? []).map((r) => (
+                <RoleCard key={r.role} short={initials(r.label)} name={r.label} users={r.users} tone="warn"
+                  desc={r.description || 'Field work in the app: visits, partners, referrals and surveys.'} where={r.custom ? 'Added by admin · app' : 'Android app'} />
+              ))}
+              {isAdmin && (
+                <button type="button" className="crm-card us-add-role" onClick={() => setAddingRole(true)}>
+                  <Plus size={20} aria-hidden /> <strong>Add a field role</strong>
+                  <span className="crm-sub" style={{ fontSize: 13 }}>e.g. Senior field officer, Camp coordinator</span>
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </section>
 
       <section className="crm-card is-flush" aria-labelledby="perm-h">
@@ -180,11 +207,11 @@ export default function UsersPage() {
         </div>
         {people.error && <div style={{ padding: '0 22px' }}><ErrorBox message={people.error} onRetry={people.reload} /></div>}
         {!people.data ? <div style={{ padding: '0 22px 16px' }}><Skeleton h={200} /></div> : visiblePeople.length === 0 ? <Empty title="Nobody here yet" /> : (
-          <div className="crm-table-wrap">
+          <><div className="crm-table-wrap">
             <table className="crm-table" style={{ minWidth: 760 }}>
               <thead><tr><th>Person</th><th>Role</th><th>Signed in now</th><th>Last sign-in</th><th className="num">Actions</th></tr></thead>
               <tbody>
-                {visiblePeople.map((p) => (
+                {pg.rows.map((p) => (
                   <tr key={p.agentId} style={p.isActive ? undefined : { opacity: 0.55 }}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -199,7 +226,12 @@ export default function UsersPage() {
                         </div>
                       </div>
                     </td>
-                    <td><Pill tone={p.kind === 'field' ? 'warn' : ROLE_TONE[p.role] ?? 'accent'}>{ROLE_NAME[p.role] ?? p.role}</Pill></td>
+                    <td>
+                      <span style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                        <Pill tone={p.kind === 'field' ? 'warn' : ROLE_TONE[p.role] ?? 'accent'}>{ROLE_NAME[p.role] ?? p.role}</Pill>
+                        {p.fieldBlock && <span className="crm-cell-sub" title="Has a block: works in the field from the app">Field · {p.fieldBlock}</span>}
+                      </span>
+                    </td>
                     <td>
                       {(p.sessions ?? []).length === 0 ? <span className="crm-cell-sub">Not signed in</span> : (
                         <span className="us-devs">
@@ -229,6 +261,7 @@ export default function UsersPage() {
                         <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                           <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setSending({ person: p })} title="Send their user ID"><Send size={14} aria-hidden /> Send login</button>
                           <button type="button" className="crm-btn is-sm" onClick={() => void resetPassword(p)} title="New one-time password"><KeyRound size={14} aria-hidden /> Reset &amp; send password</button>
+                          <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setRoleFor(p)}><UserCog size={14} aria-hidden /> Change role</button>
                           <button type="button" className="crm-btn is-secondary is-sm" onClick={() => signOut(p)}>Sign out devices</button>
                           <Link className="crm-btn is-secondary is-sm" href={`/admin/audit?actor=${encodeURIComponent(p.agentId)}`} title="Everything this person did"><History size={14} aria-hidden /> Activity</Link>
                           <button type="button" className={`crm-btn is-sm ${p.isActive ? 'is-danger' : 'is-secondary'}`} onClick={() => setActive(p, !p.isActive)}>{p.isActive ? 'Deactivate' : 'Reactivate'}</button>
@@ -240,11 +273,15 @@ export default function UsersPage() {
               </tbody>
             </table>
           </div>
+            <Pager {...pg.pager} noun="people" /></>
         )}
       </section>
 
       {sending && <SendLogin person={sending.person} password={sending.password} onClose={() => setSending(null)} />}
-      {inviting && <InviteUser kind={inviting} onClose={() => setInviting(null)} onDone={() => { void people.reload(); void roles.reload(); }} />}
+      {inviting && <InviteUser kind={inviting} fieldRoles={roles.data?.fieldRoles?.map((r) => r.role)} onClose={() => setInviting(null)} onDone={() => { void people.reload(); void roles.reload(); }} />}
+      {addingRole && <AddFieldRole onClose={() => setAddingRole(false)} onDone={(name) => { setAddingRole(false); showToast(`Field role “${name}” added.`); void roles.reload(); }} />}
+      {roleFor && <ChangeRole person={roleFor} fieldRoles={roles.data?.fieldRoles?.map((r) => r.role) ?? []} onClose={() => setRoleFor(null)}
+        onDone={(msg) => { setRoleFor(null); showToast(msg); void people.reload(); void roles.reload(); }} />}
       {toast}
     </main>
   );
@@ -268,8 +305,10 @@ function RoleCard({ short, name, users, desc, where, tone }: { short: string; na
   );
 }
 
-function InviteUser({ kind, onClose, onDone }: { kind: 'dashboard' | 'field'; onClose: () => void; onDone: () => void }) {
-  const options = ROLE_OPTIONS.filter((r) => r.kind === kind);
+function InviteUser({ kind, fieldRoles, onClose, onDone }: { kind: 'dashboard' | 'field'; fieldRoles?: string[]; onClose: () => void; onDone: () => void }) {
+  const options = kind === 'field' && fieldRoles?.length
+    ? fieldRoles.map((r) => ({ value: r, label: r, kind: 'field' }))
+    : ROLE_OPTIONS.filter((r) => r.kind === kind);
   const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', email: '', role: options[0].value, district: kind === 'dashboard' ? 'Hospital' : '', block: kind === 'dashboard' ? 'Hospital' : '' });
   const [password] = useState(tempPassword);
   const [saving, setSaving] = useState(false);
@@ -360,6 +399,65 @@ function SendLogin({ person, password, onClose, title }: { person: { agentId: st
         </button>
       </div>
       {!intl && <span className="crm-cell-sub">No mobile number on file. Copy the details and send them another way.</span>}
+    </Modal>
+  );
+}
+
+function AddFieldRole({ onClose, onDone }: { onClose: () => void; onDone: (name: string) => void }) {
+  const [name, setName] = useState('');
+  const [desc, setDesc] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      const r = await crm.post<{ role: string }>('/api/v1/access/field-roles', { name, description: desc });
+      onDone(r.role);
+    } catch (e) { setError(friendlyError(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Modal title="Add a field role" onClose={onClose} actions={<>
+      <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
+      <button type="button" className="crm-btn" disabled={busy || name.trim().length < 3} onClick={save}>{busy ? 'Adding…' : 'Add role'}</button>
+    </>}>
+      <label className="crm-field">Role name<input className="crm-input" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} placeholder="e.g. Camp coordinator" autoFocus /></label>
+      <label className="crm-field">What they do (optional)<input className="crm-input" value={desc} maxLength={140} onChange={(e) => setDesc(e.target.value)} placeholder="One line, shown on the role card" /></label>
+      <p className="crm-note">Field roles work in the Android app. You can onboard people with this role straight away.</p>
+      {error && <div className="crm-error" role="alert">{error}</div>}
+    </Modal>
+  );
+}
+
+function ChangeRole({ person, fieldRoles, onClose, onDone }: { person: Person; fieldRoles: string[]; onClose: () => void; onDone: (msg: string) => void }) {
+  const [role, setRole] = useState(person.role);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      await crm.put(`/api/v1/access/people/${encodeURIComponent(person.agentId)}/role`, { role });
+      onDone(`${person.name} is now ${ROLE_NAME[role] ?? role}. They were signed out to pick up the new role.`);
+    } catch (e) { setError(friendlyError(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Modal title={`Change role · ${person.name}`} onClose={onClose} actions={<>
+      <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
+      <button type="button" className="crm-btn" disabled={busy || role === person.role} onClick={save}>{busy ? 'Saving…' : 'Change role'}</button>
+    </>}>
+      <label className="crm-field">New role
+        <select className="crm-select" value={role} onChange={(e) => setRole(e.target.value)}>
+          <optgroup label="Dashboard roles (CRM + app)">
+            <option value="Admin">Admin (full control)</option>
+            <option value="MarketingManager">Marketing manager</option>
+            <option value="HospitalRep">Hospital representative</option>
+          </optgroup>
+          <optgroup label="Field roles (app)">
+            {fieldRoles.map((r) => <option key={r} value={r}>{r}</option>)}
+          </optgroup>
+        </select>
+      </label>
+      <p className="crm-note">They are signed out of every device and sign in again with the new role. Any role can still be given a block on Block assignments and add partners from the app.</p>
+      {error && <div className="crm-error" role="alert">{error}</div>}
     </Modal>
   );
 }

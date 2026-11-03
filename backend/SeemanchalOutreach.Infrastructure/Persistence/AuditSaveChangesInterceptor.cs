@@ -26,6 +26,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         private static readonly HashSet<Type> Skip = new()
         {
             typeof(AuditLog), typeof(TrajectoryPoint), typeof(AgentRefreshToken), typeof(AiBriefing),
+            typeof(ChatMessage), typeof(ChatRead), typeof(ChatThread),
         };
 
         private static readonly Dictionary<string, string> Friendly = new()

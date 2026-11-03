@@ -54,9 +54,10 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             var now = DateTime.UtcNow;
             var today = IstClock.TodayStartUtc;
+            var workers = await SeemanchalOutreach.Api.Services.FieldWorkforce.ActiveIdsAsync(_db, ct);
             var agents = (await _db.Agents.AsNoTracking().Where(a => a.IsActive)
                 .Select(a => new { a.AgentId, a.Name, a.Phone, a.Role, a.Block, a.District, a.PhotoUrl }).ToListAsync(ct))
-                .Where(a => !RoleChecks.IsDashboardRole(a.Role)).ToList();
+                .Where(a => workers.Contains(a.AgentId)).ToList();
             var ids = agents.Select(a => a.AgentId).ToList();
 
             var points = (await _db.TrajectoryPoints.AsNoTracking()

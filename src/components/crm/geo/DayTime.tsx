@@ -3,6 +3,7 @@
 import { Bike, CheckCircle2, MapPin, MapPinOff, WifiOff } from 'lucide-react';
 import type { AgentActivity, DaySegment } from '@/lib/crm/geo';
 import { fmt } from '@/components/crm/ui';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 /** Minutes as "1 h 25 min" / "40 min". */
 export function dur(min: number): string {
@@ -68,13 +69,14 @@ export function DayRibbon({ data, selected, onPick }: { data: AgentActivity; sel
 /** Every stop, leg of travel and gap, with times, duration, place and what was done there. */
 export function TimeGrid({ data, selected, onPick }: { data: AgentActivity; selected: DaySegment | null; onPick: (g: DaySegment) => void }) {
   const segs = data.segments ?? [];
+  const pg = usePaged(segs, `${data.agent.agentId}|${data.date}`, 25);
   if (segs.length === 0) return <div className="crm-sub" style={{ padding: 12 }}>No GPS route recorded for this day, so there is no time breakdown.</div>;
   return (
     <div className="crm-table-wrap">
       <table className="crm-table dt-grid">
         <thead><tr><th>Time</th><th>For</th><th>Where / what</th><th>Done there</th></tr></thead>
         <tbody>
-          {segs.map((g, i) => (
+          {pg.rows.map((g, i) => (
             <tr key={i} className={`dt-row is-${g.kind}`} aria-selected={selected === g} onClick={() => onPick(g)}>
               <td style={{ whiteSpace: 'nowrap' }}>
                 <span className="dt-bar" style={{ background: segColor(g) }} />
@@ -108,6 +110,7 @@ export function TimeGrid({ data, selected, onPick }: { data: AgentActivity; sele
           ))}
         </tbody>
       </table>
+      <Pager {...pg.pager} noun="entries" />
       <p className="crm-cell-sub" style={{ margin: '8px 2px 0', display: 'flex', gap: 4, alignItems: 'center' }}><MapPin size={12} aria-hidden /> A stop is 8+ minutes within about 150 m. Click a row to see it on the map.</p>
     </div>
   );

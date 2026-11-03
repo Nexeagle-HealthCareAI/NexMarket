@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Maximize2, Minimize2, LocateFixed } from 'lucide-react';
 import * as maplibregl from '@/lib/geo/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { getBasemapStyle } from '@/lib/geo/mapStyle';
 import type { AgentActivity, TimelineEvent } from '@/lib/crm/geo';
+import { useNow } from '@/lib/crm/live';
 
 const KIND_COLOR: Record<string, string> = {
   shift_start: '#0e1525', shift_end: '#0e1525', visit_in: '#16a36a', visit_out: '#16a36a',
@@ -34,7 +36,18 @@ const eventKey = (e: TimelineEvent) => `${e.kind}|${e.at}|${e.title}`;
  * The agent's exact route for the day (every GPS point, in order, with direction arrows and the time on the hour),
  * where they started and finished, their stops, and a pin with the time for every partner they added.
  */
-export default function RouteMap({ data, focus, replayIndex }: { data: AgentActivity; focus: TimelineEvent | null; replayIndex: number | null }) {
+export interface LivePoint { lat: number; lng: number; at: string; accuracyM?: number | null }
+
+export default function RouteMap({ data, focus, replayIndex, live, isToday }: {
+  data: AgentActivity; focus: TimelineEvent | null; replayIndex: number | null;
+  /** Fixes pushed live since the day was loaded (today only). */
+  live?: LivePoint[]; isToday?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [follow, setFollow] = useState(true);
+  const liveMarker = useRef<maplibregl.Marker | null>(null);
+  const lastFit = useRef<string>('');
+  const boundsRef = useRef<maplibregl.LngLatBounds | null>(null);
   const ref = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [ready, setReady] = useState(false);
@@ -190,8 +203,51 @@ export default function RouteMap({ data, focus, replayIndex }: { data: AgentActi
       const m = add(el, e.lng, e.lat, undefined, `<strong>${esc(e.title)}</strong><br/>${t(e.at)}${e.detail ? `<br/><span style="color:#5a6478">${esc(e.detail)}</span>` : ''}`);
       byEvent.current.set(eventKey(e), m);
     }
-    if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: { top: 80, right: 70, bottom: 50, left: 70 }, maxZoom: 15, duration: 400 });
+    boundsRef.current = bounds.isEmpty() ? null : bounds;
+    const dayKey = `${data.agent.agentId}|${data.date}`;
+    if (!bounds.isEmpty() && lastFit.current !== dayKey) {
+      lastFit.current = dayKey;
+      map.fitBounds(bounds, { padding: { top: 80, right: 70, bottom: 50, left: 70 }, maxZoom: 15, duration: 400 });
+    }
   }, [data, ready, layers, partners]);
+
+  // Live: points the phone has sent since the page loaded extend the route, and a pulsing dot shows where they are now.
+  const lastAt = data.route.length ? data.route[data.route.length - 1].at : '';
+  const fresh = useMemo(() => (live ?? []).filter((p) => p.at > lastAt), [live, lastAt]);
+  const latest = fresh.length ? fresh[fresh.length - 1] : (isToday && data.route.length ? data.route[data.route.length - 1] : null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    if (!map.getSource('live')) {
+      map.addSource('live', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: 'live', type: 'line', source: 'live', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#16a36a', 'line-width': 4.5 } });
+    }
+    const coords = [...(data.route.length ? [data.route[data.route.length - 1]] : []), ...fresh].map((p) => [p.lng, p.lat] as [number, number]);
+    (map.getSource('live') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: coords.length > 1 ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } }] : [] });
+    if (!isToday || !latest) { liveMarker.current?.remove(); liveMarker.current = null; return; }
+    if (!liveMarker.current) {
+      const el = document.createElement('div');
+      el.className = 'rt-live';
+      el.innerHTML = '<span class="rt-live-ring"></span><span class="rt-live-dot"></span>';
+      liveMarker.current = new maplibregl.Marker({ element: el }).setLngLat([latest.lng, latest.lat]).addTo(map);
+    } else liveMarker.current.setLngLat([latest.lng, latest.lat]);
+    liveMarker.current.getElement().title = `Live · ${t(latest.at)}`;
+    if (follow && fresh.length) map.easeTo({ center: [latest.lng, latest.lat], duration: 600 });
+  }, [fresh, latest, isToday, ready, follow, data.route]);
+
+  // Full screen: the map grows to the whole window; Esc brings it back.
+  useEffect(() => {
+    const map = mapRef.current;
+    const id = setTimeout(() => {
+      map?.resize();
+      if (map && boundsRef.current) map.fitBounds(boundsRef.current, { padding: { top: 80, right: 70, bottom: 50, left: 70 }, maxZoom: 15, duration: 300 });
+    }, 80);
+    if (!expanded) return () => clearTimeout(id);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpanded(false); };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => { clearTimeout(id); document.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
+  }, [expanded]);
 
   // Clicking something in the timeline: fly there and open its pin.
   useEffect(() => {
@@ -219,14 +275,39 @@ export default function RouteMap({ data, focus, replayIndex }: { data: AgentActi
 
   const toggle = (k: keyof Layers) => setLayers((l) => ({ ...l, [k]: !l[k] }));
 
+  const now = useNow(30000);
+  const ageMin = latest ? Math.round((now - new Date(latest.at).getTime()) / 60000) : null;
+
   return (
-    <div className="act-map-wrap">
+    <div className={`act-map-wrap${expanded ? ' is-full' : ''}`}>
+      {expanded && (
+        <div className="rt-full-head">
+          <strong>{data.agent.name}</strong>
+          <span className="crm-sub">{new Date(`${data.date}T06:30:00Z`).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })} · {data.stats.km} km · {data.stats.partners} partners added</span>
+        </div>
+      )}
       <div className="act-map">
         <div ref={ref} style={{ position: 'absolute', inset: 0 }} role="region" aria-label="Route map" />
         {failed && <div className="geo-map-error">The map background couldn&apos;t load. The timeline still lists everything.</div>}
         {ready && data.route.length === 0 && (
           <div style={{ position: 'absolute', left: 12, top: 12, background: '#fff', borderRadius: 10, padding: '8px 12px', fontSize: 13, boxShadow: '0 2px 8px rgba(0,0,0,.1)' }}>
             No GPS route recorded for this day.
+          </div>
+        )}
+        <div className="rt-tools">
+          <button type="button" onClick={() => setExpanded((x) => !x)} aria-label={expanded ? 'Exit full screen' : 'Full screen'} title={expanded ? 'Exit full screen (Esc)' : 'Full screen'}>
+            {expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+          </button>
+          {isToday && latest && (
+            <button type="button" aria-pressed={follow} onClick={() => { setFollow((f) => !f); if (!follow && latest) mapRef.current?.easeTo({ center: [latest.lng, latest.lat], zoom: Math.max(mapRef.current.getZoom(), 15), duration: 500 }); }}
+              title={follow ? 'Following the agent: click to stop' : 'Follow the agent'} aria-label="Follow the agent">
+              <LocateFixed size={18} />
+            </button>
+          )}
+        </div>
+        {isToday && latest && (
+          <div className={`rt-live-pill${ageMin != null && ageMin > 15 ? ' is-stale' : ''}`} role="status">
+            <i /> {ageMin != null && ageMin <= 15 ? 'Live' : 'Last seen'} · {t(latest.at)}{ageMin != null ? ` (${ageMin < 1 ? 'just now' : `${ageMin} min ago`})` : ''}
           </div>
         )}
         <div className="rt-layers" role="group" aria-label="Show on map">
@@ -237,7 +318,8 @@ export default function RouteMap({ data, focus, replayIndex }: { data: AgentActi
         </div>
       </div>
       <div className="rt-legend" aria-hidden>
-        <span><i className="ln" /> Route ({data.route.length} GPS points)</span>
+        <span><i className="ln" /> Route ({data.route.length + fresh.length} GPS points)</span>
+        {isToday && <span><i className="ln" style={{ background: '#16a36a' }} /> Live since you opened the page</span>}
         <span><i className="ln is-gap" /> No GPS for {GAP_MIN}+ min</span>
         <span><i className="dot" style={{ background: '#7c3aed' }} /> Partner added</span>
         <span><i className="dot is-approx" /> Approximate spot</span>

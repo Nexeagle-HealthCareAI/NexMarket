@@ -32,6 +32,7 @@ export default function AddSheet() {
     { icon: 'users', title: t('addNewPerson'), sub: place ? t('addsTo', { name: place }) : t('newPartnerSub'), color: C.blue, onPress: () => router.replace({ pathname: '/partner-new', params: visit ? { panchayatId: visit.panchayatId } : {} }) },
     { icon: 'check', title: t('revisitSomeone'), sub: t('revisitSomeoneSub'), color: C.ok, onPress: () => setPicking('revisit') },
     { icon: 'pin', title: visit ? t('changePanchayat') : t('checkInPanchayat'), sub: visit ? t('nowIn', { name: place }) : t('visitSub'), color: C.info, onPress: () => router.replace('/checkin') },
+    { icon: 'chat', title: t('chatMessageOffice'), sub: t('chatMessageOfficeSub'), color: '#00a884', onPress: () => router.replace('/chat') },
     { icon: 'camera', title: t('photo'), sub: t('photoSub'), color: C.purple, onPress: () => setPicking('photo') },
     { icon: 'flag', title: t('raiseIssue'), sub: t('raiseIssueSub'), color: C.bad, onPress: () => setPicking('issue') },
   ];

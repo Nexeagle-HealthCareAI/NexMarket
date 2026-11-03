@@ -72,6 +72,8 @@ export default function VitaChat() {
   }, [open]);
 
   if (!access || !canView(access, 'analytics')) return null;
+  // The team chat has its own composer in that corner.
+  if (path.startsWith('/admin/chat') && !open) return null;
 
   const ask = async (question: string) => {
     const text = question.trim();

@@ -54,6 +54,18 @@ namespace SeemanchalOutreach.Api.Hubs
             }
         }
 
+        public async Task PublishChatAsync(Guid threadId)
+        {
+            try
+            {
+                await _hub.Clients.Group(RoleChecks.DashboardGroup).SendAsync("chat", new { threadId });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not publish chat ping");
+            }
+        }
+
         public async Task PublishLocationAsync(LiveLocation l)
         {
             try

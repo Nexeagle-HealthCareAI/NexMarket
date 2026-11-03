@@ -40,6 +40,10 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<SurveyEdit> SurveyEdits => Set<SurveyEdit>();
         public DbSet<AgentTask> AgentTasks => Set<AgentTask>();
         public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+        public DbSet<ChatThread> ChatThreads => Set<ChatThread>();
+        public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+        public DbSet<ChatRead> ChatReads => Set<ChatRead>();
+        public DbSet<FieldRole> FieldRoles => Set<FieldRole>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -264,6 +268,34 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("survey_edits");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.ResponseId);
+            });
+
+            modelBuilder.Entity<FieldRole>(entity =>
+            {
+                entity.ToTable("field_roles");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Name).IsUnique();
+            });
+            modelBuilder.Entity<ChatThread>(entity =>
+            {
+                entity.ToTable("chat_threads");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.AgentId);
+                entity.HasIndex(e => e.LastMessageAt);
+            });
+            modelBuilder.Entity<ChatMessage>(entity =>
+            {
+                entity.ToTable("chat_messages");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.ClientId).IsUnique();
+                entity.HasIndex(e => new { e.ThreadId, e.CreatedAt });
+                entity.HasIndex(e => e.ContactClientId);
+            });
+            modelBuilder.Entity<ChatRead>(entity =>
+            {
+                entity.ToTable("chat_reads");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.ThreadId, e.UserId }).IsUnique();
             });
 
             modelBuilder.Entity<AuditLog>(entity =>

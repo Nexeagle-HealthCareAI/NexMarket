@@ -92,6 +92,7 @@ export default function Me() {
         <Num n={d.referred} label={t('patientsReferred')} />
       </View>
 
+      <Row icon="chat" label={t('chatTitle')} sub={t('chatPrivate')} onPress={() => router.push('/chat')} />
       <Row icon="calendar" label={t('attendanceAndLeave')} sub={t('daysWorked', { n: d.days })} onPress={() => router.push('/attendance')} />
       <Row icon="globe" label={t('language')} sub={LANGS.find((l) => l.code === lang)?.label} onPress={() => setLangOpen(true)} />
       <Row icon="battery" label={t('batteryLocation')} onPress={openAppSettings} />

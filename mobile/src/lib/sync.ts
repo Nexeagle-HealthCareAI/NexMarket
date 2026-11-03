@@ -6,6 +6,7 @@ import { SYNC_INTERVAL_MS } from './config';
 import { errorMessage, nowIso, uuid } from './util';
 import { me } from './repo';
 import { refreshTasks } from './tasks';
+import { flushChat, refreshUnread } from './chat';
 
 /**
  * The sync engine. Pushes the outbox in order (oldest first), then pulls what changed
@@ -59,6 +60,9 @@ async function run() {
     await pull();
     // Tasks from the manager: never let them fail the main sync.
     await refreshTasks().catch(() => undefined);
+    // Chat: send what waited for signal, and update the unread badge.
+    await flushChat().catch(() => undefined);
+    await refreshUnread().catch(() => undefined);
     failures = 0;
     nextAllowedAt = 0;
     const at = nowIso();

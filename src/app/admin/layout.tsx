@@ -5,13 +5,14 @@ import './crm.css';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, useSyncExternalStore, type ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ComponentType } from 'react';
 import {
   LayoutDashboard, PhoneCall, Inbox, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
-  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History,
+  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare,
 } from 'lucide-react';
-import { logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
+import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
+import { useLiveEvents } from '@/lib/crm/live';
 import { useAgentStore } from '@/store/agent-store';
 import { canView, clearAccess, isDashboardRole, ROLE_LABELS, useAccess, type PageKey } from '@/lib/crm/access';
 import { initials } from '@/components/crm/ui';
@@ -21,7 +22,7 @@ type IconType = ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidde
 interface NavItem {
   href: string;
   label: string;
-  page: PageKey | 'admin';
+  page: PageKey | 'admin' | 'chat';
   icon: IconType;
   /** extra paths that should highlight this item */
   match?: string[];
@@ -48,6 +49,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'Field force',
     items: [
+      { href: '/admin/chat', label: 'Chat', page: 'chat', icon: MessagesSquare, phone: true },
       { href: '/admin/map', label: 'Live map', page: 'field', icon: MapPin },
       { href: '/admin/activity', label: 'Agent activity', page: 'field', icon: Activity },
       { href: '/admin/coverage', label: 'Panchayat coverage', page: 'field', icon: Grid2x2Check, match: ['/admin/panchayats'] },
@@ -167,10 +169,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const groups = useMemo(() => NAV.map((g) => ({
     group: g.group,
-    items: g.items.filter((i) => (i.page === 'admin' ? !!access?.isAdmin : canView(access, i.page))),
+    // Chat: admins, marketing managers and anyone who can see the field pages (same rule as the API).
+    items: g.items.filter((i) => (i.page === 'admin' ? !!access?.isAdmin
+      : i.page === 'chat' ? !!access && (access.isAdmin || access.role === 'MarketingManager' || canView(access, 'field'))
+        : canView(access, i.page))),
   })).filter((g) => g.items.length > 0), [access]);
 
   const allowedItems = groups.flatMap((g) => g.items);
+
+  // Unread chat messages, for the badge on Chat.
+  const chatAllowed = !!access && (access.isAdmin || access.role === 'MarketingManager' || canView(access, 'field'));
+  const [chatUnread, setChatUnread] = useState(0);
+  const refreshUnread = useCallback(() => {
+    if (!chatAllowed) return;
+    crm.get<{ total: number }>('/api/v1/chat/unread').then((r) => setChatUnread(r.total)).catch(() => undefined);
+  }, [chatAllowed]);
+  useEffect(() => {
+    const first = setTimeout(refreshUnread, 0);
+    const t = setInterval(() => { if (!document.hidden) refreshUnread(); }, 30000);
+    return () => { clearTimeout(first); clearInterval(t); };
+  }, [refreshUnread, pathname]);
+  const noop = useCallback(() => {}, []);
+  useLiveEvents(noop, undefined, refreshUnread);
   const current = allowedItems.find((i) => isActive(pathname, i));
   const phoneItems = allowedItems.filter((i) => i.phone).slice(0, 4);
   const moreItems = allowedItems.filter((i) => !phoneItems.includes(i));
@@ -234,6 +254,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <Link key={item.href} href={item.href} className="crm-nav-item" aria-current={active ? 'page' : undefined} title={item.label}>
                   <Icon size={18} strokeWidth={2} aria-hidden />
                   <span className="crm-nav-text">{item.label}</span>
+                  {item.page === 'chat' && chatUnread > 0 && <span className="crm-nav-badge" aria-label={`${chatUnread} unread`}>{chatUnread > 99 ? '99+' : chatUnread}</span>}
                 </Link>
               );
             })}

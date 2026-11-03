@@ -999,6 +999,21 @@ export const crm = {
   put: <T>(path: string, body?: unknown) => put<unknown, T>(path, body ?? {}),
   patch: <T>(path: string, body?: unknown) => patch<unknown, T>(path, body ?? {}),
   del: <T>(path: string) => del<T>(path),
+  /** Sends a form with a file (multipart) with the session cookie. */
+  async upload<T>(path: string, form: FormData): Promise<T> {
+    const res = await doFetch(path, { method: 'POST', body: form });
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.statusText);
+      throw new Error(`API ${path} → ${res.status}: ${text}`);
+    }
+    return res.json() as Promise<T>;
+  },
+  /** A private file (e.g. a chat attachment) as a blob, fetched with the session cookie. */
+  async blob(path: string): Promise<Blob> {
+    const res = await doFetch(path, {});
+    if (!res.ok) throw new Error(`API GET ${path} → ${res.status}`);
+    return res.blob();
+  },
   /** Downloads a file (e.g. CSV export) with the session cookie and saves it. */
   async download(path: string, fileName: string): Promise<void> {
     const res = await doFetch(path, {});

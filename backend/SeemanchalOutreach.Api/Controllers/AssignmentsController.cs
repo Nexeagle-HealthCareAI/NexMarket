@@ -318,12 +318,13 @@ namespace SeemanchalOutreach.Api.Controllers
         private static string? ScopeJson(IEnumerable<string>? ids) =>
             ids == null ? null : System.Text.Json.JsonSerializer.Serialize(ids.Distinct().OrderBy(x => x).ToList());
 
-        private async Task<List<(string AgentId, string Name, string Block, string District)>> FieldAgentsAsync(CancellationToken ct)
+        private async Task<List<(string AgentId, string Name, string Block, string District, string Role)>> FieldAgentsAsync(CancellationToken ct)
         {
             var list = await _db.Agents.AsNoTracking().Where(a => a.IsActive)
                 .Select(a => new { a.AgentId, a.Name, a.Role, a.Block, a.District }).ToListAsync(ct);
-            return list.Where(a => !RoleChecks.IsDashboardRole(a.Role)).OrderBy(a => a.Name)
-                .Select(a => (a.AgentId, a.Name, a.Block, a.District)).ToList();
+            // Every role can do field marketing, so anyone active can be given a block.
+            return list.OrderBy(a => RoleChecks.IsDashboardRole(a.Role)).ThenBy(a => a.Name)
+                .Select(a => (a.AgentId, a.Name, a.Block, a.District, a.Role)).ToList();
         }
 
         [HttpGet("board")]
@@ -370,14 +371,21 @@ namespace SeemanchalOutreach.Api.Controllers
                     blocksWithAgent = blocks.Count(b => b.agents.Count > 0),
                     panchayats = blocks.Sum(b => b.panchayats),
                     panchayatsAssigned = blocks.Sum(b => b.assigned),
-                    agentsWithoutBlock = agents.Count(a => !withBlock.Contains(a.AgentId)),
+                    // Only field roles are expected to have a block; others take one when they do field work.
+                    agentsWithoutBlock = agents.Count(a => !RoleChecks.IsDashboardRole(a.Role) && !withBlock.Contains(a.AgentId)),
                 },
                 districts = blocks.Select(b => b.district).Distinct().ToList(),
                 blocks,
                 agents = agents.Select(a =>
                 {
                     var cur = active.Where(x => x.AgentId == a.AgentId).OrderByDescending(x => x.AssignedAt).FirstOrDefault();
-                    return new { agentId = a.AgentId, name = a.Name, block = cur?.Block, district = cur?.District, partial = cur != null && Scope(cur) != null };
+                    var dash = RoleChecks.CanonicalDashboardRole(a.Role);
+                    return new
+                    {
+                        agentId = a.AgentId, name = a.Name, block = cur?.Block, district = cur?.District, partial = cur != null && Scope(cur) != null,
+                        role = dash switch { "Admin" => "Admin", "MarketingManager" => "Marketing manager", "HospitalRep" => "Hospital representative", _ => a.Role },
+                        fieldRole = dash == null,
+                    };
                 }),
             });
         }

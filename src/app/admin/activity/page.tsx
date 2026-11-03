@@ -10,6 +10,7 @@ import { geo, istDate, type AgentActivity, type DaySegment, type TimelineEvent, 
 import { DayRibbon, TimeGrid } from '@/components/crm/geo/DayTime';
 import { useLiveEvents, type LiveLocation } from '@/lib/crm/live';
 import { Empty, ErrorBox, fmt, PageHead, Skeleton, useLoader } from '@/components/crm/ui';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 const RouteMap = dynamic(() => import('@/components/crm/geo/RouteMap'), { ssr: false, loading: () => <div className="act-map"><Skeleton h={520} /></div> });
 
@@ -63,10 +64,22 @@ function ActivityInner() {
   const [replayIdx, setReplayIdx] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const route = act.data?.route ?? [];
+  const partnerRows = (act.data?.events ?? []).filter((e) => e.kind === 'partner');
+  const partnerPg = usePaged(partnerRows, `${effectiveAgent}|${date}`, 10);
 
   // Today's timeline keeps itself current.
   const isToday = date === today;
-  const onLocation = useCallback((l: LiveLocation) => { if (isToday && l.agentId === effectiveAgent) void act.reload(); }, [isToday, effectiveAgent, act]);
+  // Live points: each new fix from the agent's phone extends today's route straight away.
+  const [livePts, setLivePts] = useState<{ key: string; pts: { lat: number; lng: number; at: string; accuracyM?: number | null }[] }>({ key: '', pts: [] });
+  const liveKey = `${effectiveAgent}|${date}`;
+  const onLocation = useCallback((l: LiveLocation) => {
+    if (!isToday || l.agentId !== effectiveAgent) return;
+    setLivePts((cur) => {
+      const pts = cur.key === liveKey ? cur.pts : [];
+      if (pts.some((p) => p.at === l.at)) return cur;
+      return { key: liveKey, pts: [...pts, { lat: l.lat, lng: l.lng, at: l.at, accuracyM: l.accuracyM }].slice(-500) };
+    });
+  }, [isToday, effectiveAgent, liveKey]);
   const onEvent = useCallback(() => { if (isToday) void act.reload(); }, [isToday, act]);
   useLiveEvents(onEvent, onLocation);
   useEffect(() => {
@@ -140,7 +153,7 @@ function ActivityInner() {
 
           <div className="act-layout">
             <section id="act-map" className="crm-card" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14 }} aria-label="Route">
-              <RouteMap data={d} focus={focus} replayIndex={replayIdx} />
+              <RouteMap data={d} focus={focus} replayIndex={replayIdx} isToday={isToday} live={livePts.key === liveKey ? livePts.pts : undefined} />
               {route.length > 1 && (
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   <button type="button" className="crm-btn is-secondary is-sm" onClick={() => { if (replayIdx == null || replayIdx >= route.length - 1) setReplayIdx(0); setPlaying((p) => !p); }} aria-label={playing ? 'Pause replay' : 'Replay the day'} style={{ width: 40, padding: 0 }}>
@@ -192,7 +205,7 @@ function ActivityInner() {
                 <table className="crm-table">
                   <thead><tr><th>#</th><th>Time</th><th>Partner</th><th>Type · panchayat</th><th>Location</th></tr></thead>
                   <tbody>
-                    {d.events.filter((e) => e.kind === 'partner').map((e, i) => (
+                    {partnerPg.rows.map((e, k) => { const i = partnerPg.offset + k; return (
                       <tr key={`${e.at}-${i}`} style={{ cursor: e.lat != null ? 'pointer' : undefined }} aria-selected={focus === e}
                         onClick={() => { if (e.lat != null) { setFocus(e); document.getElementById('act-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }}>
                         <td><span className="rt-num">{i + 1}</span></td>
@@ -204,10 +217,11 @@ function ActivityInner() {
                           {e.lat != null && <div><a href={`https://www.google.com/maps?q=${e.lat},${e.lng}`} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()}>{e.lat.toFixed(5)}, {e.lng!.toFixed(5)}</a></div>}
                         </td>
                       </tr>
-                    ))}
+                    ); })}
                   </tbody>
                 </table>
               </div>
+              <Pager {...partnerPg.pager} noun="partners" />
             </section>
           )}
 

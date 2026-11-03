@@ -7,6 +7,7 @@ import { Sparkles } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import AnalystWorkspace from '@/components/crm/AnalystWorkspace';
 import { contactTypeLabel, Empty, ErrorBox, fmt, PageHead, rupees, Skeleton, useLoader } from '@/components/crm/ui';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface Funnel { referred: number; arrived: number; admitted: number; discharged: number; lost: number; waiting: number; urgent: number }
@@ -72,6 +73,7 @@ function AnalyticsPage() {
 function Business({ days }: { days: number }) {
   const [group, setGroup] = useState('block');
   const data = useLoader(() => crm.get<OverviewRes>(`/api/v1/analytics/overview?days=${days}&group=${group}`), [days, group]);
+  const pg = usePaged(data.data?.breakdown ?? [], [days, group], 25);
   if (data.error) return <ErrorBox message={data.error} onRetry={data.reload} />;
   const d = data.data;
   if (!d) return <Skeleton h={480} />;
@@ -140,11 +142,11 @@ function Business({ days }: { days: number }) {
           </div>
         </div>
         {d.breakdown.length === 0 ? <Empty title="No referrals in this period" /> : (
-          <div className="crm-table-wrap">
+          <><div className="crm-table-wrap">
             <table className="crm-table">
               <thead><tr><th>{GROUPS.find((g) => g.k === d.group)?.l}</th><th style={{ textAlign: 'right' }}>Referred</th><th style={{ textAlign: 'right' }}>Arrived</th><th style={{ textAlign: 'right' }}>Admitted</th><th>Arrival rate</th><th style={{ textAlign: 'right' }}>Never came</th><th style={{ textAlign: 'right' }}>Paid partners</th></tr></thead>
               <tbody>
-                {d.breakdown.map((r) => {
+                {pg.rows.map((r) => {
                   const a = pct(r.arrived, r.referred);
                   const change = r.admitted - r.admittedPrev;
                   return (
@@ -162,6 +164,7 @@ function Business({ days }: { days: number }) {
               </tbody>
             </table>
           </div>
+            <Pager {...pg.pager} noun="rows" /></>
         )}
       </section>
 

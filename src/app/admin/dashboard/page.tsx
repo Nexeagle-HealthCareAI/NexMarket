@@ -6,6 +6,7 @@ import { ChevronRight, Inbox, MessageCircle, PhoneCall, Star, Wallet } from 'luc
 import { crm } from '@/lib/sync/api-client';
 import { canView, useAccess } from '@/lib/crm/access';
 import { timeAgo, useLiveEvents, useNow, type LiveEvent } from '@/lib/crm/live';
+import { Pager, usePaged } from '@/components/crm/Pager';
 import {
   contactTypeLabel, ErrorBox, Empty, fmt, initials, PageHead, Pill, rupees, Skeleton, stageTone, useLoader,
 } from '@/components/crm/ui';
@@ -63,6 +64,7 @@ export default function CommandCentrePage() {
   const { access } = useAccess();
   const now = useNow(1000);
   const { data, error, loading, reload } = useLoader(() => crm.get<Summary>('/api/v1/dashboard/summary'));
+  const refPg = usePaged(data?.latestReferrals ?? [], '', 10);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [paused, setPaused] = useState(false);
   const [flash, setFlash] = useState<{ kpi: string; at: number } | null>(null);
@@ -221,13 +223,13 @@ export default function CommandCentrePage() {
           {!data ? <div style={{ padding: '0 22px' }}><Skeleton h={220} /></div> : data.latestReferrals.length === 0 ? (
             <Empty title="No referrals yet" />
           ) : (
-            <div className="crm-table-wrap">
+            <><div className="crm-table-wrap">
               <table className="crm-table" style={{ minWidth: 640 }}>
                 <thead>
                   <tr><th>Patient</th><th>Department</th><th>Referred by</th><th>Agent</th><th>Stage</th></tr>
                 </thead>
                 <tbody>
-                  {data.latestReferrals.map((r) => (
+                  {refPg.rows.map((r) => (
                     <tr key={r.clientId} className={freshRefs.has(r.clientId) ? 'is-new' : undefined}>
                       <td>
                         <div className="crm-cell-main">{r.patientName}{r.urgent && <> <Pill tone="bad">Urgent</Pill></>}</div>
@@ -249,6 +251,7 @@ export default function CommandCentrePage() {
                 </tbody>
               </table>
             </div>
+            <Pager {...refPg.pager} noun="referrals" /></>
           )}
         </section>
 
