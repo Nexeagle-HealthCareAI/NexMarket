@@ -4,14 +4,15 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Check, CheckCheck, CornerUpLeft, Download, FileText, Image as ImageIcon, Lock, Paperclip, Search, Send, Smile, Tag, Users, X,
+  ArrowLeft, Check, CheckCheck, CornerUpLeft, MessageSquarePlus, Download, FileText, Image as ImageIcon, Lock, Paperclip, Search, Send, Smile, Tag, Users, X,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
 import { EMOJI } from '@/lib/crm/emoji';
-import { contactTypeLabel, ErrorBox, friendlyError, initials, PageHead, Skeleton, useToast } from '@/components/crm/ui';
+import { contactTypeLabel, ErrorBox, friendlyError, initials, Modal, PageHead, Skeleton, useToast } from '@/components/crm/ui';
 
-export interface ChatThread { id: string; kind: 'agent' | 'team'; agentId?: string | null; title: string; sub?: string | null; lastMessageAt?: string | null; lastPreview?: string | null; unread: number }
+export interface ChatThread { id: string; kind: 'agent' | 'team' | 'direct'; agentId?: string | null; title: string; sub?: string | null; lastMessageAt?: string | null; lastPreview?: string | null; unread: number; photoUrl?: string | null }
+interface ChatPerson { agentId: string; name: string; role: string; kind: 'dashboard' | 'field'; block?: string | null; photoUrl?: string | null }
 export interface ChatMsg {
   id: string; clientId: string; threadId: string; senderId: string; senderName: string; fromOffice: boolean; mine: boolean;
   text?: string | null; contact?: { id: string; name: string } | null;
@@ -57,6 +58,7 @@ function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [ping, setPing] = useState(0);
+  const [newOpen, setNewOpen] = useState(false);
 
   const loadThreads = useCallback(async () => {
     try {
@@ -83,24 +85,26 @@ function ChatPage() {
 
   return (
     <main className="crm-page">
-      <PageHead title="Chat" sub="Talk with field agents one to one, or with the whole team. Share photos and documents and tag a partner: tagged items also show on that partner's profile." />
+      <PageHead title="Chat" sub="Talk with field agents, the whole team, or anyone one to one: admins, managers and agents. Share photos and documents and tag a partner: tagged items also show on that partner's profile.">
+        <button type="button" className="crm-btn" onClick={() => setNewOpen(true)}><MessageSquarePlus size={16} aria-hidden /> New chat</button>
+      </PageHead>
       {error && <ErrorBox message={error} onRetry={loadThreads} />}
       <div className={`ch-shell${selected ? ' has-sel' : ''}`}>
         <aside className="ch-list" aria-label="Conversations">
           <label className="ch-search">
             <Search size={16} aria-hidden />
             <span className="crm-sr">Search conversations</span>
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search agents" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats" />
           </label>
           {!threads ? <div style={{ padding: 12 }}><Skeleton h={300} /></div> : (
             <ul>
               {shown.map((t) => (
                 <li key={t.id}>
                   <button type="button" className="ch-thread" aria-current={t.id === selected ? 'true' : undefined} onClick={() => open(t.id)}>
-                    <span className={`ch-avatar${t.kind === 'team' ? ' is-team' : ''}`} aria-hidden>{t.kind === 'team' ? <Users size={18} /> : initials(t.title)}</span>
+                    <ThreadAvatar t={t} />
                     <span className="ch-thread-main">
                       <span className="ch-thread-top">
-                        <strong>{t.title}</strong>
+                        <strong>{t.title}{t.kind === 'direct' && <span className="ch-direct-dot" title="One-to-one: only the two of you can read it"><Lock size={11} aria-hidden /></span>}</strong>
                         <span className={t.unread ? 'is-unread' : undefined}>{listTime(t.lastMessageAt)}</span>
                       </span>
                       <span className="ch-thread-bottom">
@@ -111,7 +115,7 @@ function ChatPage() {
                   </button>
                 </li>
               ))}
-              {shown.length === 0 && <li className="crm-sub" style={{ padding: 16 }}>No agent matches.</li>}
+              {shown.length === 0 && <li className="crm-sub" style={{ padding: 16 }}>No chat matches.</li>}
             </ul>
           )}
         </aside>
@@ -125,7 +129,73 @@ function ChatPage() {
           )}
         </section>
       </div>
+      {newOpen && <NewChat onClose={() => setNewOpen(false)} onOpened={(id) => { setNewOpen(false); void loadThreads().then(() => open(id)); }} />}
     </main>
+  );
+}
+
+function ThreadAvatar({ t, small }: { t: ChatThread; small?: boolean }) {
+  if (t.kind === 'team') return <span className="ch-avatar is-team" aria-hidden><Users size={small ? 16 : 18} /></span>;
+  // eslint-disable-next-line @next/next/no-img-element
+  if (t.kind === 'direct' && t.photoUrl) return <img className="ch-avatar" src={t.photoUrl} alt="" />;
+  return <span className={`ch-avatar${t.kind === 'direct' ? ' is-direct' : ''}`} aria-hidden>{initials(t.title)}</span>;
+}
+
+/** Start a one-to-one chat with anyone: an admin, a manager or a field agent. */
+function NewChat({ onClose, onOpened }: { onClose: () => void; onOpened: (id: string) => void }) {
+  const [people, setPeople] = useState<ChatPerson[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    crm.get<ChatPerson[]>('/api/v1/chat/people').then((p) => { if (alive) setPeople(p); }).catch((e) => { if (alive) setError(friendlyError(e)); });
+    return () => { alive = false; };
+  }, []);
+  const s = q.trim().toLowerCase();
+  const list = (people ?? []).filter((p) => !s || p.name.toLowerCase().includes(s) || p.role.toLowerCase().includes(s) || (p.block ?? '').toLowerCase().includes(s) || p.agentId.toLowerCase().includes(s));
+  const start = async (p: ChatPerson) => {
+    setBusy(p.agentId);
+    try { const r = await crm.post<{ id: string }>('/api/v1/chat/direct', { agentId: p.agentId }); onOpened(r.id); }
+    catch (e) { setError(friendlyError(e)); setBusy(null); }
+  };
+  const group = (kind: 'dashboard' | 'field', title: string) => {
+    const g = list.filter((p) => p.kind === kind);
+    if (!g.length) return null;
+    return (
+      <div className="ch-people-group">
+        <span className="ch-people-title">{title} · {g.length}</span>
+        <ul>
+          {g.map((p) => (
+            <li key={p.agentId}>
+              <button type="button" disabled={!!busy} onClick={() => void start(p)}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {p.photoUrl ? <img className="ch-avatar" src={p.photoUrl} alt="" /> : <span className="ch-avatar is-direct" aria-hidden>{initials(p.name)}</span>}
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  <strong>{p.name}</strong>
+                  <span className="crm-cell-sub" style={{ display: 'block' }}>{[p.role, p.block, p.agentId].filter(Boolean).join(' · ')}</span>
+                </span>
+                {busy === p.agentId && <span className="crm-cell-sub">Opening…</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+  return (
+    <Modal title="New chat" onClose={onClose}>
+      <p className="crm-sub" style={{ margin: 0, fontSize: 13 }}>A one-to-one chat: only the two of you can read it.</p>
+      <label className="ch-search" style={{ margin: 0 }}>
+        <Search size={16} aria-hidden />
+        <span className="crm-sr">Search people</span>
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, role or block" />
+      </label>
+      {error && <div className="crm-error" role="alert">{error}</div>}
+      {!people ? <Skeleton h={240} /> : list.length === 0 ? <span className="crm-sub">Nobody matches.</span> : (
+        <div className="ch-people">{group('dashboard', 'Office')}{group('field', 'Field team')}</div>
+      )}
+    </Modal>
   );
 }
 
@@ -253,20 +323,20 @@ function Conversation({ thread, ping, onBack, onSent }: { thread: ChatThread; pi
     <div className="ch-conv">
       <header className="ch-head">
         <button type="button" className="ch-icon ch-back" onClick={onBack} aria-label="Back to conversations"><ArrowLeft size={18} /></button>
-        <span className={`ch-avatar${thread.kind === 'team' ? ' is-team' : ''}`} aria-hidden>{thread.kind === 'team' ? <Users size={18} /> : initials(thread.title)}</span>
+        <ThreadAvatar t={thread} />
         <span style={{ minWidth: 0, flex: 1 }}>
           <strong>{thread.title}</strong>
-          <span className="crm-cell-sub" style={{ display: 'block' }}>{thread.kind === 'team' ? 'Everyone in the field team and the office' : [thread.agentId, thread.sub].filter(Boolean).join(' · ')}</span>
+          <span className="crm-cell-sub" style={{ display: 'block' }}>{thread.kind === 'team' ? 'Everyone in the field team and the office' : thread.kind === 'direct' ? [thread.sub, 'one-to-one'].filter(Boolean).join(' · ') : [thread.agentId, thread.sub].filter(Boolean).join(' · ')}</span>
         </span>
-        {thread.agentId && <Link className="crm-btn is-secondary is-sm" href={`/admin/activity?agent=${encodeURIComponent(thread.agentId)}`}>Today&apos;s activity</Link>}
+        {thread.agentId && thread.kind === 'agent' && <Link className="crm-btn is-secondary is-sm" href={`/admin/activity?agent=${encodeURIComponent(thread.agentId)}`}>Today&apos;s activity</Link>}
       </header>
 
       <div className="ch-body" role="log" aria-live="polite">
-        <div className="ch-secure"><Lock size={12} aria-hidden /> Only the people in this chat can see these messages and files.</div>
+        <div className="ch-secure"><Lock size={12} aria-hidden /> {thread.kind === 'direct' ? `Only you and ${thread.title} can read this chat. Admins can't see it.` : 'Only the people in this chat can see these messages and files.'}</div>
         {hasMore && <button type="button" className="ch-older" onClick={older}>Load earlier messages</button>}
         {!loaded ? <Skeleton h={200} /> : msgs.length === 0 ? <div className="ch-none">No messages yet. Say namaste 👋</div> : null}
         {rows.map((r, i) => 'day' in r ? <div key={`d${i}`} className="ch-day"><span>{dayLabel(r.day)}</span></div> : (
-          <Bubble key={r.clientId} m={r} showName={!r.mine && (thread.kind === 'team' || r.fromOffice)} readAt={readAt} seenAt={seenAt}
+          <Bubble key={r.clientId} m={r} showName={!r.mine && thread.kind !== 'direct' && (thread.kind === 'team' || r.fromOffice)} readAt={readAt} seenAt={seenAt}
             onReply={() => { setReply(r); inputRef.current?.focus(); }} />
         ))}
         <div ref={endRef} />

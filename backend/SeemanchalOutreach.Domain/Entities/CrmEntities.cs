@@ -173,6 +173,9 @@ namespace SeemanchalOutreach.Domain.Entities
         public double? Lng { get; set; }
         public double? AccuracyM { get; set; }
         public DateTime ServerReceivedAt { get; set; } = DateTime.UtcNow;
+        /// <summary>When the agent last changed the comment from the app; the first wording is kept in <see cref="OriginalText"/>.</summary>
+        public DateTime? EditedAt { get; set; }
+        public string? OriginalText { get; set; }
     }
 
     /// <summary>One run of the AI analyst: what it was shown, what it said, and how it went.</summary>
@@ -292,8 +295,9 @@ namespace SeemanchalOutreach.Domain.Entities
     public class ChatThread
     {
         public Guid Id { get; set; } = Guid.NewGuid();
-        public string Kind { get; set; } = "agent";          // agent | team
-        public string? AgentId { get; set; }                 // for Kind = agent
+        public string Kind { get; set; } = "agent";          // agent | team | direct
+        public string? AgentId { get; set; }                 // Kind = agent: the agent; Kind = direct: one of the two people
+        public string? PeerId { get; set; }                  // Kind = direct: the other person (AgentId < PeerId)
         public string Title { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime LastMessageAt { get; set; } = DateTime.UtcNow;
@@ -331,6 +335,45 @@ namespace SeemanchalOutreach.Domain.Entities
         public bool IsOffice { get; set; }
         public DateTime LastReadAt { get; set; }
         public DateTime? LastSeenAt { get; set; }            // delivered: their app fetched messages up to here
+    }
+
+    /// <summary>
+    /// One notification for one person: a chat message, an escalation, a new block, a task… Shown in the
+    /// CRM bell and the app's inbox, and pushed to their phone. Never deleted; read when they open it.
+    /// </summary>
+    public class Notification
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string UserId { get; set; } = string.Empty;   // agentId of the person it is for
+        public string Kind { get; set; } = "update";         // chat | team_chat | escalation | assignment | task | leave | referral | note
+        public string Title { get; set; } = string.Empty;
+        public string Body { get; set; } = string.Empty;
+        public string? Link { get; set; }                    // chat:{threadId} | partner:{clientId} | referral:{clientId} | leave | tasks | assignments
+        public string? RefId { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? ReadAt { get; set; }
+    }
+
+    /// <summary>A phone that can receive push notifications (Firebase Cloud Messaging token).</summary>
+    public class PushDevice
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string UserId { get; set; } = string.Empty;
+        public string Token { get; set; } = string.Empty;
+        public string Platform { get; set; } = "android";
+        public string? DeviceId { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime LastSeenAt { get; set; } = DateTime.UtcNow;
+        public bool Enabled { get; set; } = true;
+    }
+
+    /// <summary>Which kinds of notification a person has turned off (they still land in the inbox, just without a push or sound).</summary>
+    public class NotificationSetting
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string UserId { get; set; } = string.Empty;
+        public string MutedKinds { get; set; } = string.Empty; // comma-separated kinds
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 
     /// <summary>A field job title (Marketing executive, Field officer…) that people can be onboarded with.</summary>

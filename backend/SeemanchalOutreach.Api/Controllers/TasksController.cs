@@ -75,10 +75,13 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IMarketingDbContext _db;
         private readonly ILiveEvents _live;
 
-        public TasksController(IMarketingDbContext db, ILiveEvents live)
+        private readonly INotifier _notifier;
+
+        public TasksController(IMarketingDbContext db, ILiveEvents live, INotifier notifier)
         {
             _db = db;
             _live = live;
+            _notifier = notifier;
         }
 
         [HttpGet]
@@ -212,6 +215,13 @@ namespace SeemanchalOutreach.Api.Controllers
                 Kind = "task",
                 Text = $"Task for {string.Join(", ", agents.Select(a => a.Name))}: {title}",
                 RefId = group.ToString(),
+            });
+            _notifier.Notify(new NotifyJob
+            {
+                To = made.Select(t => t.AgentId).ToList(), Except = me, Kind = "task",
+                Title = $"New task: {title}",
+                Body = $"{(string.IsNullOrWhiteSpace(dto.Detail) ? "" : dto.Detail.Trim() + " ")}{(due != null ? $"Due {due:d MMM}." : "")}".Trim(),
+                Link = "tasks", RefId = group.ToString(),
             });
             return Ok(new { groupId = group, created = made.Count });
         }

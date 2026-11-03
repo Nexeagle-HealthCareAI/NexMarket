@@ -220,7 +220,7 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             var people = await _db.Agents.AsNoTracking()
                 .OrderBy(a => a.Name)
-                .Select(a => new { a.AgentId, a.Name, a.Phone, a.Email, a.Role, a.District, a.Block, a.IsActive, a.CreatedAt, a.MustChangePassword })
+                .Select(a => new { a.AgentId, a.Name, a.Phone, a.Email, a.Role, a.District, a.Block, a.IsActive, a.CreatedAt, a.MustChangePassword, a.PhotoUrl })
                 .ToListAsync();
 
             var lastLogin = await _db.AgentRefreshTokens.AsNoTracking()
@@ -263,6 +263,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     // Signed in right now: at most one phone, one tablet and one laptop/desktop.
                     sessions = active.TryGetValue(p.AgentId, out var ss) ? (object)ss : Array.Empty<object>(),
                     fieldBlock = blocks.GetValueOrDefault(p.AgentId),
+                    photoUrl = p.PhotoUrl,
                 };
             }));
         }

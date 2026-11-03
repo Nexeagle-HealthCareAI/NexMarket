@@ -118,7 +118,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var take = request.PageSize;
 
             var contacts = await _db.Contacts.AsNoTracking()
-                .Where(c => c.AgentId == request.AgentId && c.ServerReceivedAt >= request.Since)
+                .Where(c => c.AgentId == request.AgentId && (c.ServerReceivedAt >= request.Since || c.LastModifiedAt >= request.Since)) // office edits too, e.g. an escalation resolved
                 .OrderBy(c => c.Id)
                 .Skip(skip).Take(take)
                 .ToListAsync(cancellationToken);
@@ -187,6 +187,11 @@ namespace SeemanchalOutreach.Api.Controllers
                     isImportant = c.IsImportant,
                     priority = c.Priority,
                     followUpDate = c.FollowUpDate,
+                    // The agent's escalation and what the office did about it.
+                    agentEscalated = c.AgentEscalated,
+                    agentEscalationNote = c.AgentEscalationNote,
+                    isEscalationResolved = c.IsEscalationResolved,
+                    agentEscalationResolution = c.AgentEscalationResolution,
                 }),
                 visits = visits.Select(v => new
                 {
@@ -220,6 +225,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     lat = n.Lat,
                     lng = n.Lng,
                     accuracyM = n.AccuracyM,
+                    editedAt = n.EditedAt == null ? null : n.EditedAt.Value.ToString("o"),
                 }),
                 referrals = referrals.Select(r => new
                 {

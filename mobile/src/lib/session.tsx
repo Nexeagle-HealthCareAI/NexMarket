@@ -6,6 +6,7 @@ import { translate, type Lang, type TFn } from '../i18n';
 import { uuid } from './util';
 import { onSyncState, startAutoSync, stopAutoSync, syncNow, syncState, type SyncState } from './sync';
 import { stopTracking } from './location';
+import { unregisterPush } from './notifications';
 
 /**
  * App-wide state: who is signed in and which language they read. The language lives in
@@ -22,6 +23,8 @@ interface Session {
   t: TFn;
   signIn(userId: string, password: string): Promise<LoginResult>;
   signOut(): Promise<void>;
+  /** After the agent edits their profile: show the new name everywhere. */
+  updateAgent(patch: Partial<Agent>): void;
 }
 
 const Ctx = createContext<Session | null>(null);
@@ -106,12 +109,22 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    await unregisterPush();
     await logoutRemote();
     await resetLocal();
   }, [resetLocal]);
 
-  const value = useMemo<Session>(() => ({ ready, agent, lang, setLang, t, signIn, signOut }),
-    [ready, agent, lang, setLang, t, signIn, signOut]);
+  const updateAgent = useCallback((patch: Partial<Agent>) => {
+    setAgent((a) => {
+      if (!a) return a;
+      const next = { ...a, ...patch };
+      kvSet('agent', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const value = useMemo<Session>(() => ({ ready, agent, lang, setLang, t, signIn, signOut, updateAgent }),
+    [ready, agent, lang, setLang, t, signIn, signOut, updateAgent]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

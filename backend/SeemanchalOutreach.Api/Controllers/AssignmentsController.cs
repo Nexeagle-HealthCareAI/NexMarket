@@ -75,9 +75,23 @@ namespace SeemanchalOutreach.Api.Controllers
 
         private readonly IMarketingDbContext _db;
 
-        public AssignmentsController(IMarketingDbContext db)
+        private readonly INotifier _notifier;
+
+        public AssignmentsController(IMarketingDbContext db, INotifier notifier)
         {
             _db = db;
+            _notifier = notifier;
+        }
+
+        private void NotifyAssigned(string agentId, string block, int panchayats, bool whole, string? notes)
+        {
+            _notifier.Notify(new NotifyJob
+            {
+                To = new() { agentId }, Except = User.FindFirst("agentId")?.Value, Kind = "assignment",
+                Title = $"New block: {block}",
+                Body = $"{(whole ? "The whole block" : $"{panchayats} panchayat{(panchayats == 1 ? "" : "s")}")} assigned to you.{(string.IsNullOrWhiteSpace(notes) ? "" : " " + notes!.Trim())} Pick a panchayat when you start your shift.",
+                Link = "assignments",
+            });
         }
 
         [HttpGet]
@@ -193,6 +207,7 @@ namespace SeemanchalOutreach.Api.Controllers
             agent.Block = block;
 
             await _db.SaveChangesAsync(cancellationToken);
+            NotifyAssigned(request.AgentId, block, 0, true, null);
 
             var total = await _db.Panchayats.CountAsync(p => p.District == district && p.Block == block && p.IsActiveForMarketing, cancellationToken);
             var blockPanchayatIds = await _db.Panchayats.AsNoTracking()
@@ -516,6 +531,7 @@ namespace SeemanchalOutreach.Api.Controllers
             }
 
             await _db.SaveChangesAsync(ct);
+            if (agent != null) NotifyAssigned(agent.AgentId, dto.Block, moving.Count, whole, dto.Notes);
             return Ok(new { moved = moving.Count, whole, agentId = agent?.AgentId });
         }
 }

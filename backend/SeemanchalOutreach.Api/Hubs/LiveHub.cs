@@ -15,12 +15,17 @@ namespace SeemanchalOutreach.Api.Hubs
     [Authorize]
     public class LiveHub : Hub
     {
+        /// <summary>Each person's own notifications ("notify") go to this group.</summary>
+        public static string UserGroup(string agentId) => $"user:{agentId}";
+
         public override async Task OnConnectedAsync()
         {
             if (Context.User.IsDashboardUser())
             {
                 await Groups.AddToGroupAsync(Context.ConnectionId, RoleChecks.DashboardGroup);
             }
+            var me = Context.User.AgentIdOf();
+            if (!string.IsNullOrEmpty(me)) await Groups.AddToGroupAsync(Context.ConnectionId, UserGroup(me));
             await base.OnConnectedAsync();
         }
     }

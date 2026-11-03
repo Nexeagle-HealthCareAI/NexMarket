@@ -1,5 +1,6 @@
 import '../lib/location'; // registers the background location task before anything else runs
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
+import * as Notifications from 'expo-notifications';
 import { ActivityIndicator, View } from 'react-native';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -7,6 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SessionProvider, useSession } from '../lib/session';
 import { pendingPasswordChange } from '../lib/api';
+import { handleResponse, registerPush, setupNotifications } from '../lib/notifications';
 import { ToastHost } from '../components/ui';
 import { CelebrateHost } from '../components/Vita';
 import { C } from '../theme';
@@ -24,6 +26,23 @@ function Gate() {
     if (!agent && !onLogin) router.replace('/login');
     else if (agent && onLogin) router.replace(pendingPasswordChange() ? '/set-password' : '/today');
   }, [ready, agent, onLogin]);
+
+  // Notifications: once signed in, register this phone for push and open whatever the agent taps.
+  const registeredFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready || !agent) return;
+    void setupNotifications();
+    if (registeredFor.current !== agent.agentId) {
+      registeredFor.current = agent.agentId;
+      void registerPush();
+    }
+    const sub = Notifications.addNotificationResponseReceivedListener(handleResponse);
+    // The tap that opened the app from the tray.
+    Notifications.getLastNotificationResponseAsync().then((r) => {
+      if (r) { handleResponse(r); void Notifications.clearLastNotificationResponseAsync().catch(() => undefined); }
+    }).catch(() => undefined);
+    return () => sub.remove();
+  }, [ready, agent]);
 
   if (!ready) {
     return <View style={{ flex: 1, backgroundColor: C.ink, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color="#fff" /></View>;

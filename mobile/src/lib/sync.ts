@@ -7,6 +7,7 @@ import { errorMessage, nowIso, uuid } from './util';
 import { me } from './repo';
 import { refreshTasks } from './tasks';
 import { flushChat, refreshUnread } from './chat';
+import { pollNotifications } from './notifications';
 
 /**
  * The sync engine. Pushes the outbox in order (oldest first), then pulls what changed
@@ -63,6 +64,8 @@ async function run() {
     // Chat: send what waited for signal, and update the unread badge.
     await flushChat().catch(() => undefined);
     await refreshUnread().catch(() => undefined);
+    // Notifications: unread count, and local alerts when the server can't push to this phone.
+    await pollNotifications().catch(() => undefined);
     failures = 0;
     nextAllowedAt = 0;
     const at = nowIso();
@@ -173,10 +176,11 @@ interface PullResponse {
   contacts: {
     clientId: string; panchayatId: string; role: string; name: string; phone: string; whatsappAdded: boolean;
     cardGiven: boolean; createdAt: string; updatedAt: string; isImportant: boolean; priority?: string | null; followUpDate?: string | null;
+    agentEscalated?: boolean; agentEscalationNote?: string | null; isEscalationResolved?: boolean; agentEscalationResolution?: string | null;
   }[];
   visits: { clientId: string; panchayatId: string; checkInAt: string; checkInLat: number; checkInLng: number; checkOutAt: string | null; checkOutLat: number | null; checkOutLng: number | null }[];
   shifts: { clientId: string; startAt: string; endAt: string | null }[];
-  contactNotes: { clientId: string; contactId: string; text: string; source: string; createdAt: string; lat?: number | null; lng?: number | null; accuracyM?: number | null }[];
+  contactNotes: { clientId: string; contactId: string; text: string; source: string; createdAt: string; lat?: number | null; lng?: number | null; accuracyM?: number | null; agentId?: string | null; editedAt?: string | null }[];
   referrals: { clientId: string; contactId: string; status: string; notes: string | null; createdAt: string; patientName?: string; department?: string; urgent?: boolean; updatedAt?: string }[];
   surveys: { clientId: string; contactId: string; panchayatId: string; answersJson: string; createdAt: string }[];
 }
@@ -213,6 +217,11 @@ function applyPull(r: PullResponse) {
            isImportant = excluded.isImportant, followUpDate = excluded.followUpDate, updatedAt = excluded.updatedAt`,
         c.clientId, c.panchayatId, c.role, c.name, c.phone, c.whatsappAdded ? 1 : 0, c.cardGiven ? 1 : 0, prio,
         c.isImportant ? 1 : 0, c.followUpDate ? c.followUpDate.slice(0, 10) : null, c.createdAt, c.updatedAt);
+      if (c.agentEscalated !== undefined) {
+        // Open while the office hasn't resolved it; once resolved, keep what they said.
+        d.runSync('UPDATE contacts SET escalated = ?, escalationNote = COALESCE(?, escalationNote), escalationResolved = ?, escalationResolution = ? WHERE clientId = ?',
+          c.agentEscalated ? 1 : 0, c.agentEscalationNote ?? null, c.isEscalationResolved ? 1 : 0, c.agentEscalationResolution ?? null, c.clientId);
+      }
     }
     for (const v of r.visits ?? []) {
       if (skip.has(v.clientId)) continue;
@@ -231,8 +240,13 @@ function applyPull(r: PullResponse) {
     // A shift the server has never closed but that started on an earlier day is left
     // open on the phone only if the phone itself opened it.
     for (const n of r.contactNotes ?? []) {
-      d.runSync('INSERT OR IGNORE INTO notes (clientId, contactId, text, source, createdAt, lat, lng, accuracy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        n.clientId, n.contactId, n.text, n.source || 'note', n.createdAt, n.lat ?? null, n.lng ?? null, n.accuracyM ?? null);
+      // A comment the agent changed here and hasn't sent yet keeps the phone's wording.
+      d.runSync(
+        `INSERT INTO notes (clientId, contactId, text, source, createdAt, lat, lng, accuracy, agentId, editedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(clientId) DO UPDATE SET agentId = excluded.agentId,
+           text = CASE WHEN ? THEN text ELSE excluded.text END, editedAt = CASE WHEN ? THEN editedAt ELSE excluded.editedAt END`,
+        n.clientId, n.contactId, n.text, n.source || 'note', n.createdAt, n.lat ?? null, n.lng ?? null, n.accuracyM ?? null, n.agentId ?? null, n.editedAt ?? null,
+        skip.has(n.clientId) ? 1 : 0, skip.has(n.clientId) ? 1 : 0);
     }
     for (const x of r.referrals ?? []) {
       if (skip.has(x.clientId)) continue;

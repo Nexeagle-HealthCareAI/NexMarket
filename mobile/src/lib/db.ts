@@ -16,7 +16,7 @@ export function db(): SQLite.SQLiteDatabase {
   return _db;
 }
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 function migrate(d: SQLite.SQLiteDatabase) {
   const row = d.getFirstSync<{ user_version: number }>('PRAGMA user_version');
@@ -72,6 +72,16 @@ function migrate(d: SQLite.SQLiteDatabase) {
     // Where the agent was when they logged a visit / revisit comment.
     for (const col of ['lat REAL', 'lng REAL', 'accuracy REAL']) {
       try { d.execSync(`ALTER TABLE notes ADD COLUMN ${col}`); } catch { /* already there */ }
+    }
+  }
+  if (v < 4) {
+    // Comments the agent edited later (and who wrote each one); the agent's escalation on a partner
+    // and what the office did about it.
+    for (const col of ['editedAt TEXT', 'agentId TEXT']) {
+      try { d.execSync(`ALTER TABLE notes ADD COLUMN ${col}`); } catch { /* already there */ }
+    }
+    for (const col of ['escalated INTEGER DEFAULT 0', 'escalationNote TEXT', 'escalatedAt TEXT', 'escalationResolved INTEGER DEFAULT 0', 'escalationResolution TEXT']) {
+      try { d.execSync(`ALTER TABLE contacts ADD COLUMN ${col}`); } catch { /* already there */ }
     }
   }
   if (v < SCHEMA_VERSION) d.execSync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
@@ -130,8 +140,20 @@ export interface Contact {
   shiftId: string | null;
   createdAt: string;
   updatedAt: string;
+  escalated?: number | null;
+  escalationNote?: string | null;
+  escalatedAt?: string | null;
+  escalationResolved?: number | null;
+  escalationResolution?: string | null;
 }
-export interface Note { clientId: string; contactId: string; text: string; source: 'note' | 'visit' | 'revisit' | 'call'; createdAt: string; lat?: number | null; lng?: number | null; accuracy?: number | null }
+export interface Note {
+  clientId: string; contactId: string; text: string; source: 'note' | 'visit' | 'revisit' | 'call'; createdAt: string;
+  lat?: number | null; lng?: number | null; accuracy?: number | null;
+  /** When the agent last changed it; null if never. */
+  editedAt?: string | null;
+  /** Who wrote it (null = this phone). Only the agent's own comments can be edited. */
+  agentId?: string | null;
+}
 export interface Shift { clientId: string; startTime: string; startLat: number; startLng: number; endTime: string | null; endLat: number | null; endLng: number | null }
 export interface Visit { clientId: string; panchayatId: string; shiftId: string | null; checkInAt: string; checkInLat: number; checkInLng: number; checkOutAt: string | null; checkOutLat: number | null; checkOutLng: number | null }
 export interface Referral { clientId: string; contactId: string; patientName: string; patientAge: number | null; patientSex: string | null; clientPhone: string | null; department: string; urgent: number; notes: string | null; status: string; createdAt: string; updatedAt: string | null }
@@ -157,6 +179,12 @@ export const q = {
     db().getAllSync<Contact>('SELECT * FROM contacts WHERE panchayatId = ? ORDER BY name COLLATE NOCASE', panchayatId),
   contactByPhone: (digits: string) =>
     db().getAllSync<Contact>("SELECT * FROM contacts WHERE replace(replace(phone, ' ', ''), '-', '') LIKE ?", `%${digits}`),
+  /** Per person in a panchayat: how many visit notes they have and when the last was. */
+  visitStatsIn: (panchayatId: string) =>
+    db().getAllSync<{ contactId: string; n: number; last: string | null }>(
+      `SELECT n.contactId AS contactId, COUNT(*) AS n, MAX(n.createdAt) AS last FROM notes n
+        JOIN contacts c ON c.clientId = n.contactId
+        WHERE c.panchayatId = ? AND n.source IN ('visit', 'revisit') GROUP BY n.contactId`, panchayatId),
   notesFor: (contactId: string) =>
     db().getAllSync<Note>('SELECT * FROM notes WHERE contactId = ? ORDER BY createdAt DESC', contactId),
   lastNote: (contactId: string) =>

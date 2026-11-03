@@ -5,6 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Sheet, T } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 import { PartnerPicker } from '../../components/PartnerPicker';
+import { ChatAvatar, NX } from '../../components/ChatAvatar';
 import { useSession } from '../../lib/session';
 import { q } from '../../lib/db';
 import {
@@ -12,10 +13,12 @@ import {
 } from '../../lib/chat';
 import { imageSource, MAX_FILE_BYTES, openChatFile, pickCamera, pickDocument, pickGallery, type Picked } from '../../lib/chatFiles';
 import { EMOJI } from '../../lib/emoji';
+import { setOpenChat } from '../../lib/notifications';
 import { dayLong, timeOf } from '../../lib/format';
 import { C } from '../../theme';
 
-const WA = { bg: '#efeae2', mine: '#d9fdd3', theirs: '#ffffff', head: '#0b6e5f', send: '#00a884', meta: '#667781', blueTick: '#53bdeb', name: '#0a72d6' };
+// NexEagle look (not WhatsApp's): navy header with a mint line, blue bubbles for me, mint read ticks.
+const WA = { bg: NX.bg, mine: NX.mine, theirs: NX.theirs, head: NX.head, send: C.blue, meta: NX.meta, blueTick: NX.read, name: NX.name };
 type Row = { kind: 'day'; key: string; at: string } | { kind: 'msg'; key: string; m: ChatMsg };
 
 export default function Conversation() {
@@ -37,17 +40,19 @@ export default function Conversation() {
   const [more, setMore] = useState(true);
   const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   const isTeam = thread?.kind === 'team';
+  const isDirect = thread?.kind === 'direct';
   const visit = q.activeVisit();
 
   // While open: fetch new messages every few seconds and mark them read.
   useFocusEffect(useCallback(() => {
     let alive = true;
+    setOpenChat(id); // its messages don't pop up while it's open
     const tick = async () => {
       try { await refreshMessages(id); if (alive) void markRead(id); } catch { /* offline */ }
     };
     void tick();
     const iv = setInterval(tick, 4000);
-    return () => { alive = false; clearInterval(iv); };
+    return () => { alive = false; clearInterval(iv); setOpenChat(null); };
   }, [id]));
 
   const rows = useMemo<Row[]>(() => {
@@ -90,21 +95,20 @@ export default function Conversation() {
     try { await openChatFile(m); } catch { Alert.alert(t('chatTitle'), t('chatOpenFailed')); }
   };
 
-  const title = isTeam ? t('chatTeam') : isOfficeUser() ? thread?.title ?? t('chatOffice') : t('chatOffice');
+  const title = isTeam ? t('chatTeam') : isDirect ? thread?.title ?? '' : isOfficeUser() ? thread?.title ?? t('chatOffice') : t('chatOffice');
+  const sub = isTeam ? t('chatTeamSub') : isDirect ? thread?.sub ?? t('chatDirectSub') : t('chatOfficeSub');
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: WA.head }} edges={['top', 'left', 'right']}>
       {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, paddingVertical: 8, backgroundColor: WA.head }}>
-        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/chat'))} hitSlop={10} accessibilityLabel="Back" style={{ padding: 6 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, paddingVertical: 8, backgroundColor: WA.head, borderBottomWidth: 3, borderBottomColor: NX.accent }}>
+        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/chat'))} hitSlop={10} accessibilityLabel={t('back')} style={{ padding: 6 }}>
           <Icon name="back" color="#fff" size={22} />
         </Pressable>
-        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isTeam ? C.blue : '#0f8a5f', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' }}>
-          <Icon name={isTeam ? 'users' : 'hospital'} color="#fff" size={20} />
-        </View>
+        <ChatAvatar kind={thread?.kind ?? 'agent'} name={title} photoUrl={thread?.photoUrl} size={40} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <T style={{ color: '#fff', fontSize: 17, fontWeight: '700' }} numberOfLines={1}>{title}</T>
-          <T style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }} numberOfLines={1}>{isTeam ? t('chatTeamSub') : t('chatOfficeSub')}</T>
+          <T style={{ color: '#fff', fontSize: 17, fontWeight: '800' }} numberOfLines={1}>{title}</T>
+          <T style={{ color: NX.headSub, fontSize: 12 }} numberOfLines={1}>{sub}</T>
         </View>
       </View>
 
@@ -117,17 +121,17 @@ export default function Conversation() {
           onEndReachedThreshold={0.3}
           onEndReached={() => { if (more && msgs.length >= 30) void olderMessages(id).then(setMore).catch(() => undefined); }}
           ListFooterComponent={
-            <View style={{ alignSelf: 'center', flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: '#fff3c4', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 8, maxWidth: '92%' }}>
-              <Icon name="lock" size={12} color="#54656f" />
-              <T style={{ color: '#54656f', fontSize: 12, textAlign: 'center' }}>{t('chatSecureNote')}</T>
+            <View style={{ alignSelf: 'center', flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: C.blueSoft, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, marginBottom: 8, maxWidth: '92%' }}>
+              <Icon name="lock" size={12} color={C.blueInk} />
+              <T style={{ color: C.blueInk, fontSize: 12, textAlign: 'center' }}>{isDirect ? t('chatDirectSecure', { name: title }) : t('chatSecureNote')}</T>
             </View>
           }
           renderItem={({ item }) => item.kind === 'day' ? (
-            <View style={{ alignSelf: 'center', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, marginVertical: 8, elevation: 1 }}>
-              <T style={{ fontSize: 12, color: '#54656f', fontWeight: '600' }}>{dayLabel(item.at, t, lang)}</T>
+            <View style={{ alignSelf: 'center', backgroundColor: NX.chip, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, marginVertical: 10 }}>
+              <T style={{ fontSize: 12, color: '#fff', fontWeight: '700' }}>{dayLabel(item.at, t, lang)}</T>
             </View>
           ) : (
-            <Bubble m={item.m} showName={!item.m.mine && (isTeam || item.m.fromOffice)} readAt={marks.readAt} seenAt={marks.seenAt}
+            <Bubble m={item.m} showName={!item.m.mine && !isDirect && (isTeam || item.m.fromOffice)} readAt={marks.readAt} seenAt={marks.seenAt}
               lang={lang} t={t} onReply={() => { setReply(item.m); inputRef.current?.focus(); }} onOpenFile={() => void openFile(item.m)}
               onOpenTag={(cid) => { if (q.contact(cid)) router.push({ pathname: '/partner/[id]', params: { id: cid } }); }} />
           )}
@@ -135,12 +139,12 @@ export default function Conversation() {
 
         {/* What's attached to the next message */}
         {reply || tag ? (
-          <View style={{ backgroundColor: '#f0f2f5', paddingHorizontal: 10, paddingTop: 8, gap: 6 }}>
+          <View style={{ backgroundColor: NX.bar, paddingHorizontal: 10, paddingTop: 8, gap: 6 }}>
             {reply ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderLeftWidth: 4, borderLeftColor: '#06cf9c', borderRadius: 8, padding: 8, gap: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderLeftWidth: 4, borderLeftColor: C.blue, borderRadius: 10, padding: 8, gap: 8 }}>
                 <View style={{ flex: 1 }}>
-                  <T style={{ color: '#06a07a', fontWeight: '700', fontSize: 13 }}>{reply.mine ? t('chatYou') : reply.senderName}</T>
-                  <T style={{ color: '#54656f', fontSize: 13 }} numberOfLines={1}>{reply.text ?? (reply.file ? `📎 ${reply.file.name}` : '')}</T>
+                  <T style={{ color: C.blueInk, fontWeight: '700', fontSize: 13 }}>{reply.mine ? t('chatYou') : reply.senderName}</T>
+                  <T style={{ color: C.text2, fontSize: 13 }} numberOfLines={1}>{reply.text ?? (reply.file ? `📎 ${reply.file.name}` : '')}</T>
                 </View>
                 <Pressable onPress={() => setReply(null)} hitSlop={8}><Icon name="close" size={18} color="#54656f" /></Pressable>
               </View>
@@ -156,8 +160,8 @@ export default function Conversation() {
         ) : null}
 
         {/* Composer */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, paddingHorizontal: 6, paddingTop: 6, paddingBottom: emoji ? 6 : Math.max(insets.bottom, 6), backgroundColor: '#f0f2f5' }}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', backgroundColor: '#fff', borderRadius: 24, paddingHorizontal: 4, minHeight: 48 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, paddingHorizontal: 6, paddingTop: 6, paddingBottom: emoji ? 6 : Math.max(insets.bottom, 6), backgroundColor: NX.bar, borderTopWidth: 1, borderTopColor: C.border }}>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: C.borderStrong, paddingHorizontal: 4, minHeight: 48 }}>
             <RoundIcon icon={emoji ? 'note' : 'smile'} onPress={toggleEmoji} label={t('chatEmoji')} />
             <TextInput ref={inputRef} value={text} onChangeText={setText} placeholder={t('chatType')} placeholderTextColor={C.muted} multiline maxLength={4000}
               onFocus={() => setEmoji(false)}
@@ -166,7 +170,7 @@ export default function Conversation() {
             <RoundIcon icon="attach" onPress={() => setAttachOpen(true)} label={t('chatAttach')} />
           </View>
           <Pressable onPress={text.trim() ? doSend : () => setAttachOpen(true)} accessibilityRole="button" accessibilityLabel={text.trim() ? t('chatSend') : t('chatAttach')}
-            style={({ pressed }) => [{ width: 48, height: 48, borderRadius: 24, backgroundColor: WA.send, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.85 }]}>
+            style={({ pressed }) => [{ width: 48, height: 48, borderRadius: 16, backgroundColor: WA.send, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.85 }]}>
             <Icon name={text.trim() ? 'send' : 'camera'} color="#fff" size={22} />
           </Pressable>
         </View>
@@ -176,7 +180,7 @@ export default function Conversation() {
           <View style={{ height: 270 + insets.bottom, backgroundColor: '#fff', paddingBottom: insets.bottom }}>
             <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f0f2f5' }}>
               {EMOJI.map((g, i) => (
-                <Pressable key={g.group} onPress={() => setGroup(i)} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, borderBottomWidth: 3, borderBottomColor: i === group ? WA.send : 'transparent' }}>
+                <Pressable key={g.group} onPress={() => setGroup(i)} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, borderBottomWidth: 3, borderBottomColor: i === group ? C.blue : 'transparent' }}>
                   <T style={{ fontSize: 20 }}>{g.icon}</T>
                 </Pressable>
               ))}
@@ -229,7 +233,7 @@ function RoundIcon({ icon, onPress, label, active }: { icon: IconName; onPress: 
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={4}
       style={({ pressed }) => [{ width: 42, height: 48, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}>
-      <Icon name={icon} size={22} color={active ? C.purple : '#54656f'} />
+      <Icon name={icon} size={22} color={active ? C.purple : C.text2} />
     </Pressable>
   );
 }
@@ -259,45 +263,45 @@ function Bubble({ m, showName, readAt, seenAt, lang, t, onReply, onOpenFile, onO
     <Pressable onLongPress={m.state ? undefined : onReply} delayLongPress={300}
       onPress={failed ? () => Alert.alert(t('chatNotSent'), failedReason(m.clientId) ?? '', [{ text: t('cancel'), style: 'cancel' }, { text: t('chatRetry'), onPress: () => retry(m.clientId) }]) : undefined}
       style={{ alignSelf: m.mine ? 'flex-end' : 'flex-start', maxWidth: '84%', marginVertical: 1 }}>
-      <View style={{ backgroundColor: m.mine ? WA.mine : WA.theirs, borderRadius: 10, borderTopRightRadius: m.mine ? 2 : 10, borderTopLeftRadius: m.mine ? 10 : 2,
-        padding: isImage ? 4 : 8, paddingBottom: 6, gap: 4, elevation: 1, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 1, shadowOffset: { width: 0, height: 1 },
-        borderWidth: failed ? 1 : 0, borderColor: C.bad }}>
-        {showName ? <T style={{ color: WA.name, fontWeight: '700', fontSize: 13, paddingHorizontal: isImage ? 4 : 0 }}>{m.senderName}{m.fromOffice ? ` · ${t('chatOfficeShort')}` : ''}</T> : null}
+      <View style={{ backgroundColor: m.mine ? WA.mine : WA.theirs, borderRadius: 18, borderBottomRightRadius: m.mine ? 6 : 18, borderBottomLeftRadius: m.mine ? 18 : 6,
+        padding: isImage ? 4 : 10, paddingBottom: 6, gap: 4, borderWidth: failed ? 1 : m.mine ? 0 : 1, borderColor: failed ? C.bad : C.border,
+        elevation: m.mine ? 2 : 0, shadowColor: C.blue, shadowOpacity: m.mine ? 0.18 : 0, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
+        {showName ? <T style={{ color: WA.name, fontWeight: '800', fontSize: 13, paddingHorizontal: isImage ? 6 : 0 }}>{m.senderName}{m.fromOffice ? ` · ${t('chatOfficeShort')}` : ''}</T> : null}
         {m.replyTo ? (
-          <View style={{ backgroundColor: 'rgba(0,0,0,0.05)', borderLeftWidth: 4, borderLeftColor: '#06cf9c', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 }}>
-            <T style={{ color: '#06a07a', fontWeight: '700', fontSize: 12 }}>{m.replyTo.senderName}</T>
-            <T style={{ color: '#54656f', fontSize: 13 }} numberOfLines={2}>{m.replyTo.text ?? (m.replyTo.fileName ? `📎 ${m.replyTo.fileName}` : '')}</T>
+          <View style={{ backgroundColor: m.mine ? 'rgba(255,255,255,0.16)' : C.blueSoft, borderLeftWidth: 3, borderLeftColor: m.mine ? NX.accent : C.blue, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 }}>
+            <T style={{ color: m.mine ? NX.accent : C.blueInk, fontWeight: '800', fontSize: 12 }}>{m.replyTo.senderName}</T>
+            <T style={{ color: m.mine ? NX.mineMeta : C.text2, fontSize: 13 }} numberOfLines={2}>{m.replyTo.text ?? (m.replyTo.fileName ? `📎 ${m.replyTo.fileName}` : '')}</T>
           </View>
         ) : null}
         {m.file ? (isImage ? (
           <Pressable onPress={onOpenFile}>
-            <Image source={imageSource(m)} style={{ width: 240, height: 240, borderRadius: 8, backgroundColor: '#e9edef' }} resizeMode="cover" />
+            <Image source={imageSource(m)} style={{ width: 240, height: 240, borderRadius: 14, backgroundColor: C.line }} resizeMode="cover" />
           </Pressable>
         ) : (
-          <Pressable onPress={onOpenFile} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 8, padding: 10, minWidth: 220 }}>
-            <View style={{ width: 38, height: 44, borderRadius: 6, backgroundColor: fileColor(m.file.name), alignItems: 'center', justifyContent: 'center' }}>
+          <Pressable onPress={onOpenFile} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: m.mine ? 'rgba(255,255,255,0.14)' : C.bg, borderRadius: 12, padding: 10, minWidth: 220 }}>
+            <View style={{ width: 38, height: 44, borderRadius: 8, backgroundColor: fileColor(m.file.name), alignItems: 'center', justifyContent: 'center' }}>
               <T style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{(m.file.name.split('.').pop() ?? '').toUpperCase().slice(0, 4)}</T>
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <T style={{ fontWeight: '600', fontSize: 14 }} numberOfLines={2}>{m.file.name}</T>
-              {m.file.size ? <T style={{ color: WA.meta, fontSize: 12 }}>{fmtSize(m.file.size)}</T> : null}
+              <T style={{ fontWeight: '700', fontSize: 14, color: m.mine ? '#fff' : C.text }} numberOfLines={2}>{m.file.name}</T>
+              {m.file.size ? <T style={{ color: m.mine ? NX.mineMeta : WA.meta, fontSize: 12 }}>{fmtSize(m.file.size)}</T> : null}
             </View>
-            <Icon name="download" size={18} color={WA.meta} />
+            <Icon name="download" size={18} color={m.mine ? '#fff' : WA.meta} />
           </Pressable>
         )) : null}
-        {m.text ? <T style={{ fontSize: 15.5, lineHeight: 21, color: '#111b21', paddingHorizontal: isImage ? 4 : 0 }}>{m.text}</T> : null}
+        {m.text ? <T style={{ fontSize: 15.5, lineHeight: 21, color: m.mine ? NX.mineText : NX.theirsText, paddingHorizontal: isImage ? 6 : 0 }}>{m.text}</T> : null}
         {m.contact ? (
-          <Pressable onPress={() => onOpenTag(m.contact!.id)} style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: C.purpleSoft, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, marginHorizontal: isImage ? 4 : 0 }}>
-            <Icon name="tag" size={12} color={C.purple} />
-            <T style={{ color: C.purple, fontWeight: '700', fontSize: 12 }}>{m.contact.name}</T>
+          <Pressable onPress={() => onOpenTag(m.contact!.id)} style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: m.mine ? 'rgba(255,255,255,0.18)' : C.purpleSoft, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, marginHorizontal: isImage ? 6 : 0 }}>
+            <Icon name="tag" size={12} color={m.mine ? '#fff' : C.purple} />
+            <T style={{ color: m.mine ? '#fff' : C.purple, fontWeight: '700', fontSize: 12 }}>{m.contact.name}</T>
           </Pressable>
         ) : null}
-        <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: 3, paddingHorizontal: isImage ? 4 : 0 }}>
-          <T style={{ fontSize: 11, color: WA.meta }}>{timeOf(lang, m.createdAt)}</T>
-          {m.mine ? (failed ? <Icon name="alert" size={14} color={C.bad} />
-            : pending ? <Icon name="clock" size={13} color={WA.meta} />
-              : read ? <Icon name="checks" size={16} color={WA.blueTick} />
-                : seen ? <Icon name="checks" size={16} color={WA.meta} /> : <Icon name="check" size={14} color={WA.meta} />) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: 3, paddingHorizontal: isImage ? 6 : 0 }}>
+          <T style={{ fontSize: 11, color: m.mine ? NX.mineMeta : WA.meta }}>{timeOf(lang, m.createdAt)}</T>
+          {m.mine ? (failed ? <Icon name="alert" size={14} color="#ffd1cc" />
+            : pending ? <Icon name="clock" size={13} color={NX.mineMeta} />
+              : read ? <Icon name="checks" size={16} color={WA.blueTick} strokeWidth={2.4} />
+                : seen ? <Icon name="checks" size={16} color={NX.mineMeta} /> : <Icon name="check" size={14} color={NX.mineMeta} />) : null}
         </View>
       </View>
       {failed ? <T style={{ color: C.bad, fontSize: 12, textAlign: 'right', marginTop: 2 }}>{t('chatTapRetry')}</T> : null}

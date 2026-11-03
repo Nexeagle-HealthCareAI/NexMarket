@@ -1,17 +1,18 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Copy, History, KeyRound, Laptop, Lock, MessageCircle, MessageSquare, Plus, Send, Smartphone, Tablet, UserCog, UserPlus, X } from 'lucide-react';
+import { Copy, History, KeyRound, Pencil, Laptop, Lock, MessageCircle, MessageSquare, Plus, Send, Smartphone, Tablet, UserCog, UserPlus, X } from 'lucide-react';
 import Link from 'next/link';
 import { crm } from '@/lib/sync/api-client';
 import { useAccess, type PageKey } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { Pager, usePaged } from '@/components/crm/Pager';
+import { EditPerson, PhotoPicker } from '@/components/crm/EditPerson';
 
 interface RoleInfo { role: string; label: string; users: number; editable: boolean; pages: Record<PageKey, number> }
 interface FieldRoleInfo { role: string; label: string; description?: string | null; custom: boolean; users: number }
 interface RolesResponse { pages: PageKey[]; roles: RoleInfo[]; fieldAgents: number; fieldRoles?: FieldRoleInfo[] }
-interface Person { agentId: string; name: string; phone: string; email?: string | null; role: string; kind: 'field' | 'dashboard'; district: string; block: string; isActive: boolean; lastSignIn?: string | null; onOneTimePassword?: boolean; sessions?: Session[]; fieldBlock?: string | null }
+interface Person { agentId: string; name: string; phone: string; email?: string | null; role: string; kind: 'field' | 'dashboard'; district: string; block: string; isActive: boolean; lastSignIn?: string | null; onOneTimePassword?: boolean; sessions?: Session[]; fieldBlock?: string | null; photoUrl?: string | null }
 interface Session { id: string; deviceType: 'desktop' | 'tablet' | 'phone'; signedInAt: string; lastSeenAt?: string | null; device?: string | null; ip?: string | null }
 const DEV = { desktop: { label: 'Laptop', icon: Laptop }, tablet: { label: 'Tablet', icon: Tablet }, phone: { label: 'Phone', icon: Smartphone } } as const;
 
@@ -58,6 +59,7 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [addingRole, setAddingRole] = useState(false);
   const [roleFor, setRoleFor] = useState<Person | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [savingCell, setSavingCell] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<'all' | 'dashboard' | 'field'>('all');
   const [toast, showToast] = useToast();
@@ -262,7 +264,7 @@ export default function UsersPage() {
                   <tr key={p.agentId} style={p.isActive ? undefined : { opacity: 0.55 }}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span className="crm-initials" style={{ background: '#e9ebf1', color: 'var(--text)' }}>{initials(p.name)}</span>
+                        <Avatar person={p} />
                         <div>
                           <div className="crm-cell-main">{p.name}{!p.isActive && ' (inactive)'}</div>
                           <div className="crm-cell-sub" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -304,8 +306,12 @@ export default function UsersPage() {
                       </div>
                     </td>
                     <td className="num">
+                      {isAdmin && p.agentId === access?.agentId && (
+                        <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setEditing(p.agentId)}><Pencil size={14} aria-hidden /> Edit details</button>
+                      )}
                       {isAdmin && p.agentId !== access?.agentId && (
                         <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setEditing(p.agentId)}><Pencil size={14} aria-hidden /> Edit details</button>
                           <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setSending({ person: p })} title="Send their user ID"><Send size={14} aria-hidden /> Send login</button>
                           <button type="button" className="crm-btn is-sm" onClick={() => void resetPassword(p)} title="New one-time password"><KeyRound size={14} aria-hidden /> Reset &amp; send password</button>
                           <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setRoleFor(p)}><UserCog size={14} aria-hidden /> Change role</button>
@@ -327,11 +333,19 @@ export default function UsersPage() {
       {sending && <SendLogin person={sending.person} password={sending.password} onClose={() => setSending(null)} />}
       {inviting && <InviteUser kind={inviting.kind} initialRole={inviting.role} fieldRoles={roles.data?.fieldRoles?.map((r) => r.role)} onClose={() => setInviting(null)} onDone={() => { void people.reload(); void roles.reload(); }} />}
       {addingRole && <AddFieldRole onClose={() => setAddingRole(false)} onDone={(name) => { setAddingRole(false); showToast(`Field role “${name}” added.`); void roles.reload(); }} />}
+      {editing && <EditPerson agentId={editing} onClose={() => setEditing(null)} onDone={(msg) => { setEditing(null); showToast(msg); void people.reload(); }} />}
       {roleFor && <ChangeRole person={roleFor} fieldRoles={roles.data?.fieldRoles?.map((r) => r.role) ?? []} onClose={() => setRoleFor(null)}
         onDone={(msg) => { setRoleFor(null); showToast(msg); void people.reload(); void roles.reload(); }} />}
       {toast}
     </main>
   );
+}
+
+function Avatar({ person, size = 36, bg = '#e9ebf1', fg = 'var(--text)' }: { person: Pick<Person, 'name' | 'photoUrl'>; size?: number; bg?: string; fg?: string }) {
+  return person.photoUrl
+    // eslint-disable-next-line @next/next/no-img-element
+    ? <img src={person.photoUrl} alt="" className="crm-initials" style={{ width: size, height: size, objectFit: 'cover', background: bg }} />
+    : <span className="crm-initials" style={{ width: size, height: size, fontSize: size < 30 ? 10 : 12, background: bg, color: fg }}>{initials(person.name)}</span>;
 }
 
 function RoleCard({ short, name, desc, where, tone, members, onView, action }: {
@@ -356,7 +370,7 @@ function RoleCard({ short, name, desc, where, tone, members, onView, action }: {
       <ul className="us-members" aria-label={`People with the ${name} role`}>
         {shown.length === 0 ? <li className="crm-cell-sub">Nobody yet</li> : shown.map((m) => (
           <li key={m.agentId} style={m.isActive ? undefined : { opacity: 0.55 }}>
-            <span className="crm-initials" style={{ width: 26, height: 26, fontSize: 10, background: bg, color: fg }}>{initials(m.name)}</span>
+            <Avatar person={m} size={26} bg={bg} fg={fg} />
             <span className="us-m-name">{m.name}</span>
             <span className="us-id">{m.agentId}</span>
           </li>
@@ -382,6 +396,8 @@ function InviteUser({ kind, initialRole, fieldRoles, onClose, onDone }: { kind: 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<{ agentId: string; password: string } | null>(null);
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = async () => {
@@ -393,7 +409,7 @@ function InviteUser({ kind, initialRole, fieldRoles, onClose, onDone }: { kind: 
     try {
       const res = await crm.post<{ agentId: string; password: string }>('/api/v1/agents', {
         firstName: form.firstName.trim(), lastName: form.lastName.trim(), phone: form.phone, email: form.email.trim() || null,
-        role: form.role, district: form.district.trim(), block: form.block.trim(), password,
+        role: form.role, district: form.district.trim(), block: form.block.trim(), password, photoUrl: photoUrl || null,
       });
       setCreated({ agentId: res.agentId, password });
       onDone();
@@ -412,9 +428,10 @@ function InviteUser({ kind, initialRole, fieldRoles, onClose, onDone }: { kind: 
     <Modal title={kind === 'dashboard' ? 'Invite dashboard user' : `Onboard field agent${form.role ? ` · ${form.role}` : ''}`} onClose={onClose} actions={
       <>
         <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
-        <button type="button" className="crm-btn" disabled={saving} onClick={save}>{saving ? 'Creating…' : 'Create account'}</button>
+        <button type="button" className="crm-btn" disabled={saving || uploading} onClick={save}>{saving ? 'Creating…' : 'Create account'}</button>
       </>
     }>
+      <PhotoPicker name={`${form.firstName} ${form.lastName}`} url={photoUrl} onChange={setPhotoUrl} busy={uploading} setBusy={setUploading} onError={setError} />
       <div className="crm-form-grid">
         <label className="crm-field">First name<input className="crm-input" value={form.firstName} onChange={(e) => set('firstName', e.target.value)} /></label>
         <label className="crm-field">Last name<input className="crm-input" value={form.lastName} onChange={(e) => set('lastName', e.target.value)} /></label>

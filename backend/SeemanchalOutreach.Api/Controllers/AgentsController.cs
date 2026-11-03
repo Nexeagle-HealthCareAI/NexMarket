@@ -77,6 +77,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public string? PersonalDetails { get; set; }
 
         // Admin-only fields — ignored unless the caller is an Admin.
+        public string? Phone { get; set; }
         public string? Role { get; set; }
         public string? District { get; set; }
         public string? Block { get; set; }
@@ -514,9 +515,33 @@ namespace SeemanchalOutreach.Api.Controllers
             var agent = await _db.Agents.FirstOrDefaultAsync(a => a.AgentId == agentId, cancellationToken);
             if (agent == null) return NotFound();
 
-            if (dto.Email != null && await _db.Agents.AnyAsync(a => a.AgentId != agentId && a.Email == dto.Email, cancellationToken))
+            if (dto.Email != null) dto.Email = dto.Email.Trim();
+            if (!string.IsNullOrEmpty(dto.Email) && !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(dto.Email))
             {
-                return Conflict($"An agent with email {dto.Email} already exists.");
+                return BadRequest("Enter a valid email address.");
+            }
+            if (!string.IsNullOrEmpty(dto.Email) && await _db.Agents.AnyAsync(a => a.AgentId != agentId && a.Email == dto.Email, cancellationToken))
+            {
+                return Conflict($"Someone else already uses the email {dto.Email}.");
+            }
+            if (isAdmin && dto.Phone != null)
+            {
+                dto.Phone = new string(dto.Phone.Where(char.IsDigit).ToArray());
+                if (dto.Phone.Length != 10) return BadRequest("Mobile number must be exactly 10 digits.");
+                if (await _db.Agents.AnyAsync(a => a.AgentId != agentId && a.Phone == dto.Phone, cancellationToken))
+                {
+                    return Conflict($"Someone else already uses the mobile number {dto.Phone}.");
+                }
+            }
+            if (dto.DateOfBirth != null && dto.DateOfBirth.Value.Date > DateTime.UtcNow.Date)
+            {
+                return BadRequest("Date of birth can't be in the future.");
+            }
+            if (dto.EmergencyContactPhone != null)
+            {
+                var ec = new string(dto.EmergencyContactPhone.Where(char.IsDigit).ToArray());
+                if (ec.Length != 0 && ec.Length != 10) return BadRequest("Emergency contact number must be 10 digits.");
+                dto.EmergencyContactPhone = ec;
             }
 
             var nameChanged = false;
@@ -532,7 +557,8 @@ namespace SeemanchalOutreach.Api.Controllers
             // "clear this field," distinct from omitting the property to leave it
             // untouched. These used to only ever accept a non-empty overwrite, so an
             // agent/admin could never actually clear Address, Education, etc. once set.
-            if (!string.IsNullOrEmpty(dto.Email)) agent.Email = dto.Email;
+            // An empty email clears it (email is optional).
+            if (dto.Email != null) agent.Email = dto.Email.Length == 0 ? null : dto.Email;
             if (dto.DateOfBirth != null) agent.DateOfBirth = DateTime.SpecifyKind(dto.DateOfBirth.Value, DateTimeKind.Utc);
             if (dto.Gender != null) agent.Gender = dto.Gender;
             if (dto.Address != null) agent.Address = dto.Address;
@@ -541,13 +567,15 @@ namespace SeemanchalOutreach.Api.Controllers
             if (dto.WorkExperience != null) agent.WorkExperience = dto.WorkExperience;
             if (dto.EmergencyContactName != null) agent.EmergencyContactName = dto.EmergencyContactName;
             if (dto.EmergencyContactPhone != null) agent.EmergencyContactPhone = dto.EmergencyContactPhone;
-            if (!string.IsNullOrEmpty(dto.PhotoUrl)) agent.PhotoUrl = dto.PhotoUrl;
+            // An empty photo URL removes the photo.
+            if (dto.PhotoUrl != null) agent.PhotoUrl = dto.PhotoUrl.Length == 0 ? null : dto.PhotoUrl;
             if (dto.PersonalDetails != null) agent.PersonalDetails = dto.PersonalDetails;
 
             // Admin-only fields — silently ignored for a self-edit so an agent can't
             // reassign their own role/district/block or reactivate themselves.
             if (isAdmin)
             {
+                if (!string.IsNullOrEmpty(dto.Phone)) agent.Phone = dto.Phone;
                 if (!string.IsNullOrEmpty(dto.Role)) agent.Role = RoleChecks.CanonicalDashboardRole(dto.Role) ?? dto.Role;
                 if (!string.IsNullOrEmpty(dto.District)) agent.District = dto.District;
                 if (!string.IsNullOrEmpty(dto.Block)) agent.Block = dto.Block;

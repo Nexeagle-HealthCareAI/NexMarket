@@ -46,6 +46,11 @@ builder.Services.AddScoped<SeemanchalOutreach.Api.Services.FieldAssistant>();
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.AnalystScheduler>();
 builder.Services.AddSingleton<ILiveEvents, LiveEventPublisher>();
 builder.Services.AddHostedService<BroadcastDispatcher>();
+// Notifications: inbox + live CRM bell + phone push (Firebase, when Push:Fcm is configured).
+builder.Services.AddHttpClient("fcm", c => c.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.FcmSender>();
+builder.Services.AddSingleton<INotifier, SeemanchalOutreach.Api.Services.Notifier>();
+builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.NotificationDispatcher>();
 
 // Consistent JSON error shape for both validation failures ([ApiController]'s
 // automatic 400s) and unhandled exceptions (via UseExceptionHandler below) —

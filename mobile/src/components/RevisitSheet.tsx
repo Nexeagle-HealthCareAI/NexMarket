@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { Chip, Field, Sheet, T, toast } from './ui';
+import { Btn, Chip, Field, Sheet, T, toast } from './ui';
+import { NoteList } from './NoteList';
+import { EscalateSheet } from './EscalateSheet';
 import { Icon } from './Icon';
-import { useSession } from '../lib/session';
+import { useDb, useSession } from '../lib/session';
 import { q, type Note } from '../lib/db';
 import { addNote, setFollowUp } from '../lib/repo';
 import { quickPosition } from '../lib/location';
-import { relDay } from '../lib/format';
 import { addDays, ymd } from '../lib/util';
 import { C } from '../theme';
 
@@ -22,13 +23,13 @@ export function RevisitSheet({ visible, onClose, contactId, name }: { visible: b
   const [met, setMet] = useState<Met | null>(null);
   const [interest, setInterest] = useState<Interest | null>(null);
   const [comment, setComment] = useState('');
-  const [history, setHistory] = useState<Note[]>([]);
+  const history = useDb(() => (visible ? q.notesFor(contactId) : ([] as Note[])), [visible, contactId]);
   const [saving, setSaving] = useState(false);
+  const [escOpen, setEscOpen] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
     setMet(null); setInterest(null); setComment('');
-    setHistory(q.notesFor(contactId).slice(0, 3));
   }, [visible, contactId]);
 
   const ready = !!met && (met === 'notMet' || !!interest || comment.trim().length > 0);
@@ -48,17 +49,7 @@ export function RevisitSheet({ visible, onClose, contactId, name }: { visible: b
   return (
     <Sheet visible={visible} onClose={onClose} title={t('revisitTitle', { name })}>
       <View style={{ gap: 12 }}>
-        {history.length ? (
-          <View style={{ gap: 8, backgroundColor: C.bg, borderRadius: 14, padding: 12 }}>
-            <T style={{ fontWeight: '700', color: C.text2, fontSize: 13 }}>{t('earlierComments')}</T>
-            {history.map((n) => (
-              <View key={n.clientId} style={{ gap: 2 }}>
-                <T style={{ color: C.text2, fontSize: 12 }}>{relDay(t, lang, n.createdAt)} · {t(`source_${n.source}` as never)}</T>
-                <T numberOfLines={3}>{n.text}</T>
-              </View>
-            ))}
-          </View>
-        ) : <T style={{ color: C.text2 }}>{t('noNotes')}</T>}
+        <NoteList notes={history} limit={3} title={t('earlierComments')} />
 
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {(['met', 'notMet'] as Met[]).map((m) => (
@@ -93,7 +84,9 @@ export function RevisitSheet({ visible, onClose, contactId, name }: { visible: b
           </>
         ) : <T style={{ color: C.muted, fontSize: 13 }}>{t('revisitPickFirst')}</T>}
         <T style={{ color: C.muted, fontSize: 12 }}>{t('revisitLocationNote')}</T>
+        <Btn kind="danger" icon="flag" label={t('escalateIssue')} onPress={() => setEscOpen(true)} />
       </View>
+      <EscalateSheet visible={escOpen} onClose={() => setEscOpen(false)} contactId={contactId} name={name} />
     </Sheet>
   );
 }

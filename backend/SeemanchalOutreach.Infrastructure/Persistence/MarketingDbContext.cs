@@ -44,6 +44,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
         public DbSet<ChatRead> ChatReads => Set<ChatRead>();
         public DbSet<FieldRole> FieldRoles => Set<FieldRole>();
+        public DbSet<Notification> Notifications => Set<Notification>();
+        public DbSet<PushDevice> PushDevices => Set<PushDevice>();
+        public DbSet<NotificationSetting> NotificationSettings => Set<NotificationSetting>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -276,11 +279,32 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.Name).IsUnique();
             });
+            modelBuilder.Entity<Notification>(entity =>
+            {
+                entity.ToTable("notifications");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.UserId, e.CreatedAt });
+                entity.HasIndex(e => new { e.UserId, e.ReadAt });
+            });
+            modelBuilder.Entity<PushDevice>(entity =>
+            {
+                entity.ToTable("push_devices");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Token).IsUnique();
+                entity.HasIndex(e => e.UserId);
+            });
+            modelBuilder.Entity<NotificationSetting>(entity =>
+            {
+                entity.ToTable("notification_settings");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.UserId).IsUnique();
+            });
             modelBuilder.Entity<ChatThread>(entity =>
             {
                 entity.ToTable("chat_threads");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.AgentId);
+                entity.HasIndex(e => e.PeerId);
                 entity.HasIndex(e => e.LastMessageAt);
             });
             modelBuilder.Entity<ChatMessage>(entity =>
