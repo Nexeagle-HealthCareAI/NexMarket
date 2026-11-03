@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, CalendarDays, MapPin, MessageCircle, Phone, Search, Star } from 'lucide-react';
+import { ArrowLeft, CalendarDays, FileText, Image as ImageIcon, MapPin, MessageCircle, MessagesSquare, Phone, Search, Star } from 'lucide-react';
+import Link from 'next/link';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, contactTypeLabel, fmt, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast, type Tone } from '@/components/crm/ui';
@@ -28,9 +29,10 @@ interface Detail {
   escalation?: { note?: string | null; resolved: boolean; resolution?: string | null } | null;
   stats: { referrals90: number; admitted90: number; referralsAll: number; admittedAll: number };
   referrals: { clientId: string; patientName: string; department?: string | null; createdAt: string; status: string; label: string }[];
-  timeline: { kind: 'note' | 'visit' | 'revisit' | 'call' | 'change'; text: string; by: string; at: string; fromApp: boolean }[];
+  timeline: { kind: 'note' | 'visit' | 'revisit' | 'call' | 'change' | 'chat'; text: string; by: string; at: string; fromApp: boolean }[];
   survey: { done: boolean; skipped: boolean; at?: string | null; answers: { question: string; answer: string }[] };
   timesMet?: number;
+  chat?: { id: string; threadId: string; at: string; by: string; fromOffice: boolean; text?: string | null; file?: { name: string; mime: string; size?: number | null; url: string } | null }[];
   visits?: { kind: 'added' | 'visit' | 'revisit'; at: string; by: string; text?: string | null; lat?: number | null; lng?: number | null }[];
 }
 interface DupRecord { clientId: string; name: string; role: string; phone?: string | null; agentName: string; panchayatName: string; createdAt: string }
@@ -53,10 +55,20 @@ const TABS: { key: Tab; label: string }[] = [
 const KIND_META: Record<Detail['timeline'][number]['kind'], { letter: string; label: string; bg: string; fg: string }> = {
   visit: { letter: 'V', label: 'Visit', bg: 'var(--ok-soft)', fg: 'var(--ok-ink)' },
   revisit: { letter: 'R', label: 'Revisit', bg: 'var(--ok-soft)', fg: 'var(--ok-ink)' },
+  chat: { letter: '💬', label: 'Chat', bg: '#ede9fe', fg: '#5b21b6' },
   call: { letter: 'C', label: 'Call', bg: 'var(--accent-soft)', fg: 'var(--accent-ink)' },
   note: { letter: 'N', label: 'Note', bg: 'var(--grey-soft)', fg: 'var(--text-3)' },
   change: { letter: 'S', label: 'Update', bg: 'var(--warn-soft)', fg: 'var(--warn-ink)' },
 };
+
+/** Chat files are private: fetch with the session, then show or save. */
+async function openChatFile(url: string, mime: string, name: string) {
+  const b = await crm.blob(url);
+  const u = URL.createObjectURL(b);
+  if (mime.startsWith('image/') || mime === 'application/pdf') window.open(u, '_blank', 'noopener');
+  else { const a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+  setTimeout(() => URL.revokeObjectURL(u), 60000);
+}
 
 function followText(d?: string | null, s?: FollowState) {
   if (!d || s === 'none') return 'Not set';
@@ -471,6 +483,31 @@ function Profile({ id, editable, showToast, onBack, onChange }: {
         </section>
       )}
 
+      {c.chat && c.chat.length > 0 && (
+        <section aria-labelledby="chat-h" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <h3 id="chat-h" style={{ fontSize: 16, fontWeight: 800, flex: 1 }}>Shared in chat</h3>
+            <span className="crm-cell-sub">{c.chat.filter((m) => m.file).length} file{c.chat.filter((m) => m.file).length === 1 ? '' : 's'} · {c.chat.length} message{c.chat.length === 1 ? '' : 's'} tagged</span>
+          </span>
+          <ul className="pt-chat">
+            {c.chat.map((m) => (
+              <li key={m.id}>
+                <span className="pt-chat-icon" aria-hidden>{m.file ? (m.file.mime.startsWith('image/') ? <ImageIcon size={16} /> : <FileText size={16} />) : <MessagesSquare size={16} />}</span>
+                <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {m.file && <strong style={{ fontSize: 13.5, overflowWrap: 'anywhere' }}>{m.file.name}</strong>}
+                  {m.text && <span style={{ fontSize: 13.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{m.text}</span>}
+                  <span className="crm-cell-sub">{m.by}{m.fromOffice ? ' (office)' : ''} · {fmt.dateTime(m.at)}</span>
+                </span>
+                <span style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  {m.file && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => void openChatFile(m.file!.url, m.file!.mime, m.file!.name)}>Open</button>}
+                  <Link className="crm-btn is-secondary is-sm" href={`/admin/chat?t=${m.threadId}`}>In chat</Link>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section aria-labelledby="notes-h" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <h3 id="notes-h" style={{ fontSize: 16, fontWeight: 800, flex: 1 }}>Notes &amp; history</h3>
@@ -494,7 +531,7 @@ function Profile({ id, editable, showToast, onBack, onChange }: {
                   <span aria-hidden style={{ width: 30, height: 30, borderRadius: 999, background: m.bg, color: m.fg, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{m.letter}</span>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
                     <span style={{ fontSize: 14, lineHeight: 1.45, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{t.text}</span>
-                    <span className="crm-cell-sub">{m.label} · {t.by} · {fmt.dateTime(t.at)}{t.kind === 'note' || t.kind === 'visit' || t.kind === 'revisit' ? (t.fromApp ? ' · from app' : ' · from CRM') : ''}</span>
+                    <span className="crm-cell-sub">{m.label} · {t.by} · {fmt.dateTime(t.at)}{t.kind === 'note' || t.kind === 'visit' || t.kind === 'revisit' || t.kind === 'chat' ? (t.fromApp ? ' · from app' : ' · from CRM') : ''}</span>
                   </span>
                 </li>
               );

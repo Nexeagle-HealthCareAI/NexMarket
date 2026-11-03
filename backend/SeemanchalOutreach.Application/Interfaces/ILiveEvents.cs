@@ -33,5 +33,8 @@ namespace SeemanchalOutreach.Application.Interfaces
 
         /// <summary>Never throws.</summary>
         Task PublishLocationAsync(LiveLocation location);
+
+        /// <summary>"Something new in this chat" — only the thread id; the CRM then fetches it with its own access check. Never throws.</summary>
+        Task PublishChatAsync(System.Guid threadId);
     }
 }

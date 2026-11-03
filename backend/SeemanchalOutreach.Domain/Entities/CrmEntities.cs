@@ -285,4 +285,51 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? Summary { get; set; }                 // a readable name: partner name, patient name, task title…
         public string? ChangesJson { get; set; }             // {"Priority":{"from":"normal","to":"high"}}
     }
+
+    /// <summary>
+    /// A chat: one per field agent with the office ("agent"), plus the whole-team group ("team").
+    /// </summary>
+    public class ChatThread
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Kind { get; set; } = "agent";          // agent | team
+        public string? AgentId { get; set; }                 // for Kind = agent
+        public string Title { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime LastMessageAt { get; set; } = DateTime.UtcNow;
+        public string? LastPreview { get; set; }
+    }
+
+    /// <summary>One chat message: text, an optional file, and an optional tagged partner. Never edited or removed.</summary>
+    public class ChatMessage
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string ClientId { get; set; } = string.Empty;  // idempotency key from the sender's device
+        public Guid ThreadId { get; set; }
+        public string SenderId { get; set; } = string.Empty;  // agentId of the person
+        public string SenderName { get; set; } = string.Empty;
+        public bool FromOffice { get; set; }                  // sent from the CRM
+        public string? Text { get; set; }
+        public string? ContactClientId { get; set; }          // tagged partner
+        public string? ContactName { get; set; }
+        public string? FileKey { get; set; }                  // private storage key; served only through the API
+        public string? FileName { get; set; }
+        public string? FileMime { get; set; }
+        public long? FileSize { get; set; }
+        public double? Lat { get; set; }
+        public double? Lng { get; set; }
+        public Guid? ReplyToId { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>How far each person has read a chat (for unread counts and the blue ticks).</summary>
+    public class ChatRead
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid ThreadId { get; set; }
+        public string UserId { get; set; } = string.Empty;
+        public bool IsOffice { get; set; }
+        public DateTime LastReadAt { get; set; }
+        public DateTime? LastSeenAt { get; set; }            // delivered: their app fetched messages up to here
+    }
 }

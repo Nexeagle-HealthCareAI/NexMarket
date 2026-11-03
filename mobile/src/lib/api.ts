@@ -34,6 +34,9 @@ export const clearSignedOutReason = () => { endedReason = null; };
 let refreshing: Promise<boolean> | null = null;
 let onSignedOut: (() => void) | null = null;
 
+/** The current access token, for loading private files (chat photos) with an Authorization header. */
+export const accessToken = () => access;
+
 export function setSignedOutHandler(fn: (() => void) | null) {
   onSignedOut = fn;
 }

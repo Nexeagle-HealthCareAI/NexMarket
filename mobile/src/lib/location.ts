@@ -118,6 +118,16 @@ export async function quickPosition(): Promise<{ lat: number; lng: number; accur
   }
 }
 
+/** The last known fix (up to 5 minutes old) without waiting for GPS — for tagging chat messages. */
+export async function lastKnown(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const p = await Location.getLastKnownPositionAsync({ maxAge: 5 * 60_000 });
+    return p ? { lat: p.coords.latitude, lng: p.coords.longitude } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Store a point now (e.g. at shift start or check-in) so the route has no gap. */
 export function recordPoint(lat: number, lng: number, accuracy: number | null) {
   const shift = q.activeShift();

@@ -191,6 +191,9 @@ namespace SeemanchalOutreach.Api.Controllers
                 .OrderByDescending(l => l.CreatedAt).Take(30).ToListAsync(ct);
             var history = await _db.ContactHistory.AsNoTracking().Where(h => h.ContactClientId == clientId)
                 .OrderByDescending(h => h.Timestamp).Take(30).ToListAsync(ct);
+            // Chat messages and files that someone tagged with this partner.
+            var chat = await _db.ChatMessages.AsNoTracking().Where(m => m.ContactClientId == clientId)
+                .OrderByDescending(m => m.CreatedAt).Take(50).ToListAsync(ct);
             var lastVisit = await _db.Visits.AsNoTracking()
                 .Where(v => v.PanchayatId == c.PanchayatId && v.AgentId == c.AgentId)
                 .OrderByDescending(v => v.CheckInAt).Select(v => (DateTime?)v.CheckInAt).FirstOrDefaultAsync(ct);
@@ -223,6 +226,14 @@ namespace SeemanchalOutreach.Api.Controllers
                         : h.Comments!,
                     By = Who(h.UpdatedBy),
                     At = h.Timestamp,
+                }))
+                .Concat(chat.Select(m => new TimelineItem
+                {
+                    Kind = "chat",
+                    Text = (m.FileName != null ? $"📎 {m.FileName}" + (string.IsNullOrWhiteSpace(m.Text) ? "" : "\n") : "") + (m.Text ?? ""),
+                    By = m.SenderName,
+                    At = m.CreatedAt,
+                    FromApp = !m.FromOffice,
                 }))
                 .OrderByDescending(t => t.At).Take(60).ToList();
 
@@ -278,6 +289,17 @@ namespace SeemanchalOutreach.Api.Controllers
                     .Concat(notes.Where(n => n.Source is "visit" or "revisit").Select(n => new { kind = n.Source, at = n.CreatedAt, by = Who(n.AgentId), text = (string?)n.Text, lat = n.Lat, lng = n.Lng }))
                     .OrderByDescending(v => v.at),
                 survey = await SurveyAsync(clientId, ct),
+                // Shared in chat with this partner tagged: files open through the chat API (signed-in only).
+                chat = chat.Select(m => new
+                {
+                    id = m.Id,
+                    threadId = m.ThreadId,
+                    at = m.CreatedAt,
+                    by = m.SenderName,
+                    fromOffice = m.FromOffice,
+                    text = m.Text,
+                    file = m.FileKey == null ? null : new { name = m.FileName, mime = m.FileMime, size = m.FileSize, url = $"/api/v1/chat/files/{m.Id}" },
+                }),
             });
         }
 

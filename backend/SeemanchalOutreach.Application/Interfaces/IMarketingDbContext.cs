@@ -37,6 +37,9 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<SurveyEdit> SurveyEdits { get; }
         DbSet<AgentTask> AgentTasks { get; }
         DbSet<AuditLog> AuditLogs { get; }
+        DbSet<ChatThread> ChatThreads { get; }
+        DbSet<ChatMessage> ChatMessages { get; }
+        DbSet<ChatRead> ChatReads { get; }
 
         ChangeTracker ChangeTracker { get; }
 

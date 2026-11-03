@@ -29,6 +29,7 @@ namespace SeemanchalOutreach.Infrastructure
 
             services.AddScoped<IMarketingDbContext>(provider => provider.GetRequiredService<MarketingDbContext>());
             services.AddSingleton<IPhotoUploadService, S3PhotoUploadService>();
+            services.AddSingleton<IFileStore, PrivateFileStore>();
 
             services.AddMemoryCache();
             services.AddHttpClient("mapbox", client =>
