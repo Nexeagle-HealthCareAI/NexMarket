@@ -43,6 +43,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<ChatThread> ChatThreads => Set<ChatThread>();
         public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
         public DbSet<ChatRead> ChatReads => Set<ChatRead>();
+        public DbSet<FieldRole> FieldRoles => Set<FieldRole>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -269,6 +270,12 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.ResponseId);
             });
 
+            modelBuilder.Entity<FieldRole>(entity =>
+            {
+                entity.ToTable("field_roles");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Name).IsUnique();
+            });
             modelBuilder.Entity<ChatThread>(entity =>
             {
                 entity.ToTable("chat_threads");

@@ -43,6 +43,8 @@ export function useChatVersion(): number {
 const KEEP = 200;
 export const cachedThreads = (): ChatThread[] => kvJson<ChatThread[]>('chatThreads', []);
 export const cachedUnread = (): number => Number(kvGet('chatUnread') ?? '0') || 0;
+/** A manager or admin using the app sees every agent's chat, named by agent. */
+export const isOfficeUser = (): boolean => kvGet('chatIsOffice') === '1';
 export function cachedMessages(threadId: string): ChatMsg[] {
   const server = kvJson<ChatMsg[]>(`chat:${threadId}`, []);
   const pend = queue().filter((p) => p.threadId === threadId).map(toMsg);
@@ -64,8 +66,9 @@ function storeMessages(threadId: string, incoming: ChatMsg[]) {
 
 // ─── Server ───
 export async function refreshThreads(): Promise<ChatThread[]> {
-  const r = await api<{ threads: ChatThread[] }>('/api/v1/chat/threads');
+  const r = await api<{ threads: ChatThread[]; office?: boolean }>('/api/v1/chat/threads');
   kvSet('chatThreads', JSON.stringify(r.threads));
+  kvSet('chatIsOffice', r.office ? '1' : '0');
   kvSet('chatUnread', String(r.threads.reduce((n, t) => n + t.unread, 0)));
   changed();
   return r.threads;

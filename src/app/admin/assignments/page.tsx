@@ -17,7 +17,7 @@ interface Board {
   kpis: { blocks: number; blocksWithAgent: number; panchayats: number; panchayatsAssigned: number; agentsWithoutBlock: number };
   districts: string[];
   blocks: BoardBlock[];
-  agents: { agentId: string; name: string; block?: string | null; district?: string | null; partial: boolean }[];
+  agents: { agentId: string; name: string; block?: string | null; district?: string | null; partial: boolean; role?: string; fieldRole?: boolean }[];
 }
 interface BlockDetail {
   district: string; block: string;
@@ -170,7 +170,7 @@ function BlockPanel({ blk, agents, editable, onBack, onSaved, showToast, taskVer
   const [busy, setBusy] = useState(false);
 
   const agentLabel = (a: Board['agents'][number]) =>
-    `${a.name}${!a.block ? ' (no block yet)' : a.block === blk.block && a.district === blk.district ? ' (here now)' : ` (now ${a.block})`}`;
+    `${a.name}${a.role ? ` · ${a.role}` : ''}${!a.block ? ' (no block yet)' : a.block === blk.block && a.district === blk.district ? ' (here now)' : ` (now ${a.block})`}`;
   const nameOf = (id: string) => agents.find((a) => a.agentId === id)?.name ?? 'the agent';
 
   const save = async (agentId: string, panchayatIds: string[] | null) => {
@@ -209,7 +209,8 @@ function BlockPanel({ blk, agents, editable, onBack, onSaved, showToast, taskVer
           <label className="crm-field" style={{ flex: '1 1 220px' }}>Give the whole block to
             <select className="crm-select" value={whole} onChange={(e) => setWhole(e.target.value)}>
               <option value="">Choose agent</option>
-              {agents.map((a) => <option key={a.agentId} value={a.agentId}>{agentLabel(a)}</option>)}
+              <optgroup label="Field roles">{agents.filter((a) => a.fieldRole !== false).map((a) => <option key={a.agentId} value={a.agentId}>{agentLabel(a)}</option>)}</optgroup>
+              <optgroup label="Other roles (can also work in the field)">{agents.filter((a) => a.fieldRole === false).map((a) => <option key={a.agentId} value={a.agentId}>{agentLabel(a)}</option>)}</optgroup>
             </select>
           </label>
           <button type="button" className="crm-btn" disabled={!whole || busy} onClick={() => save(whole, null)}>Assign block</button>
@@ -245,7 +246,8 @@ function BlockPanel({ blk, agents, editable, onBack, onSaved, showToast, taskVer
             <label className="crm-sr" htmlFor="split-to">Agent</label>
             <select id="split-to" className="crm-select" style={{ width: 'auto', flex: '1 1 180px' }} value={to} onChange={(e) => setTo(e.target.value)}>
               <option value="">Choose agent</option>
-              {agents.map((a) => <option key={a.agentId} value={a.agentId}>{agentLabel(a)}</option>)}
+              <optgroup label="Field roles">{agents.filter((a) => a.fieldRole !== false).map((a) => <option key={a.agentId} value={a.agentId}>{agentLabel(a)}</option>)}</optgroup>
+              <optgroup label="Other roles (can also work in the field)">{agents.filter((a) => a.fieldRole === false).map((a) => <option key={a.agentId} value={a.agentId}>{agentLabel(a)}</option>)}</optgroup>
               <option value="__none">Nobody (unassign)</option>
             </select>
             <button type="button" className="crm-btn is-sm" disabled={!to || busy} onClick={() => save(to === '__none' ? '' : to, [...checked])}>Move</button>

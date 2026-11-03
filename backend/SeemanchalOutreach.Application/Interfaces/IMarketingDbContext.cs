@@ -40,6 +40,7 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<ChatThread> ChatThreads { get; }
         DbSet<ChatMessage> ChatMessages { get; }
         DbSet<ChatRead> ChatReads { get; }
+        DbSet<FieldRole> FieldRoles { get; }
 
         ChangeTracker ChangeTracker { get; }
 

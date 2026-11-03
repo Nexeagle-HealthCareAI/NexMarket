@@ -99,7 +99,85 @@ namespace SeemanchalOutreach.Api.Controllers
                 new { role = RoleChecks.MarketingManager, label = "Marketing manager", users = CountOf(RoleChecks.MarketingManager), editable = true, pages = await _perms.GetLevelsAsync(RoleChecks.MarketingManager) },
                 new { role = RoleChecks.HospitalRep, label = "Hospital representative", users = CountOf(RoleChecks.HospitalRep), editable = true, pages = await _perms.GetLevelsAsync(RoleChecks.HospitalRep) },
             };
-            return Ok(new { pages = Pages.All, roles, fieldAgents = fieldCount });
+            return Ok(new { pages = Pages.All, roles, fieldAgents = fieldCount, fieldRoles = await FieldRoleListAsync(counts.Select(c => (c.Role, c.Count))) });
+        }
+
+        /// <summary>Field job titles that come with the app.</summary>
+        public static readonly (string Name, string Description)[] DefaultFieldRoles =
+        {
+            ("Marketing Executive", "Visits panchayats, adds partners and refers patients."),
+            ("Field Officer", "Works a block day to day: visits, surveys and partner follow-ups."),
+            ("Regional Representative", "Looks after partners across several blocks."),
+        };
+
+        /// <summary>Default field roles, ones an admin added, and any title already in use, with head counts.</summary>
+        private async Task<List<object>> FieldRoleListAsync(IEnumerable<(string Role, int Count)> counts)
+        {
+            var custom = await _db.FieldRoles.AsNoTracking().Where(r => r.IsActive).OrderBy(r => r.CreatedAt).ToListAsync();
+            var used = counts.Where(c => RoleChecks.CanonicalDashboardRole(c.Role) == null && !string.IsNullOrWhiteSpace(c.Role)).ToList();
+            var list = new List<(string Name, string? Desc, bool Custom)>();
+            foreach (var d in DefaultFieldRoles) list.Add((d.Name, d.Description, false));
+            foreach (var c in custom) if (!list.Any(x => x.Name.Equals(c.Name, StringComparison.OrdinalIgnoreCase))) list.Add((c.Name, c.Description, true));
+            foreach (var u in used) if (!list.Any(x => x.Name.Equals(u.Role.Trim(), StringComparison.OrdinalIgnoreCase))) list.Add((u.Role.Trim(), null, true));
+            return list.Select(r => (object)new
+            {
+                role = r.Name,
+                label = r.Name,
+                description = r.Desc,
+                custom = r.Custom,
+                users = used.Where(u => u.Role.Trim().Equals(r.Name, StringComparison.OrdinalIgnoreCase)).Sum(u => u.Count),
+            }).ToList();
+        }
+
+        public class FieldRoleDto { public string Name { get; set; } = ""; public string? Description { get; set; } }
+
+        /// <summary>Adds a field job title people can be onboarded with (Admin).</summary>
+        [HttpPost("field-roles")]
+        [Authorize(Roles = "Admin,admin")]
+        public async Task<IActionResult> AddFieldRole([FromBody] FieldRoleDto dto)
+        {
+            var name = System.Text.RegularExpressions.Regex.Replace((dto.Name ?? "").Trim(), @"\s+", " ");
+            if (name.Length < 3 || name.Length > 40) return BadRequest(new { message = "Give the role a name of 3 to 40 letters." });
+            if (RoleChecks.CanonicalDashboardRole(name) != null) return BadRequest(new { message = "That name is a dashboard role. Pick another name." });
+            if (DefaultFieldRoles.Any(d => d.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                || await _db.FieldRoles.AnyAsync(r => r.Name.ToLower() == name.ToLower()))
+                return Conflict(new { message = "That field role already exists." });
+            _db.FieldRoles.Add(new FieldRole { Name = name, Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim(), CreatedBy = User.AgentIdOf() });
+            await _db.SaveChangesAsync();
+            return Ok(new { role = name });
+        }
+
+        public class ChangeRoleDto { public string Role { get; set; } = ""; }
+
+        /// <summary>
+        /// Changes someone's role (Admin): any dashboard role or any field role. They are signed out of every
+        /// device so the new role applies at once. Anyone can still be given a block, whatever their role.
+        /// </summary>
+        [HttpPut("people/{agentId}/role")]
+        [Authorize(Roles = "Admin,admin")]
+        public async Task<IActionResult> ChangeRole(string agentId, [FromBody] ChangeRoleDto dto)
+        {
+            if (agentId == User.AgentIdOf()) return BadRequest(new { message = "You can't change your own role." });
+            var agent = await _db.Agents.FirstOrDefaultAsync(a => a.AgentId == agentId);
+            if (agent == null) return NotFound();
+            var wanted = (dto.Role ?? "").Trim();
+            var dashboard = RoleChecks.CanonicalDashboardRole(wanted);
+            string? newRole = dashboard;
+            if (newRole == null)
+            {
+                var fieldNames = DefaultFieldRoles.Select(d => d.Name)
+                    .Concat(await _db.FieldRoles.Where(r => r.IsActive).Select(r => r.Name).ToListAsync()).ToList();
+                newRole = fieldNames.FirstOrDefault(n => n.Equals(wanted, StringComparison.OrdinalIgnoreCase));
+            }
+            if (newRole == null) return BadRequest(new { message = "Pick a role from the list." });
+            if (newRole == agent.Role) return Ok(new { agent.AgentId, role = agent.Role });
+            var old = agent.Role;
+            agent.Role = newRole;
+            var sessions = await _db.AgentRefreshTokens.Where(t => t.AgentId == agentId && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow).ToListAsync();
+            foreach (var t in sessions) SessionGuard.End(t, "Your role was changed. Please sign in again.", _cache);
+            await LogAdminAsync(agentId, "update", $"Role changed from {old} to {newRole}");
+            await _db.SaveChangesAsync();
+            return Ok(new { agent.AgentId, role = newRole, signedOutDevices = sessions.Count });
         }
 
         /// <summary>Only Admin changes what other roles can see.</summary>
@@ -149,6 +227,9 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Select(g => new { AgentId = g.Key, At = g.Max(t => t.CreatedAt) })
                 .ToDictionaryAsync(x => x.AgentId, x => x.At);
             var nowUtc = DateTime.UtcNow;
+            // Whoever has a block works in the field, whatever their role.
+            var blocks = (await _db.BlockAssignments.AsNoTracking().Where(b => b.Status == "Active").Select(b => new { b.AgentId, b.Block }).ToListAsync())
+                .GroupBy(b => b.AgentId).ToDictionary(g => g.Key, g => g.First().Block);
             var active = (await _db.AgentRefreshTokens.AsNoTracking()
                     .Where(t => t.RevokedAt == null && t.ExpiresAt > nowUtc)
                     .Select(t => new { t.Id, t.AgentId, t.DeviceType, t.CreatedAt, t.LastSeenAt, t.UserAgent, t.Ip })
@@ -180,6 +261,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     lastSignIn = lastLogin.TryGetValue(p.AgentId, out var at) ? at : (DateTime?)null,
                     // Signed in right now: at most one phone, one tablet and one laptop/desktop.
                     sessions = active.TryGetValue(p.AgentId, out var ss) ? (object)ss : Array.Empty<object>(),
+                    fieldBlock = blocks.GetValueOrDefault(p.AgentId),
                 };
             }));
         }

@@ -332,4 +332,15 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime LastReadAt { get; set; }
         public DateTime? LastSeenAt { get; set; }            // delivered: their app fetched messages up to here
     }
+
+    /// <summary>A field job title (Marketing executive, Field officer…) that people can be onboarded with.</summary>
+    public class FieldRole
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public bool IsActive { get; set; } = true;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string? CreatedBy { get; set; }
+    }
 }

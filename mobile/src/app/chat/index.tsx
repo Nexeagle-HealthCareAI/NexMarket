@@ -4,7 +4,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { T, TopBar } from '../../components/ui';
 import { Icon } from '../../components/Icon';
 import { useSession } from '../../lib/session';
-import { cachedThreads, refreshThreads, useChatVersion, type ChatThread } from '../../lib/chat';
+import { cachedThreads, isOfficeUser, refreshThreads, useChatVersion, type ChatThread } from '../../lib/chat';
 import { relDay, timeOf } from '../../lib/format';
 import { C } from '../../theme';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -49,7 +49,7 @@ export default function ChatList() {
             </View>
             <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <T style={{ flex: 1, fontSize: 17, fontWeight: '700' }} numberOfLines={1}>{th.kind === 'team' ? t('chatTeam') : t('chatOffice')}</T>
+                <T style={{ flex: 1, fontSize: 17, fontWeight: '700' }} numberOfLines={1}>{th.kind === 'team' ? t('chatTeam') : isOfficeUser() ? th.title : t('chatOffice')}</T>
                 <T style={{ fontSize: 12, color: th.unread ? '#1fa855' : C.text2, fontWeight: th.unread ? '700' : '500' }}>{when(th.lastMessageAt)}</T>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

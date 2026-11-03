@@ -8,7 +8,7 @@ import { PartnerPicker } from '../../components/PartnerPicker';
 import { useSession } from '../../lib/session';
 import { q } from '../../lib/db';
 import {
-  cachedMessages, cachedThreads, failedReason, markRead, olderMessages, otherMarks, refreshMessages, retry, send, useChatVersion, type ChatMsg,
+  cachedMessages, cachedThreads, failedReason, isOfficeUser, markRead, olderMessages, otherMarks, refreshMessages, retry, send, useChatVersion, type ChatMsg,
 } from '../../lib/chat';
 import { imageSource, MAX_FILE_BYTES, openChatFile, pickCamera, pickDocument, pickGallery, type Picked } from '../../lib/chatFiles';
 import { EMOJI } from '../../lib/emoji';
@@ -90,7 +90,7 @@ export default function Conversation() {
     try { await openChatFile(m); } catch { Alert.alert(t('chatTitle'), t('chatOpenFailed')); }
   };
 
-  const title = isTeam ? t('chatTeam') : t('chatOffice');
+  const title = isTeam ? t('chatTeam') : isOfficeUser() ? thread?.title ?? t('chatOffice') : t('chatOffice');
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: WA.head }} edges={['top', 'left', 'right']}>

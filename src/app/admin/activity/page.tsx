@@ -69,7 +69,17 @@ function ActivityInner() {
 
   // Today's timeline keeps itself current.
   const isToday = date === today;
-  const onLocation = useCallback((l: LiveLocation) => { if (isToday && l.agentId === effectiveAgent) void act.reload(); }, [isToday, effectiveAgent, act]);
+  // Live points: each new fix from the agent's phone extends today's route straight away.
+  const [livePts, setLivePts] = useState<{ key: string; pts: { lat: number; lng: number; at: string; accuracyM?: number | null }[] }>({ key: '', pts: [] });
+  const liveKey = `${effectiveAgent}|${date}`;
+  const onLocation = useCallback((l: LiveLocation) => {
+    if (!isToday || l.agentId !== effectiveAgent) return;
+    setLivePts((cur) => {
+      const pts = cur.key === liveKey ? cur.pts : [];
+      if (pts.some((p) => p.at === l.at)) return cur;
+      return { key: liveKey, pts: [...pts, { lat: l.lat, lng: l.lng, at: l.at, accuracyM: l.accuracyM }].slice(-500) };
+    });
+  }, [isToday, effectiveAgent, liveKey]);
   const onEvent = useCallback(() => { if (isToday) void act.reload(); }, [isToday, act]);
   useLiveEvents(onEvent, onLocation);
   useEffect(() => {
@@ -143,7 +153,7 @@ function ActivityInner() {
 
           <div className="act-layout">
             <section id="act-map" className="crm-card" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14 }} aria-label="Route">
-              <RouteMap data={d} focus={focus} replayIndex={replayIdx} />
+              <RouteMap data={d} focus={focus} replayIndex={replayIdx} isToday={isToday} live={livePts.key === liveKey ? livePts.pts : undefined} />
               {route.length > 1 && (
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   <button type="button" className="crm-btn is-secondary is-sm" onClick={() => { if (replayIdx == null || replayIdx >= route.length - 1) setReplayIdx(0); setPlaying((p) => !p); }} aria-label={playing ? 'Pause replay' : 'Replay the day'} style={{ width: 40, padding: 0 }}>
