@@ -16,7 +16,7 @@ export function db(): SQLite.SQLiteDatabase {
   return _db;
 }
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 function migrate(d: SQLite.SQLiteDatabase) {
   const row = d.getFirstSync<{ user_version: number }>('PRAGMA user_version');
@@ -67,6 +67,12 @@ function migrate(d: SQLite.SQLiteDatabase) {
   if (v < 2) {
     // How many times the agent has checked in at each panchayat (revisits count), from the server.
     try { d.execSync('ALTER TABLE assigned ADD COLUMN visitCount INTEGER DEFAULT 0'); } catch { /* already there */ }
+  }
+  if (v < 3) {
+    // Where the agent was when they logged a visit / revisit comment.
+    for (const col of ['lat REAL', 'lng REAL', 'accuracy REAL']) {
+      try { d.execSync(`ALTER TABLE notes ADD COLUMN ${col}`); } catch { /* already there */ }
+    }
   }
   if (v < SCHEMA_VERSION) d.execSync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
@@ -125,7 +131,7 @@ export interface Contact {
   createdAt: string;
   updatedAt: string;
 }
-export interface Note { clientId: string; contactId: string; text: string; source: 'note' | 'visit' | 'revisit' | 'call'; createdAt: string }
+export interface Note { clientId: string; contactId: string; text: string; source: 'note' | 'visit' | 'revisit' | 'call'; createdAt: string; lat?: number | null; lng?: number | null; accuracy?: number | null }
 export interface Shift { clientId: string; startTime: string; startLat: number; startLng: number; endTime: string | null; endLat: number | null; endLng: number | null }
 export interface Visit { clientId: string; panchayatId: string; shiftId: string | null; checkInAt: string; checkInLat: number; checkInLng: number; checkOutAt: string | null; checkOutLat: number | null; checkOutLng: number | null }
 export interface Referral { clientId: string; contactId: string; patientName: string; patientAge: number | null; patientSex: string | null; clientPhone: string | null; department: string; urgent: number; notes: string | null; status: string; createdAt: string; updatedAt: string | null }

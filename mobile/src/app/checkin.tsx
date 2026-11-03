@@ -9,7 +9,7 @@ import { PanchayatList, sortPanchayats } from '../components/PanchayatList';
 import { tryCheckIn } from '../lib/visit';
 import { relDay } from '../lib/format';
 import { addNote, addPhoto, checkOut, setFollowUp } from '../lib/repo';
-import { currentPosition } from '../lib/location';
+import { currentPosition, quickPosition } from '../lib/location';
 import { takePhoto } from '../lib/photo';
 import { useHere } from '../lib/useHere';
 import { CHECK_IN_RADIUS_M } from '../lib/config';
@@ -148,11 +148,15 @@ function InVisit({ visit, name, partners, initialContact }: {
     return c ? { revisit: c.createdAt < visit.checkInAt, history: q.notesFor(contactId).slice(0, 3) } : null;
   }, [contactId, visit.checkInAt]);
 
-  const save = (days: number) => {
-    if (!contactId || !met) return;
+  const savingRef = useRef(false);
+  const save = async (days: number) => {
+    if (!contactId || !met || savingRef.current) return;
+    savingRef.current = true;
     const text = [t('visitNoteText', { met: t(met), interest: interest ? t(interest) : '–' }), note.trim()].filter(Boolean).join('\n');
-    addNote(contactId, text, picked?.revisit ? 'revisit' : 'visit');
+    const pos = await quickPosition();
+    addNote(contactId, text, picked?.revisit ? 'revisit' : 'visit', pos);
     setFollowUp(contactId, ymd(addDays(new Date(), days)));
+    savingRef.current = false;
     toast(t('visitSaved'));
     reset();
   };
@@ -236,9 +240,9 @@ function InVisit({ visit, name, partners, initialContact }: {
               <Field placeholder={t('addNote')} value={note} onChangeText={setNote} multiline />
               <T style={{ color: C.text2 }}>{t('nextFollowUp')}</T>
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                <View style={{ flex: 1 }}><Chip big label={t('tomorrow')} onPress={() => save(1)} /></View>
-                <View style={{ flex: 1 }}><Chip big label={t('in3Days')} onPress={() => save(3)} /></View>
-                <View style={{ flex: 1 }}><Chip big label={t('in1Week')} onPress={() => save(7)} /></View>
+                <View style={{ flex: 1 }}><Chip big label={t('tomorrow')} onPress={() => void save(1)} /></View>
+                <View style={{ flex: 1 }}><Chip big label={t('in3Days')} onPress={() => void save(3)} /></View>
+                <View style={{ flex: 1 }}><Chip big label={t('in1Week')} onPress={() => void save(7)} /></View>
               </View>
             </>
           ) : null}

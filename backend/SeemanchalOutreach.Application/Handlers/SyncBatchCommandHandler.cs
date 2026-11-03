@@ -682,6 +682,9 @@ namespace SeemanchalOutreach.Application.Handlers
                         Text = text.Length > 2000 ? text[..2000] : text,
                         Source = source is "visit" or "revisit" or "call" ? source : "note",
                         CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
+                        Lat = GetOptionalDouble(root, "lat"),
+                        Lng = GetOptionalDouble(root, "lng"),
+                        AccuracyM = GetOptionalDouble(root, "accuracyM"),
                         ServerReceivedAt = syncedAt,
                     };
                     _db.ContactNotes.Add(note);
@@ -797,7 +800,7 @@ namespace SeemanchalOutreach.Application.Handlers
             => el.TryGetProperty(prop, out var p) && p.TryGetDouble(out var d) ? d : def;
 
         private static double? GetOptionalDouble(JsonElement el, string prop)
-            => el.TryGetProperty(prop, out var p) && p.TryGetDouble(out var d) ? d : null;
+            => el.TryGetProperty(prop, out var p) && p.ValueKind == JsonValueKind.Number && p.TryGetDouble(out var d) ? d : null;
 
         private static bool GetBool(JsonElement el, string prop, bool def)
             => el.TryGetProperty(prop, out var p) && (p.ValueKind == JsonValueKind.True || p.ValueKind == JsonValueKind.False) ? p.GetBoolean() : def;

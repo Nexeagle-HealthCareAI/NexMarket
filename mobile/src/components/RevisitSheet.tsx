@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { Chip, Field, Sheet, T, toast } from './ui';
+import { Icon } from './Icon';
 import { useSession } from '../lib/session';
 import { q, type Note } from '../lib/db';
 import { addNote, setFollowUp } from '../lib/repo';
+import { quickPosition } from '../lib/location';
 import { relDay } from '../lib/format';
 import { addDays, ymd } from '../lib/util';
 import { C } from '../theme';
@@ -21,6 +23,7 @@ export function RevisitSheet({ visible, onClose, contactId, name }: { visible: b
   const [interest, setInterest] = useState<Interest | null>(null);
   const [comment, setComment] = useState('');
   const [history, setHistory] = useState<Note[]>([]);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -29,12 +32,16 @@ export function RevisitSheet({ visible, onClose, contactId, name }: { visible: b
   }, [visible, contactId]);
 
   const ready = !!met && (met === 'notMet' || !!interest || comment.trim().length > 0);
-  const save = (days: number | null) => {
-    if (!met) return;
+  const save = async (days: number | null) => {
+    if (!met || saving) return;
+    setSaving(true);
+    // Where the agent is right now goes with the comment (saved even without a fix).
+    const pos = await quickPosition();
     const text = [t('visitNoteText', { met: t(met), interest: interest ? t(interest) : '–' }), comment.trim()].filter(Boolean).join('\n');
-    addNote(contactId, text, 'revisit');
+    addNote(contactId, text, 'revisit', pos);
     if (days != null) setFollowUp(contactId, ymd(addDays(new Date(), days)));
-    toast(t('revisitSaved'));
+    setSaving(false);
+    toast(pos ? t('revisitSaved') : t('revisitSavedNoGps'));
     onClose();
   };
 
@@ -70,15 +77,22 @@ export function RevisitSheet({ visible, onClose, contactId, name }: { visible: b
         <Field placeholder={t('revisitComment')} value={comment} onChangeText={setComment} multiline />
         {ready ? (
           <>
+            {saving ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Icon name="pin" size={14} color={C.blue} />
+                <T style={{ color: C.blueInk, fontSize: 13, fontWeight: '600' }}>{t('gettingLocation')}</T>
+              </View>
+            ) : null}
             <T style={{ color: C.text2 }}>{t('nextFollowUp')}</T>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              <Chip big label={t('tomorrow')} onPress={() => save(1)} />
-              <Chip big label={t('in3Days')} onPress={() => save(3)} />
-              <Chip big label={t('in1Week')} onPress={() => save(7)} />
-              <Chip big label={t('noFollowUpNeeded')} onPress={() => save(null)} />
+              <Chip big label={t('tomorrow')} onPress={() => void save(1)} />
+              <Chip big label={t('in3Days')} onPress={() => void save(3)} />
+              <Chip big label={t('in1Week')} onPress={() => void save(7)} />
+              <Chip big label={t('noFollowUpNeeded')} onPress={() => void save(null)} />
             </View>
           </>
         ) : <T style={{ color: C.muted, fontSize: 13 }}>{t('revisitPickFirst')}</T>}
+        <T style={{ color: C.muted, fontSize: 12 }}>{t('revisitLocationNote')}</T>
       </View>
     </Sheet>
   );

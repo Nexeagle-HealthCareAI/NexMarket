@@ -45,6 +45,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> List(
             [FromQuery] string? tab, [FromQuery] string? priority, [FromQuery] string? block, [FromQuery] string? type,
             [FromQuery] string? agentId, [FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 25,
+            [FromQuery] string? from = null, [FromQuery] string? to = null, [FromQuery] string? dateBy = null,
             CancellationToken ct = default)
         {
             page = Math.Max(1, page);
@@ -77,6 +78,20 @@ namespace SeemanchalOutreach.Api.Controllers
                 var ids = _db.Panchayats.Where(p => p.Block == block).Select(p => p.PanchayatId);
                 query = query.Where(c => ids.Contains(c.PanchayatId));
             }
+            // Date range in IST days. "added" = when the partner was added; "visited" = added, visited or revisited then.
+            DateTime? fromUtc = DateOnly.TryParse(from, out var fd) ? IstClock.StartOfIstDayUtc(fd) : null;
+            DateTime? toUtc = DateOnly.TryParse(to, out var td) ? IstClock.StartOfIstDayUtc(td.AddDays(1)) : null;
+            if (fromUtc != null || toUtc != null)
+            {
+                var a = fromUtc ?? DateTime.MinValue;
+                var b = toUtc ?? DateTime.MaxValue;
+                if (dateBy == "visited")
+                {
+                    var met = _db.ContactNotes.Where(n => (n.Source == "visit" || n.Source == "revisit") && n.CreatedAt >= a && n.CreatedAt < b).Select(n => n.ContactClientId);
+                    query = query.Where(c => (c.CreatedAt >= a && c.CreatedAt < b) || met.Contains(c.ClientId));
+                }
+                else query = query.Where(c => c.CreatedAt >= a && c.CreatedAt < b);
+            }
             if (!string.IsNullOrWhiteSpace(q))
             {
                 var term = q.Trim().ToLower();
@@ -93,7 +108,7 @@ namespace SeemanchalOutreach.Api.Controllers
                        .ThenBy(c => c.Name);
 
             var rows = await ordered.Skip((page - 1) * pageSize).Take(pageSize)
-                .Select(c => new { c.ClientId, c.Name, c.Role, c.Profession, c.Phone, c.PanchayatId, c.AgentId, c.Priority, c.IsImportant, c.IsChampion, c.FollowUpDate, c.PhotoUrl, escalated = c.AgentEscalated && !c.IsEscalationResolved })
+                .Select(c => new { c.ClientId, c.Name, c.Role, c.Profession, c.Phone, c.PanchayatId, c.AgentId, c.Priority, c.IsImportant, c.IsChampion, c.FollowUpDate, c.PhotoUrl, c.CreatedAt, escalated = c.AgentEscalated && !c.IsEscalationResolved })
                 .ToListAsync(ct);
 
             var ids2 = rows.Select(r => r.ClientId).ToList();
@@ -105,6 +120,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 .ToDictionaryAsync(x => x.id, ct);
             var places = await PlacesAsync(rows.Select(r => r.PanchayatId), ct);
             var agents = await AgentNamesAsync(rows.Select(r => r.AgentId), ct);
+            // Times met = the first meeting (when added) + every visit / revisit logged from the app.
+            var meets = await _db.ContactNotes.AsNoTracking()
+                .Where(n => ids2.Contains(n.ContactClientId) && (n.Source == "visit" || n.Source == "revisit"))
+                .GroupBy(n => n.ContactClientId)
+                .Select(g => new { id = g.Key, n = g.Count(), last = g.Max(n => n.CreatedAt) })
+                .ToDictionaryAsync(x => x.id, ct);
 
             return Ok(new
             {
@@ -130,6 +151,9 @@ namespace SeemanchalOutreach.Api.Controllers
                     admitted90 = refs.TryGetValue(r.ClientId, out var y) ? y.adm : 0,
                     photoUrl = r.PhotoUrl,
                     escalated = r.escalated,
+                    addedAt = r.CreatedAt,
+                    timesMet = 1 + (meets.TryGetValue(r.ClientId, out var m) ? m.n : 0),
+                    lastMetAt = meets.TryGetValue(r.ClientId, out var m2) && m2.last > r.CreatedAt ? m2.last : r.CreatedAt,
                 }),
             });
         }
@@ -248,6 +272,11 @@ namespace SeemanchalOutreach.Api.Controllers
                     label = ReferralsController.StageLabel(r.Status),
                 }),
                 timeline = timeline.Select(t => new { kind = t.Kind, text = t.Text, by = t.By, at = t.At, fromApp = t.FromApp }),
+                timesMet = 1 + await _db.ContactNotes.CountAsync(n => n.ContactClientId == clientId && (n.Source == "visit" || n.Source == "revisit"), ct),
+                // Every time an agent met this person: when added, then each visit / revisit, with where they were.
+                visits = new[] { new { kind = "added", at = c.CreatedAt, by = Who(c.AgentId), text = (string?)null, lat = c.Latitude, lng = c.Longitude } }
+                    .Concat(notes.Where(n => n.Source is "visit" or "revisit").Select(n => new { kind = n.Source, at = n.CreatedAt, by = Who(n.AgentId), text = (string?)n.Text, lat = n.Lat, lng = n.Lng }))
+                    .OrderByDescending(v => v.at),
                 survey = await SurveyAsync(clientId, ct),
             });
         }

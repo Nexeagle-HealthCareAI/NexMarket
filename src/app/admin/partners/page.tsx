@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, MessageCircle, Phone, Search, Star } from 'lucide-react';
+import { ArrowLeft, CalendarDays, MapPin, MessageCircle, Phone, Search, Star } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, contactTypeLabel, fmt, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast, type Tone } from '@/components/crm/ui';
@@ -15,6 +15,7 @@ interface Row {
   clientId: string; name: string; type: string; profession?: string | null; phone?: string | null;
   panchayat?: string | null; block?: string | null; agentName: string; priority: Priority; champion: boolean;
   followUpDate?: string | null; followState: FollowState; referrals90: number; admitted90: number; escalated: boolean;
+  addedAt?: string; timesMet?: number; lastMetAt?: string;
 }
 interface ListRes { counts: { all: number; follow: number; champ: number; escalated: number; dup: number }; total: number; page: number; pageSize: number; rows: Row[] }
 interface Filters { blocks: { block: string; district: string }[]; agents: { agentId: string; name: string }[]; types: { type: string; count: number }[] }
@@ -28,6 +29,8 @@ interface Detail {
   referrals: { clientId: string; patientName: string; department?: string | null; createdAt: string; status: string; label: string }[];
   timeline: { kind: 'note' | 'visit' | 'revisit' | 'call' | 'change'; text: string; by: string; at: string; fromApp: boolean }[];
   survey: { done: boolean; skipped: boolean; at?: string | null; answers: { question: string; answer: string }[] };
+  timesMet?: number;
+  visits?: { kind: 'added' | 'visit' | 'revisit'; at: string; by: string; text?: string | null; lat?: number | null; lng?: number | null }[];
 }
 interface DupRecord { clientId: string; name: string; role: string; phone?: string | null; agentName: string; panchayatName: string; createdAt: string }
 interface DupRes { totalCount: number; items: { id: string; recordA: DupRecord; recordB: DupRecord; status: string }[] }
@@ -64,6 +67,25 @@ function followColor(s: FollowState) {
   return s === 'overdue' ? 'var(--bad)' : s === 'today' ? 'var(--warn-ink)' : s === 'none' ? 'var(--text-2)' : 'var(--text)';
 }
 const istToday = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+const istDaysAgo = (n: number) => new Date(Date.now() + 5.5 * 3600 * 1000 - n * 864e5).toISOString().slice(0, 10);
+
+type Range = '' | 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'custom';
+const RANGES: { k: Range; l: string }[] = [
+  { k: '', l: 'Any time' }, { k: 'today', l: 'Today' }, { k: 'yesterday', l: 'Yesterday' },
+  { k: '7d', l: 'Last 7 days' }, { k: '30d', l: 'Last 30 days' }, { k: 'month', l: 'This month' }, { k: 'custom', l: 'Custom' },
+];
+function rangeDates(r: Range, from: string, to: string): [string, string] | null {
+  const t = istToday();
+  switch (r) {
+    case 'today': return [t, t];
+    case 'yesterday': return [istDaysAgo(1), istDaysAgo(1)];
+    case '7d': return [istDaysAgo(6), t];
+    case '30d': return [istDaysAgo(29), t];
+    case 'month': return [`${t.slice(0, 8)}01`, t];
+    case 'custom': return from || to ? [from, to] : null;
+    default: return null;
+  }
+}
 
 export default function PartnersPageWrap() {
   return (
@@ -88,6 +110,10 @@ function PartnersPage() {
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
+  const [range, setRange] = useState<Range>('');
+  const [dateBy, setDateBy] = useState<'added' | 'visited'>('added');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [toast, showToast] = useToast();
 
   useEffect(() => {
@@ -110,8 +136,10 @@ function PartnersPage() {
     if (type) sp.set('type', type);
     if (agentId) sp.set('agentId', agentId);
     if (q) sp.set('q', q);
+    const r = rangeDates(range, from, to);
+    if (r) { if (r[0]) sp.set('from', r[0]); if (r[1]) sp.set('to', r[1]); sp.set('dateBy', dateBy); }
     return sp.toString();
-  }, [tab, page, priority, block, type, agentId, q]);
+  }, [tab, page, priority, block, type, agentId, q, range, from, to, dateBy]);
 
   const list = useLoader(() => crm.get<ListRes>(`/api/v1/partners?${qs}`), [qs]);
   const filters = useLoader(() => crm.get<Filters>('/api/v1/partners/filters'), []);
@@ -174,6 +202,32 @@ function PartnersPage() {
             </select>
           </div>
 
+          <div className="pt-dates" role="group" aria-label="Date">
+            <CalendarDays size={16} aria-hidden color="var(--text-2)" />
+            <label className="crm-sr" htmlFor="pt-dateby">Date of</label>
+            <select id="pt-dateby" className="crm-select" style={{ width: 'auto', height: 36 }} value={dateBy} onChange={(e) => { setDateBy(e.target.value as 'added' | 'visited'); resetPage(); }}>
+              <option value="added">Added</option>
+              <option value="visited">Added or visited</option>
+            </select>
+            <div className="pt-seg" role="group" aria-label="Date range">
+              {RANGES.map((r) => (
+                <button key={r.k} type="button" aria-pressed={range === r.k} onClick={() => {
+                  setRange(r.k); resetPage();
+                  if (r.k === 'custom' && !from && !to) { setFrom(istDaysAgo(6)); setTo(istToday()); }
+                }}>{r.l}</button>
+              ))}
+            </div>
+            {range === 'custom' && (
+              <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <label className="crm-sr" htmlFor="pt-from">From</label>
+                <input id="pt-from" type="date" className="crm-input" style={{ width: 160, height: 36 }} value={from} max={to || istToday()} onChange={(e) => { setFrom(e.target.value); resetPage(); }} />
+                <span className="crm-sub">to</span>
+                <label className="crm-sr" htmlFor="pt-to">To</label>
+                <input id="pt-to" type="date" className="crm-input" style={{ width: 160, height: 36 }} value={to} min={from || undefined} max={istToday()} onChange={(e) => { setTo(e.target.value); resetPage(); }} />
+              </span>
+            )}
+          </div>
+
           {list.error && <ErrorBox message={list.error} onRetry={list.reload} />}
 
           <div className={`crm-row pt-split${selected ? ' has-sel' : ''}`}>
@@ -186,7 +240,7 @@ function PartnersPage() {
                 <>
                   <div className="crm-table-wrap">
                     <table className="crm-table">
-                      <thead><tr><th>Partner</th><th>Priority</th><th>Next follow-up</th><th style={{ textAlign: 'right' }}>Refs 90d</th></tr></thead>
+                      <thead><tr><th>Partner</th><th>Priority</th><th>Met</th><th>Next follow-up</th><th style={{ textAlign: 'right' }}>Refs 90d</th></tr></thead>
                       <tbody>
                         {rows.map((r) => (
                           <tr key={r.clientId} className={`pt-tr${r.clientId === selected ? ' is-sel' : ''}`} onClick={() => go({ id: r.clientId })}>
@@ -205,6 +259,10 @@ function PartnersPage() {
                               </span>
                             </td>
                             <td><Pill tone={PRIORITY[r.priority].tone}>{PRIORITY[r.priority].label}</Pill></td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              <strong>{r.timesMet ?? 1}×</strong>
+                              <div className="crm-cell-sub">{r.lastMetAt && r.timesMet && r.timesMet > 1 ? `last ${fmt.date(r.lastMetAt)}` : r.addedAt ? `added ${fmt.date(r.addedAt)}` : ''}</div>
+                            </td>
                             <td style={{ whiteSpace: 'nowrap', fontWeight: r.followState === 'overdue' || r.followState === 'today' ? 700 : 500, color: followColor(r.followState) }}>{followText(r.followUpDate, r.followState)}</td>
                             <td style={{ textAlign: 'right', fontWeight: 700 }}>{r.referrals90}{r.admitted90 > 0 && <div className="crm-cell-sub" style={{ fontWeight: 500 }}>{r.admitted90} admitted</div>}</td>
                           </tr>
@@ -386,8 +444,36 @@ function Profile({ id, editable, showToast, onBack, onChange }: {
       <div className="pt-stats">
         <span><span>Referrals 90d</span><strong>{c.stats.referrals90}</strong></span>
         <span><span>Admitted 90d</span><strong>{c.stats.admitted90}</strong></span>
-        <span><span>Last visit</span><strong style={{ fontSize: 15 }}>{c.lastVisit ? fmt.date(c.lastVisit) : '—'}</strong></span>
+        <span><span>Times met</span><strong>{c.timesMet ?? 1}</strong></span>
       </div>
+
+      {c.visits && c.visits.length > 0 && (
+        <section aria-labelledby="visits-h" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <h3 id="visits-h" style={{ fontSize: 16, fontWeight: 800, flex: 1 }}>Visits</h3>
+            <span className="crm-cell-sub">Met {c.timesMet ?? c.visits.length} time{(c.timesMet ?? c.visits.length) === 1 ? '' : 's'}</span>
+          </span>
+          <ol className="pt-visits">
+            {c.visits.map((v, i) => (
+              <li key={`${v.at}-${i}`} data-kind={v.kind}>
+                <span className="pt-visit-dot" aria-hidden />
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+                  <span style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: 14 }}>{v.kind === 'added' ? 'First met · added' : v.kind === 'revisit' ? 'Revisit' : 'Visit'}</strong>
+                    <span className="crm-cell-sub">{fmt.dateTime(v.at)} · {v.by}</span>
+                  </span>
+                  {v.text && <span style={{ fontSize: 13, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{v.text}</span>}
+                  {v.lat != null && v.lng != null ? (
+                    <a className="crm-cell-sub" href={`https://www.google.com/maps?q=${v.lat},${v.lng}`} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                      <MapPin size={12} aria-hidden /> {v.lat.toFixed(5)}, {v.lng.toFixed(5)}
+                    </a>
+                  ) : <span className="crm-cell-sub">No location recorded</span>}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       <section aria-labelledby="notes-h" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>

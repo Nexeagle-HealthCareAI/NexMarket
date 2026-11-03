@@ -678,3 +678,11 @@
 .rt-num { display: inline-flex; width: 24px; height: 24px; border-radius: 999px; background: #7c3aed; color: #fff; font-size: 12px; font-weight: 800; align-items: center; justify-content: center; }
 .maplibregl-popup-content { border-radius: 12px; font: 13px/1.45 Inter, sans-serif; padding: 10px 12px; }
 @media (max-width: 640px) { .rt-layers { font-size: 11px; padding: 6px 8px; } .rt-partner-label { max-width: 120px; } }
+
+/* Partners: date filter and visit history */
+.pt-dates { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pt-visits { list-style: none; margin: 0; padding: 0 0 0 6px; display: flex; flex-direction: column; gap: 12px; border-left: 2px solid var(--line); }
+.pt-visits li { display: flex; gap: 10px; position: relative; padding-left: 10px; }
+.pt-visit-dot { position: absolute; left: -13px; top: 4px; width: 12px; height: 12px; border-radius: 999px; background: #16a36a; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+.pt-visits li[data-kind='added'] .pt-visit-dot { background: #7c3aed; }
+.pt-visits li[data-kind='visit'] .pt-visit-dot { background: #0a72d6; }

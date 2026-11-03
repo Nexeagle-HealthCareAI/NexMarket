@@ -217,6 +217,9 @@ namespace SeemanchalOutreach.Api.Controllers
                     source = n.Source,
                     agentId = n.AgentId,
                     createdAt = n.CreatedAt.ToString("o"),
+                    lat = n.Lat,
+                    lng = n.Lng,
+                    accuracyM = n.AccuracyM,
                 }),
                 referrals = referrals.Select(r => new
                 {

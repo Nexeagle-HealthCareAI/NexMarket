@@ -713,6 +713,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<double?>("AccuracyM")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("AgentId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -727,6 +730,12 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("Lat")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Lng")
+                        .HasColumnType("double precision");
 
                     b.Property<DateTime>("ServerReceivedAt")
                         .HasColumnType("timestamp with time zone");
