@@ -143,7 +143,8 @@ export function Empty({ text, icon = 'note' }: { text: string; icon?: IconName }
   );
 }
 
-export function Avatar({ name, size = 44, bg = C.blue, color = '#fff' }: { name: string; size?: number; bg?: string; color?: string }) {
+export function Avatar({ name, size = 44, bg = C.blue, color = '#fff', uri }: { name: string; size?: number; bg?: string; color?: string; uri?: string | null }) {
+  if (uri) return <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: C.line }} accessibilityIgnoresInvertColors />;
   const initials = name.split(/\s+/).filter(Boolean).filter((w) => !/^(dr|mr|mrs|ms)\.?$/i.test(w)).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '?';
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>

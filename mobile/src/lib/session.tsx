@@ -22,6 +22,8 @@ interface Session {
   t: TFn;
   signIn(userId: string, password: string): Promise<LoginResult>;
   signOut(): Promise<void>;
+  /** After the agent edits their profile: show the new name everywhere. */
+  updateAgent(patch: Partial<Agent>): void;
 }
 
 const Ctx = createContext<Session | null>(null);
@@ -110,8 +112,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     await resetLocal();
   }, [resetLocal]);
 
-  const value = useMemo<Session>(() => ({ ready, agent, lang, setLang, t, signIn, signOut }),
-    [ready, agent, lang, setLang, t, signIn, signOut]);
+  const updateAgent = useCallback((patch: Partial<Agent>) => {
+    setAgent((a) => {
+      if (!a) return a;
+      const next = { ...a, ...patch };
+      kvSet('agent', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const value = useMemo<Session>(() => ({ ready, agent, lang, setLang, t, signIn, signOut, updateAgent }),
+    [ready, agent, lang, setLang, t, signIn, signOut, updateAgent]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

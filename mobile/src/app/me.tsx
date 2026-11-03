@@ -11,6 +11,7 @@ import { openAppSettings } from '../lib/shift';
 import { APP_VERSION } from '../lib/config';
 import { monthName, relDay, timeOf } from '../lib/format';
 import { LANGS } from '../i18n';
+import { myPhotoUrl } from '../lib/profile';
 import { C } from '../theme';
 
 export default function Me() {
@@ -48,15 +49,18 @@ export default function Me() {
   };
 
   const block = assignment().block ?? agent?.block ?? '';
+  const photo = useDb(() => myPhotoUrl());
 
   return (
     <Screen header={<TopBar title={t('me')} onBack={false} />} footer={<BottomNav />}>
-      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Avatar name={agent?.name ?? '?'} size={52} />
+      <Card onPress={() => router.push('/profile')} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Avatar name={agent?.name ?? '?'} size={52} uri={photo} />
         <View style={{ flex: 1 }}>
           <T style={{ fontSize: 18, fontWeight: '800' }}>{agent?.name}</T>
           <T style={{ color: C.text2, fontSize: 13 }}>{[agent?.agentId, block, agent?.district].filter(Boolean).join(' · ')}</T>
+          <T style={{ color: C.blueInk, fontSize: 13, fontWeight: '700', marginTop: 2 }}>{t('pfEdit')}</T>
         </View>
+        <Icon name="chevron" color={C.muted} />
       </Card>
 
       <Card style={unsent ? { borderColor: '#f5d9a8', backgroundColor: C.warnSoft } : { borderColor: C.okSoft, backgroundColor: C.okSoft }}>
