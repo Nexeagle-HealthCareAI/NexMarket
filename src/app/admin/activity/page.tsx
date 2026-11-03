@@ -182,6 +182,35 @@ function ActivityInner() {
             </section>
           </div>
 
+          {d.events.some((e) => e.kind === 'partner') && (
+            <section className="crm-card" aria-labelledby="pa-h">
+              <div className="crm-card-head">
+                <h2 id="pa-h" className="crm-h2">Partners added</h2>
+                <span className="crm-sub" style={{ fontSize: 13 }}>Where and when each one was added · click to see it on the map</span>
+              </div>
+              <div className="crm-table-wrap">
+                <table className="crm-table">
+                  <thead><tr><th>#</th><th>Time</th><th>Partner</th><th>Type · panchayat</th><th>Location</th></tr></thead>
+                  <tbody>
+                    {d.events.filter((e) => e.kind === 'partner').map((e, i) => (
+                      <tr key={`${e.at}-${i}`} style={{ cursor: e.lat != null ? 'pointer' : undefined }} aria-selected={focus === e}
+                        onClick={() => { if (e.lat != null) { setFocus(e); document.getElementById('act-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }}>
+                        <td><span className="rt-num">{i + 1}</span></td>
+                        <td style={{ whiteSpace: 'nowrap', fontWeight: 700 }}>{fmt.time(e.at)}</td>
+                        <td><strong>{e.name ?? e.title.replace(/^Added partner /, '')}</strong></td>
+                        <td className="crm-cell-sub" style={{ textTransform: 'capitalize' }}>{e.detail}</td>
+                        <td className="crm-cell-sub">
+                          {e.lat == null ? 'Not recorded' : e.locSource === 'route' ? <>Approximate · from GPS track</> : <>Recorded by phone</>}
+                          {e.lat != null && <div><a href={`https://www.google.com/maps?q=${e.lat},${e.lng}`} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()}>{e.lat.toFixed(5)}, {e.lng!.toFixed(5)}</a></div>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
           {(d.segments?.length ?? 0) > 0 && (
             <section className="crm-card" aria-labelledby="tg-h">
               <div className="crm-card-head">

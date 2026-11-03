@@ -216,7 +216,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     events.Add(new("visit_out", o, $"Left {Place(v.PanchayatId)}", null, v.CheckOutLat, v.CheckOutLng, v.PanchayatId));
             }
             foreach (var c in contacts)
-                events.Add(new("partner", c.CreatedAt, $"Added partner {c.Name}", $"{c.Role.Replace('_', ' ')} · {Place(c.PanchayatId)}{(c.IsImportant ? " · important" : "")}", c.Latitude, c.Longitude, c.PanchayatId, c.ClientId));
+                events.Add(new("partner", c.CreatedAt, $"Added partner {c.Name}", $"{c.Role.Replace('_', ' ')} · {Place(c.PanchayatId)}{(c.IsImportant ? " · important" : "")}", c.Latitude, c.Longitude, c.PanchayatId, c.ClientId, null, c.Name));
             foreach (var r in referrals)
                 events.Add(new("referral", r.CreatedAt, $"Referred {r.PatientName}", $"{(string.IsNullOrEmpty(r.Department) ? "" : r.Department + " · ")}via {Partner(r.ContactId)}{(r.Urgent ? " · urgent" : "")}", null, null, null, r.ClientId));
             foreach (var x in docs)
@@ -314,17 +314,25 @@ namespace SeemanchalOutreach.Api.Controllers
                     stopsWithoutCheckIn = unregistered.Count,
                     minutesStoppedWithoutCheckIn = (int)Math.Round(unregistered.Sum(g => (g.To - g.From).TotalMinutes)),
                 },
-                events = ordered.Select(e => new
+                events = ordered.Select(e =>
                 {
+                    // No position saved with the record: use where the GPS track had the agent at that minute.
+                    var fix = e.Lat == null && e.Kind is "partner" or "referral" or "survey" or "photo" ? NearestFix(good, e.At) : null;
+                    return new
+                    {
                     kind = e.Kind,
                     at = e.At,
                     title = e.Title,
                     detail = e.Detail,
-                    lat = e.Lat,
-                    lng = e.Lng,
+                    name = e.Name,
+                    lat = e.Lat ?? (fix != null ? Math.Round(fix.Lat, 6) : (double?)null),
+                    lng = e.Lng ?? (fix != null ? Math.Round(fix.Lng, 6) : (double?)null),
+                    // phone = saved with the record; route = taken from the GPS track at that time
+                    locSource = e.Lat != null ? "phone" : fix != null ? "route" : null,
                     panchayatId = e.PanchayatId,
                     refId = e.RefId,
                     url = e.Url,
+                    };
                 }),
             });
         }
@@ -334,6 +342,15 @@ namespace SeemanchalOutreach.Api.Controllers
         private const double StopRadiusM = 150;     // staying within this counts as one place
         private static readonly TimeSpan StopMin = TimeSpan.FromMinutes(8);
         private static readonly TimeSpan GapMin = TimeSpan.FromMinutes(30);
+
+        /// <summary>The GPS point closest in time to <paramref name="at"/>, if one is within 15 minutes.</summary>
+        private static Pt? NearestFix(List<Pt> pts, DateTime at)
+        {
+            Pt? best = null;
+            foreach (var p in pts)
+                if (best == null || Math.Abs((p.At - at).TotalSeconds) < Math.Abs((best.At - at).TotalSeconds)) best = p;
+            return best != null && Math.Abs((best.At - at).TotalMinutes) <= 15 ? best : null;
+        }
 
         private sealed record Seg(string Kind, DateTime From, DateTime To, double? Lat, double? Lng, double Km, string? VisitPanchayatId);
 
@@ -432,6 +449,6 @@ namespace SeemanchalOutreach.Api.Controllers
 
         private record TimelineEvent(
             string Kind, DateTime At, string Title, string? Detail, double? Lat, double? Lng,
-            string? PanchayatId = null, string? RefId = null, string? Url = null);
+            string? PanchayatId = null, string? RefId = null, string? Url = null, string? Name = null);
     }
 }

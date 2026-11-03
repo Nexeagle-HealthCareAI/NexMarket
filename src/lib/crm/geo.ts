@@ -139,6 +139,10 @@ export interface TimelineEvent {
   panchayatId?: string | null;
   refId?: string | null;
   url?: string | null;
+  /** Partner's name, for "partner" events. */
+  name?: string | null;
+  /** phone = position saved with the record; route = taken from the GPS track at that time. */
+  locSource?: 'phone' | 'route' | null;
 }
 
 export interface AgentActivity {
