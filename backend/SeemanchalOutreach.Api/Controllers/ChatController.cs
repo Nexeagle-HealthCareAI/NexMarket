@@ -56,13 +56,42 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IPermissionService _perms;
         private readonly IFileStore _files;
         private readonly ILiveEvents _live;
+        private readonly INotifier _notifier;
 
-        public ChatController(IMarketingDbContext db, IPermissionService perms, IFileStore files, ILiveEvents live)
+        public ChatController(IMarketingDbContext db, IPermissionService perms, IFileStore files, ILiveEvents live, INotifier notifier)
         {
             _db = db;
             _perms = perms;
             _files = files;
             _live = live;
+            _notifier = notifier;
+        }
+
+        /// <summary>Tell the other people in this chat (push + bell). Never the sender.</summary>
+        private async Task NotifyAsync(ChatThread t, bool office, ChatMessage m, CancellationToken ct)
+        {
+            var preview = m.FileName != null ? $"📎 {m.FileName}{(string.IsNullOrWhiteSpace(m.Text) ? "" : " · " + m.Text)}" : m.Text ?? "";
+            if (m.ContactName != null) preview += $" · #{m.ContactName}";
+            var job = new NotifyJob { Kind = "chat", Body = preview, Link = $"chat:{t.Id}", RefId = m.Id.ToString(), Except = Me, Title = MyName };
+            if (t.Kind == "direct")
+            {
+                var peer = PeerOf(t);
+                if (peer == null) return;
+                job.To.Add(peer);
+            }
+            else if (t.Kind == "agent")
+            {
+                if (office) job.To.Add(t.AgentId!);
+                else { job.ToOffice = true; job.Title = $"{MyName} · field agent"; }
+                if (office) job.Title = $"{MyName} · Office";
+            }
+            else
+            {
+                job.Kind = "team_chat";
+                job.Title = $"{MyName} · Field team";
+                job.To.AddRange(await _db.Agents.AsNoTracking().Where(a => a.IsActive).Select(a => a.AgentId).ToListAsync(ct));
+            }
+            _notifier.Notify(job);
         }
 
         private string Me => User.AgentIdOf();
@@ -418,6 +447,7 @@ namespace SeemanchalOutreach.Api.Controllers
             // Sending means I've read everything up to now.
             await TouchAsync(t.Id, office, seen: true, read: true, ct);
             await _live.PublishChatAsync(t.Id);
+            await NotifyAsync(t, office, m, ct);
             var replies = replyTo != null ? await _db.ChatMessages.AsNoTracking().Where(x => x.Id == replyTo).ToDictionaryAsync(x => x.Id, ct) : new();
             return Ok(Shape(m, replies));
         }
@@ -428,6 +458,15 @@ namespace SeemanchalOutreach.Api.Controllers
             var (t, office) = await AccessAsync(id, ct);
             if (t == null) return NotFound();
             await TouchAsync(id, office, seen: true, read: true, ct);
+            // Reading the chat clears its alerts in my bell / inbox too.
+            var me = Me;
+            var link = $"chat:{id}";
+            var alerts = await _db.Notifications.Where(n => n.UserId == me && n.Link == link && n.ReadAt == null).ToListAsync(ct);
+            if (alerts.Count > 0)
+            {
+                foreach (var n in alerts) n.ReadAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync(ct);
+            }
             await _live.PublishChatAsync(id); // the sender's ticks turn blue
             return Ok(new { read = true });
         }

@@ -20,10 +20,13 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IMarketingDbContext _context;
         private readonly ILiveEvents _live;
 
-        public ReferralsController(IMarketingDbContext context, ILiveEvents live)
+        private readonly INotifier _notifier;
+
+        public ReferralsController(IMarketingDbContext context, ILiveEvents live, INotifier notifier)
         {
             _context = context;
             _live = live;
+            _notifier = notifier;
         }
 
         /// <summary>Stages a referral moves through. "pending" = referred; "converted" is the old name for admitted.</summary>
@@ -203,6 +206,17 @@ namespace SeemanchalOutreach.Api.Controllers
                 Text = $"{referral.PatientName}{dept} marked {StageLabel(status).ToLower()}",
                 RefId = clientId,
             });
+            // The agent who referred the patient hears how it went.
+            if (!string.IsNullOrEmpty(referral.AgentId))
+            {
+                _notifier.Notify(new NotifyJob
+                {
+                    To = new() { referral.AgentId }, Except = User.AgentIdOf(), Kind = "referral",
+                    Title = $"{referral.PatientName}: {StageLabel(status)}",
+                    Body = $"Your patient{dept} is now {StageLabel(status).ToLower()}.",
+                    Link = $"referral:{clientId}", RefId = clientId,
+                });
+            }
 
             return Ok(new { message = "Status updated successfully" });
         }

@@ -1,6 +1,8 @@
 'use client';
 
 import VitaChat from '@/components/crm/VitaChat';
+import { NotificationBell, NOTIFY_EVENT } from '@/components/crm/NotificationBell';
+import type { LiveNotification } from '@/lib/crm/live';
 import './crm.css';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -190,7 +192,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => { clearTimeout(first); clearInterval(t); };
   }, [refreshUnread, pathname]);
   const noop = useCallback(() => {}, []);
-  useLiveEvents(noop, undefined, refreshUnread);
+  // My notifications arrive on the same socket; the bell (and any page) listens for them on window.
+  const onNotify = useCallback((n: LiveNotification) => {
+    window.dispatchEvent(new CustomEvent(NOTIFY_EVENT, { detail: n }));
+    if (n.kind === 'chat' || n.kind === 'team_chat') refreshUnread();
+  }, [refreshUnread]);
+  useLiveEvents(noop, undefined, refreshUnread, onNotify);
   const current = allowedItems.find((i) => isActive(pathname, i));
   const phoneItems = allowedItems.filter((i) => i.phone).slice(0, 4);
   const moreItems = allowedItems.filter((i) => !phoneItems.includes(i));
@@ -280,11 +287,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <span style={{ fontSize: 12, color: '#aeb7ca', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>NexEagle · Glisan Akbari SuperSpeciality</span>
             <span style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 700, fontSize: 16 }}>{current?.label ?? 'Dashboard'}</span>
           </div>
-          <button type="button" className="crm-icon-btn" style={{ marginLeft: 'auto' }} onClick={handleLogout} aria-label="Sign out">
+          <span style={{ marginLeft: 'auto' }} className="crm-top-bell"><NotificationBell placement="inline" /></span>
+          <button type="button" className="crm-icon-btn" onClick={handleLogout} aria-label="Sign out">
             <LogOut size={18} aria-hidden />
           </button>
         </div>
 
+        <div className="crm-desk-bell"><NotificationBell /></div>
         {children}
       </div>
 

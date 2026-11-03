@@ -21,12 +21,14 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IMarketingDbContext _db;
         private readonly AttendanceService _attendance;
         private readonly ILiveEvents _live;
+        private readonly INotifier _notifier;
 
-        public MeController(IMarketingDbContext db, AttendanceService attendance, ILiveEvents live)
+        public MeController(IMarketingDbContext db, AttendanceService attendance, ILiveEvents live, INotifier notifier)
         {
             _db = db;
             _attendance = attendance;
             _live = live;
+            _notifier = notifier;
         }
 
         private string Me => User.AgentIdOf();
@@ -143,6 +145,13 @@ namespace SeemanchalOutreach.Api.Controllers
                 Kind = "leave",
                 Text = $"{name} asked for {(type == "urgent" ? "urgent" : "holiday")} leave: {from:d MMM}{(to != from ? " – " + to.ToString("d MMM") : "")} ({days:0.#} day{(days == 1 ? "" : "s")})",
                 RefId = leave.Id.ToString(),
+            });
+            _notifier.Notify(new NotifyJob
+            {
+                ToOffice = true, Except = Me, Kind = "leave",
+                Title = $"Leave request: {name}",
+                Body = $"{(type == "urgent" ? "Urgent" : "Holiday")} leave {from:d MMM}{(to != from ? " – " + to.ToString("d MMM") : "")} ({days:0.#} day{(days == 1 ? "" : "s")}). {leave.Reason}",
+                Link = "leave", RefId = leave.Id.ToString(),
             });
             return Ok(Dto(leave, new()));
         }

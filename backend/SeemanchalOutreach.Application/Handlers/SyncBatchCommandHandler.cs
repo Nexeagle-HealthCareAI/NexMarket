@@ -17,12 +17,27 @@ namespace SeemanchalOutreach.Application.Handlers
         private readonly IMarketingDbContext _db;
         private readonly IPhotoUploadService _photoUploadService;
         private readonly ILiveEvents _live;
+        private readonly INotifier _notifier;
 
-        public SyncBatchCommandHandler(IMarketingDbContext db, IPhotoUploadService photoUploadService, ILiveEvents live)
+        public SyncBatchCommandHandler(IMarketingDbContext db, IPhotoUploadService photoUploadService, ILiveEvents live, INotifier notifier)
         {
             _db = db;
             _photoUploadService = photoUploadService;
             _live = live;
+            _notifier = notifier;
+        }
+
+        /// <summary>An agent escalated a partner from the app: tell the office.</summary>
+        private async Task NotifyEscalationAsync(string agentId, string clientId, string partnerName, string? note, CancellationToken ct)
+        {
+            var who = await _db.Agents.AsNoTracking().Where(a => a.AgentId == agentId).Select(a => a.Name).FirstOrDefaultAsync(ct) ?? agentId;
+            _notifier.Notify(new NotifyJob
+            {
+                ToOffice = true, Except = agentId, Kind = "escalation",
+                Title = $"Escalation: {partnerName}",
+                Body = $"{who}: {note ?? "needs help with this partner."}",
+                Link = $"partner:{clientId}", RefId = clientId,
+            });
         }
 
         /// <summary>Tells the live dashboard about field activity that was just synced. Never throws.</summary>
@@ -446,6 +461,7 @@ namespace SeemanchalOutreach.Application.Handlers
                         }
 
                         _db.Contacts.Add(contact);
+                        if (agentEscalated) await NotifyEscalationAsync(agentId, clientId, name, agentEscalationNote, cancellationToken);
                         _db.ContactHistory.Add(new ContactHistoryEntry
                         {
                             ContactClientId = clientId,
@@ -499,7 +515,11 @@ namespace SeemanchalOutreach.Application.Handlers
                                 if (root.TryGetProperty("agentEscalated", out _))
                                 {
                                     // A fresh escalation re-opens it for the office, even if an earlier one was resolved.
-                                    if (agentEscalated && (!existing.AgentEscalated || existing.AgentEscalationNote != agentEscalationNote)) existing.IsEscalationResolved = false;
+                                    if (agentEscalated && (!existing.AgentEscalated || existing.AgentEscalationNote != agentEscalationNote))
+                                    {
+                                        existing.IsEscalationResolved = false;
+                                        await NotifyEscalationAsync(agentId, existing.ClientId, existing.Name, agentEscalationNote, cancellationToken);
+                                    }
                                     existing.AgentEscalated = agentEscalated;
                                     existing.AgentEscalationNote = agentEscalationNote;
                                 }

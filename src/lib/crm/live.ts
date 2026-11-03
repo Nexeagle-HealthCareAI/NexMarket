@@ -12,6 +12,11 @@ export interface LiveEvent {
 
 export type LiveStatus = 'connecting' | 'live' | 'polling';
 
+/** One of my notifications, pushed the moment it's created. */
+export interface LiveNotification {
+  id: string; kind: string; title: string; body: string; link?: string | null; createdAt: string; muted?: boolean;
+}
+
 /** An agent's newest GPS fix, pushed when their phone syncs. */
 export interface LiveLocation {
   agentId: string;
@@ -27,12 +32,14 @@ export interface LiveLocation {
  * If the socket can't connect, status becomes "polling" — pages then refresh
  * on their own timer instead, so the screen never goes stale.
  */
-export function useLiveEvents(onEvent: (e: LiveEvent) => void, onLocation?: (l: LiveLocation) => void, onChat?: (threadId: string) => void): LiveStatus {
+export function useLiveEvents(onEvent: (e: LiveEvent) => void, onLocation?: (l: LiveLocation) => void, onChat?: (threadId: string) => void,
+  onNotify?: (n: LiveNotification) => void): LiveStatus {
   const [status, setStatus] = useState<LiveStatus>('connecting');
   const handler = useRef(onEvent);
   const locHandler = useRef(onLocation);
   const chatHandler = useRef(onChat);
-  useEffect(() => { handler.current = onEvent; locHandler.current = onLocation; chatHandler.current = onChat; }, [onEvent, onLocation, onChat]);
+  const notifyHandler = useRef(onNotify);
+  useEffect(() => { handler.current = onEvent; locHandler.current = onLocation; chatHandler.current = onChat; notifyHandler.current = onNotify; }, [onEvent, onLocation, onChat, onNotify]);
 
   useEffect(() => {
     let stopped = false;
@@ -50,6 +57,8 @@ export function useLiveEvents(onEvent: (e: LiveEvent) => void, onLocation?: (l: 
         connection.on('location', (l: LiveLocation) => locHandler.current?.(l));
         // Chat pings carry only the conversation id; the page fetches what's new with its own access check.
         connection.on('chat', (c: { threadId: string }) => chatHandler.current?.(c.threadId));
+        // My own notifications (sent only to my user group).
+        connection.on('notify', (n: LiveNotification) => notifyHandler.current?.(n));
         connection.onreconnecting(() => !stopped && setStatus('connecting'));
         connection.onreconnected(() => !stopped && setStatus('live'));
         connection.onclose(() => !stopped && setStatus('polling'));

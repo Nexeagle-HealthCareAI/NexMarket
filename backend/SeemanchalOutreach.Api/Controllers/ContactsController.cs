@@ -45,9 +45,12 @@ namespace SeemanchalOutreach.Api.Controllers
     {
         private readonly IMarketingDbContext _db;
 
-        public ContactsController(IMarketingDbContext db)
+        private readonly INotifier _notifier;
+
+        public ContactsController(IMarketingDbContext db, INotifier notifier)
         {
             _db = db;
+            _notifier = notifier;
         }
 
         [HttpGet]
@@ -376,6 +379,18 @@ namespace SeemanchalOutreach.Api.Controllers
             }
 
             await _db.SaveChangesAsync(cancellationToken);
+
+            // The agent who raised it hears that the office resolved it.
+            if (dto.AgentEscalationResolved == true && !string.IsNullOrEmpty(contact.AgentId))
+            {
+                _notifier.Notify(new NotifyJob
+                {
+                    To = new() { contact.AgentId }, Except = User.FindFirst("agentId")?.Value, Kind = "escalation",
+                    Title = $"Resolved: {contact.Name}",
+                    Body = string.IsNullOrWhiteSpace(contact.AgentEscalationResolution) ? "The office resolved your escalation." : contact.AgentEscalationResolution!,
+                    Link = $"partner:{clientId}", RefId = clientId,
+                });
+            }
 
             return Ok(new
             {

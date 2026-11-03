@@ -7,6 +7,7 @@ import { errorMessage, nowIso, uuid } from './util';
 import { me } from './repo';
 import { refreshTasks } from './tasks';
 import { flushChat, refreshUnread } from './chat';
+import { pollNotifications } from './notifications';
 
 /**
  * The sync engine. Pushes the outbox in order (oldest first), then pulls what changed
@@ -63,6 +64,8 @@ async function run() {
     // Chat: send what waited for signal, and update the unread badge.
     await flushChat().catch(() => undefined);
     await refreshUnread().catch(() => undefined);
+    // Notifications: unread count, and local alerts when the server can't push to this phone.
+    await pollNotifications().catch(() => undefined);
     failures = 0;
     nextAllowedAt = 0;
     const at = nowIso();

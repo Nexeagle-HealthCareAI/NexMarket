@@ -13,6 +13,7 @@ import {
 } from '../../lib/chat';
 import { imageSource, MAX_FILE_BYTES, openChatFile, pickCamera, pickDocument, pickGallery, type Picked } from '../../lib/chatFiles';
 import { EMOJI } from '../../lib/emoji';
+import { setOpenChat } from '../../lib/notifications';
 import { dayLong, timeOf } from '../../lib/format';
 import { C } from '../../theme';
 
@@ -45,12 +46,13 @@ export default function Conversation() {
   // While open: fetch new messages every few seconds and mark them read.
   useFocusEffect(useCallback(() => {
     let alive = true;
+    setOpenChat(id); // its messages don't pop up while it's open
     const tick = async () => {
       try { await refreshMessages(id); if (alive) void markRead(id); } catch { /* offline */ }
     };
     void tick();
     const iv = setInterval(tick, 4000);
-    return () => { alive = false; clearInterval(iv); };
+    return () => { alive = false; clearInterval(iv); setOpenChat(null); };
   }, [id]));
 
   const rows = useMemo<Row[]>(() => {

@@ -27,11 +27,14 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly AttendanceService _attendance;
         private readonly ILiveEvents _live;
 
-        public LeaveController(IMarketingDbContext db, AttendanceService attendance, ILiveEvents live)
+        private readonly INotifier _notifier;
+
+        public LeaveController(IMarketingDbContext db, AttendanceService attendance, ILiveEvents live, INotifier notifier)
         {
             _db = db;
             _attendance = attendance;
             _live = live;
+            _notifier = notifier;
         }
 
         private bool CanDecide =>
@@ -204,6 +207,13 @@ namespace SeemanchalOutreach.Api.Controllers
                 Kind = "leave",
                 Text = $"{name}'s leave {leave.FromDate:d MMM}{(leave.ToDate != leave.FromDate ? " – " + leave.ToDate.ToString("d MMM") : "")} {(dto.Approve ? "approved" : "rejected")}",
                 RefId = leave.Id.ToString(),
+            });
+            _notifier.Notify(new NotifyJob
+            {
+                To = new() { leave.AgentId }, Except = User.AgentIdOf(), Kind = "leave",
+                Title = dto.Approve ? "Leave approved ✅" : "Leave not approved",
+                Body = $"{leave.FromDate:d MMM}{(leave.ToDate != leave.FromDate ? " – " + leave.ToDate.ToString("d MMM") : "")}{(leave.DecisionNote != null ? ". " + leave.DecisionNote : "")}{(leave.FollowUpsMoved > 0 ? $". {leave.FollowUpsMoved} follow-ups moved." : "")}",
+                Link = "leave", RefId = leave.Id.ToString(),
             });
             return Ok(new { id = leave.Id, status = leave.Status, followUpsMoved = leave.FollowUpsMoved });
         }

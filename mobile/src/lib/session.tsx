@@ -6,6 +6,7 @@ import { translate, type Lang, type TFn } from '../i18n';
 import { uuid } from './util';
 import { onSyncState, startAutoSync, stopAutoSync, syncNow, syncState, type SyncState } from './sync';
 import { stopTracking } from './location';
+import { unregisterPush } from './notifications';
 
 /**
  * App-wide state: who is signed in and which language they read. The language lives in
@@ -108,6 +109,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    await unregisterPush();
     await logoutRemote();
     await resetLocal();
   }, [resetLocal]);

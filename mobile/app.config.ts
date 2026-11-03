@@ -10,6 +10,12 @@ const versionCode = Number(process.env.ANDROID_VERSION_CODE ?? '1');
 const LOCATION_PURPOSE =
   'NexMarket AI records your location only while your shift is on, including when the screen is off, so the hospital can see your visits and distance. Tracking stops when you end the shift.';
 
+// Firebase (phone push): CI writes google-services.json from a secret. Without it the app still builds,
+// and alerts come through the sync loop while the app is running.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const fs: { existsSync(p: string): boolean } = require('fs');
+const GOOGLE_SERVICES = process.env.GOOGLE_SERVICES_JSON ?? (fs.existsSync('./google-services.json') ? './google-services.json' : undefined);
+
 const config: ExpoConfig = {
   name: 'NexMarket AI',
   slug: 'nexeagle-field',
@@ -29,6 +35,7 @@ const config: ExpoConfig = {
   android: {
     package: 'com.nexeagle.field',
     versionCode,
+    ...(GOOGLE_SERVICES ? { googleServicesFile: GOOGLE_SERVICES } : {}),
     adaptiveIcon: {
       backgroundColor: '#0e1525',
       foregroundImage: './assets/android-icon-foreground.png',
@@ -44,6 +51,7 @@ const config: ExpoConfig = {
       'android.permission.CAMERA',
       'android.permission.INTERNET',
       'android.permission.ACCESS_NETWORK_STATE',
+      'android.permission.POST_NOTIFICATIONS',
     ],
     // The app never records audio or reads the photo gallery (photos must be taken live).
     blockedPermissions: [
@@ -82,6 +90,13 @@ const config: ExpoConfig = {
         isIosBackgroundLocationEnabled: true,
         isAndroidBackgroundLocationEnabled: true,
         isAndroidForegroundServiceEnabled: true,
+      },
+    ],
+    [
+      'expo-notifications',
+      {
+        icon: './assets/android-icon-monochrome.png',
+        color: '#0a72d6',
       },
     ],
     [

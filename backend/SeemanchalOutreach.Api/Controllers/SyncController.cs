@@ -118,7 +118,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var take = request.PageSize;
 
             var contacts = await _db.Contacts.AsNoTracking()
-                .Where(c => c.AgentId == request.AgentId && c.ServerReceivedAt >= request.Since)
+                .Where(c => c.AgentId == request.AgentId && (c.ServerReceivedAt >= request.Since || c.LastModifiedAt >= request.Since)) // office edits too, e.g. an escalation resolved
                 .OrderBy(c => c.Id)
                 .Skip(skip).Take(take)
                 .ToListAsync(cancellationToken);

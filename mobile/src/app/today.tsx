@@ -20,6 +20,7 @@ import { routeKm, startOfDay, ymd } from '../lib/util';
 import { cachedTasks } from '../lib/tasks';
 import { cachedTips, ensureTips } from '../lib/aiTips';
 import { cachedUnread, useChatVersion } from '../lib/chat';
+import { cachedNotifyUnread, useNotifyVersion } from '../lib/notifications';
 import { C, PRIORITY_COLOR } from '../theme';
 import type { Lang, TFn } from '../i18n';
 
@@ -40,6 +41,8 @@ export default function Today() {
   const sync = useSync();
   useChatVersion();
   const chatUnread = cachedUnread();
+  useNotifyVersion();
+  const notifyUnread = cachedNotifyUnread();
   const here = useHere();
   const [langOpen, setLangOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -139,8 +142,17 @@ export default function Today() {
                 style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>
                 <Icon name="chat" size={18} color="#fff" />
                 {chatUnread > 0 ? (
-                  <View style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#25d366', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: C.ink }}>
+                  <View style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: C.ink }}>
                     <T style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{chatUnread > 99 ? '99+' : chatUnread}</T>
+                  </View>
+                ) : null}
+              </Pressable>
+              <Pressable onPress={() => router.push('/notifications')} accessibilityRole="button" accessibilityLabel={t('ntTitle')} hitSlop={6}
+                style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>
+                <Icon name="bell" size={18} color="#fff" />
+                {notifyUnread > 0 ? (
+                  <View style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#e5484d', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: C.ink }}>
+                    <T style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{notifyUnread > 99 ? '99+' : notifyUnread}</T>
                   </View>
                 ) : null}
               </Pressable>
