@@ -8,7 +8,7 @@ const VERSION: string = require('./package.json').version;
 const versionCode = Number(process.env.ANDROID_VERSION_CODE ?? '1');
 
 const LOCATION_PURPOSE =
-  'NexMarket AI records your location only while your shift is on, including when the screen is off, so the hospital can see your visits and distance. Tracking stops when you end the shift.';
+  'NexEagle records your location only while your shift is on, including when the screen is off, so the hospital can see your visits and distance. Tracking stops when you end the shift.';
 
 // Firebase (phone push): CI writes google-services.json from a secret. Without it the app still builds,
 // and alerts come through the sync loop while the app is running.
@@ -17,7 +17,7 @@ const fs: { existsSync(p: string): boolean } = require('fs');
 const GOOGLE_SERVICES = process.env.GOOGLE_SERVICES_JSON ?? (fs.existsSync('./google-services.json') ? './google-services.json' : undefined);
 
 const config: ExpoConfig = {
-  name: 'NexMarket AI',
+  name: 'NexEagle',
   slug: 'nexeagle-field',
   scheme: 'nexeaglefield',
   version: VERSION,
@@ -85,7 +85,7 @@ const config: ExpoConfig = {
         locationAlwaysAndWhenInUsePermission: LOCATION_PURPOSE,
         locationAlwaysPermission: LOCATION_PURPOSE,
         locationWhenInUsePermission:
-          'NexMarket AI uses your location to check you in at panchayats and to plan your route.',
+          'NexEagle uses your location to check you in at panchayats and to plan your route.',
         motionUsagePermission: false,
         isIosBackgroundLocationEnabled: true,
         isAndroidBackgroundLocationEnabled: true,
@@ -102,7 +102,7 @@ const config: ExpoConfig = {
     [
       'expo-image-picker',
       {
-        cameraPermission: 'NexMarket AI uses the camera to photograph partners, clinics and documents. Each photo is stamped with the time and place.',
+        cameraPermission: 'NexEagle uses the camera to photograph partners, clinics and documents. Each photo is stamped with the time and place.',
         photosPermission: false,
         microphonePermission: false,
       },

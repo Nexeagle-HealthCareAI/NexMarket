@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { router } from 'expo-router';
-import { Avatar, BottomNav, Btn, Card, Screen, T, TopBar } from '../components/ui';
-import { Icon, type IconName } from '../components/Icon';
-import { LanguageSheet } from '../components/LanguageSheet';
-import { useDb, useSession, useSync } from '../lib/session';
-import { db, kvGet, q } from '../lib/db';
-import { syncNow, assignment } from '../lib/sync';
-import { openAppSettings } from '../lib/shift';
-import { APP_VERSION } from '../lib/config';
-import { monthName, relDay, timeOf } from '../lib/format';
-import { LANGS } from '../i18n';
-import { myPhotoUrl } from '../lib/profile';
-import { C } from '../theme';
+import { Avatar, Btn, Card, Screen, T, TopBar } from '../../components/ui';
+import { Icon, type IconName } from '../../components/Icon';
+import { LanguageSheet } from '../../components/LanguageSheet';
+import { useDb, useSession, useSync } from '../../lib/session';
+import { db, kvGet, q } from '../../lib/db';
+import { syncNow, assignment } from '../../lib/sync';
+import { openAppSettings } from '../../lib/shift';
+import { APP_VERSION } from '../../lib/config';
+import { monthName, relDay, timeOf } from '../../lib/format';
+import { LANGS } from '../../i18n';
+import { myPhotoUrl } from '../../lib/profile';
+import { C } from '../../theme';
 
 export default function Me() {
   const { t, lang, agent, signOut } = useSession();
@@ -52,7 +52,7 @@ export default function Me() {
   const photo = useDb(() => myPhotoUrl());
 
   return (
-    <Screen header={<TopBar title={t('me')} onBack={false} />} footer={<BottomNav />}>
+    <Screen header={<TopBar title={t('me')} onBack={false} />}>
       <Card onPress={() => router.push('/profile')} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Avatar name={agent?.name ?? '?'} size={52} uri={photo} />
         <View style={{ flex: 1 }}>

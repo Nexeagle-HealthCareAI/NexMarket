@@ -2,7 +2,7 @@
 // {name}-style placeholders are filled in by t(key, { name: ... }).
 const en = {
   // App
-  appName: 'NexMarket AI',
+  appName: 'NexEagle',
   hospital: 'Glisan Akbari SuperSpeciality Hospital',
   fieldTeamApp: 'Field team app',
 
@@ -69,7 +69,7 @@ const en = {
   turnOnLocation: 'Turn on location',
   battery: 'Battery',
   batterySaverWarn: 'Battery saver can stop the app',
-  batterySaverHint: 'Some phones (Xiaomi, Vivo, Oppo, Realme) stop tracking in the background. Set battery to “No restrictions” for NexMarket AI.',
+  batterySaverHint: 'Some phones (Xiaomi, Vivo, Oppo, Realme) stop tracking in the background. Set battery to “No restrictions” for NexEagle.',
   fix: 'Fix',
   locationNotice: 'Your location is recorded only during your shift, so the hospital can see your visits and distance. It stops as soon as you end the shift.',
   locationNoticeEn: 'Location is recorded only while your shift is on, also with the screen off.',

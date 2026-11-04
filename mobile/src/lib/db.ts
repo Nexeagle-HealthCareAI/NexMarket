@@ -98,11 +98,21 @@ export function onDbChange(l: Listener): () => void {
 export function dbVersion(): number {
   return version;
 }
+let flushQueued = false;
+/**
+ * A write happened. Screens hear about it once per tick, not once per write: a sync that saves
+ * 200 rows makes the open screen re-read once instead of 200 times.
+ */
 export function notifyChange() {
   version++;
-  listeners.forEach((l) => {
-    try { l(); } catch { /* a screen failing to refresh must not break a write */ }
-  });
+  if (flushQueued) return;
+  flushQueued = true;
+  setTimeout(() => {
+    flushQueued = false;
+    listeners.forEach((l) => {
+      try { l(); } catch { /* a screen failing to refresh must not break a write */ }
+    });
+  }, 0);
 }
 
 // ─── kv ───

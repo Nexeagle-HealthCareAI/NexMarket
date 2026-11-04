@@ -3,7 +3,7 @@ import type { Strings } from './en';
 // বাংলা — DRAFT translation. Needs review by a native Bengali speaker from the
 // Kishanganj / Uttar Dinajpur team before rollout (especially survey and consent wording).
 const bn: Strings = {
-  appName: 'NexMarket AI',
+  appName: 'NexEagle',
   hospital: 'গ্লিসান আকবরী সুপার স্পেশালিটি হাসপাতাল',
   fieldTeamApp: 'ফিল্ড টিম অ্যাপ',
 
@@ -65,7 +65,7 @@ const bn: Strings = {
   turnOnLocation: 'লোকেশন চালু করুন',
   battery: 'ব্যাটারি',
   batterySaverWarn: 'ব্যাটারি সেভার অ্যাপ বন্ধ করে দিতে পারে',
-  batterySaverHint: 'কিছু ফোন (Xiaomi, Vivo, Oppo, Realme) ব্যাকগ্রাউন্ডে ট্র্যাকিং বন্ধ করে দেয়। NexMarket AI-এর জন্য ব্যাটারি “No restrictions”-এ রাখুন।',
+  batterySaverHint: 'কিছু ফোন (Xiaomi, Vivo, Oppo, Realme) ব্যাকগ্রাউন্ডে ট্র্যাকিং বন্ধ করে দেয়। NexEagle-এর জন্য ব্যাটারি “No restrictions”-এ রাখুন।',
   fix: 'ঠিক করুন',
   locationNotice: 'আপনার লোকেশন শুধু শিফটের সময় রেকর্ড হয়, যাতে হাসপাতাল আপনার ভিজিট আর দূরত্ব দেখতে পায়। শিফট শেষ করলেই বন্ধ।',
   locationNoticeEn: 'Location is recorded only while your shift is on, also with the screen off.',

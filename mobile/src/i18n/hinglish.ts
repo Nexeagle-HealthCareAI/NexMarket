@@ -2,7 +2,7 @@ import type { Strings } from './en';
 
 // Hinglish — Hindi written in Roman letters, as agents type it on WhatsApp.
 const hinglish: Strings = {
-  appName: 'NexMarket AI',
+  appName: 'NexEagle',
   hospital: 'Glisan Akbari SuperSpeciality Hospital',
   fieldTeamApp: 'Field team app',
 
@@ -64,7 +64,7 @@ const hinglish: Strings = {
   turnOnLocation: 'Location chalu karein',
   battery: 'Battery',
   batterySaverWarn: 'Battery saver app ko rok sakta hai',
-  batterySaverHint: 'Kuch phone (Xiaomi, Vivo, Oppo, Realme) background mein tracking rok dete hain. NexMarket AI ke liye battery “No restrictions” par rakhein.',
+  batterySaverHint: 'Kuch phone (Xiaomi, Vivo, Oppo, Realme) background mein tracking rok dete hain. NexEagle ke liye battery “No restrictions” par rakhein.',
   fix: 'Theek karein',
   locationNotice: 'Aapki location sirf shift ke dauran record hoti hai, taaki hospital aapke daure aur doori dekh sake. Shift khatam karte hi band.',
   locationNoticeEn: 'Location is recorded only while your shift is on, also with the screen off.',
