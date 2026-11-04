@@ -2124,10 +2124,73 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.ToTable("trajectory_points", "marketing");
                 });
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.WaConversation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssignedTo")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastDirection")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastInboundAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastMessage")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("LastMessageAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LeadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("OptOut")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PartnerClientId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Unread")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedTo");
+
+                    b.HasIndex("LastMessageAt");
+
+                    b.HasIndex("Phone")
+                        .IsUnique();
+
+                    b.ToTable("wa_conversations", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.WaMessage", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BroadcastId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
@@ -2143,6 +2206,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("LeadId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ParamsJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("Phone")
                         .IsRequired()
                         .HasColumnType("text");
@@ -2150,8 +2216,18 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("SentBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TemplateLanguage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TemplateName")
                         .HasColumnType("text");
 
                     b.Property<string>("Text")
@@ -2166,6 +2242,10 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BroadcastId");
+
+                    b.HasIndex("Direction", "CreatedAt");
 
                     b.HasIndex("LeadId");
 

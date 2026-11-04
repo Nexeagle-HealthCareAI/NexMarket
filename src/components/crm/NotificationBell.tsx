@@ -37,6 +37,7 @@ export function crmHref(link?: string | null): string | null {
   const [k, id] = link.split(':');
   if (k === 'chat' && id) return `/admin/chat?t=${encodeURIComponent(id)}`;
   if (k === 'lead' && id) return `/admin/leads?id=${encodeURIComponent(id)}`;
+  if (k === 'wa' && id) return `/admin/whatsapp?c=${encodeURIComponent(id)}`;
   if (k === 'partner' && id) return `/admin/partners?id=${encodeURIComponent(id)}`;
   if (k === 'referral') return '/admin/pipeline';
   if (k === 'leave') return '/admin/leave';
@@ -390,24 +391,27 @@ function PopupCard({ p, onOpen, onRead, onClose, onHold, onRelease }: {
   const chatId = p.link?.startsWith('chat:') ? p.link.slice(5) : null;
   // A patient's WhatsApp message: reply straight from the pop-up (WhatsApp allows it for 24 hours after they write).
   const leadId = p.kind === 'lead' && p.link?.startsWith('lead:') ? p.link.slice(5) : null;
+  const waPhone = p.kind === 'lead' && p.link?.startsWith('wa:') ? p.link.slice(3) : null;
   const [replying, setReplying] = useState(false);
   const [text, setText] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [err, setErr] = useState('');
 
   const send = async () => {
-    if ((!chatId && !leadId) || !text.trim()) return;
+    if ((!chatId && !leadId && !waPhone) || !text.trim()) return;
     setState('sending');
     try {
       if (leadId) {
         await crm.post(`/api/v1/leads/${leadId}/whatsapp`, { text: text.trim() });
+      } else if (waPhone) {
+        await crm.post(`/api/v1/whatsapp/conversations/${encodeURIComponent(waPhone)}/text`, { text: text.trim() });
       } else {
         const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`;
         await crm.post(`/api/v1/chat/threads/${chatId}/messages`, { clientId: id, text: text.trim() });
       }
       setState('sent');
       setTimeout(onRead, 900);
-    } catch (e) { setErr(leadId ? friendlyError(e) : ''); setState('error'); }
+    } catch (e) { setErr(leadId || waPhone ? friendlyError(e) : ''); setState('error'); }
   };
 
   return (
@@ -424,7 +428,7 @@ function PopupCard({ p, onOpen, onRead, onClose, onHold, onRelease }: {
       </div>
       {replying ? (
         <form className="nt-reply" onSubmit={(e) => { e.preventDefault(); void send(); }}>
-          <input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={leadId ? 'Reply on WhatsApp…' : 'Type a reply…'} maxLength={4000} disabled={state === 'sending' || state === 'sent'} />
+          <input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={leadId || waPhone ? 'Reply on WhatsApp…' : 'Type a reply…'} maxLength={4000} disabled={state === 'sending' || state === 'sent'} />
           <button type="submit" className="crm-btn is-sm" disabled={!text.trim() || state === 'sending' || state === 'sent'}>
             {state === 'sending' ? 'Sending…' : state === 'sent' ? 'Sent ✓' : 'Send'}
           </button>
@@ -433,7 +437,7 @@ function PopupCard({ p, onOpen, onRead, onClose, onHold, onRelease }: {
       ) : (
         <div className="nt-pop-actions">
           <button type="button" className="nt-link" onClick={onOpen}>Open</button>
-          {(chatId || leadId) && <button type="button" className="nt-link" onClick={() => { onHold(); setReplying(true); }}>Reply</button>}
+          {(chatId || leadId || waPhone) && <button type="button" className="nt-link" onClick={() => { onHold(); setReplying(true); }}>Reply</button>}
           <button type="button" className="nt-link is-muted" onClick={onRead}><Check size={14} aria-hidden /> Mark read</button>
         </div>
       )}

@@ -35,6 +35,9 @@ namespace SeemanchalOutreach.Application.Interfaces
         /// A read from the WhatsApp Graph API (e.g. the phone number's details, the approved templates). Uses the given
         /// token when set, so settings can be tested before they're saved. Returns the JSON body, or an error message.
         /// </summary>
+        /// <summary>A write to the WhatsApp Graph API with the saved token (e.g. creating or editing a template).</summary>
+        Task<(bool Ok, string? Json, string? Error)> GraphPostAsync(string path, object body, CancellationToken ct = default);
+
         Task<(bool Ok, string? Json, string? Error)> GraphGetAsync(string pathAndQuery, string? accessToken = null, string? apiVersion = null, CancellationToken ct = default);
     }
 }

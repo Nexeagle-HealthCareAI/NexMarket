@@ -132,6 +132,29 @@ namespace SeemanchalOutreach.Infrastructure.Services
             }
         }
 
+        public async Task<(bool Ok, string? Json, string? Error)> GraphPostAsync(string path, object body, CancellationToken ct = default)
+        {
+            var cfg = Cfg;
+            if (string.IsNullOrWhiteSpace(cfg.AccessToken)) return (false, null, "WhatsApp isn't connected yet (Settings → WhatsApp setup).");
+            try
+            {
+                var client = _http.CreateClient("whatsapp");
+                using var req = new HttpRequestMessage(HttpMethod.Post, $"https://graph.facebook.com/{cfg.ApiVersion}/{path.TrimStart('/')}");
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.AccessToken);
+                req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                using var res = await client.SendAsync(req, ct);
+                var text = await res.Content.ReadAsStringAsync(ct);
+                if (res.IsSuccessStatusCode) return (true, text, null);
+                _logger.LogWarning("WhatsApp Graph write failed ({Status}): {Body}", (int)res.StatusCode, text);
+                return (false, null, ErrorOf(text, (int)res.StatusCode));
+            }
+            catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException)
+            {
+                _logger.LogWarning(ex, "WhatsApp Graph write failed");
+                return (false, null, "Could not reach WhatsApp.");
+            }
+        }
+
         private static string ErrorOf(string body, int status)
         {
             string error = $"WhatsApp returned {status}";

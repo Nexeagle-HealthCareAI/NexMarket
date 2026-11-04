@@ -440,6 +440,34 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? Error { get; set; }
         public string? SentBy { get; set; }                        // agentId for outgoing
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        /// <summary>What sent it: in | inbox | lead | auto | rule:{id} | followup | broadcast | test | resend</summary>
+        public string Source { get; set; } = "in";
+        public string? TemplateName { get; set; }
+        public string? TemplateLanguage { get; set; }
+        public string? ParamsJson { get; set; }                    // template values, so a failed one can be sent again
+        public Guid? BroadcastId { get; set; }
+    }
+
+    /// <summary>
+    /// One WhatsApp conversation per phone number: patients, partners, anyone who writes to (or gets a message from)
+    /// the hospital's number. The WhatsApp inbox in the CRM lists these.
+    /// </summary>
+    public class WaConversation
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Phone { get; set; } = string.Empty;          // 91XXXXXXXXXX
+        public string Name { get; set; } = string.Empty;
+        public Guid? LeadId { get; set; }
+        public string? PartnerClientId { get; set; }
+        public string? AssignedTo { get; set; }                    // agentId
+        public string Status { get; set; } = "open";               // open | done
+        public int Unread { get; set; }
+        public bool OptOut { get; set; }
+        public string? LastMessage { get; set; }
+        public string? LastDirection { get; set; }                 // in | out
+        public DateTime LastMessageAt { get; set; } = DateTime.UtcNow;
+        public DateTime? LastInboundAt { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
     /// <summary>
