@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text,
+  ActivityIndicator, Animated, Dimensions, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text,
   TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -235,15 +235,24 @@ const TABS: { path: string; icon: IconName | 'vita'; key: 'tabToday' | 'tabPartn
   { path: '/me', icon: 'user', key: 'tabMe' },
 ];
 const VITA_TAB = require('../../assets/mascot/think.webp');
-export function BottomNav() {
+export const BottomNav = React.memo(function BottomNav() {
   const t = useT();
   const path = usePathname();
   const insets = useSafeAreaInsets();
+  // On Android the keyboard pushes the window up; hide the tabs while typing so the input keeps the room.
+  const [keyboard, setKeyboard] = useState(false);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const a = Keyboard.addListener('keyboardDidShow', () => setKeyboard(true));
+    const b = Keyboard.addListener('keyboardDidHide', () => setKeyboard(false));
+    return () => { a.remove(); b.remove(); };
+  }, []);
+  if (keyboard) return null;
   const item = (tab: (typeof TABS)[number]) => {
     const active = path.startsWith(tab.path);
     return (
       <Pressable key={tab.path} accessibilityRole="tab" accessibilityState={{ selected: active }} style={s.tab}
-        onPress={() => { if (!active) router.replace(tab.path as never); }}>
+        onPress={() => { if (!active) router.navigate(tab.path as never); }}>
         {tab.icon === 'vita' ? (
           <View style={{ width: 28, height: 28, borderRadius: 14, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end',
             backgroundColor: active ? C.purpleSoft : C.line, borderWidth: active ? 2 : 0, borderColor: C.purple }}>
@@ -269,7 +278,7 @@ export function BottomNav() {
       {item(TABS[4])}
     </View>
   );
-}
+});
 
 export const s = StyleSheet.create({
   text: { color: C.text, fontSize: 15 },

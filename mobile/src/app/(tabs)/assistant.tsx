@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, TextInput, View } from 'react-native';
-import { BottomNav, Screen, T } from '../components/ui';
-import { Icon } from '../components/Icon';
-import { useSession } from '../lib/session';
-import { api, ApiError, OfflineError, post } from '../lib/api';
-import { errorMessage } from '../lib/util';
-import { saveTips } from '../lib/aiTips';
-import { Vita } from '../components/Vita';
-import type { StringKey } from '../i18n';
-import { C } from '../theme';
+import { Screen, T } from '../../components/ui';
+import { Icon } from '../../components/Icon';
+import { useSession } from '../../lib/session';
+import { api, ApiError, OfflineError, post } from '../../lib/api';
+import { errorMessage } from '../../lib/util';
+import { saveTips } from '../../lib/aiTips';
+import { Vita } from '../../components/Vita';
+import type { StringKey } from '../../i18n';
+import { C } from '../../theme';
 
 interface Tip { title: string; detail: string }
 interface Tips { greeting: string; tips: Tip[] }
@@ -113,7 +113,6 @@ export default function Assistant() {
           </View>
           <T style={{ color: C.muted, fontSize: 11, textAlign: 'center' }}>{t('aiPrivacy')}</T>
         </View>
-        <BottomNav />
         </>
       }>
       <ScrollView ref={scroller} style={{ backgroundColor: C.bg }} contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 24 }} keyboardShouldPersistTaps="handled"

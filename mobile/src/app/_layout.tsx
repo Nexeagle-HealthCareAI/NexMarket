@@ -6,6 +6,7 @@ import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { enableFreeze } from 'react-native-screens';
 import { SessionProvider, useSession } from '../lib/session';
 import { pendingPasswordChange } from '../lib/api';
 import { handleResponse, registerPush, setupNotifications } from '../lib/notifications';
@@ -14,6 +15,8 @@ import { CelebrateHost } from '../components/Vita';
 import { C } from '../theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
+// Screens the agent can't see (behind the one on top, or other tabs) stop re-rendering until shown again.
+enableFreeze(true);
 
 function Gate() {
   const { ready, agent } = useSession();
@@ -49,14 +52,10 @@ function Gate() {
   }
   return (
     <>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg }, animation: 'slide_from_right' }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg }, animation: 'slide_from_right', animationDuration: 220, freezeOnBlur: true }}>
         <Stack.Screen name="index" options={{ animation: 'none' }} />
         <Stack.Screen name="login" options={{ animation: 'fade' }} />
-        <Stack.Screen name="today" options={{ animation: 'none' }} />
-        <Stack.Screen name="followups" options={{ animation: 'none' }} />
-        <Stack.Screen name="patients" options={{ animation: 'none' }} />
-        <Stack.Screen name="me" options={{ animation: 'none' }} />
-        <Stack.Screen name="assistant" options={{ animation: 'none' }} />
+        <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
         <Stack.Screen name="set-password" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="add" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
       </Stack>

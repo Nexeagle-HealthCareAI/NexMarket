@@ -454,9 +454,9 @@ function InviteUser({ kind, initialRole, fieldRoles, onClose, onDone }: { kind: 
 }
 
 function loginText(p: { agentId: string; name: string; kind: 'field' | 'dashboard' }, password?: string): string {
-  const where = p.kind === 'field' ? 'Open the NexMarket AI app on your phone and sign in.' : 'Sign in at the NexEagle dashboard.';
+  const where = p.kind === 'field' ? 'Open the NexEagle app on your phone and sign in.' : 'Sign in at the NexEagle dashboard.';
   return [
-    `Namaste ${p.name.split(' ')[0] || ''}, here are your NexMarket AI login details.`,
+    `Namaste ${p.name.split(' ')[0] || ''}, here are your NexEagle login details.`,
     `User ID: ${p.agentId}`,
     password ? `One-time password: ${password}` : null,
     where,

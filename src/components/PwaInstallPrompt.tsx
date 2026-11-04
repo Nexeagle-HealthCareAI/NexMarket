@@ -67,7 +67,7 @@ export default function PwaInstallPrompt() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span style={{ fontSize: '1.5rem' }}>📱</span>
           <div>
-            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600 }}>Install NexMarket App</h4>
+            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600 }}>Install NexEagle App</h4>
             <p style={{ margin: 0, fontSize: '0.75rem', opacity: 0.9 }}>Get offline access and faster loading.</p>
           </div>
         </div>
@@ -93,7 +93,7 @@ export default function PwaInstallPrompt() {
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <span style={{ fontSize: '1.5rem' }}>📱</span>
         <div>
-          <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600 }}>Install NexMarket App</h4>
+          <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600 }}>Install NexEagle App</h4>
           <p style={{ margin: 0, fontSize: '0.75rem', opacity: 0.9 }}>Get offline access and faster loading.</p>
         </div>
       </div>

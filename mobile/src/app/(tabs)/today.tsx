@@ -1,28 +1,28 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Easing, Image, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import Svg, { Circle, Defs, Line, Path, RadialGradient, Rect, Stop, Text as SvgText } from 'react-native-svg';
-import { Vita, type VitaMood } from '../components/Vita';
-import { BottomNav, Empty, Pill, T } from '../components/ui';
-import { Icon, type IconName } from '../components/Icon';
-import { LanguageButton, LanguageSheet } from '../components/LanguageSheet';
-import { TasksSection } from '../components/TaskCard';
-import { useDb, useSession, useSync } from '../lib/session';
-import { db, q } from '../lib/db';
-import { buildPlan, formatDist, type PlanItem } from '../lib/plan';
-import { useHere } from '../lib/useHere';
-import { assignment } from '../lib/sync';
-import { finishShift, resumeTrackingIfNeeded } from '../lib/shift';
-import { openDirections } from '../lib/links';
-import { dayShort, km, timeOf, weekday } from '../lib/format';
-import { routeKm, startOfDay, ymd } from '../lib/util';
-import { cachedTasks } from '../lib/tasks';
-import { cachedTips, ensureTips } from '../lib/aiTips';
-import { cachedUnread, useChatVersion } from '../lib/chat';
-import { cachedNotifyUnread, useNotifyVersion } from '../lib/notifications';
-import { C, PRIORITY_COLOR } from '../theme';
-import type { Lang, TFn } from '../i18n';
+import { Vita, type VitaMood } from '../../components/Vita';
+import { Empty, Pill, T } from '../../components/ui';
+import { Icon, type IconName } from '../../components/Icon';
+import { LanguageButton, LanguageSheet } from '../../components/LanguageSheet';
+import { TasksSection } from '../../components/TaskCard';
+import { useDb, useSession, useSync } from '../../lib/session';
+import { db, q } from '../../lib/db';
+import { buildPlan, formatDist, type PlanItem } from '../../lib/plan';
+import { useHere } from '../../lib/useHere';
+import { assignment } from '../../lib/sync';
+import { finishShift, resumeTrackingIfNeeded } from '../../lib/shift';
+import { openDirections } from '../../lib/links';
+import { dayShort, km, timeOf, weekday } from '../../lib/format';
+import { routeKm, startOfDay, ymd } from '../../lib/util';
+import { cachedTasks } from '../../lib/tasks';
+import { cachedTips, ensureTips } from '../../lib/aiTips';
+import { cachedUnread, useChatVersion } from '../../lib/chat';
+import { cachedNotifyUnread, useNotifyVersion } from '../../lib/notifications';
+import { C, PRIORITY_COLOR } from '../../theme';
+import type { Lang, TFn } from '../../i18n';
 
 function weekStart(): string {
   const d = new Date();
@@ -125,14 +125,13 @@ export default function Today() {
           <View style={{ backgroundColor: C.ink, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 34, gap: 14, overflow: 'hidden' }}>
             <Aurora />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Image source={require('../../assets/brand/logo.png')} style={{ width: 30, height: 22 }} resizeMode="contain" />
+              <Image source={require('../../../assets/brand/logo.png')} style={{ width: 30, height: 22 }} resizeMode="contain" />
               <View style={{ flex: 1, minWidth: 0 }}>
-                <T style={{ color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 0.3 }} numberOfLines={1}>NexMarket <T style={{ color: C.mint, fontSize: 15, fontWeight: '800' }}>AI</T></T>
-                <T style={{ color: C.sideText, fontSize: 10, letterSpacing: 0.4 }} numberOfLines={1}>{t('poweredBy')}</T>
+                <T style={{ color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 }} numberOfLines={1}>NexEagle</T>
               </View>
               <LiveDot online={sync.online} running={sync.running} t={t} compact={data.unsent > 0} />
               {data.unsent > 0 ? (
-                <Pressable onPress={() => router.replace('/me')} accessibilityLabel={t('nOnPhone', { n: data.unsent })} hitSlop={6}
+                <Pressable onPress={() => router.navigate('/me')} accessibilityLabel={t('nOnPhone', { n: data.unsent })} hitSlop={6}
                   style={{ height: 36, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,207,122,0.12)', borderWidth: 1, borderColor: 'rgba(255,207,122,0.3)', borderRadius: 999, paddingHorizontal: 10 }}>
                   <Icon name={sync.online ? 'upload' : 'cloudOff'} size={14} color="#ffcf7a" />
                   <T style={{ color: '#ffcf7a', fontSize: 13, fontWeight: '800' }}>{data.unsent}</T>
@@ -202,7 +201,7 @@ export default function Today() {
 
           {/* Ask the AI helper */}
           <View style={{ paddingHorizontal: 14, marginTop: -20, gap: 8 }}>
-            <Pressable onPress={() => router.replace('/assistant')} accessibilityRole="button" accessibilityLabel={t('aiHelper')}
+            <Pressable onPress={() => router.navigate('/assistant')} accessibilityRole="button" accessibilityLabel={t('aiHelper')}
               style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.card, borderRadius: 18, paddingVertical: 11, paddingHorizontal: 12,
                 borderWidth: 1, borderColor: C.border, elevation: 4, shadowColor: C.ink, shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } }, pressed && { opacity: 0.9 }]}>
               <View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.purpleSoft, alignItems: 'center', justifyContent: 'flex-end', overflow: 'hidden' }}>
@@ -214,7 +213,7 @@ export default function Today() {
               </View>
             </Pressable>
             {data.tip ? (
-              <Pressable onPress={() => router.replace('/assistant')} style={{ flexDirection: 'row', gap: 10, backgroundColor: C.purpleSoft, borderRadius: 16, padding: 12 }}>
+              <Pressable onPress={() => router.navigate('/assistant')} style={{ flexDirection: 'row', gap: 10, backgroundColor: C.purpleSoft, borderRadius: 16, padding: 12 }}>
                 <Icon name="sparkle" size={16} color={C.purple} />
                 <View style={{ flex: 1, gap: 2 }}>
                   <T style={{ color: C.purple, fontWeight: '800', fontSize: 13 }}>{t('aiTipToday')} · {data.tip.title}</T>
@@ -264,7 +263,6 @@ export default function Today() {
             ) : null}
           </View>
         </ScrollView>
-        <BottomNav />
       </View>
       <LanguageSheet visible={langOpen} onClose={() => setLangOpen(false)} />
     </SafeAreaView>
@@ -331,17 +329,25 @@ const glass = {
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
+/** Runs a looping animation only while Today is on screen, so other tabs aren't slowed by it. */
+function useLoopWhileShown(make: () => Animated.CompositeAnimation | null, deps: React.DependencyList = []) {
+  useFocusEffect(
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useCallback(() => {
+      const loop = make();
+      loop?.start();
+      return () => loop?.stop();
+    }, deps),
+  );
+}
+
 /** Slowly drifting blue and green light behind the dark header. */
 function Aurora() {
   const v = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(v, { toValue: 1, duration: 9000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      Animated.timing(v, { toValue: 0, duration: 9000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [v]);
+  useLoopWhileShown(() => Animated.loop(Animated.sequence([
+    Animated.timing(v, { toValue: 1, duration: 9000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    Animated.timing(v, { toValue: 0, duration: 9000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+  ])));
   const blob = (id: string, color: string, o: number) => (
     <Svg width={420} height={420}>
       <Defs>
@@ -355,10 +361,10 @@ function Aurora() {
   );
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
-      <Animated.View style={{ position: 'absolute', right: -170, top: -190, transform: [{ translateX: v.interpolate({ inputRange: [0, 1], outputRange: [0, -60] }) }, { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, 30] }) }] }}>
+      <Animated.View renderToHardwareTextureAndroid style={{ position: 'absolute', right: -170, top: -190, transform: [{ translateX: v.interpolate({ inputRange: [0, 1], outputRange: [0, -60] }) }, { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, 30] }) }] }}>
         {blob('a1', '#2a5bd7', 0.75)}
       </Animated.View>
-      <Animated.View style={{ position: 'absolute', left: -190, bottom: -220, transform: [{ translateX: v.interpolate({ inputRange: [0, 1], outputRange: [0, 70] }) }] }}>
+      <Animated.View renderToHardwareTextureAndroid style={{ position: 'absolute', left: -190, bottom: -220, transform: [{ translateX: v.interpolate({ inputRange: [0, 1], outputRange: [0, 70] }) }] }}>
         {blob('a2', '#13a37a', 0.6)}
       </Animated.View>
     </View>
@@ -368,12 +374,7 @@ function Aurora() {
 /** "Live" when connected (pulsing), "Syncing" while sending, "Offline" otherwise. */
 function LiveDot({ online, running, t, compact }: { online: boolean; running: boolean; t: TFn; compact?: boolean }) {
   const v = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (!online) return;
-    const loop = Animated.loop(Animated.timing(v, { toValue: 1, duration: 1600, useNativeDriver: true }));
-    loop.start();
-    return () => loop.stop();
-  }, [v, online]);
+  useLoopWhileShown(() => (online ? Animated.loop(Animated.timing(v, { toValue: 1, duration: 1600, useNativeDriver: true })) : null), [online]);
   const color = !online ? C.muted : running ? '#ffcf7a' : C.mint;
   return (
     <View accessibilityLabel={!online ? t('liveOffline') : running ? t('liveSyncing') : t('liveOn')} style={{ height: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: compact ? 13 : 10, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>
@@ -390,14 +391,10 @@ function LiveDot({ online, running, t, compact }: { online: boolean; running: bo
 /** The big green start button, breathing softly so it invites a tap. */
 function StartOrb() {
   const v = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(v, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      Animated.timing(v, { toValue: 0, duration: 1200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [v]);
+  useLoopWhileShown(() => Animated.loop(Animated.sequence([
+    Animated.timing(v, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    Animated.timing(v, { toValue: 0, duration: 1200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+  ])));
   return (
     <View style={{ width: 66, height: 66, alignItems: 'center', justifyContent: 'center' }}>
       <Animated.View style={{ position: 'absolute', width: 66, height: 66, borderRadius: 33, backgroundColor: 'rgba(56,246,169,0.18)', transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.08] }) }] }} />
@@ -411,11 +408,7 @@ function StartOrb() {
 /** A live "on shift" dot with a soft ring that keeps pulsing. */
 function Pulse() {
   const v = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const loop = Animated.loop(Animated.timing(v, { toValue: 1, duration: 1800, easing: Easing.out(Easing.quad), useNativeDriver: true }));
-    loop.start();
-    return () => loop.stop();
-  }, [v]);
+  useLoopWhileShown(() => Animated.loop(Animated.timing(v, { toValue: 1, duration: 1800, easing: Easing.out(Easing.quad), useNativeDriver: true })));
   return (
     <View style={{ width: 46, height: 46, alignItems: 'center', justifyContent: 'center' }}>
       <Animated.View style={{ position: 'absolute', width: 46, height: 46, borderRadius: 23, borderWidth: 2, borderColor: C.mint,

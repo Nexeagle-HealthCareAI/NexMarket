@@ -285,7 +285,7 @@ export default function AgentsClient() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>👥 NexMarket Field Directory</h1>
+          <h1 style={{ fontSize: '1.5rem', color: 'var(--text-primary)', marginBottom: '0.2rem' }}>👥 NexEagle Field Directory</h1>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
             Manage marketing executives, field officers, regional representatives, and admins across all territories.
           </p>

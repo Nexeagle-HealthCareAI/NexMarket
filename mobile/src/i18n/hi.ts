@@ -2,7 +2,7 @@ import type { Strings } from './en';
 
 // हिंदी — the app's default language.
 const hi: Strings = {
-  appName: 'NexMarket AI',
+  appName: 'NexEagle',
   hospital: 'ग्लिसन अकबरी सुपर स्पेशलिटी हॉस्पिटल',
   fieldTeamApp: 'फील्ड टीम ऐप',
 
@@ -64,7 +64,7 @@ const hi: Strings = {
   turnOnLocation: 'लोकेशन चालू करें',
   battery: 'बैटरी',
   batterySaverWarn: 'बैटरी सेवर ऐप को रोक सकता है',
-  batterySaverHint: 'कुछ फ़ोन (Xiaomi, Vivo, Oppo, Realme) बैकग्राउंड में ट्रैकिंग रोक देते हैं। NexMarket AI के लिए बैटरी को “No restrictions” पर रखें।',
+  batterySaverHint: 'कुछ फ़ोन (Xiaomi, Vivo, Oppo, Realme) बैकग्राउंड में ट्रैकिंग रोक देते हैं। NexEagle के लिए बैटरी को “No restrictions” पर रखें।',
   fix: 'ठीक करें',
   locationNotice: 'आपकी लोकेशन सिर्फ़ शिफ्ट के दौरान रिकॉर्ड होती है, ताकि अस्पताल आपके दौरे और दूरी देख सके। शिफ्ट खत्म करते ही बंद।',
   locationNoticeEn: 'Location is recorded only while your shift is on, also with the screen off.',
