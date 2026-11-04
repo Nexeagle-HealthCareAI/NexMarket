@@ -269,9 +269,24 @@ namespace SeemanchalOutreach.Api.Services
             }
             result.Lead = lead;
 
-            // Replies: a keyword rule first (at most once per rule per 12 hours), else the instant reply to a new enquiry.
-            var rule = rules.Match(m.Text);
+            // "Camp: KSB12" from a camp's QR poster: book them into that camp and confirm.
             string? reply = null, source = null;
+            if (camp != null)
+            {
+                var hc = await CampBook.BookFromWhatsAppAsync(db, camp, phone, m.ProfileName ?? lead?.Name, lead?.Id, partner?.ClientId ?? senderPartner?.ClientId, ct);
+                if (hc != null)
+                {
+                    if (lead != null && lead.Source == "camp") lead.SourceRef = hc.Title;
+                    var booked = db.CampPatients.Local.FirstOrDefault(x => x.CampId == hc.Id && x.Phone == phone)
+                        ?? await db.CampPatients.AsNoTracking().FirstOrDefaultAsync(x => x.CampId == hc.Id && x.Phone == phone, ct);
+                    var when = hc.Date.ToString("d MMM");
+                    reply = $"नमस्ते! {hc.Title} में आपका पंजीकरण हो गया है।\nतारीख: {when}, {hc.StartTime}–{hc.EndTime}\nजगह: {hc.Venue ?? hc.Block ?? ""}\nटोकन नंबर: {booked?.Token}\nYou're registered for the camp. Please bring old reports and medicines.";
+                    source = "camp";
+                }
+            }
+
+            // Replies: a keyword rule first (at most once per rule per 12 hours), else the instant reply to a new enquiry.
+            var rule = reply == null ? rules.Match(m.Text) : null;
             if (rule != null)
             {
                 var since = now.AddHours(-12);

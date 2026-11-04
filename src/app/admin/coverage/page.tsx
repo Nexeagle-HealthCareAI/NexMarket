@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
-import { Download, ListChecks, MapPin, Plus, Search } from 'lucide-react';
+import { Suspense, useMemo, useState } from 'react';
+import { Download, Grid2x2Check, ListChecks, MapPin, Plus, Search } from 'lucide-react';
+import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { geo, istDate, STATUS_META, type CoverageRow, type CoverageStatus } from '@/lib/crm/geo';
@@ -19,7 +20,12 @@ const PERIODS = [
 const STATUSES: CoverageStatus[] = ['patients', 'partners', 'visited', 'untouched'];
 type SortKey = 'name' | 'block' | 'visits' | 'partners' | 'champions' | 'referrals' | 'admitted' | 'lastVisitAt';
 
-export default function CoveragePage() {
+export default function CoveragePageWrap() {
+  return <Suspense fallback={<main className="crm-page"><Skeleton h={480} /></main>}><CoveragePage /></Suspense>;
+}
+
+function CoveragePage() {
+  const [tab, setTab] = usePageTab(['panchayats', 'blocks'] as const, 'panchayats');
   const { access } = useAccess();
   const [toast, showToast] = useToast();
   const [district, setDistrict] = useState('');
@@ -31,7 +37,6 @@ export default function CoveragePage() {
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'referrals', desc: true });
   const [blockSort, setBlockSort] = useState<'least' | 'patients'>('least');
   const [openId, setOpenId] = useState<string | null>(null);
-  const [allBlocks, setAllBlocks] = useState(false);
   const [scope, setScope] = useState<'in' | 'out'>('in');
   const [adding, setAdding] = useState(false);
   const [scoping, setScoping] = useState(false);
@@ -89,6 +94,7 @@ export default function CoveragePage() {
   // Back to the first page whenever the filters change.
   const filterKey = [district, block, statuses.join(), q, agentId, period].join('|');
   const pg = usePaged(filtered, [filterKey, sort.key, sort.desc, scope], 50);
+  const blockPg = usePaged(byBlock, [filterKey, blockSort, scope], 20);
 
   const exportCsv = () => {
     const head = ['Panchayat', 'Block', 'District', 'Status', 'Visits', 'Last visit', 'Agents', 'Partners', 'Important', 'Champions', 'Referrals', 'Admitted', 'Survey answers', 'Location'];
@@ -151,6 +157,12 @@ export default function CoveragePage() {
         <Kpi label="Surveyed" value={kpi.surveyed} sub="panchayats with answers" />
       </div>
 
+      <PageTabs label="Coverage views" value={tab} onChange={setTab} tabs={[
+        { key: 'panchayats', label: 'Panchayats', icon: ListChecks, count: filtered.length },
+        { key: 'blocks', label: 'By block', icon: Grid2x2Check, count: byBlock.length },
+      ]} />
+
+      {tab === 'blocks' && (
       <section className="crm-card" aria-labelledby="blocks-h">
         <div className="crm-card-head">
           <h2 id="blocks-h" className="crm-h2">By block</h2>
@@ -168,9 +180,9 @@ export default function CoveragePage() {
         </div>
         {!data.data ? <Skeleton h={200} /> : byBlock.length === 0 ? <Empty title="No panchayats" /> : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(420px, 100%), 1fr))', columnGap: 28 }}>
-            {(allBlocks ? byBlock : byBlock.slice(0, 16)).map((b) => (
+            {blockPg.rows.map((b) => (
               <button key={b.name} type="button" className="geo-block-row" aria-pressed={block === b.name}
-                onClick={() => { setDistrict(b.district); setBlock(block === b.name ? '' : b.name); }}
+                onClick={() => { setDistrict(b.district); setBlock(b.name); setTab('panchayats'); }}
                 title={`${b.name}: ${b.patients} sending patients, ${b.partners} with partners, ${b.visited} visited only, ${b.untouched} not visited`}>
                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.name} <span className="crm-cell-sub">· {b.total}</span></span>
                 <span className="geo-stack">
@@ -181,12 +193,12 @@ export default function CoveragePage() {
             ))}
           </div>
         )}
-        {byBlock.length > 16 && (
-          <button type="button" className="crm-btn is-secondary is-sm" style={{ marginTop: 10 }} onClick={() => setAllBlocks((v) => !v)}>
-            {allBlocks ? 'Show fewer' : `Show all ${byBlock.length} blocks`}
-          </button>
-        )}
+        <span className="crm-sub" style={{ fontSize: 12.5, marginTop: 8, display: 'block' }}>Click a block to see its panchayats.</span>
+        <Pager {...blockPg.pager} noun="blocks" compact />
       </section>
+      )}
+
+      {tab === 'panchayats' && (
 
       <section className="crm-card" style={{ padding: 0 }} aria-labelledby="list-h">
         <div className="crm-card-head" style={{ padding: '18px 22px 6px', flexWrap: 'wrap', gap: 10 }}>
@@ -233,6 +245,7 @@ export default function CoveragePage() {
           <Pager {...pg.pager} noun="panchayats" /></>
         )}
       </section>
+      )}
 
       {openId && (
         <>

@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Suspense, useCallback, useMemo, useState } from 'react';
+import { CalendarCheck, CalendarX2, ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
+import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 import { crm } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
 import { Empty, ErrorBox, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
@@ -41,7 +42,14 @@ function shiftMonth(month: string, by: number) {
 }
 const thisMonth = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 7);
 
-export default function LeavePage() {
+export default function LeavePageWrap() {
+  return <Suspense fallback={<main className="crm-page"><Skeleton h={480} /></main>}><LeavePage /></Suspense>;
+}
+
+const TAB_KEYS = ['requests', 'away', 'attendance'] as const;
+
+function LeavePage() {
+  const [tab, setTab] = usePageTab(TAB_KEYS, 'requests');
   const [month, setMonth] = useState(thisMonth);
   const board = useLoader(() => crm.get<Board>(`/api/v1/leave/board?month=${month}`), [month]);
   const [toast, showToast] = useToast();
@@ -55,6 +63,8 @@ export default function LeavePage() {
   const b = board.data;
   const dayNumbers = useMemo(() => (b?.team[0]?.days ?? []).map((d) => Number(d.date.slice(8))), [b]);
   const pg = usePaged(b?.team ?? [], month, 25);
+  const reqPg = usePaged(b?.requests ?? [], month, 10);
+  const awayPg = usePaged(b?.away ?? [], month, 10);
 
   const decide = async () => {
     if (!deciding) return;
@@ -99,15 +109,21 @@ export default function LeavePage() {
         </div>
       )}
 
-      <div className="crm-row">
-        <section className="crm-card grow-2" aria-labelledby="req-h">
+      <PageTabs label="Attendance and leave" value={tab} onChange={setTab} tabs={[
+        { key: 'requests', label: 'Leave requests', icon: Inbox, count: b?.requests.length, hot: !!b?.requests.length },
+        { key: 'away', label: 'Who’s away', icon: CalendarX2, count: b?.away.length },
+        { key: 'attendance', label: 'Team attendance', icon: CalendarCheck },
+      ]} />
+
+      {tab === 'requests' && (
+        <section className="crm-card" aria-labelledby="req-h">
           <div className="crm-card-head">
             <h2 id="req-h" className="crm-h2">Leave requests</h2>
             {b && !b.canDecide && <span className="crm-sub" style={{ fontSize: 13 }}>Only an admin or marketing manager can approve.</span>}
           </div>
           {!b ? <Skeleton h={180} /> : b.requests.length === 0 ? <Empty title="Nothing waiting">New requests from the app appear here straight away.</Empty> : (
             <ul className="crm-list">
-              {b.requests.map((r) => (
+              {reqPg.rows.map((r) => (
                 <li key={r.id} style={{ flexWrap: 'wrap' }}>
                   <span className="crm-initials">{initials(r.name)}</span>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '1 1 260px', minWidth: 0 }}>
@@ -129,13 +145,16 @@ export default function LeavePage() {
               ))}
             </ul>
           )}
+          {b && <Pager {...reqPg.pager} noun="requests" compact />}
         </section>
+      )}
 
-        <aside className="crm-card grow-1" aria-labelledby="away-h" style={{ flexBasis: 320 }}>
+      {tab === 'away' && (
+        <section className="crm-card" aria-labelledby="away-h">
           <div className="crm-card-head"><h2 id="away-h" className="crm-h2">Who&apos;s away</h2></div>
           {!b ? <Skeleton h={160} /> : b.away.length === 0 ? <Empty title="Everyone is in">No approved leave today or coming up.</Empty> : (
             <ul className="crm-list">
-              {b.away.map((a) => (
+              {awayPg.rows.map((a) => (
                 <li key={a.id}>
                   <span style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                     <strong style={{ fontSize: 14 }}>{a.name}</strong>
@@ -146,9 +165,11 @@ export default function LeavePage() {
               ))}
             </ul>
           )}
-        </aside>
-      </div>
+          {b && <Pager {...awayPg.pager} noun="people" compact />}
+        </section>
+      )}
 
+      {tab === 'attendance' && (
       <section className="crm-card" aria-labelledby="grid-h" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div className="crm-card-head" style={{ flexWrap: 'wrap', gap: 12 }}>
           <h2 id="grid-h" className="crm-h2">Team attendance</h2>
@@ -199,6 +220,7 @@ export default function LeavePage() {
             <Pager {...pg.pager} noun="agents" /></>
         )}
       </section>
+      )}
 
       {deciding && (
         <Modal title={deciding.approve ? `Approve leave for ${deciding.name}?` : `Reject leave for ${deciding.name}?`} onClose={() => setDeciding(null)}

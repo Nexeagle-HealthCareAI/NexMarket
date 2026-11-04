@@ -484,4 +484,71 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
         public string? UpdatedBy { get; set; }
     }
+
+    /// <summary>A health camp the hospital runs in a village or town: the plan, who comes, and what was found.</summary>
+    public class HealthCamp
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Title { get; set; } = string.Empty;
+        /// <summary>Short code people send on WhatsApp ("Camp: KSB12") to book, and that is printed on the QR poster.</summary>
+        public string Code { get; set; } = string.Empty;
+        public string CampType { get; set; } = "general";      // general | eye | bone_joint | women | diabetes_bp | child | dental | heart | other
+        public string? Departments { get; set; }               // comma-separated department names
+        public string? Doctors { get; set; }                   // comma-separated doctor names
+        public DateOnly Date { get; set; }
+        public string StartTime { get; set; } = "09:00";
+        public string EndTime { get; set; } = "14:00";
+        public string? District { get; set; }
+        public string? Block { get; set; }
+        public string? PanchayatId { get; set; }
+        public string? Venue { get; set; }
+        public string? HostPartnerClientId { get; set; }       // the local partner hosting it (mukhiya, ASHA, school…)
+        public string Status { get; set; } = "planned";        // planned | confirmed | done | cancelled
+        public int Capacity { get; set; } = 150;               // pre-booking slots
+        public int TargetRegistrations { get; set; } = 100;
+        public int TargetReferrals { get; set; } = 15;
+        public decimal Budget { get; set; }
+        public decimal Spent { get; set; }
+        public string? ChecklistJson { get; set; }             // the marketing plan: [{ "id", "phase", "text", "done", "doneBy", "doneAt" }]
+        public string? Notes { get; set; }
+        public string? Outcome { get; set; }                   // what went well / what to change, written after the camp
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>One person at a health camp: booked beforehand or walked in, what they came with, and what the doctor found.</summary>
+    public class CampPatient
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid CampId { get; set; }
+        public int Token { get; set; }                         // queue number on the day
+        public string Name { get; set; } = string.Empty;
+        public string? Phone { get; set; }                     // 91XXXXXXXXXX
+        public int? Age { get; set; }
+        public string? Sex { get; set; }                       // M | F | O
+        public string? Village { get; set; }
+        public string Source { get; set; } = "walk_in";        // prebooked | whatsapp | partner | agent | walk_in
+        public string? PartnerClientId { get; set; }           // who brought or booked them
+        public string? Slot { get; set; }                      // booked time, e.g. "10:30"
+        public string Status { get; set; } = "booked";         // booked | attended | no_show | cancelled
+        public DateTime? ArrivedAt { get; set; }
+        public string? Complaint { get; set; }                 // in their words
+        public string? Symptoms { get; set; }                  // comma-separated codes
+        public string? Conditions { get; set; }                // suspected, comma-separated codes
+        public int? BpSystolic { get; set; }
+        public int? BpDiastolic { get; set; }
+        public int? Sugar { get; set; }                        // random blood sugar, mg/dL
+        public decimal? WeightKg { get; set; }
+        public int? Spo2 { get; set; }
+        public string? Advice { get; set; }
+        public bool ReferToHospital { get; set; }
+        public string? Department { get; set; }
+        public bool Urgent { get; set; }
+        public Guid? LeadId { get; set; }                      // the follow-up lead in the Leads inbox
+        public bool Consent { get; set; }                      // agreed to their details being kept and to be contacted
+        public string? CreatedBy { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
 }

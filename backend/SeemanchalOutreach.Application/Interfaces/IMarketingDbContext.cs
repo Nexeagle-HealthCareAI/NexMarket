@@ -49,6 +49,8 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<WaMessage> WaMessages { get; }
         DbSet<AppSetting> AppSettings { get; }
         DbSet<WaConversation> WaConversations { get; }
+        DbSet<HealthCamp> HealthCamps { get; }
+        DbSet<CampPatient> CampPatients { get; }
 
         ChangeTracker ChangeTracker { get; }
 

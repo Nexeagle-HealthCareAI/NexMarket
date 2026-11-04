@@ -2,8 +2,8 @@
 
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Sparkles } from 'lucide-react';
+import { Building2, LineChart, MapPinned, Sparkles, Users } from 'lucide-react';
+import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 import { crm } from '@/lib/sync/api-client';
 import AnalystWorkspace from '@/components/crm/AnalystWorkspace';
 import { contactTypeLabel, Empty, ErrorBox, fmt, PageHead, rupees, Skeleton, useLoader } from '@/components/crm/ui';
@@ -44,36 +44,39 @@ export default function AnalyticsWrap() {
 }
 
 function AnalyticsPage() {
-  const params = useSearchParams();
-  const router = useRouter();
-  const tab = params.get('tab') === 'ai' ? 'ai' : 'business';
+  const [tab, setTab] = usePageTab(['overview', 'sources', 'departments', 'partners', 'ai'] as const, 'overview');
   const [days, setDays] = useState(30);
-  const setTab = (t: string) => router.replace(t === 'ai' ? '/admin/reports?tab=ai' : '/admin/reports', { scroll: false });
 
   return (
     <main className="crm-page">
       <PageHead title="Analytics" sub="What outreach brings the hospital, and an AI analyst that reads the numbers every day and keeps track of what needs doing.">
-        {tab === 'business' && (
+        {tab !== 'ai' && (
           <div className="crm-chips" role="group" aria-label="Period">
             {PERIODS.map((p) => <button key={p.d} type="button" className="crm-chip" aria-pressed={days === p.d} onClick={() => setDays(p.d)}>{p.l}</button>)}
           </div>
         )}
       </PageHead>
-      <div className="crm-tabs" role="tablist" aria-label="Analytics views">
-        <button type="button" role="tab" className="crm-tab" aria-selected={tab === 'business'} onClick={() => setTab('business')}>Business view</button>
-        <button type="button" role="tab" className="crm-tab" aria-selected={tab === 'ai'} onClick={() => setTab('ai')}><Sparkles size={14} aria-hidden style={{ verticalAlign: -2, marginRight: 6 }} />AI analyst</button>
-      </div>
-      {tab === 'business' ? <Business days={days} /> : <AnalystWorkspace />}
+      <PageTabs label="Analytics views" value={tab} onChange={setTab} tabs={[
+        { key: 'overview', label: 'Overview', icon: LineChart },
+        { key: 'sources', label: 'Where patients come from', icon: MapPinned },
+        { key: 'departments', label: 'Departments', icon: Building2 },
+        { key: 'partners', label: 'Partners', icon: Users },
+        { key: 'ai', label: 'AI analyst', icon: Sparkles },
+      ]} />
+      {tab === 'ai' ? <AnalystWorkspace /> : <Business days={days} view={tab} />}
     </main>
   );
 }
 
 // ─── Business view ─────────────────────────────────────────────────────────
 
-function Business({ days }: { days: number }) {
+function Business({ days, view }: { days: number; view: 'overview' | 'sources' | 'departments' | 'partners' }) {
   const [group, setGroup] = useState('block');
   const data = useLoader(() => crm.get<OverviewRes>(`/api/v1/analytics/overview?days=${days}&group=${group}`), [days, group]);
   const pg = usePaged(data.data?.breakdown ?? [], [days, group], 25);
+  const topPg = usePaged(data.data?.topPartners ?? [], days, 10);
+  const quietPg = usePaged(data.data?.goneQuiet ?? [], days, 10);
+  const deptPg = usePaged(data.data?.departments ?? [], days, 15);
   if (data.error) return <ErrorBox message={data.error} onRetry={data.reload} />;
   const d = data.data;
   if (!d) return <Skeleton h={480} />;
@@ -95,6 +98,7 @@ function Business({ days }: { days: number }) {
         <Kpi label="Partners sending patients" value={o.activePartners} sub={`of ${o.totalPartners.toLocaleString('en-IN')} · ${o.newPartners} new`} up={o.activePartners >= o.activePartnersPrev} />
       </div>
 
+      {view === 'overview' && (
       <div className="crm-row">
         <section className="crm-card grow-1" aria-labelledby="fn-h" style={{ flexBasis: 420 }}>
           <div className="crm-card-head"><h2 id="fn-h" className="crm-h2">From referral to discharge</h2></div>
@@ -134,6 +138,9 @@ function Business({ days }: { days: number }) {
         </section>
       </div>
 
+      )}
+
+      {view === 'sources' && (
       <section className="crm-card" aria-labelledby="bd-h" style={{ padding: 0, overflow: 'hidden' }}>
         <div className="crm-card-head" style={{ padding: '18px 22px 6px' }}>
           <h2 id="bd-h" className="crm-h2" style={{ flex: 1 }}>Where admissions come from</h2>
@@ -168,12 +175,14 @@ function Business({ days }: { days: number }) {
         )}
       </section>
 
-      <div className="crm-row">
-        <section className="crm-card grow-1" aria-labelledby="dp-h" style={{ flexBasis: 360 }}>
+      )}
+
+      {view === 'departments' && (
+        <section className="crm-card" aria-labelledby="dp-h">
           <div className="crm-card-head"><h2 id="dp-h" className="crm-h2">Admissions by department</h2></div>
           {d.departments.length === 0 ? <span className="crm-cell-sub">No admissions yet.</span> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {d.departments.map((x) => (
+              {deptPg.rows.map((x) => (
                 <div key={x.name} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,150px) minmax(0,1fr) 40px', gap: 10, alignItems: 'center', fontSize: 14 }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.name}</span>
                   <span className="crm-bar" style={{ height: 16, borderRadius: 5 }}><span style={{ display: 'block', height: '100%', borderRadius: 5, width: `${pct(x.admitted, maxDept)}%`, background: 'var(--accent)' }} /></span>
@@ -182,12 +191,17 @@ function Business({ days }: { days: number }) {
               ))}
             </div>
           )}
+          <Pager {...deptPg.pager} noun="departments" compact />
         </section>
+      )}
+
+      {view === 'partners' && (
+      <div className="crm-row">
         <section className="crm-card grow-1" aria-labelledby="tp-h" style={{ flexBasis: 360 }}>
           <div className="crm-card-head"><h2 id="tp-h" className="crm-h2" style={{ flex: 1 }}>Top partners</h2><Link href="/admin/partners" style={{ fontSize: 13, fontWeight: 600 }}>All partners</Link></div>
           {d.topPartners.length === 0 ? <span className="crm-cell-sub">Nobody referred in this period.</span> : (
             <ol className="crm-list">
-              {d.topPartners.map((t, i) => (
+              {topPg.rows.map((t, k) => { const i = topPg.offset + k; return (
                 <li key={t.clientId}>
                   <span style={{ width: 20, color: 'var(--text-2)', fontWeight: 700 }}>{i + 1}</span>
                   <Link href={`/admin/partners?id=${encodeURIComponent(t.clientId)}`} style={{ flex: 1, minWidth: 0, color: 'var(--text)' }}>
@@ -196,16 +210,17 @@ function Business({ days }: { days: number }) {
                   </Link>
                   <span style={{ textAlign: 'right', fontSize: 13 }}><strong>{t.admitted}</strong> adm.<div className="crm-cell-sub">{t.referred} referred</div></span>
                 </li>
-              ))}
+              ); })}
             </ol>
           )}
+          <Pager {...topPg.pager} noun="partners" compact />
         </section>
         <section className="crm-card grow-1" aria-labelledby="gq-h" style={{ flexBasis: 360 }}>
           <div className="crm-card-head"><h2 id="gq-h" className="crm-h2">Gone quiet</h2></div>
           <span className="crm-sub" style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>Sent patients before, none in this period. Worth a call.</span>
           {d.goneQuiet.length === 0 ? <span className="crm-cell-sub">Nobody has gone quiet.</span> : (
             <ul className="crm-list">
-              {d.goneQuiet.map((g) => (
+              {quietPg.rows.map((g) => (
                 <li key={g.clientId}>
                   <Link href={`/admin/partners?id=${encodeURIComponent(g.clientId)}`} style={{ flex: 1, minWidth: 0, color: 'var(--text)' }}>
                     <span style={{ fontWeight: 600 }}>{g.name}</span>{g.champion && <span className="pt-champ">Champion</span>}
@@ -216,8 +231,10 @@ function Business({ days }: { days: number }) {
               ))}
             </ul>
           )}
+          <Pager {...quietPg.pager} noun="partners" compact />
         </section>
       </div>
+      )}
     </>
   );
 }

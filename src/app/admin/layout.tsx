@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type C
 import {
   LayoutDashboard, PhoneCall, Inbox, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
-  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus,
+  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus, Tent,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
@@ -46,6 +46,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Network',
     items: [
       { href: '/admin/partners', label: 'Partners', page: 'partners', icon: Users, match: ['/admin/pipeline', '/admin/duplicates'] },
+      { href: '/admin/camps', label: 'Health camps', page: 'camps', icon: Tent },
       { href: '/admin/whatsapp', label: 'WhatsApp', page: 'wa', icon: MessageCircle, match: ['/admin/broadcasts', '/admin/whatsapp-setup'] },
     ],
   },

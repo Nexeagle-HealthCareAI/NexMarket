@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { Suspense, useState } from 'react';
+import { Building2, Pencil, Plus, Stethoscope } from 'lucide-react';
+import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
@@ -12,7 +13,12 @@ interface Doctor { id: string; name: string; departmentId?: string | null; depar
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-export default function DepartmentsPage() {
+export default function DepartmentsPageWrap() {
+  return <Suspense fallback={<main className="crm-page"><Skeleton h={400} /></main>}><DepartmentsPage /></Suspense>;
+}
+
+function DepartmentsPage() {
+  const [tab, setTab] = usePageTab(['doctors', 'departments'] as const, 'doctors');
   const { access } = useAccess();
   const editable = canEdit(access, 'departments');
   const depts = useLoader(() => crm.get<Department[]>('/api/v1/departments?includeInactive=true'));
@@ -24,13 +30,19 @@ export default function DepartmentsPage() {
 
   const list = (doctors.data ?? []).filter((d) => !deptFilter || d.departmentId === deptFilter);
   const pg = usePaged(list, deptFilter, 25);
+  const deptPg = usePaged(depts.data ?? [], '', 20);
 
   return (
     <main className="crm-page">
       <PageHead title="Departments & doctors" sub="Glisan Akbari's departments and doctors. Field agents pick from these when referring, and WhatsApp broadcasts use them for OPD updates." />
 
-      <div className="crm-row">
-        <section className="crm-card grow-1" aria-labelledby="dept-h">
+      <PageTabs label="Departments and doctors" value={tab} onChange={setTab} tabs={[
+        { key: 'doctors', label: 'Doctors', icon: Stethoscope, count: doctors.data?.length },
+        { key: 'departments', label: 'Departments', icon: Building2, count: depts.data?.length },
+      ]} />
+
+      {tab === 'departments' && (
+        <section className="crm-card" aria-labelledby="dept-h">
           <div className="crm-card-head">
             <h2 id="dept-h" className="crm-h2" style={{ marginRight: 'auto' }}>Departments</h2>
             {editable && <button type="button" className="crm-btn is-sm" onClick={() => setEditDept('new')}><Plus size={14} aria-hidden /> Add</button>}
@@ -38,14 +50,11 @@ export default function DepartmentsPage() {
           {depts.error && <ErrorBox message={depts.error} onRetry={depts.reload} />}
           {!depts.data ? <Skeleton h={200} /> : depts.data.length === 0 ? <Empty title="No departments yet">{editable ? 'Add the hospital’s departments to get started.' : ''}</Empty> : (
             <ul className="crm-list">
-              <li style={{ padding: 0 }}>
-                <button type="button" className="crm-chip" aria-pressed={!deptFilter} onClick={() => setDeptFilter('')} style={{ margin: '8px 0' }}>All doctors</button>
-              </li>
-              {depts.data.map((d) => (
+              {deptPg.rows.map((d) => (
                 <li key={d.id}>
-                  <button type="button" onClick={() => setDeptFilter(deptFilter === d.id ? '' : d.id)} aria-pressed={deptFilter === d.id}
+                  <button type="button" onClick={() => { setDeptFilter(d.id); setTab('doctors'); }} title="See this department's doctors"
                     style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                    <span style={{ fontWeight: 600, color: deptFilter === d.id ? 'var(--accent-ink)' : 'var(--text)' }}>{d.name}</span>
+                    <span style={{ fontWeight: 600 }}>{d.name}</span>
                     <span className="crm-cell-sub">{(doctors.data ?? []).filter((x) => x.departmentId === d.id && x.isActive).length} doctors</span>
                   </button>
                   {!d.isActive && <Pill>Hidden</Pill>}
@@ -54,11 +63,18 @@ export default function DepartmentsPage() {
               ))}
             </ul>
           )}
+          {depts.data && <Pager {...deptPg.pager} noun="departments" compact />}
         </section>
+      )}
 
-        <section className="crm-card is-flush grow-2" aria-labelledby="doc-h">
-          <div className="crm-card-head">
-            <h2 id="doc-h" className="crm-h2" style={{ marginRight: 'auto' }}>Doctors</h2>
+      {tab === 'doctors' && (
+        <section className="crm-card is-flush" aria-labelledby="doc-h">
+          <div className="crm-card-head" style={{ padding: '0 22px', flexWrap: 'wrap', gap: 10 }}>
+            <h2 id="doc-h" className="crm-h2">Doctors</h2>
+            <select className="crm-select" aria-label="Department" value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)} style={{ width: 'auto', marginRight: 'auto' }}>
+              <option value="">All departments</option>
+              {(depts.data ?? []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
             {editable && <button type="button" className="crm-btn is-sm" onClick={() => setEditDoc('new')}><Plus size={14} aria-hidden /> Add doctor</button>}
           </div>
           {doctors.error && <div style={{ padding: '0 22px' }}><ErrorBox message={doctors.error} onRetry={doctors.reload} /></div>}
@@ -86,7 +102,7 @@ export default function DepartmentsPage() {
             <Pager {...pg.pager} noun="doctors" /></>
           )}
         </section>
-      </div>
+      )}
 
       {editDept && <DeptModal dept={editDept === 'new' ? null : editDept} count={depts.data?.length ?? 0} onClose={() => setEditDept(null)}
         onSaved={() => { setEditDept(null); showToast('Saved.'); void depts.reload(); }} />}

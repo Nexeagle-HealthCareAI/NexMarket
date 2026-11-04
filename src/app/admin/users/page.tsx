@@ -21,7 +21,7 @@ const PAGE_LABELS: Record<PageKey, string> = {
   whatsapp: 'WhatsApp broadcasts', field: 'Field force & map', payments: 'Payments', targets: 'Targets', analytics: 'Analytics & surveys',
   camps: 'Health camps', departments: 'Departments & doctors', users: 'Users & roles',
 };
-const HIDDEN_PAGES: PageKey[] = ['targets', 'camps']; // not built yet
+const HIDDEN_PAGES: PageKey[] = ['targets']; // not built yet
 
 const LEVELS = [
   { label: 'No access', style: { border: '1px dashed #c9cedb', background: '#fff', color: 'var(--text-2)' } },
