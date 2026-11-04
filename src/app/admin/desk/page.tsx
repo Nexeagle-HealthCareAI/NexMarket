@@ -9,6 +9,7 @@ import { useLiveEvents, useNow } from '@/lib/crm/live';
 import {
   Empty, ErrorBox, fmt, initials, PageHead, Pill, Skeleton, stageTone, useLoader, useToast,
 } from '@/components/crm/ui';
+import { Pager, usePaged } from '@/components/crm/Pager';
 
 export default function ReferralDeskPage() {
   const { access } = useAccess();
@@ -19,6 +20,7 @@ export default function ReferralDeskPage() {
   const [selected, setSelected] = useState<ReferralRow | null>(null);
   const [toast, showToast] = useToast();
   const expected = useLoader(() => crm.get<{ arrivedToday: number; items: ReferralRow[] }>('/api/v1/referrals/expected'));
+  const expPg = usePaged(expected.data?.items ?? [], '', 15);
 
   // Live: refresh the expected list when anything changes on referrals.
   const onEvent = useCallback((e: { kind: string }) => {
@@ -101,11 +103,12 @@ export default function ReferralDeskPage() {
           {expected.error && <ErrorBox message={expected.error} onRetry={expected.reload} />}
           {!expected.data ? <Skeleton h={240} /> : expected.data.items.length === 0 ? <Empty title="Nobody waiting">Every recent referral has arrived.</Empty> : (
             <ul className="crm-list">
-              {expected.data.items.map((r) => (
+              {expPg.rows.map((r) => (
                 <ExpectedRow key={r.clientId} r={r} editable={editable} onOpen={() => setSelected(r)} onUpdated={updated} />
               ))}
             </ul>
           )}
+          {expected.data && <Pager {...expPg.pager} noun="patients" compact />}
         </aside>
       </div>
       {toast}

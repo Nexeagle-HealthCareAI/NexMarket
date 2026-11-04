@@ -4,13 +4,14 @@ import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
 import {
-  Camera, ChevronLeft, ChevronRight, ClipboardList, LogIn, LogOut, Pause, Play, Play as Start, Square, TriangleAlert, UserPlus, Send, MapPin,
+  Camera, Clock3, ChevronLeft, Route as RouteIcon, ChevronRight, ClipboardList, LogIn, LogOut, Pause, Play, Play as Start, Square, TriangleAlert, UserPlus, Send, MapPin,
 } from 'lucide-react';
 import { geo, istDate, type AgentActivity, type DaySegment, type TimelineEvent, type TimelineKind } from '@/lib/crm/geo';
 import { DayRibbon, TimeGrid } from '@/components/crm/geo/DayTime';
 import { useLiveEvents, type LiveLocation } from '@/lib/crm/live';
 import { Empty, ErrorBox, fmt, PageHead, Skeleton, useLoader } from '@/components/crm/ui';
 import { Pager, usePaged } from '@/components/crm/Pager';
+import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 
 const RouteMap = dynamic(() => import('@/components/crm/geo/RouteMap'), { ssr: false, loading: () => <div className="act-map"><Skeleton h={520} /></div> });
 
@@ -50,13 +51,14 @@ function ActivityInner() {
     router.replace(`/admin/activity?${p.toString()}`);
   }, [params, router]);
 
+  const [tab, setTab] = usePageTab(['route', 'partners', 'grid'] as const, 'route');
   const act = useLoader<AgentActivity | null>(() => (effectiveAgent ? geo.activity(effectiveAgent, date) : Promise.resolve(null)), [effectiveAgent, date]);
   const [focus, setFocus] = useState<TimelineEvent | null>(null);
   const [seg, setSeg] = useState<DaySegment | null>(null);
   // A stop or leg picked in the ribbon or grid: show it on the map (travel/gaps jump to where they started).
   const pickSeg = (g: DaySegment, scroll = false) => {
     setSeg(g);
-    if (scroll) document.getElementById('act-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (scroll) { setTab('route'); setTimeout(() => document.getElementById('act-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); }
     const near = g.lat != null ? g : (act.data?.route ?? []).find((p) => p.at >= g.from);
     if (near && near.lat != null && near.lng != null)
       setFocus({ kind: g.kind === 'stop' ? 'visit_in' : 'partner', at: g.from, title: '', detail: null, lat: near.lat, lng: near.lng } as TimelineEvent);
@@ -151,6 +153,13 @@ function ActivityInner() {
 
           <DayRibbon data={d} selected={seg} onPick={pickSeg} />
 
+          <PageTabs label="Activity views" value={tab} onChange={setTab} tabs={[
+            { key: 'route', label: 'Route & timeline', icon: RouteIcon, count: d.events.length },
+            { key: 'partners', label: 'Partners added', icon: UserPlus, count: partnerRows.length },
+            { key: 'grid', label: 'Time grid', icon: Clock3, count: d.segments?.length ?? 0 },
+          ]} />
+
+          {tab === 'route' && (
           <div className="act-layout">
             <section id="act-map" className="crm-card" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14 }} aria-label="Route">
               <RouteMap data={d} focus={focus} replayIndex={replayIdx} isToday={isToday} live={livePts.key === liveKey ? livePts.pts : undefined} />
@@ -194,12 +203,13 @@ function ActivityInner() {
               )}
             </section>
           </div>
+          )}
 
-          {d.events.some((e) => e.kind === 'partner') && (
+          {tab === 'partners' && (partnerRows.length === 0 ? <Empty title="No partners added on this day" /> : (
             <section className="crm-card" aria-labelledby="pa-h">
               <div className="crm-card-head">
                 <h2 id="pa-h" className="crm-h2">Partners added</h2>
-                <span className="crm-sub" style={{ fontSize: 13 }}>Where and when each one was added · click to see it on the map</span>
+                <span className="crm-sub" style={{ fontSize: 13 }}>Where and when each one was added · click one to see it on the map</span>
               </div>
               <div className="crm-table-wrap">
                 <table className="crm-table">
@@ -207,7 +217,7 @@ function ActivityInner() {
                   <tbody>
                     {partnerPg.rows.map((e, k) => { const i = partnerPg.offset + k; return (
                       <tr key={`${e.at}-${i}`} style={{ cursor: e.lat != null ? 'pointer' : undefined }} aria-selected={focus === e}
-                        onClick={() => { if (e.lat != null) { setFocus(e); document.getElementById('act-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }}>
+                        onClick={() => { if (e.lat != null) { setFocus(e); setTab('route'); setTimeout(() => document.getElementById('act-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); } }}>
                         <td><span className="rt-num">{i + 1}</span></td>
                         <td style={{ whiteSpace: 'nowrap', fontWeight: 700 }}>{fmt.time(e.at)}</td>
                         <td><strong>{e.name ?? e.title.replace(/^Added partner /, '')}</strong></td>
@@ -223,9 +233,9 @@ function ActivityInner() {
               </div>
               <Pager {...partnerPg.pager} noun="partners" />
             </section>
-          )}
+          ))}
 
-          {(d.segments?.length ?? 0) > 0 && (
+          {tab === 'grid' && ((d.segments?.length ?? 0) === 0 ? <Empty title="No stops or travel recorded" /> : (
             <section className="crm-card" aria-labelledby="tg-h">
               <div className="crm-card-head">
                 <h2 id="tg-h" className="crm-h2">Time grid</h2>
@@ -233,7 +243,7 @@ function ActivityInner() {
               </div>
               <TimeGrid data={d} selected={seg} onPick={(g) => pickSeg(g, true)} />
             </section>
-          )}
+          ))}
         </>
       )}
     </main>

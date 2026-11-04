@@ -9,6 +9,7 @@ import { canView, useAccess } from '@/lib/crm/access';
 import { timeAgo, useNow } from '@/lib/crm/live';
 import { Empty, ErrorBox, fmt, initials, PageHead, Pill, Skeleton, useLoader, type Tone } from '@/components/crm/ui';
 import { Pager, usePaged } from '@/components/crm/Pager';
+import { PageTabs } from '@/components/crm/PageTabs';
 
 type Status = 'shift' | 'leave' | 'off';
 type DayStatus = 'worked' | 'leave' | 'absent' | 'off' | 'today' | 'future';
@@ -182,6 +183,7 @@ function delta(now: number, prev: number) {
 
 function Profile({ id, month, onBack, now }: { id: string; month: string; onBack: () => void; now: number }) {
   const d = useLoader(() => crm.get<Detail>(`/api/v1/team/${encodeURIComponent(id)}?month=${month}`), [id, month]);
+  const [view, setView] = useState<'perf' | 'att' | 'flags'>('perf');
   if (d.error) return <ErrorBox message={d.error} onRetry={d.reload} />;
   const a = d.data;
   if (!a) return <Skeleton h={420} />;
@@ -222,6 +224,13 @@ function Profile({ id, month, onBack, now }: { id: string; month: string; onBack
         <Link href={`/admin/agents/${encodeURIComponent(a.agentId)}`} className="crm-btn is-secondary">Profile details</Link>
       </div>
 
+      <PageTabs label="Agent views" value={view} onChange={setView} tabs={[
+        { key: 'perf', label: 'Performance' },
+        { key: 'att', label: 'Attendance' },
+        { key: 'flags', label: 'Needs attention', count: a.flags.length, hot: a.flags.length > 0 },
+      ]} />
+
+      {view === 'perf' && (
       <section aria-labelledby="perf-h" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <h3 id="perf-h" style={{ fontSize: 16, fontWeight: 800 }}>Performance · {monthFmt.format(new Date(`${month}-01T00:00:00Z`))}</h3>
         <div className="ag-perf">
@@ -254,7 +263,9 @@ function Profile({ id, month, onBack, now }: { id: string; month: string; onBack
           </div>
         </div>
       </section>
+      )}
 
+      {view === 'att' && (
       <section aria-labelledby="att-h" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <h3 id="att-h" style={{ fontSize: 16, fontWeight: 800, flex: 1 }}>Attendance</h3>
@@ -280,7 +291,9 @@ function Profile({ id, month, onBack, now }: { id: string; month: string; onBack
           <span><span>Average shift</span><strong style={{ fontSize: 18 }}>{shift ? `${Math.floor(shift / 60)}h ${String(shift % 60).padStart(2, '0')}m` : '—'}</strong></span>
         </div>
       </section>
+      )}
 
+      {view === 'flags' && (
       <section aria-labelledby="flags-h" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <h3 id="flags-h" style={{ fontSize: 16, fontWeight: 800 }}>Needs attention</h3>
         {a.flags.length === 0 ? <span className="crm-cell-sub">Nothing right now.</span> : a.flags.map((f) => (
@@ -290,6 +303,7 @@ function Profile({ id, month, onBack, now }: { id: string; month: string; onBack
           </div>
         ))}
       </section>
+      )}
     </div>
   );
 }

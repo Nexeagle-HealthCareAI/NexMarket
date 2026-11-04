@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Check, Phone, RotateCcw, Search, Star } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
+import { Pager, usePaged } from '@/components/crm/Pager';
 import {
   contactTypeLabel, Empty, ErrorBox, fmt, friendlyError, initials, PageHead, Pill, rupees, Skeleton, stageTone, useLoader, useToast,
 } from '@/components/crm/ui';
@@ -101,6 +102,7 @@ function DailyCalls() {
   );
 
   const rows = useMemo(() => queue.data ?? [], [queue.data]);
+  const rowPg = usePaged(rows, [filter, search], 20);
   // Keep a valid selection: first row by default.
   const selectedId = selected && rows.some((r) => r.clientId === selected) ? selected : rows[0]?.clientId ?? null;
 
@@ -178,7 +180,7 @@ function DailyCalls() {
             </Empty>
           ) : (
             <ul className="crm-list" style={{ gap: 4 }}>
-              {rows.map((r) => {
+              {rowPg.rows.map((r) => {
                 const sel = r.clientId === selectedId;
                 const tone = r.doneToday ? 'ok' : r.needsVisit ? 'bad' : r.lastCallOutcome === 'no_answer' ? 'warn' : r.isImportant ? 'warn' : 'accent';
                 return (
@@ -201,6 +203,7 @@ function DailyCalls() {
               })}
             </ul>
           )}
+          {rows.length > 0 && <Pager {...rowPg.pager} noun="calls" compact />}
         </section>
 
         <section className="crm-card grow-2" style={{ flexBasis: 560 }} aria-live="polite">

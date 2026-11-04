@@ -1308,3 +1308,10 @@ button.ld-head-btn { border: 0; cursor: pointer; font: inherit; font-size: 13px;
 .wa-activity-row { align-items: center; }
 .wb-wrap { display: flex; flex-direction: column; gap: 22px; }
 .wa-page { display: flex; flex-direction: column; gap: 16px; }
+
+/* Page tabs */
+.pg-tabs-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.pg-tabs { border-bottom: 0; flex: 1 1 auto; min-width: 0; }
+.pg-tabs .crm-tab { display: inline-flex; align-items: center; gap: 7px; }
+.pg-tabs-extra { display: flex; gap: 8px; align-items: center; padding-bottom: 6px; }
+.ld-tab-n.is-hot { background: var(--warn); color: #fff; }

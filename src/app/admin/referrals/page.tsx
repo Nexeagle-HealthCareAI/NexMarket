@@ -16,6 +16,8 @@ export default function ReferralPipelinePage() {
   const { access } = useAccess();
   const editable = canEdit(access, 'pipeline') || canEdit(access, 'desk');
   const [search, setSearch] = useState('');
+  // Each column shows 20 cards at a time; "Show more" adds 20.
+  const [shown, setShown] = useState<Record<string, number>>({});
   const [dept, setDept] = useState<string>('');
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [open, setOpen] = useState<ReferralRow | null>(null);
@@ -97,7 +99,7 @@ export default function ReferralPipelinePage() {
                 <h2 style={{ fontSize: 14, fontWeight: 700 }}>{col.label}</h2>
                 <span style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>{col.cards.length}</span>
               </div>
-              {col.cards.slice(0, 60).map((r) => {
+              {col.cards.slice(0, shown[col.key] ?? 20).map((r) => {
                 const hours = Math.floor((Date.now() - new Date(r.createdAt).getTime()) / 3600000);
                 const age = hours < 24 ? `${hours} h` : `${Math.floor(hours / 24)} days`;
                 const late = r.status === 'pending' && hours >= 48;
@@ -122,7 +124,11 @@ export default function ReferralPipelinePage() {
                   </article>
                 );
               })}
-              {col.cards.length > 60 && <span className="crm-sub" style={{ fontSize: 12, textAlign: 'center' }}>+{col.cards.length - 60} more — use search</span>}
+              {col.cards.length > (shown[col.key] ?? 20) && (
+                <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setShown((x) => ({ ...x, [col.key]: (x[col.key] ?? 20) + 20 }))}>
+                  Show {Math.min(20, col.cards.length - (shown[col.key] ?? 20))} more · {col.cards.length - (shown[col.key] ?? 20)} left
+                </button>
+              )}
             </section>
           ))}
         </div>
