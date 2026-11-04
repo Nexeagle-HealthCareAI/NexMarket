@@ -56,7 +56,7 @@ export function WaAutomation({ canManage, toast }: { canManage: boolean; toast: 
           <div className="wa-field">
             <span className="wa-label">To a new enquiry</span>
             <span className="wau-quote">{data.autoReply || <em className="crm-sub">Off</em>}</span>
-            <span className="wa-hint">Set by an admin in <Link href="/admin/whatsapp-setup">WhatsApp setup</Link>.</span>
+            <span className="wa-hint">Set by an admin in the <Link href="/admin/whatsapp?tab=setup">Setup</Link> tab.</span>
           </div>
           <label className="wa-field">
             <span className="wa-label">Outside office hours, send this instead</span>

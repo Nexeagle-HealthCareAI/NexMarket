@@ -409,7 +409,7 @@ function TodaysWork({ work, access }: { work: Summary['work']; access: ReturnTyp
   }
   if (canView(access, 'whatsapp')) {
     cards.push(
-      <WorkCard key="wa" href="/admin/broadcasts" icon={<MessageCircle size={18} aria-hidden />} title="WhatsApp"
+      <WorkCard key="wa" href="/admin/whatsapp?tab=broadcasts" icon={<MessageCircle size={18} aria-hidden />} title="WhatsApp"
         big={work.whatsapp.scheduled > 0 ? `${work.whatsapp.scheduled} scheduled` : 'Nothing scheduled'}
         sub={!work.whatsapp.connected ? 'Not connected yet' : work.whatsapp.lastTitle ? `Last: ${work.whatsapp.lastTitle}` : 'No broadcasts sent yet'}
         pct={work.whatsapp.lastReadPct ?? 0} color="var(--ok)" tag={work.whatsapp.lastReadPct != null ? `${work.whatsapp.lastReadPct}% read` : undefined} tagTone="ok" />,

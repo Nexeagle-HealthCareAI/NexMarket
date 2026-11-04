@@ -14,7 +14,7 @@ using SeemanchalOutreach.Application.Interfaces;
 namespace SeemanchalOutreach.Infrastructure.Services
 {
     /// <summary>
-    /// WhatsApp Cloud API sender. Set up from the CRM (Settings → WhatsApp); anything left empty there falls back to
+    /// WhatsApp Cloud API sender. Set up from the CRM (WhatsApp → Setup); anything left empty there falls back to
     /// the server configuration:
     ///   WhatsApp__PhoneNumberId   – the hospital's WhatsApp business phone number id
     ///   WhatsApp__AccessToken     – a permanent system-user access token
@@ -54,9 +54,9 @@ namespace SeemanchalOutreach.Infrastructure.Services
         public async Task<WhatsAppSendResult> SendTemplateAsync(string toPhone, string kind, string language, IReadOnlyList<string> bodyParams, CancellationToken ct = default)
         {
             var cfg = Cfg;
-            if (!cfg.IsConfigured) return new WhatsAppSendResult { Ok = false, Error = "WhatsApp isn't connected yet (Settings → WhatsApp)." };
+            if (!cfg.IsConfigured) return new WhatsAppSendResult { Ok = false, Error = "WhatsApp isn't connected yet (WhatsApp → Setup)." };
             string? template = cfg.Template(kind);
-            if (template == null) return new WhatsAppSendResult { Ok = false, Error = "No approved template is chosen for this message yet (Settings → WhatsApp)." };
+            if (template == null) return new WhatsAppSendResult { Ok = false, Error = "No approved template is chosen for this message yet (WhatsApp → Setup)." };
             string langCode = language == "en" ? cfg.EnglishCode : cfg.HindiCode;
             return await SendNamedTemplateAsync(toPhone, template, langCode, bodyParams, ct);
         }
@@ -64,7 +64,7 @@ namespace SeemanchalOutreach.Infrastructure.Services
         public async Task<WhatsAppSendResult> SendNamedTemplateAsync(string toPhone, string template, string langCode, IReadOnlyList<string> bodyParams, CancellationToken ct = default)
         {
             var cfg = Cfg;
-            if (!cfg.IsConfigured) return new WhatsAppSendResult { Ok = false, Error = "WhatsApp isn't connected yet (Settings → WhatsApp)." };
+            if (!cfg.IsConfigured) return new WhatsAppSendResult { Ok = false, Error = "WhatsApp isn't connected yet (WhatsApp → Setup)." };
             var to = NormalizeIndianPhone(toPhone);
             if (to == null) return new WhatsAppSendResult { Ok = false, Error = "Phone number is not a valid Indian mobile number." };
 
@@ -94,7 +94,7 @@ namespace SeemanchalOutreach.Infrastructure.Services
         public async Task<WhatsAppSendResult> SendTextAsync(string toPhone, string text, CancellationToken ct = default)
         {
             var cfg = Cfg;
-            if (!cfg.IsConfigured) return new WhatsAppSendResult { Ok = false, Error = "WhatsApp isn't connected yet (Settings → WhatsApp)." };
+            if (!cfg.IsConfigured) return new WhatsAppSendResult { Ok = false, Error = "WhatsApp isn't connected yet (WhatsApp → Setup)." };
             var to = NormalizeIndianPhone(toPhone);
             if (to == null) return new WhatsAppSendResult { Ok = false, Error = "Phone number is not a valid Indian mobile number." };
             if (string.IsNullOrWhiteSpace(text)) return new WhatsAppSendResult { Ok = false, Error = "Message is empty." };
@@ -135,7 +135,7 @@ namespace SeemanchalOutreach.Infrastructure.Services
         public async Task<(bool Ok, string? Json, string? Error)> GraphPostAsync(string path, object body, CancellationToken ct = default)
         {
             var cfg = Cfg;
-            if (string.IsNullOrWhiteSpace(cfg.AccessToken)) return (false, null, "WhatsApp isn't connected yet (Settings → WhatsApp setup).");
+            if (string.IsNullOrWhiteSpace(cfg.AccessToken)) return (false, null, "WhatsApp isn't connected yet (WhatsApp → Setup).");
             try
             {
                 var client = _http.CreateClient("whatsapp");

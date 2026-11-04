@@ -436,7 +436,7 @@ namespace SeemanchalOutreach.Api.Controllers
             return await SavedAsync(l, me, msg, ct);
         }
 
-        /// <summary>The approved follow-up template (chosen in Settings → WhatsApp setup), for when the 24-hour window has closed.</summary>
+        /// <summary>The approved follow-up template (chosen in WhatsApp → Setup), for when the 24-hour window has closed.</summary>
         [HttpPost("{id:guid}/whatsapp/template")]
         public async Task<IActionResult> SendTemplate(Guid id, [FromServices] WhatsAppOutbox outbox, CancellationToken ct)
         {
@@ -444,7 +444,7 @@ namespace SeemanchalOutreach.Api.Controllers
             if (l == null) return NotFound();
             if (l.OptOut) return BadRequest(new { message = "They asked not to get WhatsApp messages." });
             var cfg = outbox.Config;
-            if (cfg.Template("lead_followup") == null) return BadRequest(new { message = "No follow-up template is chosen yet. An admin can pick one in Settings → WhatsApp setup." });
+            if (cfg.Template("lead_followup") == null) return BadRequest(new { message = "No follow-up template is chosen yet. An admin can pick one in WhatsApp → Setup." });
 
             var me = User.AgentIdOf();
             var first = l.Name.StartsWith("+") ? "" : l.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";

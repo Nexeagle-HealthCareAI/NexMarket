@@ -163,7 +163,7 @@ namespace SeemanchalOutreach.Api.Services
                 if (!sender.IsConfigured)
                 {
                     b.Status = "failed";
-                    b.Error = "WhatsApp is not connected yet. An admin can connect the hospital's WhatsApp Business number in Settings → WhatsApp.";
+                    b.Error = "WhatsApp is not connected yet. An admin can connect the hospital's WhatsApp Business number in WhatsApp → Setup.";
                     await db.SaveChangesAsync(ct);
                     continue;
                 }

@@ -79,7 +79,7 @@ namespace SeemanchalOutreach.Api.Services
             return (r.Success ? r.Groups[1].Value.ToUpperInvariant() : null, c.Success ? c.Groups[1].Value.Trim().TrimEnd('.', '!') : null);
         }
 
-        /// <summary>The WhatsApp connection and messages, from Settings → WhatsApp (or the server configuration).</summary>
+        /// <summary>The WhatsApp connection and messages, from WhatsApp → Setup (or the server configuration).</summary>
         public static WhatsAppConfig Wa(IAppSettings settings, IConfiguration config) => WhatsAppConfig.Load(settings, k => config[k]);
 
         /// <summary>The hospital's WhatsApp number as people dial it, digits only.</summary>

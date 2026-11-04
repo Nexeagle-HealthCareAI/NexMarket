@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type C
 import {
   LayoutDashboard, PhoneCall, Inbox, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
-  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus, Megaphone,
+  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
@@ -46,8 +46,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Network',
     items: [
       { href: '/admin/partners', label: 'Partners', page: 'partners', icon: Users, match: ['/admin/pipeline', '/admin/duplicates'] },
-      { href: '/admin/whatsapp', label: 'WhatsApp', page: 'wa', icon: MessageCircle },
-      { href: '/admin/broadcasts', label: 'WhatsApp broadcasts', page: 'whatsapp', icon: Megaphone },
+      { href: '/admin/whatsapp', label: 'WhatsApp', page: 'wa', icon: MessageCircle, match: ['/admin/broadcasts', '/admin/whatsapp-setup'] },
     ],
   },
   {
@@ -75,7 +74,6 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/departments', label: 'Departments & doctors', page: 'departments', icon: Building2 },
       { href: '/admin/users', label: 'Users & roles', page: 'users', icon: ShieldCheck },
-      { href: '/admin/whatsapp-setup', label: 'WhatsApp setup', page: 'admin', icon: MessageCircle },
       { href: '/admin/audit', label: 'Activity log', page: 'admin', icon: History },
       { href: '/admin/sync', label: 'Sync health', page: 'admin', icon: RefreshCw },
     ],
