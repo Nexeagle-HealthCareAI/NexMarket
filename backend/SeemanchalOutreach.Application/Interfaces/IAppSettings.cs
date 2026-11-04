@@ -25,7 +25,7 @@ namespace SeemanchalOutreach.Application.Interfaces
     }
 
     /// <summary>
-    /// The WhatsApp Business connection and its messages. Each value comes from Settings → WhatsApp in the CRM, or,
+    /// The WhatsApp Business connection and its messages. Each value comes from WhatsApp → Setup in the CRM, or,
     /// when that's empty, from the server configuration (WhatsApp__PhoneNumberId etc.), so existing setups keep working.
     /// </summary>
     public class WhatsAppConfig

@@ -74,7 +74,7 @@ export function WaTemplates({ canManage, toast }: { canManage: boolean; toast: (
           })}
         </div>
       )}
-      <p className="crm-sub" style={{ fontSize: 12.5 }}>Which template each automatic message uses is set by an admin in Settings → WhatsApp setup. Meta usually reviews new or edited templates within minutes to a day.</p>
+      <p className="crm-sub" style={{ fontSize: 12.5 }}>Which template each automatic message uses is set by an admin in WhatsApp → Setup. Meta usually reviews new or edited templates within minutes to a day.</p>
       {editing && <Editor t={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={(m) => { setEditing(null); toast(m); void load(); }} />}
       {packOpen && <PackModal onClose={() => setPackOpen(false)} onDone={(m) => { setPackOpen(false); toast(m); void load(); }} />}
     </div>

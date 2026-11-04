@@ -85,7 +85,7 @@ namespace SeemanchalOutreach.Api.Controllers
         private async Task<(List<Parsed>? List, string? Error)> FetchAsync(CancellationToken ct)
         {
             var cfg = _outbox.Config;
-            if (string.IsNullOrEmpty(cfg.BusinessAccountId)) return (null, "The WhatsApp Business Account ID isn't saved yet (Settings → WhatsApp setup).");
+            if (string.IsNullOrEmpty(cfg.BusinessAccountId)) return (null, "The WhatsApp Business Account ID isn't saved yet (WhatsApp → Setup).");
             var r = await _wa.GraphGetAsync($"{cfg.BusinessAccountId}/message_templates?fields=id,name,status,language,category,components,rejected_reason&limit=250", null, null, ct);
             if (!r.Ok) return (null, r.Error);
             using var doc = JsonDocument.Parse(r.Json!);
@@ -203,7 +203,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var err = Validate(dto, false);
             if (err != null) return BadRequest(new { message = err });
             var cfg = _outbox.Config;
-            if (string.IsNullOrEmpty(cfg.BusinessAccountId)) return BadRequest(new { message = "The WhatsApp Business Account ID isn't saved yet (Settings → WhatsApp setup)." });
+            if (string.IsNullOrEmpty(cfg.BusinessAccountId)) return BadRequest(new { message = "The WhatsApp Business Account ID isn't saved yet (WhatsApp → Setup)." });
             var r = await _wa.GraphPostAsync($"{cfg.BusinessAccountId}/message_templates", new { name = dto.Name, language = dto.Language, category = dto.Category, components = Components(dto) }, ct);
             if (!r.Ok) return BadRequest(new { message = r.Error });
             using var doc = JsonDocument.Parse(r.Json!);
@@ -297,7 +297,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> InstallPack(CancellationToken ct)
         {
             var cfg = _outbox.Config;
-            if (string.IsNullOrEmpty(cfg.BusinessAccountId)) return BadRequest(new { message = "The WhatsApp Business Account ID isn't saved yet (Settings → WhatsApp setup)." });
+            if (string.IsNullOrEmpty(cfg.BusinessAccountId)) return BadRequest(new { message = "The WhatsApp Business Account ID isn't saved yet (WhatsApp → Setup)." });
             var (existing, error) = await FetchAsync(ct);
             if (existing == null) return BadRequest(new { message = error });
             var results = new List<object>();

@@ -1,22 +1,27 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Inbox, ListChecks, Pause, Play, ScrollText, Settings2, Workflow } from 'lucide-react';
+import { Inbox, ListChecks, Megaphone, Pause, Play, ScrollText, Settings2, Workflow } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
+import { canView, useAccess } from '@/lib/crm/access';
 import { friendlyError, PageHead, Pill, Skeleton, useToast } from '@/components/crm/ui';
 import { WaInbox } from '@/components/crm/wa/WaInbox';
 import { WaLog } from '@/components/crm/wa/WaLog';
 import { WaTemplates } from '@/components/crm/wa/WaTemplates';
 import { WaAutomation } from '@/components/crm/wa/WaAutomation';
+import { WaBroadcasts } from '@/components/crm/wa/WaBroadcasts';
+import { WaSetup } from '@/components/crm/wa/WaSetup';
 import { showPhone, when, type WaStatus } from '@/components/crm/wa/shared';
 
+/** Who sees each tab: everyone on the WhatsApp page, or only those who can open broadcasts, or only admins. */
 const TABS = [
-  { key: 'inbox', label: 'Inbox', icon: Inbox },
-  { key: 'messages', label: 'All messages', icon: ScrollText },
-  { key: 'templates', label: 'Templates', icon: ListChecks },
-  { key: 'automation', label: 'Automation', icon: Workflow },
+  { key: 'inbox', label: 'Inbox', icon: Inbox, who: 'all' },
+  { key: 'broadcasts', label: 'Broadcasts', icon: Megaphone, who: 'whatsapp' },
+  { key: 'messages', label: 'All messages', icon: ScrollText, who: 'all' },
+  { key: 'templates', label: 'Templates', icon: ListChecks, who: 'all' },
+  { key: 'automation', label: 'Automation', icon: Workflow, who: 'all' },
+  { key: 'setup', label: 'Setup', icon: Settings2, who: 'admin' },
 ] as const;
 
 export default function WhatsAppHubWrap() {
@@ -27,11 +32,15 @@ export default function WhatsAppHubWrap() {
   );
 }
 
-/** Everything WhatsApp in one place: conversations, every message sent and received, templates, and the rules. */
+/** Everything WhatsApp in one place: conversations, broadcasts, every message, templates, rules and setup. */
 function WhatsAppHub() {
   const params = useSearchParams();
   const router = useRouter();
-  const tab = (params.get('tab') ?? 'inbox') as typeof TABS[number]['key'];
+  const { access } = useAccess();
+  const tabs = TABS.filter((t) => t.who === 'all' || (t.who === 'admin' ? !!access?.isAdmin : canView(access, 'whatsapp')));
+  const asked = params.get('tab') ?? 'inbox';
+  // A tab this person can't open (or an old link) falls back to the inbox.
+  const tab = (access && !tabs.some((t) => t.key === asked) ? 'inbox' : asked) as typeof TABS[number]['key'];
   const selected = params.get('c');
   const [status, setStatus] = useState<WaStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -67,7 +76,7 @@ function WhatsAppHub() {
 
   return (
     <main className={`crm-page wh-page${tab === 'inbox' && selected ? ' ld-page has-sel' : ''}`}>
-      <PageHead title="WhatsApp" sub={status?.displayPhone ? `${status.hospital} · ${showPhone(status.displayPhone)}` : 'Every conversation, message, template and rule on the hospital’s WhatsApp number.'}
+      <PageHead title="WhatsApp" sub={status?.displayPhone ? `${status.hospital} · ${showPhone(status.displayPhone)}` : 'Everything WhatsApp in one place: conversations, broadcasts, every message, templates, rules and setup.'}
         badge={status ? (!status.connected ? <Pill tone="warn" dot>Not connected</Pill> : status.paused ? <Pill tone="bad" dot>Sending paused</Pill> : <Pill tone="ok" dot>Live</Pill>) : undefined}>
         <div className="wh-controls">
           {status && status.dailyLimit > 0 && (
@@ -81,7 +90,6 @@ function WhatsAppHub() {
               {status.paused ? <><Play size={16} aria-hidden /> Resume sending</> : <><Pause size={16} aria-hidden /> Pause all sending</>}
             </button>
           )}
-          {status?.isAdmin && <Link className="crm-btn is-secondary" href="/admin/whatsapp-setup"><Settings2 size={16} aria-hidden /> Setup</Link>}
         </div>
       </PageHead>
 
@@ -92,11 +100,11 @@ function WhatsAppHub() {
             <span><strong>Nothing is going out on WhatsApp.</strong> Replies, instant replies, broadcasts and follow-ups are held{status.pausedBy ? ` (paused by ${status.pausedBy}${status.pausedAt ? `, ${when(status.pausedAt)}` : ''})` : ''}. Incoming messages still arrive.</span>
           </div>
         )}
-        {status && !status.connected && (
-          <div className="ld-banner"><span><strong>WhatsApp isn&apos;t connected yet.</strong> {status.isAdmin ? <Link href="/admin/whatsapp-setup">Connect it in WhatsApp setup →</Link> : 'An admin can connect it in Settings → WhatsApp setup.'}</span></div>
+        {status && !status.connected && tab !== 'setup' && (
+          <div className="ld-banner"><span><strong>WhatsApp isn&apos;t connected yet.</strong> {status.isAdmin ? <button type="button" className="wa-link" style={{ lineHeight: 'inherit' }} onClick={() => go({ tab: 'setup', c: null })}>Connect it in Setup →</button> : 'An admin can connect it in the Setup tab.'}</span></div>
         )}
         <nav className="crm-tabs wh-tabs" role="tablist" aria-label="WhatsApp">
-          {TABS.map((t) => {
+          {tabs.map((t) => {
             const Icon = t.icon;
             return (
               <button key={t.key} type="button" role="tab" className="crm-tab" aria-selected={tab === t.key} onClick={() => go({ tab: t.key, c: null })}>
@@ -111,7 +119,9 @@ function WhatsAppHub() {
       {tab === 'inbox' && <WaInbox status={status} selected={selected} onSelect={(c) => go({ c })} onChanged={loadStatus} toast={showToast} />}
       {tab === 'messages' && <WaLog onOpen={(c) => go({ tab: 'inbox', c })} toast={showToast} canManage />}
       {tab === 'templates' && <WaTemplates canManage={!!status?.canManage} toast={showToast} />}
+      {tab === 'broadcasts' && <WaBroadcasts />}
       {tab === 'automation' && <WaAutomation canManage={!!status?.canManage} toast={showToast} />}
+      {tab === 'setup' && <WaSetup onSaved={loadStatus} />}
       {toast}
     </main>
   );
