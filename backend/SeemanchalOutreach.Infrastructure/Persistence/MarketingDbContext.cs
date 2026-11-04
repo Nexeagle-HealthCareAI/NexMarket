@@ -52,6 +52,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<WaMessage> WaMessages => Set<WaMessage>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
         public DbSet<WaConversation> WaConversations => Set<WaConversation>();
+        public DbSet<HealthCamp> HealthCamps => Set<HealthCamp>();
+        public DbSet<CampPatient> CampPatients => Set<CampPatient>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -329,6 +331,24 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.LeadId);
                 entity.HasIndex(e => new { e.Direction, e.CreatedAt });
                 entity.HasIndex(e => e.BroadcastId);
+            });
+            modelBuilder.Entity<HealthCamp>(entity =>
+            {
+                entity.ToTable("health_camps");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Code).IsUnique();
+                entity.HasIndex(e => e.Date);
+                entity.Property(e => e.Budget).HasPrecision(12, 2);
+                entity.Property(e => e.Spent).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<CampPatient>(entity =>
+            {
+                entity.ToTable("camp_patients");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.CampId, e.Token });
+                entity.HasIndex(e => e.Phone);
+                entity.HasIndex(e => e.LeadId);
+                entity.Property(e => e.WeightKg).HasPrecision(5, 1);
             });
             modelBuilder.Entity<WaConversation>(entity =>
             {
