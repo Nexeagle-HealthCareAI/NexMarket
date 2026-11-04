@@ -79,7 +79,8 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         /// <summary>A lead counts as waiting too long when it's still New this many minutes after it came in.</summary>
-        public const int ReplyTargetMinutes = 15;
+        public const int DefaultReplyTargetMinutes = 15;
+        private int ReplyTargetMinutes => Math.Clamp(WaAutomation.Load(_settings).ReplyTargetMinutes, 1, 24 * 60);
 
         [HttpGet]
         public async Task<IActionResult> List([FromQuery] string? status, [FromQuery] string? source, [FromQuery] string? q,
@@ -421,59 +422,50 @@ namespace SeemanchalOutreach.Api.Controllers
 
         /// <summary>A WhatsApp reply typed by the desk. Only allowed within 24 hours of the person's last message.</summary>
         [HttpPost("{id:guid}/whatsapp")]
-        public async Task<IActionResult> SendText(Guid id, [FromBody] LeadMessageDto dto, CancellationToken ct)
+        public async Task<IActionResult> SendText(Guid id, [FromBody] LeadMessageDto dto, [FromServices] WhatsAppOutbox outbox, CancellationToken ct)
         {
             var l = await _db.Leads.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (l == null) return NotFound();
             var text = (dto.Text ?? "").Trim();
             if (text.Length == 0) return BadRequest(new { message = "Write a message first." });
             if (l.OptOut) return BadRequest(new { message = "They asked not to get WhatsApp messages." });
-            if (!_wa.IsConfigured) return BadRequest(new { message = "WhatsApp isn't connected yet. Call them instead and add a note." });
             if (!LeadInbox.WindowOpen(l)) return BadRequest(new { message = "It's been more than 24 hours since they last wrote, so WhatsApp only allows the follow-up template now.", windowClosed = true });
 
             var me = User.AgentIdOf();
-            var r = await _wa.SendTextAsync(l.Phone, text, ct);
-            return await SavedAsync(l, me, "text", text, r, ct);
+            var msg = await outbox.SendTextAsync(l.Phone, text, "lead", me, l.Id, ct);
+            return await SavedAsync(l, me, msg, ct);
         }
 
-        /// <summary>The approved follow-up template (WhatsApp:Templates:lead_followup), for when the 24-hour window has closed.</summary>
+        /// <summary>The approved follow-up template (chosen in Settings → WhatsApp setup), for when the 24-hour window has closed.</summary>
         [HttpPost("{id:guid}/whatsapp/template")]
-        public async Task<IActionResult> SendTemplate(Guid id, CancellationToken ct)
+        public async Task<IActionResult> SendTemplate(Guid id, [FromServices] WhatsAppOutbox outbox, CancellationToken ct)
         {
             var l = await _db.Leads.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (l == null) return NotFound();
             if (l.OptOut) return BadRequest(new { message = "They asked not to get WhatsApp messages." });
-            if (!_wa.IsConfigured) return BadRequest(new { message = "WhatsApp isn't connected yet." });
-            var cfg = LeadInbox.Wa(_settings, _config);
-            if (cfg.Template("lead_followup") == null) return BadRequest(new { message = "No follow-up template is chosen yet. An admin can pick one in Settings → WhatsApp." });
+            var cfg = outbox.Config;
+            if (cfg.Template("lead_followup") == null) return BadRequest(new { message = "No follow-up template is chosen yet. An admin can pick one in Settings → WhatsApp setup." });
 
             var me = User.AgentIdOf();
-            var hospital = cfg.HospitalName;
             var first = l.Name.StartsWith("+") ? "" : l.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
-            var r = await _wa.SendTemplateAsync(l.Phone, "lead_followup", "hi", new[] { first.Length > 0 ? first : "जी", hospital }, ct);
             var preview = $"Follow-up message ({cfg.Template("lead_followup")}) sent to {(first.Length > 0 ? first : "them")}";
-            return await SavedAsync(l, me, "template", preview, r, ct);
+            var msg = await outbox.SendUseAsync(l.Phone, "lead_followup", "hi", new[] { first.Length > 0 ? first : "जी", cfg.HospitalName }, preview, "followup", me, l.Id, null, ct);
+            return await SavedAsync(l, me, msg, ct);
         }
 
-        private async Task<IActionResult> SavedAsync(Lead l, string me, string type, string text, WhatsAppSendResult r, CancellationToken ct)
+        private async Task<IActionResult> SavedAsync(Lead l, string me, WaMessage msg, CancellationToken ct)
         {
-            var now = DateTime.UtcNow;
-            var msg = new WaMessage
-            {
-                Phone = l.Phone, LeadId = l.Id, Direction = "out", Type = type, Text = text, WaMessageId = r.MessageId,
-                Status = r.Ok ? "sent" : "failed", Error = r.Error, SentBy = me, CreatedAt = now,
-            };
-            _db.WaMessages.Add(msg);
-            if (r.Ok)
+            var ok = msg.Status == "sent";
+            if (ok)
             {
                 var hadOwner = l.OwnerId != null;
                 LeadInbox.Touch(l, me, true);
-                if (!hadOwner && l.OwnerId == me) _db.LeadActivities.Add(new LeadActivity { LeadId = l.Id, Kind = "owner", Text = "Took this lead", By = me, CreatedAt = now });
-                l.LastMessage = "You: " + LeadInbox.Shorten(text, 150);
+                if (!hadOwner && l.OwnerId == me) _db.LeadActivities.Add(new LeadActivity { LeadId = l.Id, Kind = "owner", Text = "Took this lead", By = me, CreatedAt = DateTime.UtcNow });
+                l.LastMessage = "You: " + LeadInbox.Shorten(msg.Text, 150);
                 l.Unread = 0;
             }
             await _db.SaveChangesAsync(ct);
-            if (!r.Ok) return BadRequest(new { message = r.Error ?? "WhatsApp didn't accept the message.", id = msg.Id });
+            if (!ok) return BadRequest(new { message = msg.Error ?? "WhatsApp didn't accept the message.", id = msg.Id });
             return Ok(new { id = msg.Id, status = msg.Status });
         }
 

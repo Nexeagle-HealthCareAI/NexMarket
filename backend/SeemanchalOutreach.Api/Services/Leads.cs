@@ -135,32 +135,57 @@ namespace SeemanchalOutreach.Api.Services
             public string? AdRef { get; set; }
         }
 
-        /// <summary>
-        /// A message someone sent to the hospital's WhatsApp number. Saves it, finds or creates their lead (credited
-        /// to a partner when it carries their code), and tells the lead's owner, or the desk when nobody has it yet.
-        /// Returns the lead, or null for a STOP message.
-        /// </summary>
-        public static async Task<Lead?> IngestAsync(IMarketingDbContext db, IPermissionService perms, INotifier notifier, WhatsAppConfig cfg,
-            IWhatsAppSender wa, Inbound m, bool isStop, CancellationToken ct)
+        public class IngestResult
         {
-            var phone = NormalizePhone(m.From) ?? m.From;
-            if (!string.IsNullOrEmpty(m.WaMessageId) && await db.WaMessages.AnyAsync(x => x.WaMessageId == m.WaMessageId, ct)) return null; // WhatsApp retried
+            public Lead? Lead { get; set; }
+            public WaConversation? Conversation { get; set; }
+            public bool Stop { get; set; }
+        }
 
+        /// <summary>
+        /// A message someone sent to the hospital's WhatsApp number. Saves it in their conversation, finds or creates
+        /// their lead (credited to a partner when it carries their code), applies the automation rules (assignment,
+        /// instant and keyword replies), and tells the owner, or the desk when nobody has it yet.
+        /// </summary>
+        public static async Task<IngestResult> IngestAsync(IMarketingDbContext db, IPermissionService perms, INotifier notifier, WhatsAppOutbox outbox,
+            Inbound m, CancellationToken ct)
+        {
+            var result = new IngestResult();
+            var phone = NormalizePhone(m.From) ?? m.From;
+            if (!string.IsNullOrEmpty(m.WaMessageId) && await db.WaMessages.AnyAsync(x => x.WaMessageId == m.WaMessageId, ct)) return result; // WhatsApp retried
+
+            var rules = outbox.Rules;
+            var cfg = outbox.Config;
             var now = DateTime.UtcNow;
+            var isStop = rules.IsStop(m.Text);
+            result.Stop = isStop;
+
+            var conv = await outbox.ConversationAsync(phone, m.ProfileName, ct);
+            result.Conversation = conv;
+            conv.LastMessage = Shorten(m.Text, 160);
+            conv.LastDirection = "in";
+            conv.LastMessageAt = now;
+            conv.LastInboundAt = now;
+            conv.Unread++;
+            conv.Status = "open";
+
             var lead = db.Leads.Local.FirstOrDefault(l => l.Phone == phone) ?? await db.Leads.FirstOrDefaultAsync(l => l.Phone == phone, ct);
-            var msg = new WaMessage { Phone = phone, Direction = "in", Type = m.Type, Text = m.Text, WaMessageId = m.WaMessageId, Status = "received", CreatedAt = now };
+            var msg = new WaMessage { Phone = phone, Direction = "in", Type = m.Type, Text = m.Text, WaMessageId = m.WaMessageId, Status = "received", Source = "in", CreatedAt = now };
             db.WaMessages.Add(msg);
 
             if (isStop)
             {
+                conv.OptOut = true;
                 if (lead != null)
                 {
                     lead.OptOut = true;
                     msg.LeadId = lead.Id;
                     db.LeadActivities.Add(new LeadActivity { LeadId = lead.Id, Kind = "note", Text = "Asked not to be messaged on WhatsApp (STOP)." });
                 }
-                return null;
+                result.Lead = lead;
+                return result;
             }
+            if (conv.OptOut) conv.OptOut = false; // writing to us again means they're happy to hear back
 
             var (code, camp) = ParseTags(m.Text);
             OutreachContact? partner = null;
@@ -170,81 +195,111 @@ namespace SeemanchalOutreach.Api.Services
             var senderPartner = partner == null
                 ? await db.Contacts.AsNoTracking().Where(c => c.Phone != null && c.Phone.EndsWith(last10) && !c.IsMerged).FirstOrDefaultAsync(ct)
                 : null;
+            if (senderPartner != null) conv.PartnerClientId ??= senderPartner.ClientId;
 
-            bool isNew = lead == null, reopened = false;
-            if (lead == null)
+            // A partner just chatting (no patient code, no camp) stays a conversation unless the rules say otherwise.
+            var makeLead = lead != null || partner != null || camp != null || m.AdRef != null || senderPartner == null || rules.PartnerMessagesAreLeads;
+            bool isNew = false, reopened = false;
+            if (makeLead)
             {
-                lead = new Lead
+                isNew = lead == null;
+                if (lead == null)
                 {
-                    Phone = phone,
-                    Name = !string.IsNullOrWhiteSpace(m.ProfileName) ? m.ProfileName!.Trim() : senderPartner?.Name ?? ("+" + phone),
-                    Source = partner != null ? "partner_qr" : m.AdRef != null ? "ad" : camp != null ? "camp" : senderPartner != null ? "partner" : "whatsapp",
-                    SourceRef = partner != null ? code : m.AdRef ?? camp,
-                    PartnerClientId = partner?.ClientId ?? senderPartner?.ClientId,
-                    Note = Shorten(m.Text, 500),
-                    CreatedAt = now,
-                };
-                db.Leads.Add(lead);
-                db.LeadActivities.Add(new LeadActivity
-                {
-                    LeadId = lead.Id, Kind = "created", CreatedAt = now,
-                    Text = partner != null ? $"Messaged on WhatsApp using {partner.Name}'s code {code}" : $"Messaged on WhatsApp ({SourceLabel(lead.Source)}{(lead.SourceRef != null ? ": " + lead.SourceRef : "")})",
-                });
-            }
-            else
-            {
-                if (lead.ClosedAt != null && lead.ClosedAt < now.AddDays(-7))
-                {
-                    // A new enquiry from someone whose last one was closed a while ago.
-                    reopened = true;
-                    db.LeadActivities.Add(new LeadActivity { LeadId = lead.Id, Kind = "reopened", Text = $"Wrote again after being marked {StatusLabel(lead.Status).ToLowerInvariant()}; back to New.", CreatedAt = now });
-                    lead.Status = "new";
-                    lead.ClosedAt = null;
-                    lead.FirstResponseAt = null;
-                    lead.LostReason = null;
+                    lead = new Lead
+                    {
+                        Phone = phone,
+                        Name = !string.IsNullOrWhiteSpace(m.ProfileName) ? m.ProfileName!.Trim() : senderPartner?.Name ?? ("+" + phone),
+                        Source = partner != null ? "partner_qr" : m.AdRef != null ? "ad" : camp != null ? "camp" : senderPartner != null ? "partner" : "whatsapp",
+                        SourceRef = partner != null ? code : m.AdRef ?? camp,
+                        PartnerClientId = partner?.ClientId ?? senderPartner?.ClientId,
+                        Note = Shorten(m.Text, 500),
+                        CreatedAt = now,
+                    };
+                    db.Leads.Add(lead);
+                    db.LeadActivities.Add(new LeadActivity
+                    {
+                        LeadId = lead.Id, Kind = "created", CreatedAt = now,
+                        Text = partner != null ? $"Messaged on WhatsApp using {partner.Name}'s code {code}" : $"Messaged on WhatsApp ({SourceLabel(lead.Source)}{(lead.SourceRef != null ? ": " + lead.SourceRef : "")})",
+                    });
                 }
-                if (partner != null && lead.PartnerClientId == null)
+                else
                 {
-                    lead.PartnerClientId = partner.ClientId;
-                    lead.Source = "partner_qr";
-                    lead.SourceRef = code;
-                    db.LeadActivities.Add(new LeadActivity { LeadId = lead.Id, Kind = "source", Text = $"Credited to {partner.Name} (code {code})", CreatedAt = now });
+                    if (lead.ClosedAt != null && lead.ClosedAt < now.AddDays(-7))
+                    {
+                        // A new enquiry from someone whose last one was closed a while ago.
+                        reopened = true;
+                        db.LeadActivities.Add(new LeadActivity { LeadId = lead.Id, Kind = "reopened", Text = $"Wrote again after being marked {StatusLabel(lead.Status).ToLowerInvariant()}; back to New.", CreatedAt = now });
+                        lead.Status = "new";
+                        lead.ClosedAt = null;
+                        lead.FirstResponseAt = null;
+                        lead.LostReason = null;
+                    }
+                    if (partner != null && lead.PartnerClientId == null)
+                    {
+                        lead.PartnerClientId = partner.ClientId;
+                        lead.Source = "partner_qr";
+                        lead.SourceRef = code;
+                        db.LeadActivities.Add(new LeadActivity { LeadId = lead.Id, Kind = "source", Text = $"Credited to {partner.Name} (code {code})", CreatedAt = now });
+                    }
+                    if (lead.Name.StartsWith("+") && !string.IsNullOrWhiteSpace(m.ProfileName)) lead.Name = m.ProfileName!.Trim();
                 }
-                if (lead.Name.StartsWith("+") && !string.IsNullOrWhiteSpace(m.ProfileName)) lead.Name = m.ProfileName!.Trim();
-            }
-            msg.LeadId = lead.Id;
-            lead.LastInboundAt = now;
-            lead.LastActivityAt = now;
-            lead.LastMessage = Shorten(m.Text, 160);
-            lead.Unread++;
-            if (lead.OptOut && !isStop) lead.OptOut = false; // writing to us again means they're happy to hear back
+                msg.LeadId = lead.Id;
+                conv.LeadId = lead.Id;
+                lead.LastInboundAt = now;
+                lead.LastActivityAt = now;
+                lead.LastMessage = Shorten(m.Text, 160);
+                lead.Unread++;
+                if (lead.OptOut) lead.OptOut = false;
 
-            // Optional instant acknowledgement (free inside the 24-hour window), e.g. "Thank you, our desk will call you shortly".
-            var auto = cfg.AutoReply;
-            if ((isNew || reopened) && !string.IsNullOrWhiteSpace(auto) && wa.IsConfigured)
-            {
-                var r = await wa.SendTextAsync(phone, auto, ct);
-                db.WaMessages.Add(new WaMessage
+                // Automatic assignment: the person (from the chosen list) with the fewest open leads.
+                if ((isNew || reopened) && lead.OwnerId == null && rules.AssignMode == "balance" && rules.AssignTo.Count > 0)
                 {
-                    Phone = phone, LeadId = lead.Id, Direction = "out", Type = "text", Text = auto, WaMessageId = r.MessageId,
-                    Status = r.Ok ? "sent" : "failed", Error = r.Error, SentBy = null, CreatedAt = now.AddMilliseconds(1),
-                });
+                    var pool = await db.Agents.AsNoTracking().Where(a => rules.AssignTo.Contains(a.AgentId) && a.IsActive).Select(a => new { a.AgentId, a.Name }).ToListAsync(ct);
+                    if (pool.Count > 0)
+                    {
+                        var ids = pool.Select(p => p.AgentId).ToList();
+                        var load = await db.Leads.AsNoTracking().Where(l => l.OwnerId != null && ids.Contains(l.OwnerId) && Open.Contains(l.Status))
+                            .GroupBy(l => l.OwnerId!).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
+                        var pick = pool.OrderBy(p => load.GetValueOrDefault(p.AgentId)).ThenBy(p => p.Name).First();
+                        lead.OwnerId = pick.AgentId;
+                        db.LeadActivities.Add(new LeadActivity { LeadId = lead.Id, Kind = "owner", Text = $"Assigned to {pick.Name} automatically", CreatedAt = now.AddMilliseconds(1) });
+                    }
+                }
+                conv.AssignedTo ??= lead.OwnerId;
             }
+            result.Lead = lead;
 
-            var to = lead.OwnerId != null ? new List<string> { lead.OwnerId } : await DeskPeopleAsync(db, perms, ct);
-            var partnerName = partner?.Name ?? (lead.PartnerClientId != null ? senderPartner?.Name : null);
+            // Replies: a keyword rule first (at most once per rule per 12 hours), else the instant reply to a new enquiry.
+            var rule = rules.Match(m.Text);
+            string? reply = null, source = null;
+            if (rule != null)
+            {
+                var since = now.AddHours(-12);
+                var tag = "rule:" + rule.Id;
+                if (!await db.WaMessages.AnyAsync(x => x.Phone == phone && x.Source == tag && x.CreatedAt >= since, ct)) { reply = rule.Reply; source = tag; }
+            }
+            if (reply == null && (isNew || reopened))
+            {
+                reply = !rules.InOfficeHours(now) && !string.IsNullOrWhiteSpace(rules.AfterHoursReply) ? rules.AfterHoursReply : cfg.AutoReply;
+                source = "auto";
+            }
+            if (!string.IsNullOrWhiteSpace(reply)) await outbox.SendTextAsync(phone, reply!.Trim(), source!, null, lead?.Id, ct);
+
+            var owner = lead?.OwnerId ?? conv.AssignedTo;
+            var to = owner != null ? new List<string> { owner } : await DeskPeopleAsync(db, perms, ct);
+            var partnerName = partner?.Name ?? senderPartner?.Name;
             notifier.Notify(new NotifyJob
             {
                 To = to,
                 Kind = "lead",
-                Title = isNew || reopened
-                    ? $"New lead: {lead.Name}{(partnerName != null ? $" (via {partnerName})" : "")}"
+                Title = lead == null ? $"WhatsApp from {senderPartner?.Name ?? conv.Name} (partner)"
+                    : isNew || reopened ? $"New lead: {lead.Name}{(partnerName != null && partner != null ? $" (via {partnerName})" : "")}"
                     : $"WhatsApp from {lead.Name}",
                 Body = string.IsNullOrEmpty(m.Text) ? "(" + m.Type + ")" : Shorten(m.Text, 200),
-                Link = $"lead:{lead.Id}",
-                RefId = lead.Id.ToString(),
+                Link = lead != null ? $"lead:{lead.Id}" : $"wa:{phone}",
+                RefId = lead?.Id.ToString() ?? phone,
             });
-            return lead;
+            return result;
         }
 
         /// <summary>Somebody on the desk did something with a lead: the first time counts as the response time.</summary>

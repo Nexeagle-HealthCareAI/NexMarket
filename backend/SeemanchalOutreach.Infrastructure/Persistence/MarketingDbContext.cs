@@ -51,6 +51,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<LeadActivity> LeadActivities => Set<LeadActivity>();
         public DbSet<WaMessage> WaMessages => Set<WaMessage>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+        public DbSet<WaConversation> WaConversations => Set<WaConversation>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -326,6 +327,16 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => new { e.Phone, e.CreatedAt });
                 entity.HasIndex(e => e.WaMessageId);
                 entity.HasIndex(e => e.LeadId);
+                entity.HasIndex(e => new { e.Direction, e.CreatedAt });
+                entity.HasIndex(e => e.BroadcastId);
+            });
+            modelBuilder.Entity<WaConversation>(entity =>
+            {
+                entity.ToTable("wa_conversations");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Phone).IsUnique();
+                entity.HasIndex(e => e.LastMessageAt);
+                entity.HasIndex(e => e.AssignedTo);
             });
             modelBuilder.Entity<NotificationSetting>(entity =>
             {

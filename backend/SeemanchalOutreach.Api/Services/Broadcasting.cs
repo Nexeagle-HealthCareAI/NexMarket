@@ -145,6 +145,7 @@ namespace SeemanchalOutreach.Api.Services
             using var scope = _scopes.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<IMarketingDbContext>();
             var sender = scope.ServiceProvider.GetRequiredService<IWhatsAppSender>();
+            var outbox = scope.ServiceProvider.GetRequiredService<WhatsAppOutbox>();
             var live = scope.ServiceProvider.GetRequiredService<ILiveEvents>();
 
             var now = DateTime.UtcNow;
@@ -177,19 +178,25 @@ namespace SeemanchalOutreach.Api.Services
                 foreach (var c in contacts)
                 {
                     if (ct.IsCancellationRequested) break;
-                    var res = await sender.SendTemplateAsync(c.Phone!, b.Kind, b.Language, BroadcastComposer.BodyParams(b.Kind, parameters, c.Name), ct);
+                    var phone = SeemanchalOutreach.Infrastructure.Services.WhatsAppCloudSender.NormalizeIndianPhone(c.Phone) ?? c.Phone!;
+                    // Through the outbox: respects the pause switch, the daily limit and opt-outs, and shows in the message log.
+                    var res = await outbox.SendUseAsync(phone, b.Kind, b.Language, BroadcastComposer.BodyParams(b.Kind, parameters, c.Name),
+                        BroadcastComposer.Preview(b.Kind, b.Language, parameters, c.Name), "broadcast", b.CreatedBy, null, b.Id, ct);
+                    var ok = res.Status == "sent";
                     db.BroadcastRecipients.Add(new BroadcastRecipient
                     {
                         BroadcastId = b.Id,
                         ContactClientId = c.ClientId,
                         Name = c.Name,
-                        Phone = SeemanchalOutreach.Infrastructure.Services.WhatsAppCloudSender.NormalizeIndianPhone(c.Phone) ?? c.Phone!,
-                        Status = res.Ok ? "sent" : "failed",
-                        ProviderMessageId = res.MessageId,
+                        Phone = phone,
+                        Status = ok ? "sent" : "failed",
+                        ProviderMessageId = res.WaMessageId,
                         Error = res.Error,
-                        SentAt = res.Ok ? DateTime.UtcNow : null,
+                        SentAt = ok ? DateTime.UtcNow : null,
                     });
-                    if (res.Ok) sent++; else failed++;
+                    if (ok) sent++; else failed++;
+                    // Paused part-way, or today's limit reached: stop here instead of failing everyone.
+                    if (res.Status == "blocked" && res.Error != null && !res.Error.StartsWith("They asked")) { b.Error = res.Error; break; }
                     // Stay well inside WhatsApp's per-second limits for a new business number.
                     await Task.Delay(120, ct);
                 }

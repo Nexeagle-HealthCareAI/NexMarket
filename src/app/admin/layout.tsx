@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type C
 import {
   LayoutDashboard, PhoneCall, Inbox, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
-  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus,
+  PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus, Megaphone,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
@@ -24,7 +24,7 @@ type IconType = ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidde
 interface NavItem {
   href: string;
   label: string;
-  page: PageKey | 'admin' | 'chat' | 'leads';
+  page: PageKey | 'admin' | 'chat' | 'leads' | 'wa';
   icon: IconType;
   /** extra paths that should highlight this item */
   match?: string[];
@@ -46,7 +46,8 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Network',
     items: [
       { href: '/admin/partners', label: 'Partners', page: 'partners', icon: Users, match: ['/admin/pipeline', '/admin/duplicates'] },
-      { href: '/admin/broadcasts', label: 'WhatsApp broadcasts', page: 'whatsapp', icon: MessageCircle },
+      { href: '/admin/whatsapp', label: 'WhatsApp', page: 'wa', icon: MessageCircle },
+      { href: '/admin/broadcasts', label: 'WhatsApp broadcasts', page: 'whatsapp', icon: Megaphone },
     ],
   },
   {
@@ -177,7 +178,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     items: g.items.filter((i) => (i.page === 'admin' ? !!access?.isAdmin
       : i.page === 'chat' ? !!access && (access.isAdmin || access.role === 'MarketingManager' || canView(access, 'field'))
         // Leads: whoever works the Referral desk or WhatsApp (same rule as the API).
-        : i.page === 'leads' ? canView(access, 'desk') || canView(access, 'whatsapp')
+        : i.page === 'leads' || i.page === 'wa' ? canView(access, 'desk') || canView(access, 'whatsapp')
           : canView(access, i.page))),
   })).filter((g) => g.items.length > 0), [access]);
 

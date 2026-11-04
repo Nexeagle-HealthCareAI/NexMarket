@@ -157,10 +157,12 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly INotifier _notifier;
         private readonly IWhatsAppSender _wa;
         private readonly IAppSettings _settings;
+        private readonly WhatsAppOutbox _outbox;
 
-        public WhatsAppWebhookController(IMarketingDbContext db, IConfiguration config, ILiveEvents live, IPermissionService perms, INotifier notifier, IWhatsAppSender wa, IAppSettings settings)
+        public WhatsAppWebhookController(IMarketingDbContext db, IConfiguration config, ILiveEvents live, IPermissionService perms, INotifier notifier, IWhatsAppSender wa, IAppSettings settings, WhatsAppOutbox outbox)
         {
             _settings = settings;
+            _outbox = outbox;
             _db = db;
             _config = config;
             _live = live;
@@ -238,7 +240,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     wm.Error = e0.TryGetProperty("title", out var et) ? et.GetString() : "Not delivered";
                     if (e0.TryGetProperty("error_data", out var ed) && ed.TryGetProperty("details", out var det)) wm.Error = det.GetString() ?? wm.Error;
                 }
-                return;
+                if (wm.BroadcastId == null) return; // broadcasts also keep their own per-recipient counts below
             }
 
             var r = await _db.BroadcastRecipients.FirstOrDefaultAsync(x => x.ProviderMessageId == id, ct);
@@ -311,7 +313,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 if (b != null) b.ReplyCount++;
             }
 
-            var isStop = new[] { "stop", "unsubscribe", "बंद" }.Contains(text.Trim().ToLowerInvariant());
+            var isStop = _outbox.Rules.IsStop(text);
             var last10 = from.Length >= 10 ? from.Substring(from.Length - 10) : from;
             var contacts = await _db.Contacts.Where(c => c.Phone != null && c.Phone.EndsWith(last10)).ToListAsync(ct);
             if (isStop)
@@ -335,18 +337,18 @@ namespace SeemanchalOutreach.Api.Controllers
                 adRef = (rf.TryGetProperty("headline", out var h) ? h.GetString() : null)
                     ?? (rf.TryGetProperty("source_id", out var sid) ? "Ad " + sid.GetString() : "Ad");
             }
-            var lead = await LeadInbox.IngestAsync(_db, _perms, _notifier, LeadInbox.Wa(_settings, _config), _wa, new LeadInbox.Inbound
+            var res = await LeadInbox.IngestAsync(_db, _perms, _notifier, _outbox, new LeadInbox.Inbound
             {
                 From = from, ProfileName = profileName, Type = type, Text = text,
                 WaMessageId = m.TryGetProperty("id", out var mid) ? mid.GetString() : null, AdRef = adRef,
-            }, isStop, ct);
+            }, ct);
 
-            var who = lead?.Name ?? contacts.FirstOrDefault()?.Name ?? from;
+            var who = res.Lead?.Name ?? res.Conversation?.Name ?? contacts.FirstOrDefault()?.Name ?? from;
             await _live.PublishAsync(new LiveEvent
             {
-                Kind = lead != null ? "lead" : "broadcast",
+                Kind = "lead",
                 Text = isStop ? $"{who} unsubscribed from WhatsApp updates" : $"WhatsApp from {who}: {Shorten(text)}",
-                RefId = lead?.Id.ToString() ?? contacts.FirstOrDefault()?.ClientId,
+                RefId = res.Lead?.Id.ToString() ?? contacts.FirstOrDefault()?.ClientId,
             });
         }
 
