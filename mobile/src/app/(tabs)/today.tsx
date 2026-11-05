@@ -19,7 +19,6 @@ import { dayShort, km, timeOf, weekday } from '../../lib/format';
 import { routeKm, startOfDay, ymd } from '../../lib/util';
 import { cachedTasks } from '../../lib/tasks';
 import { cachedTips, ensureTips } from '../../lib/aiTips';
-import { cachedUnread, useChatVersion } from '../../lib/chat';
 import { cachedNotifyUnread, useNotifyVersion } from '../../lib/notifications';
 import { C, PRIORITY_COLOR } from '../../theme';
 import type { Lang, TFn } from '../../i18n';
@@ -39,8 +38,6 @@ const greetingKey = () => {
 export default function Today() {
   const { t, agent, lang } = useSession();
   const sync = useSync();
-  useChatVersion();
-  const chatUnread = cachedUnread();
   useNotifyVersion();
   const notifyUnread = cachedNotifyUnread();
   const here = useHere();
@@ -138,14 +135,14 @@ export default function Today() {
                   <T style={{ color: '#ffcf7a', fontSize: 13, fontWeight: '800' }}>{data.unsent}</T>
                 </Pressable>
               ) : null}
-              <Pressable onPress={() => router.push('/chat')} accessibilityRole="button" accessibilityLabel={t('chatTitle')} hitSlop={6}
-                style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>
-                <Icon name="chat" size={18} color="#fff" />
-                {chatUnread > 0 ? (
-                  <View style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: C.ink }}>
-                    <T style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{chatUnread > 99 ? '99+' : chatUnread}</T>
-                  </View>
-                ) : null}
+              {/* Vita, the AI analyst, always in the top bar */}
+              <Pressable onPress={() => router.navigate('/assistant')} accessibilityRole="button" accessibilityLabel={t('vitaTop')} hitSlop={6}
+                style={({ pressed }) => [{ height: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 3, paddingRight: 11, borderRadius: 18,
+                  backgroundColor: 'rgba(167,139,250,0.18)', borderWidth: 1, borderColor: 'rgba(167,139,250,0.45)' }, pressed && { opacity: 0.8 }]}>
+                <View style={{ width: 28, height: 28, borderRadius: 14, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end', backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                  <Image source={require('../../../assets/mascot/think.webp')} style={{ width: 24, height: 30 }} resizeMode="contain" />
+                </View>
+                <T style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>{t('tabVita')}</T>
               </Pressable>
               <Pressable onPress={() => router.push('/notifications')} accessibilityRole="button" accessibilityLabel={t('ntTitle')} hitSlop={6}
                 style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>

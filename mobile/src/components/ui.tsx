@@ -10,6 +10,7 @@ import { Icon, type IconName } from './Icon';
 import { useDb, useT } from '../lib/session';
 import { db } from '../lib/db';
 import { ymd } from '../lib/util';
+import { cachedUnread, useChatVersion } from '../lib/chat';
 
 // ─── Text ───
 export function T({ style, children, numberOfLines, onPress }: { style?: StyleProp<TextStyle>; children: React.ReactNode; numberOfLines?: number; onPress?: () => void }) {
@@ -229,14 +230,14 @@ export function ToastHost() {
 }
 
 // ─── Bottom navigation with the centre "+" ───
-const TABS: { path: string; icon: IconName | 'vita'; key: 'tabToday' | 'tabPartners' | 'tabVita' | 'tabPatients' | 'tabMe' }[] = [
+// Vita sits in the Today header; the team chat (linked to the CRM) has the bottom slot so it's one tap from anywhere.
+const TABS: { path: string; icon: IconName; key: 'tabToday' | 'tabPartners' | 'chatTab' | 'tabPatients' | 'tabMe' }[] = [
   { path: '/today', icon: 'home', key: 'tabToday' },
   { path: '/followups', icon: 'users', key: 'tabPartners' },
-  { path: '/assistant', icon: 'vita', key: 'tabVita' },
+  { path: '/chat', icon: 'chat', key: 'chatTab' },
   { path: '/patients', icon: 'patients', key: 'tabPatients' },
   { path: '/me', icon: 'user', key: 'tabMe' },
 ];
-const VITA_TAB = require('../../assets/mascot/think.webp');
 export const BottomNav = React.memo(function BottomNav() {
   const t = useT();
   const path = usePathname();
@@ -251,29 +252,29 @@ export const BottomNav = React.memo(function BottomNav() {
   }, []);
   // Follow-ups due today or overdue, on the Partners tab, so they're never out of sight.
   const due = useDb(() => db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM contacts WHERE followUpDate IS NOT NULL AND followUpDate <= ?', ymd())?.n ?? 0);
+  useChatVersion();
+  const chatUnread = cachedUnread();
   if (keyboard) return null;
   const item = (tab: (typeof TABS)[number]) => {
     const active = path.startsWith(tab.path);
-    const badge = tab.path === '/followups' ? due : 0;
+    const isChat = tab.path === '/chat';
+    const badge = tab.path === '/followups' ? due : isChat ? chatUnread : 0;
     return (
       <Pressable key={tab.path} accessibilityRole="tab" accessibilityState={{ selected: active }} style={s.tab}
-        onPress={() => { if (!active) router.navigate(tab.path as never); }}>
-        {tab.icon === 'vita' ? (
-          <View style={{ width: 28, height: 28, borderRadius: 14, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end',
-            backgroundColor: active ? C.purpleSoft : C.line, borderWidth: active ? 2 : 0, borderColor: C.purple }}>
-            <Image source={VITA_TAB} style={{ width: 24, height: 30 }} resizeMode="contain" />
-          </View>
-        ) : (
+        accessibilityLabel={badge > 0 ? `${t(tab.key)}, ${badge}` : undefined}
+        // Chat is a stack of screens (list → conversation), so it opens on top and Back returns to where the agent was.
+        onPress={() => { if (active) return; if (isChat) router.push('/chat'); else router.navigate(tab.path as never); }}>
+        {(
           <View>
             <Icon name={tab.icon} size={22} color={active ? C.blue : C.muted} />
             {badge > 0 ? (
-              <View style={{ position: 'absolute', top: -5, right: -10, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: C.bad, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.card }}>
+              <View style={{ position: 'absolute', top: -5, right: -10, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: isChat ? C.blue : C.bad, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.card }}>
                 <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{badge > 99 ? '99+' : badge}</Text>
               </View>
             ) : null}
           </View>
         )}
-        <T style={[s.tabText, active && { color: tab.icon === 'vita' ? C.purple : C.blue, fontWeight: '700' }]} numberOfLines={1}>{t(tab.key)}</T>
+        <T style={[s.tabText, active && { color: C.blue, fontWeight: '700' }]} numberOfLines={1}>{t(tab.key)}</T>
       </Pressable>
     );
   };
