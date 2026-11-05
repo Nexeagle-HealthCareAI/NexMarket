@@ -1286,6 +1286,87 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.ToTable("departments", "marketing");
                 });
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.DiseaseRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgeBand")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Block")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("CampId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConditionCode")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Disease")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("District")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Panchayat")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PanchayatId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RemovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Sex")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId");
+
+                    b.HasIndex("ConditionCode");
+
+                    b.HasIndex("Date");
+
+                    b.HasIndex("District", "Block");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("disease_records", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.Doctor", b =>
                 {
                     b.Property<Guid>("Id")

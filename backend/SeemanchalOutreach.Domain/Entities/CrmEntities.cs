@@ -624,6 +624,33 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// One line of the disease register: how many people of one age group and gender, from one place, were seen with one
+    /// disease or complaint on one day (at a health camp or elsewhere). No names or phone numbers: it is for spotting patterns.
+    /// </summary>
+    public class DiseaseRecord
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public DateOnly Date { get; set; }
+        public string? ConditionCode { get; set; }             // a CampBook condition code when the disease matches one
+        public string Disease { get; set; } = string.Empty;    // as shown: the condition's name, or what was typed
+        public string AgeBand { get; set; } = "unknown";       // 0-5 | 6-14 | 15-29 | 30-44 | 45-59 | 60+ | unknown
+        public string Sex { get; set; } = "U";                 // M | F | O | U (not recorded)
+        public string? District { get; set; }
+        public string? Block { get; set; }
+        public string? PanchayatId { get; set; }
+        public string? Panchayat { get; set; }                 // the name as entered when it didn't match a known panchayat
+        public int Count { get; set; } = 1;
+        public Guid? CampId { get; set; }
+        public string Source { get; set; } = "grid";           // grid | upload
+        public Guid? BatchId { get; set; }                     // rows saved together (one upload or one Save)
+        public string Status { get; set; } = "active";         // active | removed
+        public string? RemovedBy { get; set; }
+        public DateTime? RemovedAt { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
     /// <summary>A Facebook Messenger or Instagram Direct conversation with one person, on the hospital's Page or account.</summary>
     public class SocialConversation
     {
