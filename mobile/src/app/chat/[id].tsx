@@ -116,6 +116,9 @@ export default function Conversation() {
         <FlatList
           inverted
           data={rows}
+          initialNumToRender={14}
+          maxToRenderPerBatch={10}
+          windowSize={9}
           keyExtractor={(r) => r.key}
           contentContainerStyle={{ paddingHorizontal: 10, paddingVertical: 10, gap: 3 }}
           onEndReachedThreshold={0.3}

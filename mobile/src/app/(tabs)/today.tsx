@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Easing, Image, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useIsFocused } from 'expo-router';
 import Svg, { Circle, Defs, Line, Path, RadialGradient, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { Vita, type VitaMood } from '../../components/Vita';
 import { Empty, Pill, T } from '../../components/ui';
@@ -22,6 +22,7 @@ import { cachedTips, ensureTips } from '../../lib/aiTips';
 import { cachedNotifyUnread, useNotifyVersion } from '../../lib/notifications';
 import { C, PRIORITY_COLOR } from '../../theme';
 import type { Lang, TFn } from '../../i18n';
+import { lite, useLite } from '../../lib/perf';
 
 function weekStart(): string {
   const d = new Date();
@@ -36,6 +37,7 @@ const greetingKey = () => {
 };
 
 export default function Today() {
+  const focused = useIsFocused(); // Vita only floats while Today is on screen
   const { t, agent, lang } = useSession();
   const sync = useSync();
   useNotifyVersion();
@@ -166,7 +168,7 @@ export default function Today() {
                   <T style={{ color: '#fff', fontSize: 13, lineHeight: 18, fontWeight: '600' }} numberOfLines={3}>{mood.say}</T>
                 </View>
               </View>
-              <Vita mood={mood.pose} height={mood.pose === 'fly' ? 96 : 128} />
+              <Vita mood={mood.pose} height={mood.pose === 'fly' ? 96 : 128} bob={focused} />
             </View>
 
             {data.shift ? (
@@ -330,6 +332,7 @@ function useLoopWhileShown(make: () => Animated.CompositeAnimation | null, deps:
   useFocusEffect(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useCallback(() => {
+      if (lite()) return undefined; // older phones: everything stays still
       const loop = make();
       loop?.start();
       return () => loop?.stop();
@@ -344,6 +347,7 @@ function Aurora() {
     Animated.timing(v, { toValue: 1, duration: 9000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
     Animated.timing(v, { toValue: 0, duration: 9000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
   ])));
+  const still = useLite();
   const blob = (id: string, color: string, o: number) => (
     <Svg width={420} height={420}>
       <Defs>
@@ -355,6 +359,15 @@ function Aurora() {
       <Rect x="0" y="0" width="420" height="420" fill={`url(#${id})`} />
     </Svg>
   );
+  if (still) {
+    // Same colours, drawn once: no moving layers for the phone to keep repainting.
+    return (
+      <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
+        <View style={{ position: 'absolute', right: -170, top: -190 }}>{blob('a1', '#2a5bd7', 0.75)}</View>
+        <View style={{ position: 'absolute', left: -190, bottom: -220 }}>{blob('a2', '#13a37a', 0.6)}</View>
+      </View>
+    );
+  }
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
       <Animated.View renderToHardwareTextureAndroid style={{ position: 'absolute', right: -170, top: -190, transform: [{ translateX: v.interpolate({ inputRange: [0, 1], outputRange: [0, -60] }) }, { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, 30] }) }] }}>
@@ -433,6 +446,8 @@ function Ring({ n, of, fill, color, label }: { n: number; of: number; fill?: num
   const p = Math.max(0, Math.min(1, fill ?? (of > 0 ? n / of : 0)));
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
+    // The ring fill can't run on the native side, so on older phones it just jumps to the value.
+    if (lite()) { v.setValue(p); return; }
     Animated.timing(v, { toValue: p, duration: 900, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
   }, [v, p]);
   return (

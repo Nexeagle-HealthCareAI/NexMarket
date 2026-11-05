@@ -15,6 +15,7 @@ import { CelebrateHost } from '../components/Vita';
 import { C } from '../theme';
 import { LockScreen } from '../components/LockScreen';
 import { lockNow, lockState, useLock } from '../lib/lock';
+import { useLite } from '../lib/perf';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 // Screens the agent can't see (behind the one on top, or other tabs) stop re-rendering until shown again.
@@ -23,6 +24,7 @@ enableFreeze(true);
 function Gate() {
   const { ready, agent } = useSession();
   const lock = useLock();
+  const light = useLite();
   const segments = useSegments();
 
   // Coming back to the app after a while asks for the PIN or fingerprint again.
@@ -69,7 +71,7 @@ function Gate() {
   }
   return (
     <>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg }, animation: 'slide_from_right', animationDuration: 220, freezeOnBlur: true }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg }, animation: light ? 'none' : 'slide_from_right', animationDuration: 220, freezeOnBlur: true }}>
         <Stack.Screen name="index" options={{ animation: 'none' }} />
         <Stack.Screen name="login" options={{ animation: 'fade' }} />
         <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />

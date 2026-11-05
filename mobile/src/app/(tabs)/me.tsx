@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { router } from 'expo-router';
-import { Avatar, Btn, Card, Screen, T, TopBar } from '../../components/ui';
+import { Avatar, Btn, Card, Chip, Screen, Sheet, T, TopBar } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 import { LanguageSheet } from '../../components/LanguageSheet';
 import { useDb, useSession, useSync } from '../../lib/session';
@@ -14,6 +14,7 @@ import { monthName, relDay, timeOf } from '../../lib/format';
 import { LANGS } from '../../i18n';
 import { myPhotoUrl } from '../../lib/profile';
 import { C } from '../../theme';
+import { oldPhone, setPerfMode, useLite, usePerfMode, type PerfMode } from '../../lib/perf';
 
 export default function Me() {
   const lock = useLock();
@@ -21,6 +22,9 @@ export default function Me() {
   const sync = useSync();
   const [langOpen, setLangOpen] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+  const [perfOpen, setPerfOpen] = useState(false);
+  const light = useLite();
+  const pm = usePerfMode();
 
   const d = useDb(() => {
     const ms = new Date(); ms.setDate(1); ms.setHours(0, 0, 0, 0);
@@ -101,11 +105,23 @@ export default function Me() {
       <Row icon="chat" label={t('chatTitle')} sub={t('chatPrivate')} onPress={() => router.push('/chat')} />
       <Row icon="calendar" label={t('attendanceAndLeave')} sub={t('daysWorked', { n: d.days })} onPress={() => router.push('/attendance')} />
       <Row icon="lock" label={t('quTitle')} sub={lock.pinSet ? `${t('quOn')}${lock.bio ? ' · ' + t('quUseBio') : ''}` : t('quOff')} onPress={() => router.push('/quick-unlock')} />
+      <Row icon="bolt" label={t('perfTitle')} sub={pm === 'auto' ? `${t('perfAuto')} · ${light ? t('perfOn') : t('perfOff')}` : light ? t('perfOn') : t('perfOff')} onPress={() => setPerfOpen(true)} />
       <Row icon="globe" label={t('language')} sub={LANGS.find((l) => l.code === lang)?.label} onPress={() => setLangOpen(true)} />
       <Row icon="battery" label={t('batteryLocation')} onPress={openAppSettings} />
       <Row icon="logout" label={t('logout')} danger onPress={logout} />
       <T style={{ textAlign: 'center', color: C.muted, fontSize: 12, marginTop: 8 }}>{t('appName')} · {t('version', { v: APP_VERSION })}</T>
       <LanguageSheet visible={langOpen} onClose={() => setLangOpen(false)} />
+      <Sheet visible={perfOpen} onClose={() => setPerfOpen(false)} title={t('perfTitle')}>
+        <T style={{ color: C.text2, lineHeight: 21 }}>{t('perfHelp')}</T>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {(['auto', 'lite', 'full'] as PerfMode[]).map((m) => (
+            <Chip key={m} big label={m === 'auto' ? t('perfAuto') : m === 'lite' ? t('perfOn') : t('perfOff')} selected={pm === m}
+              onPress={() => setPerfMode(m)} />
+          ))}
+        </View>
+        <T style={{ color: C.text2, fontSize: 13 }}>{oldPhone ? t('perfThisOld') : t('perfThisNew')}</T>
+        <Btn label={t('fltDone')} onPress={() => setPerfOpen(false)} />
+      </Sheet>
     </Screen>
   );
 }

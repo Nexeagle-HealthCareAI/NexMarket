@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useIsFocused } from 'expo-router';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, TextInput, View } from 'react-native';
 import { Screen, T } from '../../components/ui';
 import { Icon } from '../../components/Icon';
@@ -18,6 +19,7 @@ const SUGGESTIONS: StringKey[] = ['aiSuggest1', 'aiSuggest2', 'aiSuggest3', 'aiS
 
 /** The field agent's AI helper: today's tips plus a chat that only looks at the agent's own work. */
 export default function Assistant() {
+  const focused = useIsFocused(); // Vita only floats while this screen is showing
   const { t, lang } = useSession();
   const [tips, setTips] = useState<Tips | null>(null);
   const [tipsError, setTipsError] = useState<string | null>(null);
@@ -84,7 +86,7 @@ export default function Assistant() {
       header={
         <View style={{ backgroundColor: C.ink, paddingHorizontal: 18, paddingTop: 8, paddingBottom: 14, flexDirection: 'row', alignItems: 'flex-end', gap: 12, overflow: 'hidden' }}>
           <View style={{ position: 'absolute', right: -60, top: -80, width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(42,91,215,0.22)' }} />
-          <Vita mood={asking ? 'think' : 'ai'} height={88} />
+          <Vita mood={asking ? 'think' : 'ai'} height={88} bob={focused} />
           <View style={{ flex: 1, minWidth: 0, gap: 2, paddingBottom: 6 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <T style={{ color: '#fff', fontSize: 24, fontWeight: '800' }}>Vita</T>
