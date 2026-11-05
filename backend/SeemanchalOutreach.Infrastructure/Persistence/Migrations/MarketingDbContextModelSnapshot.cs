@@ -2668,6 +2668,91 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.ToTable("social_messages", "marketing");
                 });
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SocialPost", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Clicks")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Comments")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExternalId")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Likes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MediaType")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("MetricsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Permalink")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("PostedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("Reach")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Saves")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Shares")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Text")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ThumbnailUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Topic")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("Views")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Channel", "ExternalId")
+                        .IsUnique();
+
+                    b.HasIndex("PostedAt");
+
+                    b.ToTable("social_posts", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SurveyEdit", b =>
                 {
                     b.Property<Guid>("Id")

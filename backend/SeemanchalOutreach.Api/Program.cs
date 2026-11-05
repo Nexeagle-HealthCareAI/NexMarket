@@ -41,6 +41,7 @@ builder.Services.AddScoped<SeemanchalOutreach.Api.Services.WaBillingService>();
 builder.Services.AddHttpClient("meta", c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.MetaGraph>();
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.MetaService>();
+builder.Services.AddScoped<SeemanchalOutreach.Api.Services.SocialPostsService>();
 // Reminders for leads nobody has contacted, and lead stages reported back to Meta.
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.LeadSignals>();
 builder.Services.Configure<SeemanchalOutreach.Api.Services.LeaveSettings>(builder.Configuration.GetSection("Leave"));

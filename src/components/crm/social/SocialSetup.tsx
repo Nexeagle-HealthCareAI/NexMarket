@@ -123,7 +123,7 @@ export function SocialSetup({ onSaved, toast }: { onSaved: () => void; toast: (m
           <li>At <a href="https://developers.facebook.com/apps" target="_blank" rel="noreferrer">developers.facebook.com</a>, use the same Business app as WhatsApp (or create one) and add <em>Webhooks</em>, <em>Messenger</em> and <em>Instagram</em>. Copy the App ID and App secret (App settings → Basic) into step 1.</li>
           <li>In Business settings → <em>System users</em>, give the system user the Page, the Instagram account and the ad account (full control), then <em>Generate token</em> for this app with the permissions listed in step 1, set to never expire.</li>
           <li>Page settings → <em>Leads access</em>: allow this app (and the CRM&apos;s system user) to receive leads.</li>
-          <li>Until Meta approves the app (App Review: <code>leads_retrieval</code>, <code>pages_messaging</code>, <code>instagram_manage_messages</code>), it works for people with a role on the app; set the app to <em>Live</em> after approval.</li>
+          <li>Until Meta approves the app (App Review: <code>leads_retrieval</code>, <code>pages_messaging</code>, <code>instagram_manage_messages</code>; for All posts also <code>pages_read_engagement</code>, <code>read_insights</code> and <code>instagram_manage_insights</code>), it works for people with a role on the app; set the app to <em>Live</em> after approval.</li>
         </ol>
       </details>
 

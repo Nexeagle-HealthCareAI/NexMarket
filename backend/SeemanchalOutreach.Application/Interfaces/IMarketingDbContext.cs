@@ -27,6 +27,7 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<PartnerPayment> PartnerPayments { get; }
         DbSet<ReferralBill> ReferralBills { get; }
         DbSet<DiseaseRecord> DiseaseRecords { get; }
+        DbSet<SocialPost> SocialPosts { get; }
         DbSet<AgentIncentive> AgentIncentives { get; }
         DbSet<Department> Departments { get; }
         DbSet<Doctor> Doctors { get; }
