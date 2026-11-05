@@ -34,7 +34,10 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     PageId = table.Column<string>(type: "text", nullable: true),
                     Phone = table.Column<string>(type: "text", nullable: true),
                     Platform = table.Column<string>(type: "text", nullable: false),
-                    ReceivedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    ReceivedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    StageError = table.Column<string>(type: "text", nullable: true),
+                    StageSent = table.Column<string>(type: "text", nullable: true),
+                    StageSentAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {

@@ -613,5 +613,10 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? Error { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // when they filled it (Meta's time)
         public DateTime ReceivedAt { get; set; } = DateTime.UtcNow;
+        /// <summary>The last lead stage reported back to Meta (Contacted, Appointment booked, Arrived, Admitted), so ads learn who becomes a patient.</summary>
+        public string? StageSent { get; set; }
+        /// <summary>When it was sent, or when sending last failed.</summary>
+        public DateTime? StageSentAt { get; set; }
+        public string? StageError { get; set; }
     }
 }

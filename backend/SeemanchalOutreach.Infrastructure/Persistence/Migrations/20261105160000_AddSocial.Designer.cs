@@ -89,6 +89,15 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("ReceivedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("StageError")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StageSent")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("StageSentAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CampaignId");

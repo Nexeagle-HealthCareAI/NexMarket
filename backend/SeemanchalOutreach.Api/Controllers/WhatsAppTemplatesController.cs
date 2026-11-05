@@ -263,6 +263,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 }, "general_update"),
                 (new WaTemplateDto
                 {
+                    Name = "nx_form_thanks", Category = "UTILITY",
+                    Body = "नमस्ते {{1}}, {{2}} का फ़ॉर्म भरने के लिए धन्यवाद। हमारी टीम जल्द ही आपको कॉल करेगी। डॉक्टर से मिलने का समय तय करने के लिए इसी संदेश का जवाब दें।",
+                    Examples = new() { "रीना", h },
+                }, "form_welcome"),
+                (new WaTemplateDto
+                {
                     Name = "nx_appointment_confirm", Category = "UTILITY",
                     Body = "नमस्ते {{1}}, " + h + " में आपका अपॉइंटमेंट {{2}} को {{3}} बजे {{4}} के साथ तय है। कृपया पुरानी रिपोर्ट और पर्चे साथ लाएं।",
                     Examples = new() { "रीना", "12 नवंबर", "11", "डॉ. अहमद" },

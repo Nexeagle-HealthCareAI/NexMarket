@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  AlertTriangle, AtSign, CheckCircle2, ChevronDown, Copy, DownloadCloud, Eye, EyeOff, KeyRound, Link2, RefreshCw, ShieldCheck, Unplug, Webhook, XCircle,
+  AlertTriangle, AtSign, BellRing, CheckCircle2, MessageCircle, Target, ChevronDown, Copy, DownloadCloud, Eye, EyeOff, KeyRound, Link2, RefreshCw, ShieldCheck, Unplug, Webhook, XCircle,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { ErrorBox, friendlyError, Pill, Skeleton } from '@/components/crm/ui';
@@ -17,6 +17,8 @@ interface Data {
     currency?: string | null; connectedAt?: string | null; pageConnected: boolean; receiving?: boolean | null; receivingError?: string | null;
   };
   webhookUrl: string;
+  conversions: { datasetId?: string | null; datasetName?: string | null; datasetError?: string | null; sent30d: number; lastError?: string | null; lastErrorAt?: string | null };
+  instantWhatsApp: { template?: string | null; connected: boolean };
   needed: { scope: string; for: string }[];
   activity: { formLeads7d: number; messages7d: number; lastFormAt?: string | null; lastMessageAt?: string | null };
 }
@@ -44,12 +46,14 @@ export function SocialSetup({ onSaved, toast }: { onSaved: () => void; toast: (m
   const [adId, setAdId] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [dataset, setDataset] = useState('');
+  const [savingDs, setSavingDs] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const r = await crm.get<Data>('/api/v1/settings/meta');
       setData(r); setAppId(r.fields.appId ?? ''); setVerify(r.fields.verifyToken ?? '');
-      setPageId(r.connection.pageId ?? ''); setAdId(r.connection.adAccountId ?? ''); setError(null);
+      setPageId(r.connection.pageId ?? ''); setAdId(r.connection.adAccountId ?? ''); setDataset(r.conversions.datasetId ?? ''); setError(null);
     } catch (e) { setError(friendlyError(e)); }
   }, []);
   useEffect(() => { const t = setTimeout(() => void load(), 0); return () => clearTimeout(t); }, [load]);
@@ -89,6 +93,11 @@ export function SocialSetup({ onSaved, toast }: { onSaved: () => void; toast: (m
   const disconnect = async () => {
     if (!window.confirm('Stop receiving Facebook and Instagram leads and messages in the CRM? Everything already here stays.')) return;
     try { await crm.post('/api/v1/settings/meta/disconnect'); await load(); onSaved(); toast('Disconnected.'); } catch (e) { toast(friendlyError(e)); }
+  };
+  const saveDataset = async () => {
+    setSavingDs(true);
+    try { await crm.put('/api/v1/settings/meta', { datasetId: dataset.trim() }); await load(); toast(dataset.trim() ? 'Lead stages will be sent to Meta every few minutes.' : 'Lead stages are no longer sent to Meta.'); }
+    catch (e) { toast(friendlyError(e)); } finally { setSavingDs(false); }
   };
   const syncForms = async () => {
     setSyncing(true);
@@ -224,6 +233,49 @@ export function SocialSetup({ onSaved, toast }: { onSaved: () => void; toast: (m
             <span className="crm-sub">Adds anyone who filled a form before the CRM was connected. People already here aren&apos;t added twice.</span>
           </div>
         )}
+      </section>
+
+      {/* 4. Turning leads into patients */}
+      <section className="crm-card wa-step">
+        <StepHead n={4} done={!!data.instantWhatsApp.template && !!data.conversions.datasetName} title="Turn more form leads into patients" sub="Three things that run by themselves once set up." />
+
+        <div className="so-auto">
+          <span className="so-auto-icon" aria-hidden><MessageCircle size={18} /></span>
+          <div>
+            <strong>Instant WhatsApp thank-you</strong>
+            <p className="crm-sub">Every new form lead gets a WhatsApp message within seconds, so they know the hospital will call and can reply straight away.</p>
+            {data.instantWhatsApp.template
+              ? <span className="wa-ok"><CheckCircle2 size={15} aria-hidden /> On · sends <code>{data.instantWhatsApp.template}</code></span>
+              : <span className="wa-wait"><AlertTriangle size={15} aria-hidden /> Off. In <a href="/admin/whatsapp?tab=setup">WhatsApp → Setup</a>, pick an approved template for &ldquo;Facebook/Instagram form: instant thank-you&rdquo; (the NexEagle set has <code>nx_form_thanks</code>).</span>}
+          </div>
+        </div>
+
+        <div className="so-auto">
+          <span className="so-auto-icon" aria-hidden><BellRing size={18} /></span>
+          <div>
+            <strong>Reminders when nobody calls</strong>
+            <p className="crm-sub">A new lead with no reply after the reply target reminds whoever has it (or the desk). After an hour, admins and marketing managers are told too. Only during office hours.</p>
+            <span className="wa-ok"><CheckCircle2 size={15} aria-hidden /> On · reply target and office hours are in <a href="/admin/whatsapp?tab=automation">WhatsApp → Automation</a></span>
+          </div>
+        </div>
+
+        <div className="so-auto">
+          <span className="so-auto-icon" aria-hidden><Target size={18} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <strong>Tell Meta who becomes a patient</strong>
+            <p className="crm-sub">When a form lead is contacted, books, arrives or is admitted, the CRM tells Meta as plain steps (Contacted, Qualified, Converted) with only the form&apos;s lead ID and a scrambled phone number. No department, doctor or health details leave the CRM. Meta then shows the ads to people more like real patients. In Events Manager, create a CRM dataset and give the system user access, then paste its ID.</p>
+            <div className="wa-copy" style={{ maxWidth: 520 }}>
+              <input className="crm-input" value={dataset} onChange={(e) => setDataset(e.target.value.trim())} inputMode="numeric" placeholder="Dataset ID, e.g. 123456789012345" aria-label="Dataset ID" />
+              <button type="button" className="crm-btn is-sm" disabled={savingDs || dataset === (data.conversions.datasetId ?? '')} onClick={() => void saveDataset()}>{savingDs ? 'Saving…' : 'Save'}</button>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              {!data.conversions.datasetId ? <span className="crm-sub">Off.</span>
+                : data.conversions.datasetError ? <span className="wa-err"><AlertTriangle size={14} aria-hidden /> Can&apos;t open that dataset with the token: {data.conversions.datasetError}</span>
+                  : data.conversions.lastError ? <span className="wa-err"><AlertTriangle size={14} aria-hidden /> Last send failed{data.conversions.lastErrorAt ? ` (${when(data.conversions.lastErrorAt)})` : ''}: {data.conversions.lastError}</span>
+                    : <span className="wa-ok"><CheckCircle2 size={15} aria-hidden /> On{data.conversions.datasetName ? ` · ${data.conversions.datasetName}` : ''} · {data.conversions.sent30d} leads reported in the last 30 days</span>}
+            </div>
+          </div>
+        </div>
       </section>
     </div>
   );

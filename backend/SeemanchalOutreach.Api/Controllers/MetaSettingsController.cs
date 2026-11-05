@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using SeemanchalOutreach.Api.Services;
 using SeemanchalOutreach.Application.Interfaces;
 
@@ -19,6 +20,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public string? AppId { get; set; }
         public string? VerifyToken { get; set; }
         public string? ApiVersion { get; set; }
+        /// <summary>Dataset (pixel) ID for lead stages; "" turns it off.</summary>
+        public string? DatasetId { get; set; }
         /// <summary>Missing or null = keep the saved one, "" = remove it.</summary>
         public string? AppSecret { get; set; }
         public string? AccessToken { get; set; }
@@ -59,9 +62,11 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IAppSettings _settings;
         private readonly MetaGraph _graph;
         private readonly IMarketingDbContext _db;
+        private readonly IConfiguration _config;
 
-        public MetaSettingsController(IAppSettings settings, MetaGraph graph, IMarketingDbContext db)
+        public MetaSettingsController(IAppSettings settings, MetaGraph graph, IMarketingDbContext db, IConfiguration config)
         {
+            _config = config;
             _settings = settings;
             _graph = graph;
             _db = db;
@@ -106,6 +111,19 @@ namespace SeemanchalOutreach.Api.Controllers
             var formLeads7 = await _db.AdLeads.AsNoTracking().CountAsync(x => x.ReceivedAt >= since, ct);
             var messages7 = await _db.SocialMessages.AsNoTracking().CountAsync(x => x.Direction == "in" && x.CreatedAt >= since, ct);
             var lastForm = await _db.AdLeads.AsNoTracking().OrderByDescending(x => x.ReceivedAt).Select(x => (DateTime?)x.ReceivedAt).FirstOrDefaultAsync(ct);
+            // Lead stages reported back to Meta (Conversions API for CRM).
+            string? datasetName = null, datasetError = null;
+            if (!string.IsNullOrWhiteSpace(cfg.DatasetId))
+            {
+                var dr = await _graph.GetAsync(cfg.ApiVersion, $"{cfg.DatasetId}?fields=name", cfg.AccessToken, ct);
+                if (dr.Ok && dr.Doc != null) using (dr.Doc) datasetName = MetaService.Str(dr.Doc.RootElement, "name");
+                else datasetError = dr.Error;
+            }
+            var since30 = DateTime.UtcNow.AddDays(-30);
+            var stagesSent = await _db.AdLeads.AsNoTracking().CountAsync(x => x.StageSent != null && x.StageSentAt >= since30, ct);
+            var stageErr = await _db.AdLeads.AsNoTracking().Where(x => x.StageError != null).OrderByDescending(x => x.StageSentAt).Select(x => new { x.StageError, x.StageSentAt }).FirstOrDefaultAsync(ct);
+            var wa = LeadInbox.Wa(_settings, _config);
+
             var lastMsg = await _db.SocialMessages.AsNoTracking().Where(x => x.Direction == "in").OrderByDescending(x => x.CreatedAt).Select(x => (DateTime?)x.CreatedAt).FirstOrDefaultAsync(ct);
 
             return Ok(new
@@ -123,6 +141,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     pageConnected = cfg.PageConnected, receiving, receivingError,
                 },
                 webhookUrl = WebhookUrl(),
+                conversions = new { datasetId = cfg.DatasetId, datasetName, datasetError, sent30d = stagesSent, lastError = stageErr?.StageError, lastErrorAt = stageErr?.StageSentAt },
+                instantWhatsApp = new { template = wa.Template("form_welcome"), connected = wa.IsConfigured },
                 needed = Needed.Select(n => new { scope = n.Scope, @for = n.For }),
                 activity = new { formLeads7d = formLeads7, messages7d = messages7, lastFormAt = lastForm, lastMessageAt = lastMsg },
             });
@@ -149,6 +169,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 var ver = dto.ApiVersion.Trim();
                 if (ver.Length > 0 && !Version.IsMatch(ver)) return BadRequest(new { message = "API version looks like v21.0." });
                 v["apiVersion"] = ver;
+            }
+            if (dto.DatasetId != null)
+            {
+                var d = dto.DatasetId.Trim();
+                if (d.Length > 0 && !Digits.IsMatch(d)) return BadRequest(new { message = "Dataset ID is the number from Events Manager (digits only)." });
+                v["datasetId"] = d;
             }
             if (dto.AppSecret != null)
             {

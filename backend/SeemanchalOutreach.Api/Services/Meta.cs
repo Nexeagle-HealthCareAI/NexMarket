@@ -30,7 +30,7 @@ namespace SeemanchalOutreach.Api.Services
         {
             ("appId", false), ("appSecret", true), ("accessToken", true), ("verifyToken", false), ("apiVersion", false),
             ("pageId", false), ("pageName", false), ("pageToken", true), ("igId", false), ("igUsername", false),
-            ("adAccountId", false), ("adAccountName", false), ("currency", false), ("connectedAt", false),
+            ("adAccountId", false), ("adAccountName", false), ("currency", false), ("connectedAt", false), ("datasetId", false),
         };
         public static IEnumerable<string> SecretKeys => Fields.Where(f => f.Secret).Select(f => Prefix + f.Key);
 
@@ -51,6 +51,8 @@ namespace SeemanchalOutreach.Api.Services
         public string? AdAccountName { get; set; }
         public string? Currency { get; set; }
         public string? ConnectedAt { get; set; }
+        /// <summary>The dataset (pixel) that receives lead stages from the CRM (Conversions API for CRM). Empty = off.</summary>
+        public string? DatasetId { get; set; }
 
         public bool PageConnected => !string.IsNullOrWhiteSpace(PageId) && !string.IsNullOrWhiteSpace(PageToken);
 
@@ -62,7 +64,7 @@ namespace SeemanchalOutreach.Api.Services
                 AppId = g("appId"), AppSecret = g("appSecret"), AccessToken = g("accessToken"), VerifyToken = g("verifyToken"),
                 ApiVersion = g("apiVersion") ?? "v21.0", PageId = g("pageId"), PageName = g("pageName"), PageToken = g("pageToken"),
                 IgId = g("igId"), IgUsername = g("igUsername"), AdAccountId = g("adAccountId"), AdAccountName = g("adAccountName"),
-                Currency = g("currency"), ConnectedAt = g("connectedAt"),
+                Currency = g("currency"), ConnectedAt = g("connectedAt"), DatasetId = g("datasetId"),
             };
         }
     }
@@ -135,10 +137,12 @@ namespace SeemanchalOutreach.Api.Services
         private readonly MetaGraph _graph;
         private readonly INotifier _notifier;
         private readonly IPermissionService _perms;
+        private readonly WhatsAppOutbox _outbox;
         private readonly ILogger<MetaService> _log;
 
-        public MetaService(IMarketingDbContext db, IAppSettings settings, MetaGraph graph, INotifier notifier, IPermissionService perms, ILogger<MetaService> log)
+        public MetaService(IMarketingDbContext db, IAppSettings settings, MetaGraph graph, INotifier notifier, IPermissionService perms, WhatsAppOutbox outbox, ILogger<MetaService> log)
         {
+            _outbox = outbox;
             _db = db;
             _settings = settings;
             _graph = graph;
@@ -317,6 +321,21 @@ namespace SeemanchalOutreach.Api.Services
                 ad.LeadId = lead.Id;
             }
             await _db.SaveChangesAsync(ct);
+
+            // The first minute matters most: a new form lead gets a WhatsApp thank-you straight away, when a template is chosen
+            // for it (WhatsApp → Setup → "Facebook/Instagram form: instant thank-you"). Their reply opens a normal chat.
+            if (lead != null && isNew && _outbox.Config.Template("form_welcome") != null)
+            {
+                try
+                {
+                    var first = (lead.Name.StartsWith("+") ? "" : lead.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()) ?? "";
+                    var cfgWa = _outbox.Config;
+                    await _outbox.SendUseAsync(lead.Phone, "form_welcome", "hi", new[] { first.Length > 0 ? first : "जी", cfgWa.HospitalName },
+                        $"Thank-you for filling the {where} form ({cfgWa.Template("form_welcome")})", "form_welcome", null, lead.Id, null, ct);
+                    await _db.SaveChangesAsync(ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException) { _log.LogWarning(ex, "Instant WhatsApp to a form lead failed"); }
+            }
 
             var to = lead?.OwnerId != null ? new List<string> { lead.OwnerId } : await DeskAsync(ct);
             NotifyDesk(

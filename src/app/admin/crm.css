@@ -1455,3 +1455,8 @@ button.ld-head-btn { border: 0; cursor: pointer; font: inherit; font-size: 13px;
 .wa-result.is-warn { background: var(--warn-soft); color: var(--warn-ink); border: 1px solid #f1d29a; }
 .wa-result code { font-size: 12.5px; }
 @media (max-width: 640px) { .so-ext { margin-left: 0; } }
+.so-auto { display: flex; gap: 14px; align-items: flex-start; padding: 14px 0; border-top: 1px solid var(--line); }
+.so-auto:first-of-type { border-top: 0; padding-top: 0; }
+.so-auto p { margin: 2px 0 8px; line-height: 1.5; }
+.so-auto-icon { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-tint); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.so-auto code { font-size: 12.5px; }
