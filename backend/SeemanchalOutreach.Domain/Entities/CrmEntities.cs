@@ -667,6 +667,37 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// A post the hospital put out: fetched from the Facebook Page and Instagram account (with reach and engagement), or
+    /// logged by hand for WhatsApp Status, Channel or groups, which Meta does not let software read.
+    /// </summary>
+    public class SocialPost
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Channel { get; set; } = "facebook";       // facebook | instagram | whatsapp_status | whatsapp_channel | whatsapp_group | other
+        public string? ExternalId { get; set; }                 // Meta's post / media id (null for posts logged by hand)
+        public string Source { get; set; } = "synced";          // synced | manual
+        public string? Text { get; set; }
+        public string? MediaType { get; set; }                  // photo | video | reel | carousel | text | link | story
+        public string? Permalink { get; set; }
+        public string? ThumbnailUrl { get; set; }
+        public DateTime PostedAt { get; set; }
+        public int? Reach { get; set; }
+        public int? Views { get; set; }
+        public int? Likes { get; set; }
+        public int? Comments { get; set; }
+        public int? Shares { get; set; }
+        public int? Saves { get; set; }
+        public int? Clicks { get; set; }
+        public DateTime? MetricsAt { get; set; }
+        public string? Topic { get; set; }                      // a department or theme, for "which topics work"
+        public string? Note { get; set; }
+        public string Status { get; set; } = "active";         // active | removed
+        public string? CreatedBy { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
     /// <summary>A Facebook Messenger or Instagram Direct conversation with one person, on the hospital's Page or account.</summary>
     public class SocialConversation
     {

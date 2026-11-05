@@ -1950,3 +1950,46 @@ button.pp-chip { cursor: pointer; }
 .dz-upload-drop:hover, .dz-upload-drop:focus-within { border-color: var(--accent); background: var(--accent-tint); }
 .dz-upload-icon { width: 46px; height: 46px; border-radius: 12px; background: #1d6f42; color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
 .dz-entry.is-dragging { outline: 3px dashed var(--accent); outline-offset: -6px; background: var(--accent-tint); }
+
+/* ─── Social posts ─── */
+.sp { display: flex; flex-direction: column; gap: 14px; }
+.sp-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
+.sp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.sp-spin { animation: sp-spin 1s linear infinite; }
+@keyframes sp-spin { to { transform: rotate(360deg); } }
+.sp-mark { width: 34px; height: 34px; border-radius: 10px; color: #fff; font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; flex: none; letter-spacing: .02em; }
+.sp-mark.is-small { width: 24px; height: 24px; border-radius: 7px; font-size: 10px; position: absolute; right: -6px; bottom: -6px; border: 2px solid #fff; }
+.sp-channels { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.sp-channel { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; padding: 8px; border-radius: 12px; cursor: pointer; text-align: left; font: inherit; color: var(--text); }
+.sp-channel:hover, .sp-channel[aria-pressed='true'] { background: var(--accent-tint); }
+.sp-num { font-size: 18px; font-variant-numeric: tabular-nums; }
+.sp-topics { list-style: none; margin: 8px -6px 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.sp-topics button { width: 100%; display: grid; grid-template-columns: minmax(140px, 1.2fr) 1fr 52px; gap: 10px; align-items: center; border: 0; background: transparent; padding: 6px; border-radius: 8px; cursor: pointer; font: inherit; color: var(--text); text-align: left; }
+.sp-topics button:hover, .sp-topics button[aria-pressed='true'] { background: var(--accent-tint); }
+.sp-topic-l { font-size: 13.5px; font-weight: 600; }
+.sp-topic-bar { height: 10px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.sp-topic-bar > span { display: block; height: 100%; background: #2a78d6; border-radius: 4px; }
+.sp-topics .sp-num { font-size: 14px; text-align: right; }
+.sp-posts { list-style: none; margin: 0; padding: 0; }
+.sp-post { display: grid; grid-template-columns: 76px 1fr auto; gap: 14px; padding: 14px 20px; border-top: 1px solid var(--line); align-items: start; }
+.sp-thumb { position: relative; width: 72px; height: 72px; }
+.sp-thumb img, .sp-thumb-ph { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; display: flex; align-items: center; justify-content: center; background: var(--bg, #f3f4f6); color: var(--text-3); border: 1px solid var(--border); }
+.sp-body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sp-meta { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.sp-text { margin: 0; font-size: 14px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-line; }
+.sp-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--text-2); }
+.sp-stats strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.sp-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 150px; }
+.sp-topic-sel { width: 170px; height: 34px; font-size: 13px; }
+.sp-eng { font-size: 12.5px; color: var(--text-2); }
+.sp-eng strong { font-size: 16px; color: var(--text); }
+.sp-links { display: flex; gap: 4px; }
+.sp-form { display: flex; flex-direction: column; gap: 12px; }
+.sp-form-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.sp-form-row .crm-field { flex: 1 1 92px; min-width: 0; }
+@media (max-width: 760px) {
+  .sp-post { grid-template-columns: 60px 1fr; padding: 12px 14px; }
+  .sp-thumb, .sp-thumb img, .sp-thumb-ph { width: 56px; height: 56px; }
+  .sp-side { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; min-width: 0; }
+  .sp-topics button { grid-template-columns: 1fr 70px 44px; }
+}

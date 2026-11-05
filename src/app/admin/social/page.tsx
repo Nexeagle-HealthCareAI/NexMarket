@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BarChart3, ClipboardList, Inbox, Settings2 } from 'lucide-react';
+import { BarChart3, ClipboardList, Inbox, Newspaper, Settings2 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { useAccess } from '@/lib/crm/access';
 import { PageHead, Pill, Skeleton, useToast } from '@/components/crm/ui';
@@ -10,10 +10,12 @@ import { SocialInbox } from '@/components/crm/social/SocialInbox';
 import { SocialForms } from '@/components/crm/social/SocialForms';
 import { SocialAds } from '@/components/crm/social/SocialAds';
 import { SocialSetup } from '@/components/crm/social/SocialSetup';
+import { SocialPosts } from '@/components/crm/social/SocialPosts';
 import type { SocialStatus } from '@/components/crm/social/shared';
 
 const TABS = [
   { key: 'inbox', label: 'Messages', icon: Inbox, admin: false },
+  { key: 'posts', label: 'All posts', icon: Newspaper, admin: false },
   { key: 'forms', label: 'Lead forms', icon: ClipboardList, admin: false },
   { key: 'ads', label: 'Ads & results', icon: BarChart3, admin: false },
   { key: 'setup', label: 'Setup', icon: Settings2, admin: true },
@@ -60,7 +62,7 @@ function Social() {
 
   return (
     <main className={`crm-page wh-page${tab === 'inbox' && selected ? ' ld-page has-sel' : ''}`}>
-      <PageHead title="Facebook & Instagram" sub={accounts || 'Messages, Lead Ads form entries and ad results from the hospital’s Facebook Page and Instagram account.'}
+      <PageHead title={tab === 'posts' ? 'Social posts' : 'Facebook & Instagram'} sub={accounts || 'Messages, Lead Ads form entries and ad results from the hospital’s Facebook Page and Instagram account.'}
         badge={status ? (status.connected ? <Pill tone="ok" dot>Connected</Pill> : <Pill tone="warn" dot>Not connected</Pill>) : undefined}>
         {status && status.formsToday > 0 && <span className="crm-sub"><strong style={{ color: 'var(--text)' }}>{status.formsToday}</strong> form {status.formsToday === 1 ? 'entry' : 'entries'} today</span>}
       </PageHead>
@@ -83,6 +85,7 @@ function Social() {
       </div>
 
       {tab === 'inbox' && <SocialInbox status={status} selected={selected} onSelect={(c) => go({ c })} onChanged={loadStatus} toast={showToast} />}
+      {tab === 'posts' && <SocialPosts connected={!!status?.connected} canManage={!!status?.canManage} toast={showToast} />}
       {tab === 'forms' && <SocialForms canManage={!!status?.canManage} connected={!!status?.connected} toast={showToast} />}
       {tab === 'ads' && <SocialAds hasAds={!!status?.hasAds} isAdmin={!!status?.isAdmin} onSetup={() => go({ tab: 'setup', c: null })} />}
       {tab === 'setup' && <SocialSetup onSaved={loadStatus} toast={showToast} />}
