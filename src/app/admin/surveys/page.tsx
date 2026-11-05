@@ -8,6 +8,7 @@ import { crm } from '@/lib/sync/api-client';
 import AnalystPanel from '@/components/crm/AnalystPanel';
 import { contactTypeLabel, Empty, ErrorBox, fmt, friendlyError, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { Pager } from '@/components/crm/Pager';
+import { addRange, DateRangeBar, rangeLabel, type DateRangeKey, type DateRangeValue } from '@/components/crm/DateRange';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface QMeta { id: string; questionId: string; title: string; text: string; type: string; options: { full: string; label: string }[] }
@@ -19,7 +20,8 @@ interface Unit {
 interface InsightsRes {
   unit: 'block' | 'panchayat'; district?: string | null; block?: string | null;
   blocks: { district: string; block: string }[]; departments: string[]; questions: QMeta[];
-  totals: { responses: number; places: number; placesWithAnswers: number; panchayats: number; panchayatsWithAnswers: number; thisMonth: number; skippedThisMonth: number };
+  totals: { responses: number; places: number; placesWithAnswers: number; panchayats: number; panchayatsWithAnswers: number; thisMonth: number; skippedThisMonth: number; agents?: number };
+  ranged?: boolean;
   units: Unit[];
 }
 interface RespRow { id: string; kind: string; contactId?: string | null; contactName?: string | null; contactType?: string | null; panchayat?: string | null; block?: string | null; agentId: string; agent: string; createdAt: string; answered: number; answerCount: number; skipReason?: string | null }
@@ -55,7 +57,18 @@ function SurveysPage() {
   const params = useSearchParams();
   const router = useRouter();
   const tab = (TABS.find((t) => t.k === params.get('tab'))?.k ?? 'insights') as Tab;
-  const go = (t: Tab) => router.replace(t === 'insights' ? '/admin/surveys' : `/admin/surveys?tab=${t}`, { scroll: false });
+  // The date filter lives in the address (?d=today, or d=custom&from=…&to=…) so it holds across tabs and a reload.
+  const range: DateRangeValue = { key: (params.get('d') ?? '') as DateRangeKey, from: params.get('from') ?? '', to: params.get('to') ?? '' };
+  const url = (t: Tab, r: DateRangeValue) => {
+    const sp = new URLSearchParams();
+    if (t !== 'insights') sp.set('tab', t);
+    if (r.key) sp.set('d', r.key);
+    if (r.key === 'custom') { if (r.from) sp.set('from', r.from); if (r.to) sp.set('to', r.to); }
+    const qs = sp.toString();
+    return qs ? `/admin/surveys?${qs}` : '/admin/surveys';
+  };
+  const go = (t: Tab) => router.replace(url(t, range), { scroll: false });
+  const setRange = (r: DateRangeValue) => router.replace(url(tab, r), { scroll: false });
   const [toast, showToast] = useToast();
 
   return (
@@ -68,8 +81,9 @@ function SurveysPage() {
           </button>
         ))}
       </div>
-      {tab === 'insights' && <Insights />}
-      {tab === 'responses' && <Responses showToast={showToast} />}
+      {(tab === 'insights' || tab === 'responses') && <DateRangeBar value={range} onChange={setRange} id="sv-date" />}
+      {tab === 'insights' && <Insights range={range} />}
+      {tab === 'responses' && <Responses showToast={showToast} range={range} />}
       {tab === 'questions' && <Questions showToast={showToast} />}
       {tab === 'ai' && (
         <AnalystPanel scope="surveys"
@@ -88,7 +102,7 @@ function SurveysPage() {
 
 // ─── Insights ───────────────────────────────────────────────────────────────
 
-function Insights() {
+function Insights({ range }: { range: DateRangeValue }) {
   const [district, setDistrict] = useState('');
   const [block, setBlock] = useState('');
   const [sel, setSel] = useState<string | null>(null);
@@ -97,8 +111,9 @@ function Insights() {
     const sp = new URLSearchParams();
     if (district) sp.set('district', district);
     if (block) sp.set('block', block);
+    addRange(sp, range);
     return crm.get<InsightsRes>(`/api/v1/surveys/insights?${sp}`);
-  }, [district, block]);
+  }, [district, block, range.key, range.from, range.to]);
   const d = data.data;
   const districts = useMemo(() => [...new Set((d?.blocks ?? []).map((b) => b.district))].sort(), [d]);
   const blockOptions = (d?.blocks ?? []).filter((b) => !district || b.district === district);
@@ -134,15 +149,17 @@ function Insights() {
       </div>
 
       <div className="crm-kpis">
-        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Contacts surveyed</span><span className="crm-kpi-value">{d.totals.responses.toLocaleString('en-IN')}</span></div>
+        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Contacts surveyed{d.ranged ? ` · ${rangeLabel(range)}` : ''}</span><span className="crm-kpi-value">{d.totals.responses.toLocaleString('en-IN')}</span></div>
         <div className="crm-card crm-kpi"><span className="crm-kpi-label">Panchayats with answers</span><span className="crm-kpi-value">{d.totals.panchayatsWithAnswers}<span className="crm-kpi-unit">of {d.totals.panchayats}</span></span></div>
-        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Answered this month</span><span className="crm-kpi-value">{d.totals.thisMonth}</span></div>
+        {d.ranged
+          ? <div className="crm-card crm-kpi"><span className="crm-kpi-label">Agents who surveyed</span><span className="crm-kpi-value">{d.totals.agents ?? 0}</span></div>
+          : <div className="crm-card crm-kpi"><span className="crm-kpi-label">Answered this month</span><span className="crm-kpi-value">{d.totals.thisMonth}</span></div>}
         <div className="crm-card crm-kpi" style={d.totals.skippedThisMonth ? { background: 'var(--warn-soft)', borderColor: '#f0c98a' } : undefined}>
-          <span className="crm-kpi-label">Skipped this month</span><span className="crm-kpi-value" style={{ color: d.totals.skippedThisMonth ? 'var(--warn-ink)' : undefined }}>{d.totals.skippedThisMonth}</span>
+          <span className="crm-kpi-label">{d.ranged ? `Skipped · ${rangeLabel(range)}` : 'Skipped this month'}</span><span className="crm-kpi-value" style={{ color: d.totals.skippedThisMonth ? 'var(--warn-ink)' : undefined }}>{d.totals.skippedThisMonth}</span>
         </div>
       </div>
 
-      {withAnswers.length === 0 ? <section className="crm-card"><Empty title="No survey answers here yet">Answers appear as agents survey new contacts.</Empty></section> : (
+      {withAnswers.length === 0 ? <section className="crm-card">{d.ranged ? <Empty title="No survey answers in this period">Pick a longer range or All.</Empty> : <Empty title="No survey answers here yet">Answers appear as agents survey new contacts.</Empty>}</section> : (
         <div className="crm-row">
           <section className="crm-card grow-1" aria-labelledby="fz-h" style={{ flexBasis: 320, padding: '18px 0 6px' }}>
             <div style={{ padding: '0 20px 10px' }}>
@@ -272,7 +289,7 @@ function CompareTable({ d, q }: { d: InsightsRes; q: QMeta }) {
 
 // ─── Responses ──────────────────────────────────────────────────────────────
 
-function Responses({ showToast }: { showToast: (m: string) => void }) {
+function Responses({ showToast, range }: { showToast: (m: string) => void; range: DateRangeValue }) {
   const [view, setView] = useState<'current' | 'skipped' | 'older'>('current');
   const [block, setBlock] = useState('');
   const [agentId, setAgentId] = useState('');
@@ -287,8 +304,13 @@ function Responses({ showToast }: { showToast: (m: string) => void }) {
     if (block) sp.set('block', block);
     if (agentId) sp.set('agentId', agentId);
     if (q) sp.set('q', q);
+    addRange(sp, range);
     return crm.get<RespList>(`/api/v1/surveys/responses?${sp}`);
-  }, [view, block, agentId, q, page, pageSize]);
+  }, [view, block, agentId, q, page, pageSize, range.key, range.from, range.to]);
+  // A new date range starts again from the first page.
+  const rangeKey = `${range.key}|${range.from}|${range.to}`;
+  const [seenRange, setSeenRange] = useState(rangeKey);
+  if (seenRange !== rangeKey) { setSeenRange(rangeKey); setPage(1); }
   const d = list.data;
   const pages = d ? Math.max(1, Math.ceil(d.total / d.pageSize)) : 1;
 
@@ -321,7 +343,7 @@ function Responses({ showToast }: { showToast: (m: string) => void }) {
 
       <div className={`crm-row pt-split${sel ? ' has-sel' : ''}`}>
         <section className="crm-card grow-3 pt-list" aria-label="Responses" style={{ padding: 0, overflow: 'hidden' }}>
-          {!d ? <div style={{ padding: 20 }}><Skeleton h={300} /></div> : d.rows.length === 0 ? <Empty title="No responses match">Try clearing a filter.</Empty> : (
+          {!d ? <div style={{ padding: 20 }}><Skeleton h={300} /></div> : d.rows.length === 0 ? <Empty title="No responses match">{range.key ? 'Try a longer date range or All, or clear a filter.' : 'Try clearing a filter.'}</Empty> : (
             <>
               <div className="crm-table-wrap">
                 <table className="crm-table">
