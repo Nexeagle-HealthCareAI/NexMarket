@@ -27,6 +27,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         {
             typeof(AuditLog), typeof(TrajectoryPoint), typeof(AgentRefreshToken), typeof(AiBriefing),
             typeof(ChatMessage), typeof(ChatRead), typeof(ChatThread), typeof(WaMessage), typeof(WaConversation), typeof(CampPatient), // camp health details stay out of the log
+            typeof(SocialConversation), typeof(SocialMessage), typeof(AdLead), // people's messages and form answers
         };
 
         private static readonly Dictionary<string, string> Friendly = new()

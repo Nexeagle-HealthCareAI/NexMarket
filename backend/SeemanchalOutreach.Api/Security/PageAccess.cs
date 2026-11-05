@@ -28,13 +28,14 @@ namespace SeemanchalOutreach.Api.Security
         public const string Targets = "targets";
         public const string Analytics = "analytics";
         public const string Camps = "camps";
+        public const string Social = "social";
         public const string Departments = "departments";
         public const string Users = "users";
 
         public static readonly string[] All =
         {
             Dashboard, Calls, Desk, Pipeline, Partners, WhatsApp, Field,
-            Payments, Targets, Analytics, Camps, Departments, Users,
+            Payments, Targets, Analytics, Camps, Social, Departments, Users,
         };
 
         public const int None = 0, View = 1, Edit = 2;
@@ -46,13 +47,13 @@ namespace SeemanchalOutreach.Api.Security
             {
                 [Dashboard] = Edit, [Calls] = Edit, [Desk] = View, [Pipeline] = Edit, [Partners] = Edit,
                 [WhatsApp] = Edit, [Field] = View, [Payments] = View, [Targets] = Edit, [Analytics] = View,
-                [Camps] = Edit, [Departments] = View, [Users] = None,
+                [Camps] = Edit, [Social] = Edit, [Departments] = View, [Users] = None,
             },
             [RoleChecks.HospitalRep] = new()
             {
                 [Dashboard] = View, [Calls] = None, [Desk] = Edit, [Pipeline] = View, [Partners] = None,
                 [WhatsApp] = None, [Field] = None, [Payments] = None, [Targets] = None, [Analytics] = View,
-                [Camps] = View, [Departments] = Edit, [Users] = None,
+                [Camps] = View, [Social] = None, [Departments] = Edit, [Users] = None,
             },
         };
     }

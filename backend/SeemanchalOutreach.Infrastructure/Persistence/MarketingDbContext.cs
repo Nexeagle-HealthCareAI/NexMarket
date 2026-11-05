@@ -54,6 +54,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<WaConversation> WaConversations => Set<WaConversation>();
         public DbSet<HealthCamp> HealthCamps => Set<HealthCamp>();
         public DbSet<CampPatient> CampPatients => Set<CampPatient>();
+        public DbSet<SocialConversation> SocialConversations => Set<SocialConversation>();
+        public DbSet<SocialMessage> SocialMessages => Set<SocialMessage>();
+        public DbSet<AdLead> AdLeads => Set<AdLead>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -349,6 +352,30 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.Phone);
                 entity.HasIndex(e => e.LeadId);
                 entity.Property(e => e.WeightKg).HasPrecision(5, 1);
+            });
+            modelBuilder.Entity<SocialConversation>(entity =>
+            {
+                entity.ToTable("social_conversations");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.Channel, e.ExternalId }).IsUnique();
+                entity.HasIndex(e => e.LastMessageAt);
+                entity.HasIndex(e => e.LeadId);
+            });
+            modelBuilder.Entity<SocialMessage>(entity =>
+            {
+                entity.ToTable("social_messages");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.ConversationId, e.CreatedAt });
+                entity.HasIndex(e => e.ExternalId);
+            });
+            modelBuilder.Entity<AdLead>(entity =>
+            {
+                entity.ToTable("ad_leads");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.LeadgenId).IsUnique();
+                entity.HasIndex(e => e.CampaignId);
+                entity.HasIndex(e => e.ReceivedAt);
+                entity.HasIndex(e => e.LeadId);
             });
             modelBuilder.Entity<WaConversation>(entity =>
             {

@@ -1427,3 +1427,31 @@ button.ld-head-btn { border: 0; cursor: pointer; font: inherit; font-size: 13px;
 .wh-meter-bar span.is-warn { background: var(--warn); }
 .wb-stop-text { display: flex; flex-direction: column; gap: 2px; }
 .wb-stop-text .crm-sub { font-weight: 400; }
+
+/* Facebook & Instagram */
+.so-channel { width: auto; height: 40px; font-size: 13.5px; flex-shrink: 0; }
+.so-av.is-messenger { background: #e7f0ff; color: #1d4ed8; }
+.so-av.is-instagram { background: #fde7f3; color: #9d174d; }
+.so-chan { display: inline-flex; align-items: center; font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+.so-chan.is-messenger { background: #e7f0ff; color: #1d4ed8; }
+.so-chan.is-instagram { background: #fde7f3; color: #9d174d; }
+.so-card { display: flex; flex-direction: column; gap: 14px; }
+.so-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.so-bar .crm-btn { display: inline-flex; align-items: center; gap: 6px; }
+.so-ext { display: inline-flex; align-items: center; gap: 5px; line-height: 1.4; margin-left: auto; }
+.so-ads { display: flex; flex-direction: column; gap: 16px; }
+.so-exp { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 0; background: none; border-radius: 8px; color: var(--text-2); cursor: pointer; }
+.so-exp:hover { background: var(--grey-soft); }
+.so-table td { vertical-align: top; }
+.so-answers td { background: var(--grey-soft); }
+.so-answers dl { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 20px; }
+.so-answers dt { font-size: 12px; color: var(--text-2); font-weight: 600; }
+.so-answers dd { margin: 2px 0 0; font-size: 14px; }
+.so-scopes { display: flex; flex-wrap: wrap; gap: 8px; }
+.so-scope { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--text-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; }
+.so-scope code { font-size: 12px; color: var(--text); }
+.so-scope.is-ok { border-color: #bfe6d3; background: var(--ok-soft); }
+.so-scope.is-bad { border-color: #f6c7c1; background: var(--bad-soft); }
+.wa-result.is-warn { background: var(--warn-soft); color: var(--warn-ink); border: 1px solid #f1d29a; }
+.wa-result code { font-size: 12.5px; }
+@media (max-width: 640px) { .so-ext { margin-left: 0; } }

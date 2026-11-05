@@ -37,6 +37,10 @@ builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<CallCycleService>();
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.WhatsAppOutbox>();
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.WaBillingService>();
+// Facebook & Instagram: Lead Ads, Page and Instagram messages, ad results.
+builder.Services.AddHttpClient("meta", c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.MetaGraph>();
+builder.Services.AddScoped<SeemanchalOutreach.Api.Services.MetaService>();
 builder.Services.Configure<SeemanchalOutreach.Api.Services.LeaveSettings>(builder.Configuration.GetSection("Leave"));
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.AttendanceService>();
 builder.Services.Configure<SeemanchalOutreach.Api.Services.AnalystSettings>(builder.Configuration.GetSection("Groq"));

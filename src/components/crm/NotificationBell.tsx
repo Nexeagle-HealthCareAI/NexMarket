@@ -38,6 +38,8 @@ export function crmHref(link?: string | null): string | null {
   if (k === 'chat' && id) return `/admin/chat?t=${encodeURIComponent(id)}`;
   if (k === 'lead' && id) return `/admin/leads?id=${encodeURIComponent(id)}`;
   if (k === 'wa' && id) return `/admin/whatsapp?c=${encodeURIComponent(id)}`;
+  if (k === 'social' && id === 'forms') return '/admin/social?tab=forms';
+  if (k === 'social' && id) return `/admin/social?c=${encodeURIComponent(id)}`;
   if (k === 'partner' && id) return `/admin/partners?id=${encodeURIComponent(id)}`;
   if (k === 'referral') return '/admin/pipeline';
   if (k === 'leave') return '/admin/leave';
@@ -392,17 +394,21 @@ function PopupCard({ p, onOpen, onRead, onClose, onHold, onRelease }: {
   // A patient's WhatsApp message: reply straight from the pop-up (WhatsApp allows it for 24 hours after they write).
   const leadId = p.kind === 'lead' && p.link?.startsWith('lead:') ? p.link.slice(5) : null;
   const waPhone = p.kind === 'lead' && p.link?.startsWith('wa:') ? p.link.slice(3) : null;
+  // A Facebook or Instagram message: reply from the pop-up too (allowed for 24 hours after they write).
+  const socialId = p.kind === 'lead' && p.link?.startsWith('social:') && p.link !== 'social:forms' ? p.link.slice(7) : null;
   const [replying, setReplying] = useState(false);
   const [text, setText] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [err, setErr] = useState('');
 
   const send = async () => {
-    if ((!chatId && !leadId && !waPhone) || !text.trim()) return;
+    if ((!chatId && !leadId && !waPhone && !socialId) || !text.trim()) return;
     setState('sending');
     try {
       if (leadId) {
         await crm.post(`/api/v1/leads/${leadId}/whatsapp`, { text: text.trim() });
+      } else if (socialId) {
+        await crm.post(`/api/v1/social/conversations/${encodeURIComponent(socialId)}/reply`, { text: text.trim() });
       } else if (waPhone) {
         await crm.post(`/api/v1/whatsapp/conversations/${encodeURIComponent(waPhone)}/text`, { text: text.trim() });
       } else {
@@ -411,7 +417,7 @@ function PopupCard({ p, onOpen, onRead, onClose, onHold, onRelease }: {
       }
       setState('sent');
       setTimeout(onRead, 900);
-    } catch (e) { setErr(leadId || waPhone ? friendlyError(e) : ''); setState('error'); }
+    } catch (e) { setErr(leadId || waPhone || socialId ? friendlyError(e) : ''); setState('error'); }
   };
 
   return (
@@ -428,7 +434,7 @@ function PopupCard({ p, onOpen, onRead, onClose, onHold, onRelease }: {
       </div>
       {replying ? (
         <form className="nt-reply" onSubmit={(e) => { e.preventDefault(); void send(); }}>
-          <input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={leadId || waPhone ? 'Reply on WhatsApp…' : 'Type a reply…'} maxLength={4000} disabled={state === 'sending' || state === 'sent'} />
+          <input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={socialId ? 'Reply…' : leadId || waPhone ? 'Reply on WhatsApp…' : 'Type a reply…'} maxLength={4000} disabled={state === 'sending' || state === 'sent'} />
           <button type="submit" className="crm-btn is-sm" disabled={!text.trim() || state === 'sending' || state === 'sent'}>
             {state === 'sending' ? 'Sending…' : state === 'sent' ? 'Sent ✓' : 'Send'}
           </button>
@@ -437,7 +443,7 @@ function PopupCard({ p, onOpen, onRead, onClose, onHold, onRelease }: {
       ) : (
         <div className="nt-pop-actions">
           <button type="button" className="nt-link" onClick={onOpen}>Open</button>
-          {(chatId || leadId || waPhone) && <button type="button" className="nt-link" onClick={() => { onHold(); setReplying(true); }}>Reply</button>}
+          {(chatId || leadId || waPhone || socialId) && <button type="button" className="nt-link" onClick={() => { onHold(); setReplying(true); }}>Reply</button>}
           <button type="button" className="nt-link is-muted" onClick={onRead}><Check size={14} aria-hidden /> Mark read</button>
         </div>
       )}

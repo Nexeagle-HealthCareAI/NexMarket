@@ -12,6 +12,7 @@ import {
   LayoutDashboard, PhoneCall, Inbox, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
   PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus, Tent,
+  AtSign,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
@@ -48,6 +49,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/admin/partners', label: 'Partners', page: 'partners', icon: Users, match: ['/admin/pipeline', '/admin/duplicates'] },
       { href: '/admin/camps', label: 'Health camps', page: 'camps', icon: Tent },
       { href: '/admin/whatsapp', label: 'WhatsApp', page: 'wa', icon: MessageCircle, match: ['/admin/broadcasts', '/admin/whatsapp-setup'] },
+      { href: '/admin/social', label: 'Facebook & Instagram', page: 'social', icon: AtSign },
     ],
   },
   {
@@ -208,13 +210,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const t = setInterval(() => { if (!document.hidden) refreshLeads(); }, 45000);
     return () => { clearTimeout(first); clearInterval(t); };
   }, [refreshLeads, pathname]);
+  // Unread Facebook and Instagram messages, for the badge on Facebook & Instagram.
+  const socialAllowed = canView(access, 'social');
+  const [socialUnread, setSocialUnread] = useState(0);
+  const refreshSocial = useCallback(() => {
+    if (!socialAllowed) return;
+    crm.get<{ unread: number }>('/api/v1/social/status').then((r) => setSocialUnread(r.unread)).catch(() => undefined);
+  }, [socialAllowed]);
+  useEffect(() => {
+    const first = setTimeout(refreshSocial, 0);
+    const t = setInterval(() => { if (!document.hidden) refreshSocial(); }, 60000);
+    return () => { clearTimeout(first); clearInterval(t); };
+  }, [refreshSocial, pathname]);
   const noop = useCallback(() => {}, []);
   // My notifications arrive on the same socket; the bell (and any page) listens for them on window.
   const onNotify = useCallback((n: LiveNotification) => {
     window.dispatchEvent(new CustomEvent(NOTIFY_EVENT, { detail: n }));
     if (n.kind === 'chat' || n.kind === 'team_chat') refreshUnread();
-    if (n.kind === 'lead') refreshLeads();
-  }, [refreshUnread, refreshLeads]);
+    if (n.kind === 'lead') { refreshLeads(); refreshSocial(); }
+  }, [refreshUnread, refreshLeads, refreshSocial]);
   useLiveEvents(noop, undefined, refreshUnread, onNotify);
   const current = allowedItems.find((i) => isActive(pathname, i));
   const phoneItems = allowedItems.filter((i) => i.phone).slice(0, 4);
@@ -280,6 +294,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <Icon size={18} strokeWidth={2} aria-hidden />
                   <span className="crm-nav-text">{item.label}</span>
                   {item.page === 'chat' && chatUnread > 0 && <span className="crm-nav-badge" aria-label={`${chatUnread} unread`}>{chatUnread > 99 ? '99+' : chatUnread}</span>}
+                  {item.page === 'social' && socialUnread > 0 && <span className="crm-nav-badge is-lead" aria-label={`${socialUnread} unread`}>{socialUnread > 99 ? '99+' : socialUnread}</span>}
                   {item.page === 'leads' && leadsUnread > 0 && <span className="crm-nav-badge is-lead" aria-label={`${leadsUnread} new`}>{leadsUnread > 99 ? '99+' : leadsUnread}</span>}
                 </Link>
               );

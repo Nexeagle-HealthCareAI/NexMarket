@@ -24,6 +24,82 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.AdLead", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AdId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AdName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AdsetName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CampaignId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CampaignName")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FieldsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FormId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FormName")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsOrganic")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("LeadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LeadgenId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PageId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Phone")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CampaignId");
+
+                    b.HasIndex("LeadId");
+
+                    b.HasIndex("LeadgenId")
+                        .IsUnique();
+
+                    b.HasIndex("ReceivedAt");
+
+                    b.ToTable("ad_leads", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.AgentRefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2149,6 +2225,118 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("role_permissions", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SocialConversation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssignedTo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("LastDirection")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastInboundAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastMessage")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("LastMessageAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LeadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PageId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Phone")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Unread")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Username")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Channel", "ExternalId")
+                        .IsUnique();
+
+                    b.HasIndex("LastMessageAt");
+
+                    b.HasIndex("LeadId");
+
+                    b.ToTable("social_conversations", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SocialMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExternalId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SentBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Text")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId", "CreatedAt");
+
+                    b.HasIndex("ExternalId");
+
+                    b.ToTable("social_messages", "marketing");
                 });
 
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SurveyEdit", b =>
