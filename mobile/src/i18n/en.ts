@@ -129,6 +129,7 @@ const en = {
   route: 'Route',
   checkIn: 'Check in',
   seeMoreStops: '+ {n} more stops',
+  seeMoreTasks: "+ {n} more tasks",
   reasonOverdue: 'Follow-up {n} days overdue',
   reasonDueToday: 'Follow-up due today',
   reasonNewPanchayat: 'New panchayat · no partner yet',

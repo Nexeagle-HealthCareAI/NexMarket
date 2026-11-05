@@ -123,6 +123,7 @@ const hinglish: Strings = {
   route: 'Rasta',
   checkIn: 'Check-in',
   seeMoreStops: '+ {n} aur stop',
+  seeMoreTasks: "+ {n} aur kaam",
   reasonOverdue: 'Follow-up {n} din se baaki',
   reasonDueToday: 'Follow-up aaj',
   reasonNewPanchayat: 'Nayi panchayat · koi saathi nahi',

@@ -20,6 +20,7 @@ export default function AddSheet() {
   const { t } = useSession();
   const insets = useSafeAreaInsets();
   const visit = useDb(() => q.activeVisit());
+  const onShift = useDb(() => !!q.activeShift());
   const [picking, setPicking] = useState<Pending>(null);
   const [issueFor, setIssueFor] = useState<Contact | null>(null);
   const [revisitFor, setRevisitFor] = useState<Contact | null>(null);
@@ -27,13 +28,16 @@ export default function AddSheet() {
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/today'));
 
+  // Most-used first. On shift but not yet checked in, checking in comes first: everything else is logged against it.
+  const checkIn = { icon: 'pin' as IconName, title: visit ? t('changePanchayat') : t('checkInPanchayat'), sub: visit ? t('nowIn', { name: place }) : t('visitSub'), color: C.info, onPress: () => router.replace('/checkin') };
   const items: { icon: IconName; title: string; sub: string; color: string; onPress: () => void }[] = [
-    { icon: 'hospital', title: t('referPatient'), sub: t('referPatientSub'), color: '#0f8a5f', onPress: () => router.replace('/refer') },
+    ...(onShift && !visit ? [checkIn] : []),
     { icon: 'users', title: t('addNewPerson'), sub: place ? t('addsTo', { name: place }) : t('newPartnerSub'), color: C.blue, onPress: () => router.replace({ pathname: '/partner-new', params: visit ? { panchayatId: visit.panchayatId } : {} }) },
+    { icon: 'hospital', title: t('referPatient'), sub: t('referPatientSub'), color: '#0f8a5f', onPress: () => router.replace('/refer') },
     { icon: 'check', title: t('revisitSomeone'), sub: t('revisitSomeoneSub'), color: C.ok, onPress: () => setPicking('revisit') },
-    { icon: 'pin', title: visit ? t('changePanchayat') : t('checkInPanchayat'), sub: visit ? t('nowIn', { name: place }) : t('visitSub'), color: C.info, onPress: () => router.replace('/checkin') },
-    { icon: 'chat', title: t('chatMessageOffice'), sub: t('chatMessageOfficeSub'), color: '#00a884', onPress: () => router.replace('/chat') },
+    ...(onShift && !visit ? [] : [checkIn]),
     { icon: 'camera', title: t('photo'), sub: t('photoSub'), color: C.purple, onPress: () => setPicking('photo') },
+    { icon: 'chat', title: t('chatMessageOffice'), sub: t('chatMessageOfficeSub'), color: '#00a884', onPress: () => router.replace('/chat') },
     { icon: 'flag', title: t('raiseIssue'), sub: t('raiseIssueSub'), color: C.bad, onPress: () => setPicking('issue') },
   ];
 

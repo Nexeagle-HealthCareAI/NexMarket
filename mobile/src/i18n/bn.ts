@@ -124,6 +124,7 @@ const bn: Strings = {
   route: 'রাস্তা',
   checkIn: 'চেক-ইন',
   seeMoreStops: '+ আরও {n}টি স্টপ',
+  seeMoreTasks: "+ আরও {n}টি কাজ",
   reasonOverdue: 'ফলো-আপ {n} দিন বাকি',
   reasonDueToday: 'ফলো-আপ আজ',
   reasonNewPanchayat: 'নতুন পঞ্চায়েত · কোনো সাথী নেই',

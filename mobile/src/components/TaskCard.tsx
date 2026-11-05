@@ -26,6 +26,7 @@ export function TasksSection() {
   const { t, lang } = useSession();
   const tasks = useDb(() => cachedTasks());
   const [openId, setOpenId] = useState<string | null>(null);
+  const [all, setAll] = useState(false);
   useEffect(() => { void refreshTasks().catch(() => undefined); }, []);
   const open = tasks.filter((x) => x.status === 'open')
     .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || (a.priority === 'high' ? -1 : 0) - (b.priority === 'high' ? -1 : 0));
@@ -40,7 +41,7 @@ export function TasksSection() {
         <T style={{ fontSize: 18, fontWeight: '800', flex: 1 }}>{t('tasksFromManager')}</T>
         {doneToday > 0 ? <Pill tone="ok" icon="check" label={t('tasksDoneToday', { n: doneToday })} /> : null}
       </View>
-      {open.map((task) => {
+      {(all ? open : open.slice(0, 3)).map((task) => {
         const due = dueLabel(t, lang, task);
         const where = [task.panchayats.map((p) => p.name).join(', '), task.partner?.name].filter(Boolean).join(' · ');
         return (
@@ -61,6 +62,11 @@ export function TasksSection() {
           </Pressable>
         );
       })}
+      {!all && open.length > 3 ? (
+        <Pressable onPress={() => setAll(true)} style={{ padding: 12, alignItems: 'center', backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border }}>
+          <T style={{ color: C.blueInk, fontWeight: '700' }}>{t('seeMoreTasks', { n: open.length - 3 })}</T>
+        </Pressable>
+      ) : null}
       <TaskSheet task={current} onClose={() => setOpenId(null)} />
     </View>
   );

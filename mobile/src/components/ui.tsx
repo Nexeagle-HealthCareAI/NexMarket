@@ -7,7 +7,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, usePathname } from 'expo-router';
 import { C, R } from '../theme';
 import { Icon, type IconName } from './Icon';
-import { useT } from '../lib/session';
+import { useDb, useT } from '../lib/session';
+import { db } from '../lib/db';
+import { ymd } from '../lib/util';
 
 // ─── Text ───
 export function T({ style, children, numberOfLines, onPress }: { style?: StyleProp<TextStyle>; children: React.ReactNode; numberOfLines?: number; onPress?: () => void }) {
@@ -247,9 +249,12 @@ export const BottomNav = React.memo(function BottomNav() {
     const b = Keyboard.addListener('keyboardDidHide', () => setKeyboard(false));
     return () => { a.remove(); b.remove(); };
   }, []);
+  // Follow-ups due today or overdue, on the Partners tab, so they're never out of sight.
+  const due = useDb(() => db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM contacts WHERE followUpDate IS NOT NULL AND followUpDate <= ?', ymd())?.n ?? 0);
   if (keyboard) return null;
   const item = (tab: (typeof TABS)[number]) => {
     const active = path.startsWith(tab.path);
+    const badge = tab.path === '/followups' ? due : 0;
     return (
       <Pressable key={tab.path} accessibilityRole="tab" accessibilityState={{ selected: active }} style={s.tab}
         onPress={() => { if (!active) router.navigate(tab.path as never); }}>
@@ -258,7 +263,16 @@ export const BottomNav = React.memo(function BottomNav() {
             backgroundColor: active ? C.purpleSoft : C.line, borderWidth: active ? 2 : 0, borderColor: C.purple }}>
             <Image source={VITA_TAB} style={{ width: 24, height: 30 }} resizeMode="contain" />
           </View>
-        ) : <Icon name={tab.icon} size={22} color={active ? C.blue : C.muted} />}
+        ) : (
+          <View>
+            <Icon name={tab.icon} size={22} color={active ? C.blue : C.muted} />
+            {badge > 0 ? (
+              <View style={{ position: 'absolute', top: -5, right: -10, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: C.bad, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.card }}>
+                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{badge > 99 ? '99+' : badge}</Text>
+              </View>
+            ) : null}
+          </View>
+        )}
         <T style={[s.tabText, active && { color: tab.icon === 'vita' ? C.purple : C.blue, fontWeight: '700' }]} numberOfLines={1}>{t(tab.key)}</T>
       </Pressable>
     );

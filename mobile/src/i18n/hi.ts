@@ -123,6 +123,7 @@ const hi: Strings = {
   route: 'रास्ता',
   checkIn: 'चेक-इन',
   seeMoreStops: '+ {n} और स्टॉप',
+  seeMoreTasks: "+ {n} और काम",
   reasonOverdue: 'फॉलो-अप {n} दिन से बाकी',
   reasonDueToday: 'फॉलो-अप आज',
   reasonNewPanchayat: 'नई पंचायत · कोई साथी नहीं',
