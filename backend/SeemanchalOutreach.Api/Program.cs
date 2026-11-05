@@ -56,6 +56,9 @@ builder.Services.AddSingleton<ILiveEvents, LiveEventPublisher>();
 builder.Services.AddHostedService<BroadcastDispatcher>();
 // Notifications: inbox + live CRM bell + phone push (Firebase, when Push:Fcm is configured).
 builder.Services.AddHttpClient("fcm", c => c.Timeout = TimeSpan.FromSeconds(20));
+// In-app navigation for agents: road routes from an OSRM server (Routing:BaseUrl; default the free OpenStreetMap one).
+builder.Services.AddHttpClient("routing", c => { c.Timeout = TimeSpan.FromSeconds(12); c.DefaultRequestHeaders.UserAgent.ParseAdd("NexMarket/1.0 (field agent navigation)"); });
+builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.RoutingService>();
 builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.FcmSender>();
 builder.Services.AddSingleton<INotifier, SeemanchalOutreach.Api.Services.Notifier>();
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.NotificationDispatcher>();

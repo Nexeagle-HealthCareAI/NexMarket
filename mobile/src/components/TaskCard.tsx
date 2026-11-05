@@ -6,7 +6,7 @@ import { celebrate } from './Vita';
 import { Icon } from './Icon';
 import { useDb, useSession } from '../lib/session';
 import { cachedTasks, refreshTasks, setTaskDone, type Task } from '../lib/tasks';
-import { openDirections } from '../lib/links';
+import { navigateTo } from '../lib/links';
 import { dayShort } from '../lib/format';
 import { daysFromToday } from '../lib/util';
 import type { TFn } from '../i18n';
@@ -117,7 +117,7 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose: () => void }
           </Pressable>
         ) : null}
         {firstPlace ? (
-          <Btn kind="secondary" icon="nav" label={t('route')} onPress={() => openDirections(firstPlace.lat!, firstPlace.lng!)} />
+          <Btn kind="secondary" icon="nav" label={t('route')} onPress={() => { onClose(); navigateTo({ lat: firstPlace.lat!, lng: firstPlace.lng!, name: firstPlace.name, panchayatId: firstPlace.id }); }} />
         ) : null}
         <Field label={t('taskNote')} value={note} onChangeText={setNote} placeholder={t('taskNoteHint')} multiline maxLength={1000} />
         <Btn kind="ok" icon="check" label={t('taskMarkDone')} onPress={done} />

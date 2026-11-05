@@ -6,7 +6,9 @@ export type IconName =
   | 'camera' | 'star' | 'back' | 'chevron' | 'close' | 'calendar' | 'clock' | 'upload' | 'alert' | 'note' | 'pin'
   | 'search' | 'refresh' | 'logout' | 'battery' | 'hospital' | 'flag' | 'cloudOff' | 'trash' | 'leave' | 'sparkle' | 'send'
   | 'chat' | 'attach' | 'smile' | 'tag' | 'doc' | 'image' | 'reply' | 'checks' | 'lock' | 'download' | 'pencil' | 'newChat' | 'bell' | 'bellOff' | 'settings'
-  | 'fingerprint' | 'eye' | 'eyeOff' | 'backspace' | 'bolt';
+  | 'fingerprint' | 'eye' | 'eyeOff' | 'backspace' | 'bolt'
+  | 'turnLeft' | 'turnRight' | 'slightLeft' | 'slightRight' | 'straight' | 'uturn' | 'roundabout' | 'arrive' | 'volume' | 'volumeOff'
+  | 'locate' | 'bike' | 'walk' | 'userPlus' | 'ambulance' | 'repeat' | 'route';
 
 /** Line icons drawn on a 24×24 grid, 2 px stroke, matching the design canvas. */
 export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { name: IconName; size?: number; color?: string; strokeWidth?: number }) {
@@ -66,6 +68,23 @@ export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { 
     case 'eye': body = <><Path {...p} d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><Circle {...p} cx={12} cy={12} r={3} /></>; break;
     case 'eyeOff': body = <><Path {...p} d="M3 3l18 18" /><Path {...p} d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.1 4M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6" /><Path {...p} d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>; break;
     case 'backspace': body = <><Path {...p} d="M21 5H8l-6 7 6 7h13a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z" /><Path {...p} d="M17 9l-6 6M11 9l6 6" /></>; break;
+    case 'turnLeft': body = <><Path {...p} d="M17 20v-7a4 4 0 0 0-4-4H5" /><Path {...p} d="M9 5L5 9l4 4" /></>; break;
+    case 'turnRight': body = <><Path {...p} d="M7 20v-7a4 4 0 0 1 4-4h8" /><Path {...p} d="M15 5l4 4-4 4" /></>; break;
+    case 'slightLeft': body = <><Path {...p} d="M15 21v-7L7 6" /><Path {...p} d="M7 12V6h6" /></>; break;
+    case 'slightRight': body = <><Path {...p} d="M9 21v-7l8-8" /><Path {...p} d="M17 12V6h-6" /></>; break;
+    case 'straight': body = <><Path {...p} d="M12 21V4" /><Path {...p} d="M6 10l6-6 6 6" /></>; break;
+    case 'uturn': body = <><Path {...p} d="M8 21V9a5 5 0 0 1 10 0v4" /><Path {...p} d="M14 10l4 4 4-4" /></>; break;
+    case 'roundabout': body = <><Circle {...p} cx={12} cy={10} r={4} /><Path {...p} d="M12 14v7" /><Path {...p} d="M15 7l4-4M15 3h4v4" /></>; break;
+    case 'arrive': body = <><Path {...p} d="M12 21c-4-3.6-7-7.2-7-11a7 7 0 0 1 14 0c0 3.8-3 7.4-7 11z" /><Path {...p} d="M9 10l2 2 4-4" /></>; break;
+    case 'volume': body = <><Path {...p} d="M4 9h4l5-4v14l-5-4H4z" /><Path {...p} d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" /></>; break;
+    case 'volumeOff': body = <><Path {...p} d="M4 9h4l5-4v14l-5-4H4z" /><Path {...p} d="M17 9l5 6M22 9l-5 6" /></>; break;
+    case 'locate': body = <><Circle {...p} cx={12} cy={12} r={7} /><Circle {...p} cx={12} cy={12} r={2.5} /><Path {...p} d="M12 2v3M12 19v3M2 12h3M19 12h3" /></>; break;
+    case 'bike': body = <><Circle {...p} cx={5.5} cy={16.5} r={3.5} /><Circle {...p} cx={18.5} cy={16.5} r={3.5} /><Path {...p} d="M5.5 16.5L9 9h6l3.5 7.5M9 9L7.5 6H5M15 9l-3 7.5h-6.5M15 9h3" /></>; break;
+    case 'walk': body = <><Circle {...p} cx={13} cy={4.5} r={2} /><Path {...p} d="M9 21l3-7 3 3v4M7 12l3-4 4 1 3 3M12 14l-1-5" /></>; break;
+    case 'userPlus': body = <><Circle {...p} cx={9} cy={8} r={4} /><Path {...p} d="M2 21c.8-4 3.6-6 7-6s6.2 2 7 6" /><Path {...p} d="M19 8v6M16 11h6" /></>; break;
+    case 'ambulance': body = <><Path {...p} d="M2 17V8a1 1 0 0 1 1-1h11v10" /><Path {...p} d="M14 10h4l4 4v3h-2" /><Circle {...p} cx={7} cy={18} r={2} /><Circle {...p} cx={17} cy={18} r={2} /><Path {...p} d="M9 18h6M2 17h3M8 9v4M6 11h4" /></>; break;
+    case 'repeat': body = <><Path {...p} d="M17 2l4 4-4 4" /><Path {...p} d="M3 12v-1a5 5 0 0 1 5-5h13" /><Path {...p} d="M7 22l-4-4 4-4" /><Path {...p} d="M21 12v1a5 5 0 0 1-5 5H3" /></>; break;
+    case 'route': body = <><Circle {...p} cx={6} cy={19} r={2.5} /><Circle {...p} cx={18} cy={5} r={2.5} /><Path {...p} d="M8.5 19H17a3.5 3.5 0 0 0 0-7H7a3.5 3.5 0 0 1 0-7h8.5" /></>; break;
   }
   return <Svg width={size} height={size} viewBox="0 0 24 24">{body}</Svg>;
 }
