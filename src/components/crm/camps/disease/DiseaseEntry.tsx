@@ -5,7 +5,7 @@ import { Copy, Download, FileUp, Plus, RefreshCw, Trash2, Undo2 } from 'lucide-r
 import { crm } from '@/lib/sync/api-client';
 import { Pager } from '@/components/crm/Pager';
 import { friendlyError } from '@/components/crm/ui';
-import { readCsv, readXlsx, excelDate } from './sheet';
+import { readCsv, readXlsx, excelDate, writeXlsx } from './sheet';
 import { COL_LABEL, COLS, errorBody, mapHeaders, type Col, type DiseaseOptions, type GridRow } from './shared';
 
 interface SaveRes { ok: boolean; batchId?: string; dryRun?: boolean; summary: Summary }
@@ -156,11 +156,20 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
   };
 
   const template = () => {
-    const lines = ['Date,Disease,Age,Gender,District,Block,Panchayat,Count',
-      `${options.today},High BP,52,F,Kishanganj,Bahadurganj,,3`, `${options.today},Joint pain,60+,M,Kishanganj,Bahadurganj,,1`, `${options.today},Fever,6-14,F,Araria,Forbesganj,,5`];
-    const url = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' }));
-    const a = document.createElement('a'); a.href = url; a.download = 'disease-data-template.csv'; a.click(); URL.revokeObjectURL(url);
+    // Real place names from this hospital's list, so the example rows pass the checks as they are.
+    const d = options.districts[0]; const b = d?.blocks[0]; const p = b?.panchayats[0];
+    const d2 = options.districts[1] ?? d; const b2 = d2?.blocks[0] ?? b;
+    const rows: (string | number)[][] = [
+      ['Date', 'Disease', 'Age', 'Gender', 'District', 'Block', 'Panchayat', 'Count'],
+      [options.today, 'High BP', 52, 'F', d?.name ?? '', b?.name ?? '', p?.name ?? '', 3],
+      [options.today, 'Diabetes', '45-59', 'M', d?.name ?? '', b?.name ?? '', '', 2],
+      [options.today, 'Fever', '6-14', 'F', d2?.name ?? '', b2?.name ?? '', '', 5],
+    ];
+    const url = URL.createObjectURL(writeXlsx(rows, 'Disease data', [12, 26, 10, 9, 16, 18, 20, 8]));
+    const a = document.createElement('a'); a.href = url; a.download = 'disease-data-template.xlsx'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+  const [dragging, setDragging] = useState(false);
+  const onDrop = (e: React.DragEvent) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) void onFile(f); };
 
   const save = async (dryRun: boolean) => {
     if (filled.length === 0) { setMsg({ tone: 'bad', text: 'Fill in at least one row.' }); return; }
@@ -210,7 +219,9 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
   });
 
   return (
-    <section className="crm-card dz-entry" aria-labelledby="dz-entry-h">
+    <section className={`crm-card dz-entry${dragging ? ' is-dragging' : ''}`} aria-labelledby="dz-entry-h"
+      onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragging(true); } }}
+      onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false); }} onDrop={onDrop}>
       <div className="crm-card-head" style={{ flexWrap: 'wrap', gap: 10 }}>
         <div style={{ flex: '1 1 320px' }}>
           <h2 id="dz-entry-h" className="crm-h2">Add disease data</h2>
@@ -218,11 +229,18 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
             One row per group of people with the same disease, age, gender and place. No names. Paste straight from Excel, or upload a file.
           </span>
         </div>
-        <button type="button" className="crm-btn is-ghost is-sm" onClick={template}><Download size={15} aria-hidden /> Template</button>
-        <label className="crm-btn is-secondary is-sm" style={{ cursor: 'pointer' }}>
-          <FileUp size={15} aria-hidden /> Upload Excel or CSV
-          <input ref={fileRef} type="file" accept=".xlsx,.csv,.txt,.xls" className="crm-sr" onChange={(e) => void onFile(e.target.files?.[0])} />
+      </div>
+
+      <div className="dz-upload">
+        <label className="dz-upload-drop">
+          <input ref={fileRef} type="file" accept=".xlsx,.csv,.txt,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" className="crm-sr" onChange={(e) => void onFile(e.target.files?.[0])} />
+          <span className="dz-upload-icon"><FileUp size={22} aria-hidden /></span>
+          <span>
+            <strong>Upload an Excel sheet</strong> <span className="crm-sub">or drop it here</span>
+            <span className="crm-cell-sub" style={{ display: 'block' }}>Excel (.xlsx) or CSV, first sheet, up to {options.maxRows.toLocaleString('en-IN')} rows. Columns: Date, Disease, Age, Gender, District, Block, Panchayat, Count. It loads into the grid below so you can check it before saving.</span>
+          </span>
         </label>
+        <button type="button" className="crm-btn is-secondary is-sm" onClick={template}><Download size={15} aria-hidden /> Excel template</button>
       </div>
 
       <div className="crm-chips" style={{ alignItems: 'center' }}>

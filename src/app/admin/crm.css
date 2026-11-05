@@ -1945,3 +1945,8 @@ button.pp-chip { cursor: pointer; }
 .dz-pick { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .dz-grid td .dz-pick input, .dz-grid th.dz-n input { width: 16px; height: 16px; padding: 0; accent-color: var(--accent); }
 .dz-grid tr.is-picked td { background: #f0f6ff; }
+.dz-upload { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.dz-upload-drop { flex: 1 1 420px; display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 2px dashed #9cc2ec; border-radius: 14px; background: #f5f9ff; cursor: pointer; }
+.dz-upload-drop:hover, .dz-upload-drop:focus-within { border-color: var(--accent); background: var(--accent-tint); }
+.dz-upload-icon { width: 46px; height: 46px; border-radius: 12px; background: #1d6f42; color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
+.dz-entry.is-dragging { outline: 3px dashed var(--accent); outline-offset: -6px; background: var(--accent-tint); }
