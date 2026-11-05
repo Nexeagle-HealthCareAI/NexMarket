@@ -1938,3 +1938,15 @@ button.pp-chip { cursor: pointer; }
 .rm-partner-nums .is-ok { color: var(--ok-ink, #0d6b3a); }
 .rm-partner-nums .is-warn { color: var(--warn-ink, #8a4b00); }
 @media (max-width: 640px) { .rm-partner-nums { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.dz-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--accent-tint); border: 1px solid var(--border); }
+.dz-bulk-title { font-size: 13.5px; margin-right: 4px; }
+.dz-bulk .crm-select, .dz-bulk .crm-input { width: auto; min-width: 150px; height: 36px; flex: 0 1 190px; }
+.dz-grid .dz-n { width: 64px; }
+.dz-pick { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.dz-grid td .dz-pick input, .dz-grid th.dz-n input { width: 16px; height: 16px; padding: 0; accent-color: var(--accent); }
+.dz-grid tr.is-picked td { background: #f0f6ff; }
+.dz-upload { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.dz-upload-drop { flex: 1 1 420px; display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 2px dashed #9cc2ec; border-radius: 14px; background: #f5f9ff; cursor: pointer; }
+.dz-upload-drop:hover, .dz-upload-drop:focus-within { border-color: var(--accent); background: var(--accent-tint); }
+.dz-upload-icon { width: 46px; height: 46px; border-radius: 12px; background: #1d6f42; color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
+.dz-entry.is-dragging { outline: 3px dashed var(--accent); outline-offset: -6px; background: var(--accent-tint); }

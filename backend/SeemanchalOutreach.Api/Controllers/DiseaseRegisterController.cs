@@ -220,6 +220,18 @@ namespace SeemanchalOutreach.Api.Controllers
             return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray(), "text/csv", $"disease-register-{TodayIst:yyyy-MM-dd}.csv");
         }
 
+        /// <summary>Brings every camp's patient register into Disease data (counts only). Safe to run again: rows are updated in place.</summary>
+        [HttpPost("sync-camps")]
+        public async Task<IActionResult> SyncCamps(CancellationToken ct)
+        {
+            var ids = await _db.CampPatients.AsNoTracking().Where(p => p.Status == "attended").Select(p => p.CampId).Distinct().ToListAsync(ct);
+            var stale = await _db.DiseaseRecords.AsNoTracking().Where(r => r.Source == "camp" && r.Status == "active" && r.CampId != null).Select(r => r.CampId!.Value).Distinct().ToListAsync(ct);
+            foreach (var id in ids.Union(stale)) await DiseaseRegister.SyncCampAsync(_db, id, ct);
+            await _db.SaveChangesAsync(ct);
+            var people = await _db.CampPatients.CountAsync(p => p.Status == "attended", ct);
+            return Ok(new { camps = ids.Count, people });
+        }
+
         /// <summary>Takes a wrong row out of the counts. It is kept, marked removed, and can be seen in the change history.</summary>
         [HttpPost("rows/{id:guid}/remove")]
         public async Task<IActionResult> Remove(Guid id, CancellationToken ct)
@@ -227,6 +239,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var r = await _db.DiseaseRecords.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (r == null) return NotFound(new { message = "Row not found." });
             if (r.Status != "active") return Ok(new { ok = true });
+            if (r.Source == "camp") return BadRequest(new { message = "This row comes from the camp's patient register. Correct the person there and it updates here." });
             r.Status = "removed"; r.RemovedBy = User.AgentIdOf(); r.RemovedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
             return Ok(new { ok = true });

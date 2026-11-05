@@ -207,5 +207,65 @@ namespace SeemanchalOutreach.Api.Services
                 panchayats = pan,
             };
         }
+
+        /// <summary>
+        /// Keeps Disease data in step with one camp's patient register: everyone marked attended is counted by what the
+        /// doctor suspected (or, if nothing was ticked, by their symptoms), with their age group and gender, at the camp's
+        /// place and date. Only counts are written, never names. Rows are updated in place, so saving again changes nothing
+        /// twice; rows that no longer apply are taken out of the counts. The caller saves.
+        /// </summary>
+        public static async Task SyncCampAsync(IMarketingDbContext db, Guid campId, CancellationToken ct)
+        {
+            var camp = await db.HealthCamps.AsNoTracking().FirstOrDefaultAsync(c => c.Id == campId, ct);
+            var existing = await db.DiseaseRecords.Where(r => r.CampId == campId && r.Source == "camp" && r.Status == "active").ToListAsync(ct);
+            var want = new Dictionary<(string Key, string Age, string Sex), (string? Code, string Disease, int N)>();
+            if (camp != null && camp.Status != "cancelled")
+            {
+                var people = await db.CampPatients.AsNoTracking().Where(p => p.CampId == campId && p.Status == "attended")
+                    .Select(p => new { p.Age, p.Sex, p.Conditions, p.Symptoms }).ToListAsync(ct);
+                foreach (var p in people)
+                {
+                    var age = p.Age is >= 0 and <= 120 ? BandFor(p.Age.Value) : "unknown";
+                    var sex = p.Sex is "M" or "F" or "O" ? p.Sex : "U";
+                    var items = CampBook.Codes(p.Conditions).Where(c => c != "other").Select(c => ((string?)c, CampBook.ConditionLabel(c))).ToList();
+                    if (items.Count == 0)
+                        items = CampBook.Codes(p.Symptoms).Select(s => { var label = CampBook.SymptomLabel(s); return (MatchCondition(label), label); }).ToList();
+                    foreach (var (code, label) in items.DistinctBy(i => i.Item1 ?? i.Item2))
+                    {
+                        var k = (code ?? "txt:" + label.ToLowerInvariant(), age, sex);
+                        var cur = want.GetValueOrDefault(k, (code, code != null ? CampBook.ConditionLabel(code) : label, 0));
+                        want[k] = (cur.Item1, cur.Item2, cur.Item3 + 1);
+                    }
+                }
+            }
+
+            string? district = camp?.District, block = camp?.Block, pid = camp?.PanchayatId;
+            if (camp != null && pid != null)
+            {
+                var pl = await db.Panchayats.AsNoTracking().Where(x => x.PanchayatId == pid).Select(x => new { x.Block, x.District }).FirstOrDefaultAsync(ct);
+                if (pl != null) { block ??= pl.Block; district ??= pl.District; }
+            }
+            var now = DateTime.UtcNow;
+            var seen = new HashSet<Guid>();
+            foreach (var (k, v) in want)
+            {
+                var row = existing.FirstOrDefault(r => KeyOf(r) == k.Key && r.AgeBand == k.Age && r.Sex == k.Sex);
+                if (row == null)
+                {
+                    db.DiseaseRecords.Add(new DiseaseRecord
+                    {
+                        Date = camp!.Date, ConditionCode = v.Code, Disease = v.Disease, AgeBand = k.Age, Sex = k.Sex,
+                        District = district, Block = block, PanchayatId = pid, Count = v.N, CampId = campId, Source = "camp", BatchId = campId, CreatedBy = "camp",
+                    });
+                    continue;
+                }
+                seen.Add(row.Id);
+                row.Count = v.N; row.Date = camp!.Date; row.District = district; row.Block = block; row.PanchayatId = pid;
+            }
+            foreach (var r in existing.Where(r => !seen.Contains(r.Id)))
+            {
+                r.Status = "removed"; r.RemovedBy = "camp"; r.RemovedAt = now;
+            }
+        }
     }
 }

@@ -1,11 +1,11 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { Copy, Download, FileUp, Plus, Trash2, Undo2 } from 'lucide-react';
+import { Copy, Download, FileUp, Plus, RefreshCw, Trash2, Undo2 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Pager } from '@/components/crm/Pager';
 import { friendlyError } from '@/components/crm/ui';
-import { readCsv, readXlsx, excelDate } from './sheet';
+import { readCsv, readXlsx, excelDate, writeXlsx } from './sheet';
 import { COL_LABEL, COLS, errorBody, mapHeaders, type Col, type DiseaseOptions, type GridRow } from './shared';
 
 interface SaveRes { ok: boolean; batchId?: string; dryRun?: boolean; summary: Summary }
@@ -63,9 +63,40 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
     setRows((rs) => (rs.length === 1 ? [blank()] : rs.filter((_, k) => k !== i)));
     setErrors((e) => { const n: typeof e = {}; for (const [k, v] of Object.entries(e)) { const r = Number(k); if (r < i) n[r] = v; else if (r > i) n[r - 1] = v; } return n; });
   };
+  // ─── Setting the place for many rows at once ───
+  const [picked, setPicked] = useState<Set<number>>(() => new Set());
+  const [bulk, setBulk] = useState({ district: '', block: '', panchayat: '' });
+  const togglePick = (key: number) => setPicked((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  const allPicked = rows.length > 0 && rows.every((r) => picked.has(r.key));
+  const applyBulk = (onlyEmpty: boolean) => {
+    const district = bulk.district || (bulk.block ? options.districts.find((d) => d.blocks.some((b) => b.name === bulk.block))?.name ?? '' : '');
+    if (!district && !bulk.block && !bulk.panchayat.trim()) { setMsg({ tone: 'bad', text: 'Choose a district, block or panchayat to set.' }); return; }
+    const target = (r: GridRow) => (picked.size === 0 || picked.has(r.key));
+    let n = 0;
+    const touched: number[] = [];
+    const updated = rows.map((r, i) => {
+      if (!target(r)) return r;
+      const next = { ...r };
+      // A new district or block makes the old panchayat meaningless, unless only empty cells are being filled.
+      const placeChanges = !onlyEmpty && ((district && district !== r.district) || (bulk.block && bulk.block !== r.block));
+      if (district && (!onlyEmpty || !r.district)) next.district = district;
+      if (bulk.block && (!onlyEmpty || !r.block)) next.block = bulk.block;
+      if (bulk.panchayat.trim() && (!onlyEmpty || !r.panchayat)) next.panchayat = bulk.panchayat.trim();
+      else if (placeChanges && !bulk.panchayat.trim()) next.panchayat = '';
+      if (next.district !== r.district || next.block !== r.block || next.panchayat !== r.panchayat) { n++; touched.push(i); }
+      return next;
+    });
+    setRows(updated);
+    setErrors((e) => { const out = { ...e }; for (const i of touched) { if (!out[i]) continue; const f = { ...out[i] }; delete f.district; delete f.block; delete f.panchayat; if (Object.keys(f).length) out[i] = f; else delete out[i]; } return out; });
+    setMsg({ tone: 'info', text: n ? `Place set on ${n} row${n === 1 ? '' : 's'}.` : 'Nothing to change.' });
+  };
+  const bulkBlocks = blocksOf(bulk.district);
+  const bulkDistrict = bulk.district || options.districts.find((d) => d.blocks.some((b) => b.name === bulk.block))?.name || '';
+  const bulkPanchayats = bulk.block ? panchayatsOf(bulkDistrict, bulk.block) : [];
+
   const reset = (keep?: GridRow) => {
     setRows(Array.from({ length: 5 }, () => blank(keep ? { date: keep.date, district: keep.district, block: keep.block } : undefined)));
-    setErrors({}); setPage(1); setSource('grid'); setFileNote(null);
+    setErrors({}); setPage(1); setSource('grid'); setFileNote(null); setPicked(new Set());
   };
 
   /** A block of cells pasted from Excel or Google Sheets fills the grid from this cell, adding rows as needed. */
@@ -125,11 +156,20 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
   };
 
   const template = () => {
-    const lines = ['Date,Disease,Age,Gender,District,Block,Panchayat,Count',
-      `${options.today},High BP,52,F,Kishanganj,Bahadurganj,,3`, `${options.today},Joint pain,60+,M,Kishanganj,Bahadurganj,,1`, `${options.today},Fever,6-14,F,Araria,Forbesganj,,5`];
-    const url = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' }));
-    const a = document.createElement('a'); a.href = url; a.download = 'disease-data-template.csv'; a.click(); URL.revokeObjectURL(url);
+    // Real place names from this hospital's list, so the example rows pass the checks as they are.
+    const d = options.districts[0]; const b = d?.blocks[0]; const p = b?.panchayats[0];
+    const d2 = options.districts[1] ?? d; const b2 = d2?.blocks[0] ?? b;
+    const rows: (string | number)[][] = [
+      ['Date', 'Disease', 'Age', 'Gender', 'District', 'Block', 'Panchayat', 'Count'],
+      [options.today, 'High BP', 52, 'F', d?.name ?? '', b?.name ?? '', p?.name ?? '', 3],
+      [options.today, 'Diabetes', '45-59', 'M', d?.name ?? '', b?.name ?? '', '', 2],
+      [options.today, 'Fever', '6-14', 'F', d2?.name ?? '', b2?.name ?? '', '', 5],
+    ];
+    const url = URL.createObjectURL(writeXlsx(rows, 'Disease data', [12, 26, 10, 9, 16, 18, 20, 8]));
+    const a = document.createElement('a'); a.href = url; a.download = 'disease-data-template.xlsx'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+  const [dragging, setDragging] = useState(false);
+  const onDrop = (e: React.DragEvent) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) void onFile(f); };
 
   const save = async (dryRun: boolean) => {
     if (filled.length === 0) { setMsg({ tone: 'bad', text: 'Fill in at least one row.' }); return; }
@@ -179,7 +219,9 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
   });
 
   return (
-    <section className="crm-card dz-entry" aria-labelledby="dz-entry-h">
+    <section className={`crm-card dz-entry${dragging ? ' is-dragging' : ''}`} aria-labelledby="dz-entry-h"
+      onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragging(true); } }}
+      onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false); }} onDrop={onDrop}>
       <div className="crm-card-head" style={{ flexWrap: 'wrap', gap: 10 }}>
         <div style={{ flex: '1 1 320px' }}>
           <h2 id="dz-entry-h" className="crm-h2">Add disease data</h2>
@@ -187,11 +229,18 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
             One row per group of people with the same disease, age, gender and place. No names. Paste straight from Excel, or upload a file.
           </span>
         </div>
-        <button type="button" className="crm-btn is-ghost is-sm" onClick={template}><Download size={15} aria-hidden /> Template</button>
-        <label className="crm-btn is-secondary is-sm" style={{ cursor: 'pointer' }}>
-          <FileUp size={15} aria-hidden /> Upload Excel or CSV
-          <input ref={fileRef} type="file" accept=".xlsx,.csv,.txt,.xls" className="crm-sr" onChange={(e) => void onFile(e.target.files?.[0])} />
+      </div>
+
+      <div className="dz-upload">
+        <label className="dz-upload-drop">
+          <input ref={fileRef} type="file" accept=".xlsx,.csv,.txt,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" className="crm-sr" onChange={(e) => void onFile(e.target.files?.[0])} />
+          <span className="dz-upload-icon"><FileUp size={22} aria-hidden /></span>
+          <span>
+            <strong>Upload an Excel sheet</strong> <span className="crm-sub">or drop it here</span>
+            <span className="crm-cell-sub" style={{ display: 'block' }}>Excel (.xlsx) or CSV, first sheet, up to {options.maxRows.toLocaleString('en-IN')} rows. Columns: Date, Disease, Age, Gender, District, Block, Panchayat, Count. It loads into the grid below so you can check it before saving.</span>
+          </span>
         </label>
+        <button type="button" className="crm-btn is-secondary is-sm" onClick={template}><Download size={15} aria-hidden /> Excel template</button>
       </div>
 
       <div className="crm-chips" style={{ alignItems: 'center' }}>
@@ -201,7 +250,9 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
           {options.camps.map((c) => <option key={c.id} value={c.id}>{c.title} · {c.date}</option>)}
         </select>
         {fileNote && <span className="crm-note dz-file">{fileNote}</span>}
+        <SyncCamps toast={toast} onDone={onSaved} />
       </div>
+      <span className="crm-cell-sub">People registered in a camp&apos;s patient register are counted here automatically (by what the doctor ticked, their age, gender and the camp&apos;s place). Only add people who weren&apos;t registered there, so nobody is counted twice.</span>
 
       {msg && (
         <div className={`crm-note dz-msg is-${msg.tone}`} role={msg.tone === 'bad' ? 'alert' : 'status'}>
@@ -210,11 +261,34 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
         </div>
       )}
 
+      <div className="dz-bulk" role="group" aria-label="Set the place for many rows">
+        <strong className="dz-bulk-title">Set place for {picked.size ? `${picked.size} ticked row${picked.size === 1 ? '' : 's'}` : 'all rows'}</strong>
+        <label className="crm-sr" htmlFor="dz-bd">District</label>
+        <select id="dz-bd" className="crm-select" value={bulk.district} onChange={(e) => setBulk({ district: e.target.value, block: bulkBlocks.length && e.target.value && !blocksOf(e.target.value).some((b) => b.name === bulk.block) ? '' : bulk.block, panchayat: '' })}>
+          <option value="">District</option>
+          {options.districts.map((d) => <option key={d.name}>{d.name}</option>)}
+        </select>
+        <label className="crm-sr" htmlFor="dz-bb">Block</label>
+        <select id="dz-bb" className="crm-select" value={bulk.block} onChange={(e) => setBulk({ ...bulk, block: e.target.value, panchayat: '' })}>
+          <option value="">Block</option>
+          {bulkBlocks.map((b) => <option key={b.name}>{b.name}</option>)}
+        </select>
+        <label className="crm-sr" htmlFor="dz-bp">Panchayat</label>
+        <input id="dz-bp" className="crm-input" list="dz-bulk-p" value={bulk.panchayat} onChange={(e) => setBulk({ ...bulk, panchayat: e.target.value })}
+          placeholder={bulk.block ? 'Panchayat (optional)' : 'Pick a block first'} disabled={!bulk.block} maxLength={80} />
+        <datalist id="dz-bulk-p">{bulkPanchayats.map((p) => <option key={p.id} value={p.name} />)}</datalist>
+        <button type="button" className="crm-btn is-sm" onClick={() => applyBulk(false)}>Apply to {picked.size ? 'ticked' : 'all'}</button>
+        <button type="button" className="crm-btn is-secondary is-sm" onClick={() => applyBulk(true)} title="Only rows where the place is still blank">Fill blanks only</button>
+        {picked.size > 0 && <button type="button" className="crm-btn is-ghost is-sm" onClick={() => setPicked(new Set())}>Untick all</button>}
+      </div>
+
       <div className="dz-grid-wrap">
         <table className="dz-grid">
           <thead>
             <tr>
-              <th scope="col" className="dz-n">#</th>
+              <th scope="col" className="dz-n">
+                <input type="checkbox" checked={allPicked} aria-label="Tick all rows" onChange={() => setPicked(allPicked ? new Set() : new Set(rows.map((r) => r.key)))} />
+              </th>
               {COLS.map((c) => <th key={c} scope="col" className={`dz-c-${c}`}>{COL_LABEL[c]}</th>)}
               <th scope="col"><span className="crm-sr">Row actions</span></th>
             </tr>
@@ -224,8 +298,10 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
               const i = (page - 1) * PAGE + k;
               const blockKey = `${r.district}|${r.block}`;
               return (
-                <tr key={r.key} className={errors[i] ? 'has-err' : undefined}>
-                  <td className="dz-n">{i + 1}</td>
+                <tr key={r.key} className={[errors[i] ? 'has-err' : '', picked.has(r.key) ? 'is-picked' : ''].filter(Boolean).join(' ') || undefined}>
+                  <td className="dz-n">
+                    <label className="dz-pick"><input type="checkbox" checked={picked.has(r.key)} onChange={() => togglePick(r.key)} aria-label={`Tick row ${i + 1}`} /><span>{i + 1}</span></label>
+                  </td>
                   <td><input type="date" value={r.date} max={options.today} onChange={(e) => set(i, 'date', e.target.value)} {...inputProps(i, 'date')} /></td>
                   <td><input value={r.disease} list="dz-diseases" maxLength={80} placeholder="e.g. High BP" onChange={(e) => set(i, 'disease', e.target.value)} {...inputProps(i, 'disease')} /></td>
                   <td><input value={r.age} placeholder="42 or 30-44" maxLength={12} onChange={(e) => set(i, 'age', e.target.value)} {...inputProps(i, 'age')} /></td>
@@ -277,4 +353,18 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
       </div>
     </section>
   );
+}
+
+/** Brings every camp's patient register into Disease data. Needed once for camps held before this existed; later camps update by themselves. */
+function SyncCamps({ toast, onDone }: { toast: (m: string) => void; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await crm.post<{ camps: number; people: number }>('/api/v1/camps/disease/sync-camps', {});
+      toast(`Camp registers brought in: ${r.people.toLocaleString('en-IN')} people from ${r.camps} camp${r.camps === 1 ? '' : 's'}.`);
+      onDone();
+    } catch (e) { toast(friendlyError(e)); } finally { setBusy(false); }
+  };
+  return <button type="button" className="crm-btn is-ghost is-sm" style={{ marginLeft: 'auto' }} onClick={() => void run()} disabled={busy}><RefreshCw size={15} aria-hidden /> {busy ? 'Bringing in…' : 'Bring in camp registers'}</button>;
 }
