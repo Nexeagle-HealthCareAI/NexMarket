@@ -28,6 +28,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<CallCycle> CallCycles => Set<CallCycle>();
         public DbSet<CallLog> CallLogs => Set<CallLog>();
         public DbSet<PartnerPayment> PartnerPayments => Set<PartnerPayment>();
+        public DbSet<ReferralBill> ReferralBills => Set<ReferralBill>();
+        public DbSet<AgentIncentive> AgentIncentives => Set<AgentIncentive>();
         public DbSet<Department> Departments => Set<Department>();
         public DbSet<Doctor> Doctors => Set<Doctor>();
         public DbSet<ReferralStatusEntry> ReferralStatusEntries => Set<ReferralStatusEntry>();
@@ -208,6 +210,25 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Amount).HasPrecision(12, 2);
                 entity.HasIndex(e => e.ContactClientId);
+                entity.HasIndex(e => e.Status);
+                entity.HasIndex(e => e.ReferralClientId);
+            });
+            modelBuilder.Entity<ReferralBill>(entity =>
+            {
+                entity.ToTable("referral_bills");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Amount).HasPrecision(12, 2);
+                entity.Property(e => e.Collected).HasPrecision(12, 2);
+                entity.HasIndex(e => e.ReferralClientId);
+                entity.HasIndex(e => e.BilledOn);
+            });
+            modelBuilder.Entity<AgentIncentive>(entity =>
+            {
+                entity.ToTable("agent_incentives");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Amount).HasPrecision(12, 2);
+                entity.HasIndex(e => e.AgentId);
+                entity.HasIndex(e => e.ReferralClientId);
                 entity.HasIndex(e => e.Status);
             });
 

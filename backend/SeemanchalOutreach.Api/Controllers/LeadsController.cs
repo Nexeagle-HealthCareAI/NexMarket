@@ -372,9 +372,11 @@ namespace SeemanchalOutreach.Api.Controllers
                 _db.LeadActivities.Add(new LeadActivity { LeadId = l.Id, Kind = "note", By = me, CreatedAt = now.AddMilliseconds(2), Text = $"Added to the Referral desk as {partner.Name}'s patient" });
             }
             if (r.Status == stage) return;
+            bool hadArrived = r.ArrivedAt != null, hadAdmitted = r.AdmittedAt != null;
             r.Status = stage;
             if (stage is "arrived" or "admitted" && r.ArrivedAt == null) r.ArrivedAt = now;
             if (stage == "admitted" && r.AdmittedAt == null) r.AdmittedAt = now;
+            await PatientMoney.ApplyRuleAsync(_db, _settings, r, !hadArrived && r.ArrivedAt != null, !hadAdmitted && r.AdmittedAt != null, me, ct);
             r.UpdatedAt = now;
             _db.ReferralStatusEntries.Add(new ReferralStatusEntry { ReferralClientId = refId, Status = stage, ChangedBy = me, ChangedAt = now, Note = "From the leads inbox" });
             if (!string.IsNullOrEmpty(r.AgentId))

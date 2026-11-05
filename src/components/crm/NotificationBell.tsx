@@ -42,6 +42,7 @@ export function crmHref(link?: string | null): string | null {
   if (k === 'social' && id) return `/admin/social?c=${encodeURIComponent(id)}`;
   if (k === 'partner' && id) return `/admin/partners?id=${encodeURIComponent(id)}`;
   if (k === 'referral') return id ? `/admin/referrals?r=${encodeURIComponent(id)}` : '/admin/referrals';
+  if (k === 'money') return '/admin/payments';
   if (k === 'leave') return '/admin/leave';
   if (k === 'assignments') return '/admin/assignments';
   if (k === 'tasks') return '/admin/dashboard';

@@ -1774,3 +1774,30 @@ button.ch-fail { border: 0; background: #fff; color: #b42318; border-radius: 999
   .crm .rf-howto { flex-direction: column; }
   .crm .rf-count { margin-left: 0; width: 100%; }
 }
+
+/* ─── Money for a referred patient ─── */
+.crm .rm { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+.crm .rm-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.crm .rm-head h3 { font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.crm .rm-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.crm .rm-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.crm .rm-total { background: var(--bg); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.crm .rm-total span { font-size: 12px; color: var(--text-2); }
+.crm .rm-total strong { font-size: 18px; font-weight: 800; }
+.crm .rm-total strong.is-ok { color: var(--ok-ink); }
+.crm .rm-total strong.is-warn { color: var(--warn-ink); }
+.crm .rm-total em { font-style: normal; font-size: 11.5px; color: var(--text-2); }
+.crm .rm-sub { font-size: 13px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; margin: 6px 0 0; }
+.crm .rm-empty { margin: 0; font-size: 13px; }
+.crm .rm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.crm .rm-list li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.crm .rm-list li.is-void { opacity: .6; }
+.crm .rm-list li.is-void strong { text-decoration: line-through; }
+.crm .rm-main { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.crm .rm-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+.crm .rm-link { border: 0; background: transparent; padding: 0; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent-ink); cursor: pointer; }
+.crm .rm-inline { width: 100%; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; background: var(--bg); border-radius: 10px; padding: 10px; }
+.crm .rm-inline .crm-field { flex: 1; min-width: 200px; }
+.crm .rm-form { display: flex; flex-direction: column; gap: 10px; background: var(--accent-tint); border: 1px solid #cfe3f8; border-radius: 12px; padding: 12px; }
+.crm .rm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+@media (max-width: 640px) { .crm .rm-side { align-items: flex-start; text-align: left; } .crm .rm-grid .crm-field[style] { grid-column: auto !important; } }
