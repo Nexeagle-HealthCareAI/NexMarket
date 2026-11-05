@@ -185,6 +185,7 @@ export function openLink(link?: string | null) {
   if (k === 'chat' && id) router.push({ pathname: '/chat/[id]', params: { id } });
   else if (k === 'partner' && id && q.contact(id)) router.push({ pathname: '/partner/[id]', params: { id } });
   else if (k === 'referral') router.push('/patients');
+  else if (k === 'money') router.push('/money');
   else if (k === 'leave') router.push('/leave');
   else if (k === 'assignments') router.push('/shift');
   else if (k === 'tasks') router.push('/today');

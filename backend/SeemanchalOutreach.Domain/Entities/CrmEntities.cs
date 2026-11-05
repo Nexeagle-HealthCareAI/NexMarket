@@ -61,6 +61,55 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? PaidBy { get; set; }
         public DateTime? PaidAt { get; set; }
         public string? PaymentReference { get; set; }
+        /// <summary>The referred patient this service was for (travel with them, ambulance…), when it was for one.</summary>
+        public string? ReferralClientId { get; set; }
+    }
+
+    /// <summary>
+    /// One amount the hospital billed a referred patient (OPD, admission, procedure, pharmacy, lab…) and what was
+    /// collected, entered by the referral desk. Never deleted: a wrong entry is voided with a reason.
+    /// </summary>
+    public class ReferralBill
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string ReferralClientId { get; set; } = string.Empty;
+        public string Kind { get; set; } = "ipd";            // opd | ipd | procedure | pharmacy | lab | other
+        public decimal Amount { get; set; }                  // billed
+        public decimal Collected { get; set; }               // received so far
+        public string Scheme { get; set; } = "cash";         // cash | ayushman | insurance | govt_scheme | other
+        public string? BillNumber { get; set; }
+        public string? Note { get; set; }
+        public DateTime BilledOn { get; set; } = DateTime.UtcNow;
+        public string Status { get; set; } = "active";       // active | void
+        public string? VoidReason { get; set; }
+        public string? VoidedBy { get; set; }
+        public DateTime? VoidedAt { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// What a field agent (an employee) earns for a referred patient, e.g. a fixed amount when the patient is admitted.
+    /// Waits for an admin's approval, then is marked paid with a reference, like partner payments.
+    /// </summary>
+    public class AgentIncentive
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        public string? ReferralClientId { get; set; }
+        public decimal Amount { get; set; }
+        public string Reason { get; set; } = string.Empty;
+        public bool Auto { get; set; }                        // added by the incentive rule, not by hand
+        public string Status { get; set; } = "pending_approval"; // pending_approval | approved | paid | rejected
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string? ApprovedBy { get; set; }
+        public DateTime? ApprovedAt { get; set; }
+        public string? PaidBy { get; set; }
+        public DateTime? PaidAt { get; set; }
+        public string? PaymentReference { get; set; }
+        public string? Notes { get; set; }
     }
 
     public class Department

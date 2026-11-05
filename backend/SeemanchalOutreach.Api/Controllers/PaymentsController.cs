@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SeemanchalOutreach.Api.Security;
+using SeemanchalOutreach.Api.Services;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
 
@@ -21,7 +22,20 @@ namespace SeemanchalOutreach.Api.Controllers
         public decimal Amount { get; set; }
         public DateTime? DueDate { get; set; }
         public string? Notes { get; set; }
+        /// <summary>Optional: the referred patient this service was for.</summary>
+        public string? ReferralClientId { get; set; }
     }
+
+    public class IncentiveDto
+    {
+        public string AgentId { get; set; } = string.Empty;
+        public string? ReferralClientId { get; set; }
+        public decimal Amount { get; set; }
+        public string Reason { get; set; } = string.Empty;
+        public string? Notes { get; set; }
+    }
+
+    public class IncentiveRuleDto { public decimal PerArrival { get; set; } public decimal PerAdmission { get; set; } }
 
     public class MarkPaidDto
     {
@@ -40,11 +54,15 @@ namespace SeemanchalOutreach.Api.Controllers
     {
         private readonly IMarketingDbContext _db;
         private readonly ILiveEvents _live;
+        private readonly INotifier _notifier;
+        private readonly IAppSettings _settings;
 
-        public PaymentsController(IMarketingDbContext db, ILiveEvents live)
+        public PaymentsController(IMarketingDbContext db, ILiveEvents live, INotifier notifier, IAppSettings settings)
         {
             _db = db;
             _live = live;
+            _notifier = notifier;
+            _settings = settings;
         }
 
         private static bool IsAdmitted(string s) => s == "admitted" || s == "converted" || s == "procedure" || s == "discharged";
@@ -90,12 +108,12 @@ namespace SeemanchalOutreach.Api.Controllers
             var rows = await Query(status, null).OrderByDescending(p => p.CreatedAt).ToListAsync(ct);
             var items = await EnrichAsync(rows, ct);
             var sb = new StringBuilder();
-            sb.AppendLine("Partner,Type,Block,Phone,Purpose,Period,Amount (INR),Status,Created,Approved,Paid,Reference");
+            sb.AppendLine("Partner,Type,Block,Phone,Purpose,Patient,Period,Amount (INR),Status,Created,Approved,Paid,Reference");
             foreach (var i in items)
             {
                 sb.AppendLine(string.Join(",", new[]
                 {
-                    Csv(i.Partner), Csv(i.PartnerType), Csv(i.Block), Csv(i.Phone), Csv(i.Purpose), Csv(i.Period),
+                    Csv(i.Partner), Csv(i.PartnerType), Csv(i.Block), Csv(i.Phone), Csv(i.Purpose), Csv(i.PatientName), Csv(i.Period),
                     i.Amount.ToString("0.00"), Csv(i.Status), Csv(Ist(i.CreatedAt)), Csv(Ist(i.ApprovedAt)), Csv(Ist(i.PaidAt)), Csv(i.PaymentReference),
                 }));
             }
@@ -125,6 +143,14 @@ namespace SeemanchalOutreach.Api.Controllers
             if (string.IsNullOrWhiteSpace(dto.Purpose)) return BadRequest("Say what the payment is for.");
             var contact = await _db.Contacts.AsNoTracking().FirstOrDefaultAsync(c => c.ClientId == dto.ContactClientId, ct);
             if (contact == null) return NotFound("Partner not found.");
+            string? referralId = null;
+            if (!string.IsNullOrWhiteSpace(dto.ReferralClientId))
+            {
+                var rc = await _db.Referrals.AsNoTracking().Where(r => r.ClientId == dto.ReferralClientId).Select(r => r.ContactId).FirstOrDefaultAsync(ct);
+                if (rc == null) return BadRequest("That patient wasn't found.");
+                if (rc != dto.ContactClientId) return BadRequest("That patient was referred by a different partner.");
+                referralId = dto.ReferralClientId;
+            }
 
             var p = new PartnerPayment
             {
@@ -134,6 +160,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 Amount = Math.Round(dto.Amount, 2),
                 DueDate = dto.DueDate.HasValue ? DateTime.SpecifyKind(dto.DueDate.Value, DateTimeKind.Utc) : null,
                 Notes = dto.Notes,
+                ReferralClientId = referralId,
                 Status = "pending_approval",
                 CreatedBy = User.AgentIdOf(),
                 CreatedAt = DateTime.UtcNow,
@@ -181,9 +208,136 @@ namespace SeemanchalOutreach.Api.Controllers
             p.PaidBy = User.AgentIdOf();
             p.PaymentReference = string.IsNullOrWhiteSpace(dto.Reference) ? null : dto.Reference.Trim();
             await _db.SaveChangesAsync(ct);
-            var name = await _db.Contacts.Where(c => c.ClientId == p.ContactClientId).Select(c => c.Name).FirstOrDefaultAsync(ct);
-            await _live.PublishAsync(new LiveEvent { Kind = "payment", Text = $"₹{p.Amount:N0} paid to {name}", RefId = p.Id.ToString() });
+            var partner = await _db.Contacts.AsNoTracking().Where(c => c.ClientId == p.ContactClientId).Select(c => new { c.Name, c.AgentId }).FirstOrDefaultAsync(ct);
+            await _live.PublishAsync(new LiveEvent { Kind = "payment", Text = $"₹{p.Amount:N0} paid to {partner?.Name}", RefId = p.Id.ToString() });
+            // The agent who looks after this partner can tell them it's done.
+            if (!string.IsNullOrEmpty(partner?.AgentId))
+            {
+                var patient = p.ReferralClientId == null ? null : await _db.Referrals.AsNoTracking().Where(r => r.ClientId == p.ReferralClientId).Select(r => r.PatientName).FirstOrDefaultAsync(ct);
+                _notifier.Notify(new NotifyJob
+                {
+                    To = new() { partner.AgentId }, Except = User.AgentIdOf(), Kind = "payment",
+                    Title = $"₹{p.Amount:N0} paid to {partner.Name}",
+                    Body = $"{p.Purpose}{(patient != null ? $" · patient {patient}" : "")}{(p.PaymentReference != null ? $" · ref {p.PaymentReference}" : "")}",
+                    Link = "money:", RefId = p.Id.ToString(),
+                });
+            }
             return Ok(new { p.Id, p.Status });
+        }
+
+        // ─── Field agents' incentives ────────────────────────────────────────
+
+        /// <summary>Agents' incentives with totals. status: pending_approval | approved | paid | rejected | (empty = all but rejected).</summary>
+        [HttpGet("incentives")]
+        public async Task<IActionResult> Incentives([FromQuery] string? status, [FromQuery] string? agentId, CancellationToken ct)
+        {
+            var q = _db.AgentIncentives.AsNoTracking().AsQueryable();
+            q = string.IsNullOrWhiteSpace(status) ? q.Where(i => i.Status != "rejected") : q.Where(i => i.Status == status);
+            if (!string.IsNullOrWhiteSpace(agentId)) q = q.Where(i => i.AgentId == agentId);
+            var rows = await q.OrderByDescending(i => i.CreatedAt).Take(500).ToListAsync(ct);
+            var agentIds = rows.Select(r => r.AgentId).Distinct().ToList();
+            var agents = await _db.Agents.AsNoTracking().Where(a => agentIds.Contains(a.AgentId)).ToDictionaryAsync(a => a.AgentId, a => new { a.Name, a.Block }, ct);
+            var refIds = rows.Where(r => r.ReferralClientId != null).Select(r => r.ReferralClientId!).Distinct().ToList();
+            var refs = await _db.Referrals.AsNoTracking().Where(r => refIds.Contains(r.ClientId))
+                .ToDictionaryAsync(r => r.ClientId, r => new { r.PatientName, r.Status, r.Department }, ct);
+            var all = await _db.AgentIncentives.AsNoTracking().Where(i => i.Status != "rejected").Select(i => new { i.Status, i.Amount, i.PaidAt }).ToListAsync(ct);
+            var month = IstClock.MonthStartUtc;
+            return Ok(new
+            {
+                summary = new
+                {
+                    pendingAmount = all.Where(i => i.Status == "pending_approval").Sum(i => i.Amount),
+                    pendingCount = all.Count(i => i.Status == "pending_approval"),
+                    approvedAmount = all.Where(i => i.Status == "approved").Sum(i => i.Amount),
+                    paidMonthAmount = all.Where(i => i.Status == "paid" && i.PaidAt >= month).Sum(i => i.Amount),
+                },
+                rule = IncentiveRule.Load(_settings),
+                items = rows.Select(i =>
+                {
+                    agents.TryGetValue(i.AgentId, out var a);
+                    var r = i.ReferralClientId != null ? refs.GetValueOrDefault(i.ReferralClientId) : null;
+                    return new
+                    {
+                        i.Id, i.AgentId, agent = a?.Name ?? i.AgentId, block = a?.Block, i.ReferralClientId,
+                        patient = r?.PatientName, patientStage = r == null ? null : ReferralsController.StageLabel(r.Status), department = r?.Department,
+                        i.Amount, i.Reason, i.Auto, i.Status, i.CreatedAt, i.ApprovedAt, i.PaidAt, i.PaymentReference, i.Notes,
+                    };
+                }),
+            });
+        }
+
+        [HttpPost("incentives")]
+        public async Task<IActionResult> AddIncentive([FromBody] IncentiveDto dto, CancellationToken ct)
+        {
+            if (dto.Amount <= 0 || dto.Amount > 100_000) return BadRequest("Enter the amount.");
+            var reason = (dto.Reason ?? "").Trim();
+            if (reason.Length == 0) return BadRequest("Say what the incentive is for.");
+            var agent = await _db.Agents.AsNoTracking().FirstOrDefaultAsync(a => a.AgentId == dto.AgentId && a.IsActive, ct);
+            if (agent == null) return BadRequest("Pick an active field agent.");
+            if (!string.IsNullOrWhiteSpace(dto.ReferralClientId) && !await _db.Referrals.AnyAsync(r => r.ClientId == dto.ReferralClientId && r.AgentId == dto.AgentId, ct))
+                return BadRequest("That patient wasn't referred by this agent.");
+            var i = new AgentIncentive
+            {
+                AgentId = dto.AgentId, ReferralClientId = string.IsNullOrWhiteSpace(dto.ReferralClientId) ? null : dto.ReferralClientId,
+                Amount = Math.Round(dto.Amount, 2), Reason = reason.Length > 200 ? reason[..200] : reason, Notes = dto.Notes, CreatedBy = User.AgentIdOf(),
+            };
+            _db.AgentIncentives.Add(i);
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { i.Id });
+        }
+
+        [HttpPost("incentives/{id:guid}/approve")]
+        [Authorize(Roles = "Admin,admin")]
+        public async Task<IActionResult> ApproveIncentive(Guid id, CancellationToken ct)
+        {
+            var i = await _db.AgentIncentives.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (i == null) return NotFound();
+            if (i.Status != "pending_approval") return BadRequest("Only incentives waiting for approval can be approved.");
+            i.Status = "approved"; i.ApprovedBy = User.AgentIdOf(); i.ApprovedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { i.Id, i.Status });
+        }
+
+        [HttpPost("incentives/{id:guid}/reject")]
+        [Authorize(Roles = "Admin,admin")]
+        public async Task<IActionResult> RejectIncentive(Guid id, CancellationToken ct)
+        {
+            var i = await _db.AgentIncentives.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (i == null) return NotFound();
+            if (i.Status == "paid") return BadRequest("A paid incentive can't be rejected.");
+            i.Status = "rejected";
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { i.Id, i.Status });
+        }
+
+        [HttpPost("incentives/{id:guid}/paid")]
+        public async Task<IActionResult> IncentivePaid(Guid id, [FromBody] MarkPaidDto dto, CancellationToken ct)
+        {
+            var i = await _db.AgentIncentives.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (i == null) return NotFound();
+            if (i.Status != "approved") return BadRequest("Only approved incentives can be marked paid.");
+            i.Status = "paid"; i.PaidAt = DateTime.UtcNow; i.PaidBy = User.AgentIdOf();
+            i.PaymentReference = string.IsNullOrWhiteSpace(dto.Reference) ? null : dto.Reference.Trim();
+            await _db.SaveChangesAsync(ct);
+            _notifier.Notify(new NotifyJob
+            {
+                To = new() { i.AgentId }, Except = User.AgentIdOf(), Kind = "payment",
+                Title = $"Your incentive of ₹{i.Amount:N0} is paid",
+                Body = $"{i.Reason}{(i.PaymentReference != null ? $" · ref {i.PaymentReference}" : "")}",
+                Link = "money:", RefId = i.Id.ToString(),
+            });
+            return Ok(new { i.Id, i.Status });
+        }
+
+        /// <summary>The incentive rule: a fixed amount per patient who arrives / is admitted (0 = off). Admins only.</summary>
+        [HttpPut("incentive-rule")]
+        [Authorize(Roles = "Admin,admin")]
+        public async Task<IActionResult> SaveRule([FromBody] IncentiveRuleDto dto, CancellationToken ct)
+        {
+            if (dto.PerArrival < 0 || dto.PerAdmission < 0 || dto.PerArrival > 100_000 || dto.PerAdmission > 100_000) return BadRequest("Enter amounts between 0 and 1,00,000.");
+            var rule = new IncentiveRule { PerArrival = Math.Round(dto.PerArrival, 2), PerAdmission = Math.Round(dto.PerAdmission, 2) };
+            await rule.SaveAsync(_settings, User.AgentIdOf(), ct);
+            return Ok(rule);
         }
 
         private IQueryable<PartnerPayment> Query(string? status, string? search)
@@ -232,6 +386,8 @@ namespace SeemanchalOutreach.Api.Controllers
             public DateTime? PaidAt { get; set; }
             public string? PaymentReference { get; set; }
             public string? Notes { get; set; }
+            public string? ReferralClientId { get; set; }
+            public string? PatientName { get; set; }
         }
 
         private async Task<List<PaymentRow>> EnrichAsync(List<PartnerPayment> rows, CancellationToken ct)
@@ -245,6 +401,9 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Select(r => new { r.ContactId, r.Status }).ToListAsync(ct);
             var cmap = contacts.ToDictionary(c => c.ClientId);
             var before = DateTime.UtcNow.AddDays(-7);
+            var refIds = rows.Where(r => r.ReferralClientId != null).Select(r => r.ReferralClientId!).Distinct().ToList();
+            var patients = refIds.Count == 0 ? new Dictionary<string, string>()
+                : await _db.Referrals.AsNoTracking().Where(r => refIds.Contains(r.ClientId)).ToDictionaryAsync(r => r.ClientId, r => r.PatientName, ct);
 
             return rows.Select(r =>
             {
@@ -271,6 +430,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     PaidAt = r.PaidAt,
                     PaymentReference = r.PaymentReference,
                     Notes = r.Notes,
+                    ReferralClientId = r.ReferralClientId,
+                    PatientName = r.ReferralClientId != null ? patients.GetValueOrDefault(r.ReferralClientId) : null,
                 };
             }).ToList();
         }

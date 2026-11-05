@@ -64,7 +64,7 @@ function Gate() {
     // at once instead of at the next sync.
     const received = Notifications.addNotificationReceivedListener((n) => {
       const link = String(n.request.content.data?.link ?? (n.request.trigger as { remoteMessage?: { data?: Record<string, string> } } | null)?.remoteMessage?.data?.link ?? '');
-      if (link.startsWith('referral:')) void syncNow(true).catch(() => undefined);
+      if (link.startsWith('referral:') || link.startsWith('money:')) void syncNow(true).catch(() => undefined);
     });
     // The tap that opened the app from the tray.
     Notifications.getLastNotificationResponseAsync().then((r) => {

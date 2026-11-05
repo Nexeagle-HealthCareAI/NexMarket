@@ -33,8 +33,14 @@ namespace SeemanchalOutreach.Api.Controllers
 
         private sealed record Resp(Guid Id, string? ContactId, string? PanchayatId, string AgentId, bool IsSkipped, string? SkipReason, DateTime CreatedAt, string AnswersJson);
 
-        private async Task<List<Resp>> ResponsesAsync(CancellationToken ct) =>
+        /// <summary>India-time day range from the board's date filter: from and to are yyyy-MM-dd, both days included.</summary>
+        private static (DateTime? From, DateTime? To) DayRange(string? from, string? to) =>
+            (DateOnly.TryParse(from, out var f) ? IstClock.StartOfIstDayUtc(f) : null,
+             DateOnly.TryParse(to, out var t) ? IstClock.StartOfIstDayUtc(t.AddDays(1)) : null);
+
+        private async Task<List<Resp>> ResponsesAsync(CancellationToken ct, DateTime? from = null, DateTime? to = null) =>
             (await _db.SurveyResponses.AsNoTracking()
+                .Where(r => (from == null || r.CreatedAt >= from) && (to == null || r.CreatedAt < to))
                 .Select(r => new { r.Id, r.ContactId, r.PanchayatId, r.AgentId, r.IsSkipped, r.SkipReason, r.CreatedAt, r.AnswersJson })
                 .ToListAsync(ct))
             .Select(r => new Resp(r.Id, r.ContactId, r.PanchayatId, r.AgentId, r.IsSkipped, r.SkipReason, r.CreatedAt, r.AnswersJson ?? "{}")).ToList();
@@ -75,7 +81,8 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet("insights")]
-        public async Task<IActionResult> Insights([FromQuery] string? district, [FromQuery] string? block, CancellationToken ct)
+        public async Task<IActionResult> Insights([FromQuery] string? district, [FromQuery] string? block,
+            [FromQuery] string? from, [FromQuery] string? to, CancellationToken ct)
         {
             var questions = await SurveyCore.ActiveAsync(_db, ct);
             var qids = questions.Select(q => q.QuestionId).ToList();
@@ -87,7 +94,9 @@ namespace SeemanchalOutreach.Api.Controllers
             var placeById = scoped.ToDictionary(p => p.PanchayatId);
             bool byPanchayat = !string.IsNullOrWhiteSpace(block);
 
-            var all = await ResponsesAsync(ct);
+            var (fromUtc, toUtc) = DayRange(from, to);
+            bool ranged = fromUtc != null || toUtc != null;
+            var all = await ResponsesAsync(ct, fromUtc, toUtc);
             var monthStart = AttendanceService.StartUtc(new DateOnly(IstClock.NowIst.Year, IstClock.NowIst.Month, 1));
             var parsed = all.Where(r => !r.IsSkipped && r.PanchayatId != null && placeById.ContainsKey(r.PanchayatId))
                 .Select(r => (r, a: SurveyCore.Parse(r.AnswersJson)))
@@ -146,7 +155,8 @@ namespace SeemanchalOutreach.Api.Controllers
                 };
             }).OrderByDescending(u => u.score).ThenByDescending(u => u.responses).ThenBy(u => u.name).ToList();
 
-            var scopedSkipped = all.Where(r => r.IsSkipped && r.CreatedAt >= monthStart && (r.PanchayatId == null || placeById.ContainsKey(r.PanchayatId))).Count();
+            // With a date filter the skipped count covers that period; without one, this month.
+            var scopedSkipped = all.Where(r => r.IsSkipped && (ranged || r.CreatedAt >= monthStart) && (r.PanchayatId == null || placeById.ContainsKey(r.PanchayatId))).Count();
             return Ok(new
             {
                 unit = byPanchayat ? "panchayat" : "block",
@@ -164,7 +174,9 @@ namespace SeemanchalOutreach.Api.Controllers
                     panchayatsWithAnswers = parsed.Select(x => x.r.PanchayatId).Distinct().Count(),
                     thisMonth = parsed.Count(x => x.r.CreatedAt >= monthStart),
                     skippedThisMonth = scopedSkipped,
+                    agents = parsed.Select(x => x.r.AgentId).Distinct().Count(),
                 },
+                ranged,
                 units,
             });
         }
@@ -173,13 +185,15 @@ namespace SeemanchalOutreach.Api.Controllers
 
         [HttpGet("responses")]
         public async Task<IActionResult> Responses([FromQuery] string? view, [FromQuery] string? block, [FromQuery] string? agentId,
-            [FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 25, CancellationToken ct = default)
+            [FromQuery] string? q, [FromQuery] string? from = null, [FromQuery] string? to = null,
+            [FromQuery] int page = 1, [FromQuery] int pageSize = 25, CancellationToken ct = default)
         {
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 10, 100);
             var questions = await SurveyCore.ActiveAsync(_db, ct);
             var qids = questions.Select(x => x.QuestionId).ToList();
-            var all = await ResponsesAsync(ct);
+            var (fromUtc, toUtc) = DayRange(from, to);
+            var all = await ResponsesAsync(ct, fromUtc, toUtc);
             var places = (await _db.Panchayats.AsNoTracking().Select(p => new { p.PanchayatId, p.Name, p.Block }).ToListAsync(ct))
                 .GroupBy(p => p.PanchayatId).ToDictionary(g => g.Key, g => g.First());
             var contactIds = all.Select(r => r.ContactId).Where(x => x != null).Distinct().ToList();

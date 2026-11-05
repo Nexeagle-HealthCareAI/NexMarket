@@ -13,7 +13,7 @@ import { ReferralCard, sourceText, type ReferralRow } from '@/components/crm/Ref
 import { PageTabs, usePageTab, type PageTab } from '@/components/crm/PageTabs';
 import { Pager, usePaged } from '@/components/crm/Pager';
 import {
-  Empty, ErrorBox, fmt, initials, Modal, PageHead, Pill, Skeleton, STAGES, stageTone, useLoader, useToast,
+  Empty, ErrorBox, fmt, initials, Modal, PageHead, Pill, rupees, Skeleton, STAGES, stageTone, useLoader, useToast,
 } from '@/components/crm/ui';
 
 // ─── Types and helpers ───────────────────────────────────────────────────
@@ -471,8 +471,8 @@ function Table({ items, dups, now, onOpen }: { items: ReferralRow[]; dups: Map<s
         {(['new', 'old', 'stage'] as const).map((k) => <button key={k} type="button" className="crm-chip" aria-pressed={sort === k} onClick={() => setSort(k)}>{k === 'new' ? 'Newest' : k === 'old' ? 'Oldest' : 'Stage'}</button>)}
       </div>
       <div className="crm-table-wrap">
-        <table className="crm-table" style={{ minWidth: 860 }}>
-          <thead><tr><th>Patient</th><th>Department</th><th>Referred by</th><th>Agent</th><th>Referred</th><th>Stage</th><th>Came from</th></tr></thead>
+        <table className="crm-table" style={{ minWidth: 1020 }}>
+          <thead><tr><th>Patient</th><th>Department</th><th>Referred by</th><th>Agent</th><th>Referred</th><th>Stage</th><th className="num">Billed</th><th>Partner paid</th><th>Came from</th></tr></thead>
           <tbody>
             {pg.rows.map((r) => {
               const late = r.status === 'pending' && hoursSince(r.createdAt, now) >= 48;
@@ -487,6 +487,8 @@ function Table({ items, dups, now, onOpen }: { items: ReferralRow[]; dups: Map<s
                   <td style={{ color: 'var(--text-2)' }}>{r.agentName}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmt.date(r.createdAt)}</td>
                   <td><Pill tone={late ? 'warn' : stageTone(r.status)} dot>{late ? `Waiting ${Math.floor(hoursSince(r.createdAt, now) / 24)} days` : r.stageLabel}</Pill></td>
+                  <td className="num">{r.money && r.money.billed > 0 ? <><div>{rupees(r.money.billed)}</div>{r.money.collected < r.money.billed && <div className="crm-cell-sub" style={{ color: 'var(--warn-ink)' }}>{rupees(r.money.billed - r.money.collected)} due</div>}</> : <span className="crm-cell-sub">—</span>}</td>
+                  <td>{r.money && r.money.payouts > 0 ? <><div>{rupees(r.money.payoutsPaid)}</div>{r.money.payoutsOpen > 0 && <div className="crm-cell-sub" style={{ color: 'var(--warn-ink)' }}>{rupees(r.money.payoutsOpen)} waiting</div>}</> : <span className="crm-cell-sub">—</span>}</td>
                   <td className="crm-cell-sub">{r.source === 'leads' ? 'Leads inbox' : (r.syncDelayMinutes ?? 0) >= 60 ? <span style={{ color: 'var(--warn-ink)' }}>App · synced late</span> : 'App'}</td>
                 </tr>
               );

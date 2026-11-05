@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { Check, Phone, Smartphone } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
+import { useAccess } from '@/lib/crm/access';
+import { ReferralMoney } from '@/components/crm/ReferralMoney';
 import { contactTypeLabel, fmt, friendlyError, initials, Pill, Skeleton, STAGES, stageTone, useLoader } from '@/components/crm/ui';
 
 export interface ReferralRow {
@@ -11,6 +13,7 @@ export interface ReferralRow {
   department: string; notes?: string | null; clientPhone?: string | null; referralDate?: string | null; status: string; stageLabel: string;
   arrivedAt?: string | null; admittedAt?: string | null; createdAt: string;
   updatedAt?: string | null; source?: 'app' | 'leads' | 'crm'; syncDelayMinutes?: number | null; serverReceivedAt?: string | null;
+  money?: { billed: number; collected: number; payoutsPaid: number; payoutsOpen: number; payouts: number; incentivesPaid: number; incentivesOpen: number } | null;
 }
 
 /** "From the agent's app", and whether it waited on the phone (no signal) before reaching the hospital. */
@@ -25,6 +28,7 @@ export function sourceText(r: ReferralRow): string {
 interface HistoryItem { status: string; label: string; note?: string | null; by: string; at: string }
 
 export function ReferralCard({ r, editable, onUpdated }: { r: ReferralRow; editable: boolean; onUpdated: (r: ReferralRow, label: string) => void }) {
+  const { access } = useAccess();
   const history = useLoader(() => crm.get<HistoryItem[]>(`/api/v1/referrals/${encodeURIComponent(r.clientId)}/history`), [r.clientId, r.status]);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -94,6 +98,8 @@ export function ReferralCard({ r, editable, onUpdated }: { r: ReferralRow; edita
           {error && <div className="crm-error" role="alert">{error}</div>}
         </div>
       ) : <div className="crm-note">You can view referrals but not change their stage.</div>}
+
+      <ReferralMoney clientId={r.clientId} partnerName={r.contactName} editable={editable} isAdmin={!!access?.isAdmin} />
 
       <div style={{ borderTop: '1px solid var(--line)', paddingTop: 14 }}>
         <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>History</h3>

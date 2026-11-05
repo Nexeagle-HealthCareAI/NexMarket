@@ -25,6 +25,8 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<CallCycle> CallCycles { get; }
         DbSet<CallLog> CallLogs { get; }
         DbSet<PartnerPayment> PartnerPayments { get; }
+        DbSet<ReferralBill> ReferralBills { get; }
+        DbSet<AgentIncentive> AgentIncentives { get; }
         DbSet<Department> Departments { get; }
         DbSet<Doctor> Doctors { get; }
         DbSet<ReferralStatusEntry> ReferralStatusEntries { get; }

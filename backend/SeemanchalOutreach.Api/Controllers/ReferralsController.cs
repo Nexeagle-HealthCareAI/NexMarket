@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SeemanchalOutreach.Api.Security;
+using SeemanchalOutreach.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
@@ -21,12 +22,14 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly ILiveEvents _live;
 
         private readonly INotifier _notifier;
+        private readonly IAppSettings _settings;
 
-        public ReferralsController(IMarketingDbContext context, ILiveEvents live, INotifier notifier)
+        public ReferralsController(IMarketingDbContext context, ILiveEvents live, INotifier notifier, IAppSettings settings)
         {
             _context = context;
             _live = live;
             _notifier = notifier;
+            _settings = settings;
         }
 
         /// <summary>Stages a referral moves through. "pending" = referred; "converted" is the old name for admitted.</summary>
@@ -208,6 +211,7 @@ namespace SeemanchalOutreach.Api.Controllers
             if (referral == null) return NotFound("Referral not found");
 
             var now = DateTime.UtcNow;
+            bool hadArrived = referral.ArrivedAt != null, hadAdmitted = referral.AdmittedAt != null;
             referral.Status = status;
             if (status == "arrived" && referral.ArrivedAt == null) referral.ArrivedAt = now;
             if ((status == "opd" || status == "admitted" || status == "procedure" || status == "discharged") && referral.ArrivedAt == null) referral.ArrivedAt = now;
@@ -229,6 +233,10 @@ namespace SeemanchalOutreach.Api.Controllers
                 ChangedBy = User.AgentIdOf(),
                 ChangedAt = now,
             });
+
+            // The agent's incentive under the hospital's rule (still needs an admin's approval).
+            await PatientMoney.ApplyRuleAsync(_context, _settings, referral,
+                !hadArrived && referral.ArrivedAt != null, !hadAdmitted && referral.AdmittedAt != null, User.AgentIdOf(), HttpContext.RequestAborted);
 
             await _context.SaveChangesAsync();
 
@@ -263,6 +271,162 @@ namespace SeemanchalOutreach.Api.Controllers
             return Ok(new { message = "Status updated successfully" });
         }
 
+        // ─── Money for one referred patient ─────────────────────────────────
+
+        public class BillDto
+        {
+            public string Kind { get; set; } = "ipd";
+            public decimal Amount { get; set; }
+            public decimal Collected { get; set; }
+            public string Scheme { get; set; } = "cash";
+            public string? BillNumber { get; set; }
+            public string? Note { get; set; }
+            public DateTime? BilledOn { get; set; }
+        }
+        public class CollectDto { public decimal Collected { get; set; } public string? BillNumber { get; set; } public string? Note { get; set; } }
+        public class VoidDto { public string Reason { get; set; } = ""; }
+        public class ServicePaymentDto { public string Purpose { get; set; } = ""; public decimal Amount { get; set; } public string? Notes { get; set; } }
+
+        /// <summary>
+        /// Everything to do with money for this patient: what the hospital billed and collected, the partner's service
+        /// payments for this patient (with approval and paid status), and the field agent's incentive.
+        /// </summary>
+        [HttpGet("{clientId}/money")]
+        public async Task<IActionResult> Money(string clientId)
+        {
+            var ct = HttpContext.RequestAborted;
+            var r = await _context.Referrals.AsNoTracking().FirstOrDefaultAsync(x => x.ClientId == clientId, ct);
+            if (r == null) return NotFound("Referral not found");
+            var bills = await _context.ReferralBills.AsNoTracking().Where(b => b.ReferralClientId == clientId).OrderBy(b => b.BilledOn).ToListAsync(ct);
+            var pays = await _context.PartnerPayments.AsNoTracking().Where(p => p.ReferralClientId == clientId).OrderBy(p => p.CreatedAt).ToListAsync(ct);
+            var incs = await _context.AgentIncentives.AsNoTracking().Where(i => i.ReferralClientId == clientId).OrderBy(i => i.CreatedAt).ToListAsync(ct);
+            // The partner's payments overall, so the desk can see nothing for them is stuck.
+            var partnerAll = await _context.PartnerPayments.AsNoTracking().Where(p => p.ContactClientId == r.ContactId && p.Status != "rejected")
+                .Select(p => new { p.Status, p.Amount }).ToListAsync(ct);
+            var names = await NamesAsync(bills.Select(b => b.CreatedBy).Concat(pays.Select(p => p.CreatedBy)).Concat(incs.Select(i => i.AgentId)));
+            var active = bills.Where(b => b.Status == "active").ToList();
+            var before = DateTime.UtcNow.AddDays(-7);
+            return Ok(new
+            {
+                billed = active.Sum(b => b.Amount),
+                collected = active.Sum(b => b.Collected),
+                due = active.Sum(b => b.Amount - b.Collected),
+                bills = bills.Select(b => new
+                {
+                    b.Id, b.Kind, kindLabel = PatientMoney.KindLabel(b.Kind), b.Amount, b.Collected, b.Scheme, schemeLabel = PatientMoney.SchemeLabel(b.Scheme),
+                    b.BillNumber, b.Note, b.BilledOn, b.Status, b.VoidReason, by = names.GetValueOrDefault(b.CreatedBy, b.CreatedBy), b.CreatedAt,
+                }),
+                partnerPayments = pays.Select(p => new
+                {
+                    p.Id, p.Purpose, p.Amount, p.Status, p.Notes, p.CreatedAt, p.ApprovedAt, p.PaidAt, p.PaymentReference,
+                    overdue = p.Status == "approved" && (p.DueDate ?? p.ApprovedAt ?? DateTime.UtcNow) < before,
+                    by = names.GetValueOrDefault(p.CreatedBy, p.CreatedBy),
+                }),
+                partnerOverall = new
+                {
+                    paid = partnerAll.Where(p => p.Status == "paid").Sum(p => p.Amount),
+                    open = partnerAll.Where(p => p.Status != "paid").Sum(p => p.Amount),
+                },
+                incentives = incs.Select(i => new
+                {
+                    i.Id, i.Reason, i.Amount, i.Status, i.Auto, i.CreatedAt, i.ApprovedAt, i.PaidAt, i.PaymentReference,
+                    agent = names.GetValueOrDefault(i.AgentId, i.AgentId),
+                }),
+                purposes = PatientMoney.ServicePurposes,
+            });
+        }
+
+        /// <summary>The desk records a bill for this patient (and how much was collected).</summary>
+        [HttpPost("{clientId}/bills")]
+        public async Task<IActionResult> AddBill(string clientId, [FromBody] BillDto dto)
+        {
+            var ct = HttpContext.RequestAborted;
+            var r = await _context.Referrals.AsNoTracking().FirstOrDefaultAsync(x => x.ClientId == clientId, ct);
+            if (r == null) return NotFound("Referral not found");
+            if (!PatientMoney.BillKinds.Contains(dto.Kind)) return BadRequest("Pick what the bill is for.");
+            if (!PatientMoney.Schemes.Contains(dto.Scheme)) return BadRequest("Pick how the patient pays.");
+            if (dto.Amount <= 0 || dto.Amount > 10_000_000) return BadRequest("Enter the bill amount.");
+            if (dto.Collected < 0 || dto.Collected > dto.Amount) return BadRequest("Collected can't be more than the bill.");
+            var b = new ReferralBill
+            {
+                ReferralClientId = clientId, Kind = dto.Kind, Amount = Math.Round(dto.Amount, 2), Collected = Math.Round(dto.Collected, 2), Scheme = dto.Scheme,
+                BillNumber = Clean(dto.BillNumber, 60), Note = Clean(dto.Note, 500),
+                BilledOn = dto.BilledOn.HasValue ? DateTime.SpecifyKind(dto.BilledOn.Value, DateTimeKind.Utc) : DateTime.UtcNow,
+                CreatedBy = User.AgentIdOf(),
+            };
+            _context.ReferralBills.Add(b);
+            await _context.SaveChangesAsync(ct);
+            return Ok(new { b.Id });
+        }
+
+        /// <summary>Records a later collection on a bill (e.g. the insurer paid), or fixes the bill number / note.</summary>
+        [HttpPut("bills/{id:guid}")]
+        public async Task<IActionResult> UpdateBill(Guid id, [FromBody] CollectDto dto)
+        {
+            var b = await _context.ReferralBills.FirstOrDefaultAsync(x => x.Id == id, HttpContext.RequestAborted);
+            if (b == null) return NotFound();
+            if (b.Status != "active") return BadRequest("This bill was voided.");
+            if (dto.Collected < 0 || dto.Collected > b.Amount) return BadRequest("Collected can't be more than the bill.");
+            b.Collected = Math.Round(dto.Collected, 2);
+            if (dto.BillNumber != null) b.BillNumber = Clean(dto.BillNumber, 60);
+            if (dto.Note != null) b.Note = Clean(dto.Note, 500);
+            b.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync(HttpContext.RequestAborted);
+            return Ok(new { b.Id });
+        }
+
+        /// <summary>A wrong bill is voided with a reason, never deleted, so the record stays complete.</summary>
+        [HttpPost("bills/{id:guid}/void")]
+        public async Task<IActionResult> VoidBill(Guid id, [FromBody] VoidDto dto)
+        {
+            var b = await _context.ReferralBills.FirstOrDefaultAsync(x => x.Id == id, HttpContext.RequestAborted);
+            if (b == null) return NotFound();
+            var reason = Clean(dto.Reason, 300);
+            if (reason == null) return BadRequest("Say why this bill is wrong.");
+            b.Status = "void";
+            b.VoidReason = reason;
+            b.VoidedBy = User.AgentIdOf();
+            b.VoidedAt = DateTime.UtcNow;
+            b.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync(HttpContext.RequestAborted);
+            return Ok(new { b.Id, b.Status });
+        }
+
+        /// <summary>
+        /// Asks for a payment to the referring partner for a service for this patient (travel, escort, ambulance…).
+        /// It goes to Payments for an admin's approval like any other partner payment.
+        /// </summary>
+        [HttpPost("{clientId}/partner-payment")]
+        public async Task<IActionResult> AddServicePayment(string clientId, [FromBody] ServicePaymentDto dto)
+        {
+            var ct = HttpContext.RequestAborted;
+            var r = await _context.Referrals.AsNoTracking().FirstOrDefaultAsync(x => x.ClientId == clientId, ct);
+            if (r == null) return NotFound("Referral not found");
+            var purpose = (dto.Purpose ?? "").Trim();
+            if (!PatientMoney.ServicePurposes.Contains(purpose)) return BadRequest("Pick the service the partner provided.");
+            var notes = Clean(dto.Notes, 500);
+            if (purpose == "Other service" && notes == null) return BadRequest("Describe the service.");
+            if (dto.Amount <= 0 || dto.Amount > 100_000) return BadRequest("Enter the amount.");
+            var partner = await _context.Contacts.AsNoTracking().Where(c => c.ClientId == r.ContactId).Select(c => c.Name).FirstOrDefaultAsync(ct);
+            if (partner == null) return BadRequest("The referring partner wasn't found.");
+            var p = new PartnerPayment
+            {
+                ContactClientId = r.ContactId, ReferralClientId = clientId, Purpose = purpose, Amount = Math.Round(dto.Amount, 2),
+                Notes = notes == null ? $"For patient {r.PatientName}" : $"For patient {r.PatientName}: {notes}",
+                Status = "pending_approval", CreatedBy = User.AgentIdOf(), CreatedAt = DateTime.UtcNow,
+            };
+            _context.PartnerPayments.Add(p);
+            await _context.SaveChangesAsync(ct);
+            await _live.PublishAsync(new LiveEvent { Kind = "payment", Text = $"₹{p.Amount:N0} for {partner} ({purpose.ToLower()}) sent for approval", RefId = p.Id.ToString() });
+            return Ok(new { p.Id });
+        }
+
+        private static string? Clean(string? v, int max)
+        {
+            var t = (v ?? "").Trim();
+            return t.Length == 0 ? null : t.Length > max ? t[..max] : t;
+        }
+
         private async Task<Dictionary<string, string>> NamesAsync(IEnumerable<string> agentIds)
         {
             var ids = agentIds.Where(i => !string.IsNullOrEmpty(i)).Distinct().ToList();
@@ -285,10 +449,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Where(p => panchayatIds.Contains(p.PanchayatId))
                 .ToDictionaryAsync(p => p.PanchayatId, p => p.Block);
             var contactMap = contacts.ToDictionary(c => c.ClientId);
+            var money = await PatientMoney.TotalsAsync(_context, referrals.Select(r => r.ClientId).ToList(), HttpContext.RequestAborted);
 
             return referrals.Select(r =>
             {
                 contactMap.TryGetValue(r.ContactId, out var c);
+                money.TryGetValue(r.ClientId, out var m);
                 return (object)new
                 {
                     r.Id,
@@ -317,6 +483,12 @@ namespace SeemanchalOutreach.Api.Controllers
                     Source = r.DeviceId == "crm-leads" ? "leads" : r.DeviceId == "crm" ? "crm" : "app",
                     SyncDelayMinutes = r.DeviceId == "crm-leads" || r.DeviceId == "crm" ? (int?)null : Math.Max(0, (int)(r.ServerReceivedAt - r.CreatedAt).TotalMinutes),
                     r.ServerReceivedAt,
+                    Money = m == null ? null : new
+                    {
+                        billed = m.Billed, collected = m.Collected,
+                        payoutsPaid = m.PayoutsPaid, payoutsOpen = m.PayoutsOpen, payouts = m.PayoutsCount,
+                        incentivesPaid = m.IncentivesPaid, incentivesOpen = m.IncentivesOpen,
+                    },
                 };
             }).ToList();
         }

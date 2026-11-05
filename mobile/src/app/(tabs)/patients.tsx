@@ -9,6 +9,8 @@ import { dayShort } from '../../lib/format';
 import { WhatsAppSheet } from '../../components/WhatsAppSheet';
 import { stageStep, stageTone } from '../../components/stage';
 import { C } from '../../theme';
+import { useMoney } from '../../lib/useMoney';
+import { inr, statusLine, type MyMoney } from '../../lib/money';
 import type { Lang, TFn } from '../../i18n';
 
 type Filter = 'all' | 'inTransit' | 'arrived' | 'notCame';
@@ -27,6 +29,15 @@ export default function Patients() {
       : filter === 'inTransit' ? r.status === 'pending'
         : filter === 'notCame' ? r.status === 'lost'
           : !['pending', 'lost'].includes(r.status));
+  const money = useMoney();
+  // Payments linked to each patient, so the agent sees on the patient card whether the partner was paid.
+  const byPatient = useMemo(() => {
+    const m = new Map<string, { pays: MyMoney['partnerPayments']; incs: MyMoney['incentives'] }>();
+    const slot = (id: string) => { let x = m.get(id); if (!x) { x = { pays: [], incs: [] }; m.set(id, x); } return x; };
+    for (const p of money?.partnerPayments ?? []) if (p.referralClientId) slot(p.referralClientId).pays.push(p);
+    for (const i of money?.incentives ?? []) if (i.referralClientId) slot(i.referralClientId).incs.push(i);
+    return m;
+  }, [money]);
   const steps = useMemo(() => [t('stepSent'), t('stepArrived'), t('stepOpd'), t('stepAdmitted'), t('stepDischarged')], [t]);
 
   return (
@@ -34,14 +45,27 @@ export default function Patients() {
       <FlatList
         data={list}
         keyExtractor={(r) => r.clientId}
-        renderItem={({ item }) => <PatientCard r={item} t={t} lang={lang} steps={steps} onThank={setThank} />}
-        ListHeaderComponent={
+        renderItem={({ item }) => <PatientCard r={item} t={t} lang={lang} steps={steps} onThank={setThank} money={byPatient.get(item.clientId)} />}
+        ListHeaderComponent={<>
+          {money ? (
+            <Card onPress={() => router.push('/money')} style={{ marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.okSoft, alignItems: 'center', justifyContent: 'center' }}>
+                <T style={{ fontSize: 18, fontWeight: '800', color: C.okInk }}>₹</T>
+              </View>
+              <View style={{ flex: 1 }}>
+                <T style={{ fontWeight: '700', fontSize: 15.5 }}>{t('moneyCard')}</T>
+                <T style={{ color: C.text2, fontSize: 13 }}>{t('moneyCardSub', { paid: inr(money.summary.partnerPaid), waiting: inr(money.summary.partnerWaiting) })}</T>
+                {money.summary.partnerOverdue > 0 ? <T style={{ color: C.bad, fontSize: 12.5, fontWeight: '700' }}>{t('moneyOverdue', { n: money.summary.partnerOverdue })}</T> : null}
+              </View>
+              <Icon name="chevron" size={18} color={C.text3} />
+            </Card>
+          ) : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ marginBottom: 12, flexGrow: 0 }}>
             {(['all', 'inTransit', 'arrived', 'notCame'] as Filter[]).map((f) => (
               <Chip key={f} label={f === 'all' ? t('all') : t(f)} selected={filter === f} onPress={() => setFilter(f)} />
             ))}
           </ScrollView>
-        }
+        </>}
         ListEmptyComponent={<Empty text={t('noPatients')} icon="patients" />}
         ItemSeparatorComponent={Gap}
         contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
@@ -66,8 +90,9 @@ function Gap() {
   return <View style={{ height: 12 }} />;
 }
 
-const PatientCard = React.memo(function PatientCard({ r, t, lang, steps, onThank }: {
+const PatientCard = React.memo(function PatientCard({ r, t, lang, steps, onThank, money }: {
   r: Row; t: TFn; lang: Lang; steps: string[]; onThank: (x: { name: string; phone: string }) => void;
+  money?: { pays: MyMoney['partnerPayments']; incs: MyMoney['incentives'] };
 }) {
   const step = stageStep(r.status);
   const lost = r.status === 'lost';
@@ -120,6 +145,18 @@ const PatientCard = React.memo(function PatientCard({ r, t, lang, steps, onThank
           <T style={{ flex: 1, color: C.text, fontSize: 13.5, lineHeight: 19 }}>
             <T style={{ fontWeight: '700', color: C.blueInk }}>{t('hospitalSays')}: </T>{hospitalNote}
           </T>
+        </View>
+      ) : null}
+
+      {money ? (
+        <View style={{ gap: 6 }}>
+          {[...money.pays.map((p) => ({ key: p.id, text: `${t('moneyPatientLine', { amount: inr(p.amount) })} · ${p.purpose}`, st: statusLine(p, t, lang) })),
+            ...money.incs.map((i) => ({ key: i.id, text: t('moneyMyLine', { amount: inr(i.amount) }), st: statusLine(i, t, lang) }))].map((x) => (
+            <Pressable key={x.key} onPress={() => router.push('/money')} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <T style={{ fontSize: 13, fontWeight: '600' }}>₹ {x.text}</T>
+              <Pill label={x.st.label} tone={x.st.tone} />
+            </Pressable>
+          ))}
         </View>
       ) : null}
 

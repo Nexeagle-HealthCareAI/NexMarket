@@ -37,6 +37,7 @@ namespace SeemanchalOutreach.Api.Services
             ("referral", "Patients referred", "updates"),
             ("note", "Notes on my partners", "updates"),
             ("lead", "New leads and WhatsApp messages from patients", "chat"),
+            ("payment", "Payments to my partners and my incentives", "updates"),
         };
         public static string ChannelOf(string kind) => All.FirstOrDefault(k => k.Kind == kind).Channel ?? "updates";
         public static bool IsKnown(string kind) => All.Any(k => k.Kind == kind);
