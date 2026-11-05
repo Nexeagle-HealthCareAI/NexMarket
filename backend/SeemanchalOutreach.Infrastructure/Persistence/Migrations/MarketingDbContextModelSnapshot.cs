@@ -2224,6 +2224,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("ApprovedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("CashAgentId")
+                        .HasColumnType("text");
+
                     b.Property<string>("ContactClientId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -2237,6 +2240,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Method")
+                        .HasColumnType("text");
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
@@ -2253,8 +2259,35 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("Period")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("ProofAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProofBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProofKey")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProofKind")
+                        .HasColumnType("text");
+
+                    b.Property<double?>("ProofLat")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("ProofLng")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("ProofMime")
+                        .HasColumnType("text");
+
                     b.Property<string>("Purpose")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReceivedConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReceivedConfirmedBy")
                         .HasColumnType("text");
 
                     b.Property<string>("ReferralClientId")
@@ -2267,6 +2300,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ContactClientId");
+
+                    b.HasIndex("CashAgentId");
 
                     b.HasIndex("ReferralClientId");
 

@@ -1,11 +1,13 @@
 'use client';
 
 import { Suspense, useCallback, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Check, Phone, RotateCcw, Search, Star } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Check, History, ListChecks, Phone, RotateCcw, Search, Star } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { Pager, usePaged } from '@/components/crm/Pager';
+import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
+import { CallHistory } from '@/components/crm/calls/CallHistory';
 import {
   contactTypeLabel, Empty, ErrorBox, fmt, friendlyError, initials, PageHead, Pill, rupees, Skeleton, stageTone, useLoader, useToast,
 } from '@/components/crm/ui';
@@ -94,6 +96,8 @@ function DailyCalls() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [toast, showToast] = useToast();
+  const router = useRouter();
+  const [tab, setTab] = usePageTab(['queue', 'history'] as const, 'queue');
 
   const summary = useLoader(() => crm.get<CallSummary>('/api/v1/calls/summary'));
   const queue = useLoader(
@@ -121,6 +125,11 @@ function DailyCalls() {
   return (
     <main className="crm-page">
       <PageHead title="Daily calls" sub="Call every partner once per cycle, log what they said, and the system schedules the next call." />
+      <PageTabs label="Daily calls views" value={tab} onChange={setTab} tabs={[
+        { key: 'queue', label: 'Calls to make', icon: ListChecks },
+        { key: 'history', label: 'Who we called', icon: History },
+      ]} />
+      {tab === 'history' ? <CallHistory toast={showToast} onOpen={(id) => router.push(`/admin/partners?id=${encodeURIComponent(id)}`)} /> : <>
 
       {summary.error && <ErrorBox message={summary.error} onRetry={summary.reload} />}
 
@@ -215,6 +224,7 @@ function DailyCalls() {
           )}
         </section>
       </div>
+      </>}
       {toast}
     </main>
   );

@@ -46,13 +46,13 @@ export function rangeLabel(v: DateRangeValue): string {
   return 'all time';
 }
 
-export function DateRangeBar({ value, onChange, id = 'dr' }: { value: DateRangeValue; onChange: (v: DateRangeValue) => void; id?: string }) {
+export function DateRangeBar({ value, onChange, id = 'dr', keys }: { value: DateRangeValue; onChange: (v: DateRangeValue) => void; id?: string; keys?: DateRangeKey[] }) {
   const today = istToday();
   return (
     <div className="pt-dates" role="group" aria-label="Date">
       <CalendarDays size={16} aria-hidden color="var(--text-2)" />
       <div className="pt-seg" role="group" aria-label="Date range">
-        {DATE_RANGES.map((r) => (
+        {DATE_RANGES.filter((r) => !keys || keys.includes(r.k)).map((r) => (
           <button key={r.k} type="button" aria-pressed={value.key === r.k} onClick={() => {
             if (r.k === 'custom' && !value.from && !value.to) onChange({ key: 'custom', from: ist(6), to: today });
             else onChange({ ...value, key: r.k });

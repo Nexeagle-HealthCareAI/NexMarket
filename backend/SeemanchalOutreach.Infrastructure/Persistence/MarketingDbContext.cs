@@ -213,6 +213,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.ContactClientId);
                 entity.HasIndex(e => e.Status);
                 entity.HasIndex(e => e.ReferralClientId);
+                entity.HasIndex(e => e.CashAgentId);
             });
             modelBuilder.Entity<DiseaseRecord>(entity =>
             {

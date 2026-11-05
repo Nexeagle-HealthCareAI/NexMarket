@@ -10,13 +10,14 @@ import { Pager, usePaged } from '@/components/crm/Pager';
 import {
   contactTypeLabel, Empty, ErrorBox, fmt, friendlyError, initials, Modal, PageHead, Pill, rupees, Skeleton, useLoader, useToast,
 } from '@/components/crm/ui';
+import { PayWithProof, ProofLine, type ProofInfo } from '@/components/crm/PaymentProof';
 
 interface PaymentSummary { pendingAmount: number; pendingCount: number; approvedAmount: number; approvedPartners: number; overdue: number; paidMonthAmount: number; paidMonthCount: number }
 interface PaymentRow {
   id: string; contactClientId: string; partner: string; partnerType?: string | null; block?: string | null; phone?: string | null;
   patientsSent: number; admitted: number; purpose: string; period?: string | null; amount: number; status: string; overdue: boolean;
   createdAt: string; dueDate?: string | null; approvedAt?: string | null; paidAt?: string | null; paymentReference?: string | null; notes?: string | null;
-  referralClientId?: string | null; patientName?: string | null;
+  referralClientId?: string | null; patientName?: string | null; proof?: ProofInfo | null;
 }
 
 const FILTERS = [
@@ -144,6 +145,7 @@ function PartnerPaymentsView({ tab, setTab, access }: { tab: PayTab; setTab: (t:
                         : r.status === 'approved' ? <Pill tone={r.overdue ? 'bad' : 'warn'}>{r.overdue ? 'Overdue' : 'To be paid'}</Pill>
                         : r.status === 'rejected' ? <Pill>Rejected</Pill>
                         : <Pill tone="accent">Waiting approval</Pill>}
+                      <div style={{ marginTop: 4 }}><ProofLine id={r.id} status={r.status} proof={r.proof} canPay={editable} onChanged={refresh} toast={showToast} /></div>
                     </td>
                     <td className="num">
                       <div style={{ display: 'inline-flex', gap: 6 }}>
@@ -154,7 +156,7 @@ function PartnerPaymentsView({ tab, setTab, access }: { tab: PayTab; setTab: (t:
                           </>
                         )}
                         {r.status === 'pending_approval' && !isAdmin && <span className="crm-sub" style={{ fontSize: 12 }}>Admin approves</span>}
-                        {r.status === 'approved' && editable && <button type="button" className="crm-btn is-sm" onClick={() => setPaying(r)}>Mark paid</button>}
+                        {r.status === 'approved' && editable && !r.proof?.cashAgentId && <button type="button" className="crm-btn is-sm" onClick={() => setPaying(r)}>Pay with proof</button>}
                       </div>
                     </td>
                   </tr>
@@ -172,7 +174,7 @@ function PartnerPaymentsView({ tab, setTab, access }: { tab: PayTab; setTab: (t:
       </p>
 
       {adding && <AddPayment onClose={() => setAdding(false)} onSaved={() => { setAdding(false); showToast('Sent for approval.'); refresh(); }} />}
-      {paying && <MarkPaid row={paying} onClose={() => setPaying(null)} onSaved={() => { showToast(`Marked ${rupees(paying.amount)} paid to ${paying.partner}.`); setPaying(null); refresh(); }} />}
+      {paying && <PayWithProof row={{ id: paying.id, amount: paying.amount, partner: paying.partner }} onClose={() => setPaying(null)} onSaved={(m) => { showToast(m); setPaying(null); refresh(); }} />}
       {toast}
     </main>
   );
@@ -266,38 +268,6 @@ function AddPayment({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       {purpose === 'Other service' && <label className="crm-field">Describe the service<input className="crm-input" value={other} onChange={(e) => setOther(e.target.value)} /></label>}
       <label className="crm-field">Period or event (optional)<input className="crm-input" value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="e.g. Camp on 24 Oct, or October" /></label>
       <label className="crm-field">Notes (optional)<textarea className="crm-textarea" value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
-      {error && <div className="crm-error" role="alert">{error}</div>}
-    </Modal>
-  );
-}
-
-function MarkPaid({ row, onClose, onSaved }: { row: PaymentRow; onClose: () => void; onSaved: () => void }) {
-  const [reference, setReference] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const save = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      await crm.post(`/api/v1/payments/${row.id}/paid`, { reference: reference.trim() || null });
-      onSaved();
-    } catch (e) {
-      setError(friendlyError(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-  return (
-    <Modal title={`Mark ${rupees(row.amount)} paid`} onClose={onClose} actions={
-      <>
-        <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
-        <button type="button" className="crm-btn" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Mark paid'}</button>
-      </>
-    }>
-      <p className="crm-sub">{row.partner} · {row.purpose}</p>
-      <label className="crm-field">Payment reference (UPI / bank / cash receipt no.)
-        <input className="crm-input" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. UPI 4521…" />
-      </label>
       {error && <div className="crm-error" role="alert">{error}</div>}
     </Modal>
   );

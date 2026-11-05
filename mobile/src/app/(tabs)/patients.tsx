@@ -150,6 +150,11 @@ const PatientCard = React.memo(function PatientCard({ r, t, lang, steps, onThank
 
       {money ? (
         <View style={{ gap: 6 }}>
+          {money.pays.some((x) => x.status !== 'paid') ? (
+            <T style={{ fontSize: 13, fontWeight: '700', color: C.warnInk }}>
+              {t('moneyPatientDue', { amount: inr(money.pays.filter((x) => x.status !== 'paid').reduce((a, x) => a + x.amount, 0)) })}
+            </T>
+          ) : null}
           {[...money.pays.map((p) => ({ key: p.id, text: `${t('moneyPatientLine', { amount: inr(p.amount) })} · ${p.purpose}`, st: statusLine(p, t, lang) })),
             ...money.incs.map((i) => ({ key: i.id, text: t('moneyMyLine', { amount: inr(i.amount) }), st: statusLine(i, t, lang) }))].map((x) => (
             <Pressable key={x.key} onPress={() => router.push('/money')} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { canEdit, useAccess } from '@/lib/crm/access';
+import { PayWithProof, ProofLine, type ProofInfo } from '@/components/crm/PaymentProof';
 import { IndianRupee, Receipt, Wallet } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { fmt, friendlyError, Pill, rupees, Skeleton, useLoader } from '@/components/crm/ui';
@@ -12,11 +14,12 @@ interface Bill {
 }
 interface Payout {
   id: string; purpose: string; amount: number; status: string; notes?: string | null; createdAt: string; approvedAt?: string | null; paidAt?: string | null;
-  paymentReference?: string | null; overdue: boolean; by: string;
+  paymentReference?: string | null; overdue: boolean; by: string; proof?: ProofInfo | null;
 }
 interface Incentive { id: string; reason: string; amount: number; status: string; auto: boolean; createdAt: string; paidAt?: string | null; paymentReference?: string | null; agent: string }
 interface Money {
-  billed: number; collected: number; due: number; bills: Bill[]; partnerPayments: Payout[]; partnerOverall: { paid: number; open: number };
+  billed: number; collected: number; due: number; bills: Bill[]; partnerPayments: Payout[]; partnerOverall: { paid: number; open: number; total?: number };
+  partnerForPatient?: { total: number; paid: number; pending: number; unconfirmed: number };
   incentives: Incentive[]; purposes: string[];
 }
 
@@ -41,6 +44,10 @@ export function ReferralMoney({ clientId, partnerName, editable, isAdmin, onChan
   const [form, setForm] = useState<'bill' | 'payout' | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const done = (m: string) => { setForm(null); setMsg(m); void reload(); onChanged?.(); };
+  const { access } = useAccess();
+  const canPay = canEdit(access, 'payments');
+  const [paying, setPaying] = useState<Payout | null>(null);
+  const changed = () => { void reload(); onChanged?.(); };
 
   return (
     <section className="rm" aria-labelledby={`money-${clientId}`}>
@@ -61,9 +68,26 @@ export function ReferralMoney({ clientId, partnerName, editable, isAdmin, onChan
             <Total label="Billed" value={rupees(data.billed)} />
             <Total label="Collected" value={rupees(data.collected)} tone="ok" />
             <Total label="Still due" value={rupees(data.due)} tone={data.due > 0 ? 'warn' : undefined} />
-            <Total label="Partner paid (this patient)" value={rupees(data.partnerPayments.filter((p) => p.status === 'paid').reduce((a, p) => a + p.amount, 0))}
-              sub={`${partnerName}: ${rupees(data.partnerOverall.paid)} paid · ${rupees(data.partnerOverall.open)} open overall`} />
           </div>
+          {(() => {
+            const pp = data.partnerForPatient ?? { total: data.partnerPayments.reduce((a, p) => a + p.amount, 0), paid: data.partnerPayments.filter((p) => p.status === 'paid').reduce((a, p) => a + p.amount, 0), pending: 0, unconfirmed: 0 };
+            const pending = data.partnerForPatient ? pp.pending : pp.total - pp.paid;
+            return (
+              <div className="rm-partner">
+                <div className="rm-partner-head">
+                  <strong>{partnerName}</strong>
+                  <span className="crm-cell-sub">who referred this patient · gets for services for this patient</span>
+                </div>
+                <div className="rm-partner-nums">
+                  <span><em>Total</em>{rupees(pp.total)}</span>
+                  <span className="is-ok"><em>Paid</em>{rupees(pp.paid)}</span>
+                  <span className={pending > 0 ? 'is-warn' : undefined}><em>Still to pay</em>{rupees(pending)}</span>
+                  <span className={pp.unconfirmed ? 'is-warn' : undefined}><em>Receipt confirmed</em>{pp.unconfirmed ? `${pp.unconfirmed} not yet` : pp.paid > 0 ? 'Yes' : '—'}</span>
+                </div>
+                <span className="crm-cell-sub">All patients: {rupees(data.partnerOverall.paid)} paid · {rupees(data.partnerOverall.open)} still to pay. The field agent sees the same in the app.</span>
+              </div>
+            );
+          })()}
 
           {form === 'bill' && <BillForm clientId={clientId} onDone={() => done('Bill saved.')} onCancel={() => setForm(null)} />}
           {form === 'payout' && <PayoutForm clientId={clientId} partnerName={partnerName} purposes={data.purposes} onDone={() => done(`Sent to Payments for an admin's approval.`)} onCancel={() => setForm(null)} />}
@@ -84,6 +108,8 @@ export function ReferralMoney({ clientId, partnerName, editable, isAdmin, onChan
                   <span className="rm-side">
                     {statusPill(p.status, p.overdue)}
                     <span className="crm-cell-sub">{p.paidAt ? `Paid ${fmt.date(p.paidAt)}${p.paymentReference ? ` · ref ${p.paymentReference}` : ''}` : `Asked ${fmt.date(p.createdAt)} by ${p.by}`}</span>
+                    <ProofLine id={p.id} status={p.status} proof={p.proof} canPay={canPay} onChanged={changed} toast={setMsg} />
+                    {canPay && p.status === 'approved' && !p.proof?.cashAgentId && <button type="button" className="crm-btn is-sm" onClick={() => setPaying(p)}>Pay with proof</button>}
                   </span>
                 </li>
               ))}
@@ -102,8 +128,9 @@ export function ReferralMoney({ clientId, partnerName, editable, isAdmin, onChan
             </ul>
           )}
           {(data.partnerPayments.some((p) => p.status !== 'paid') || data.incentives.some((i) => i.status !== 'paid')) && (
-            <p className="crm-sub" style={{ fontSize: 12.5, margin: 0 }}>Approving and marking paid happens in <Link href="/admin/payments">Payments</Link>. The agent sees each status in their app.</p>
+            <p className="crm-sub" style={{ fontSize: 12.5, margin: 0 }}>Approving happens in <Link href="/admin/payments">Payments</Link>. Every payment needs proof: a UPI or bank screenshot, or the agent&apos;s photo of the cash handover. The agent sees each status in their app.</p>
           )}
+          {paying && <PayWithProof row={{ id: paying.id, amount: paying.amount, partner: partnerName }} onClose={() => setPaying(null)} onSaved={(m) => { setPaying(null); setMsg(m); changed(); }} />}
         </>
       )}
     </section>

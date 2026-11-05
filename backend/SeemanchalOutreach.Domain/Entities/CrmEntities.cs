@@ -63,6 +63,22 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? PaymentReference { get; set; }
         /// <summary>The referred patient this service was for (travel with them, ambulance…), when it was for one.</summary>
         public string? ReferralClientId { get; set; }
+
+        // Proof of payment, so nobody can dispute it: a UPI/bank screenshot from the office, or, for cash handed over by
+        // the field agent, a photo with the person taken in the app (time and place recorded).
+        public string? Method { get; set; }              // upi | bank | cash | cheque
+        public string? ProofKey { get; set; }            // private file storage key
+        public string? ProofMime { get; set; }
+        public string? ProofKind { get; set; }           // screenshot | cash_photo | receipt
+        public DateTime? ProofAt { get; set; }           // when the photo was taken / the proof added
+        public double? ProofLat { get; set; }
+        public double? ProofLng { get; set; }
+        public string? ProofBy { get; set; }
+        /// <summary>The field agent asked to hand this over in cash (they record it with a photo in the app).</summary>
+        public string? CashAgentId { get; set; }
+        /// <summary>The partner confirmed they got the money (recorded by their agent or the office).</summary>
+        public DateTime? ReceivedConfirmedAt { get; set; }
+        public string? ReceivedConfirmedBy { get; set; }
     }
 
     /// <summary>

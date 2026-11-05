@@ -303,7 +303,10 @@ namespace SeemanchalOutreach.Api.Controllers
             // The partner's payments overall, so the desk can see nothing for them is stuck.
             var partnerAll = await _context.PartnerPayments.AsNoTracking().Where(p => p.ContactClientId == r.ContactId && p.Status != "rejected")
                 .Select(p => new { p.Status, p.Amount }).ToListAsync(ct);
-            var names = await NamesAsync(bills.Select(b => b.CreatedBy).Concat(pays.Select(p => p.CreatedBy)).Concat(incs.Select(i => i.AgentId)));
+            var names = await NamesAsync(bills.Select(b => b.CreatedBy).Concat(pays.Select(p => p.CreatedBy)).Concat(incs.Select(i => i.AgentId))
+                .Concat(pays.SelectMany(p => new[] { p.CashAgentId, p.ProofBy, p.ReceivedConfirmedBy }).Where(x => x != null).Cast<string>()));
+            string? name(string? id) => id == null ? null : names.GetValueOrDefault(id, id);
+            var livePays = pays.Where(p => p.Status != "rejected").ToList();
             var active = bills.Where(b => b.Status == "active").ToList();
             var before = DateTime.UtcNow.AddDays(-7);
             return Ok(new
@@ -321,9 +324,19 @@ namespace SeemanchalOutreach.Api.Controllers
                     p.Id, p.Purpose, p.Amount, p.Status, p.Notes, p.CreatedAt, p.ApprovedAt, p.PaidAt, p.PaymentReference,
                     overdue = p.Status == "approved" && (p.DueDate ?? p.ApprovedAt ?? DateTime.UtcNow) < before,
                     by = names.GetValueOrDefault(p.CreatedBy, p.CreatedBy),
+                    proof = PaymentProof.Info(p, name),
                 }),
+                // For this patient: everything the partner is to get, what is paid, what is still to pay.
+                partnerForPatient = new
+                {
+                    total = livePays.Sum(p => p.Amount),
+                    paid = livePays.Where(p => p.Status == "paid").Sum(p => p.Amount),
+                    pending = livePays.Where(p => p.Status != "paid").Sum(p => p.Amount),
+                    unconfirmed = livePays.Count(p => p.Status == "paid" && p.ReceivedConfirmedAt == null),
+                },
                 partnerOverall = new
                 {
+                    total = partnerAll.Sum(p => p.Amount),
                     paid = partnerAll.Where(p => p.Status == "paid").Sum(p => p.Amount),
                     open = partnerAll.Where(p => p.Status != "paid").Sum(p => p.Amount),
                 },
