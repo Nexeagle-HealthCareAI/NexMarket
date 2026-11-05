@@ -217,7 +217,7 @@ export function WaSetup({ onSaved }: { onSaved?: () => void }) {
                 </div>
                 {templates ? (
                   <select className="crm-select" value={chosen} onChange={(e) => setTpl((x) => ({ ...x, [u.kind]: e.target.value }))}>
-                    <option value="">{u.kind === 'lead_followup' ? 'None (follow-up turned off)' : `None (uses a template named ${u.kind})`}</option>
+                    <option value="">{u.kind === 'lead_followup' ? 'None (follow-up turned off)' : u.kind === 'form_welcome' ? 'None (no instant WhatsApp to form leads)' : `None (uses a template named ${u.kind})`}</option>
                     {[...new Map(templates.map((x) => [x.name, x])).values()].map((x) => (
                       <option key={x.name} value={x.name} disabled={x.status !== 'APPROVED' && x.name !== chosen}>
                         {x.name} · {x.language} · {x.params} values{x.status !== 'APPROVED' ? ` · ${x.status.toLowerCase()}` : ''}

@@ -21,7 +21,8 @@ namespace SeemanchalOutreach.Api.Services
     {
         public static readonly string[] Statuses = { "new", "contacted", "appointment", "arrived", "admitted", "lost" };
         public static readonly string[] Open = { "new", "contacted", "appointment" };
-        public static readonly string[] Sources = { "whatsapp", "partner_qr", "partner", "ad", "camp", "missed_call", "walk_in", "desk", "agent", "web" };
+        public static readonly string[] Sources = { "whatsapp", "partner_qr", "partner", "ad", "camp", "missed_call", "walk_in", "desk", "agent", "web",
+            "fb_form", "ig_form", "facebook", "instagram" };
 
         public static string StatusLabel(string s) => s switch
         {
@@ -46,6 +47,10 @@ namespace SeemanchalOutreach.Api.Services
             "desk" => "Call to desk",
             "agent" => "Field agent",
             "web" => "Website",
+            "fb_form" => "Facebook lead form",
+            "ig_form" => "Instagram lead form",
+            "facebook" => "Facebook message",
+            "instagram" => "Instagram message",
             _ => s,
         };
 
@@ -315,6 +320,24 @@ namespace SeemanchalOutreach.Api.Services
                 RefId = lead?.Id.ToString() ?? phone,
             });
             return result;
+        }
+
+        /// <summary>
+        /// A new lead with no owner yet: when the WhatsApp automation says "share between people", it goes to whoever on
+        /// that list has the fewest open leads. Returns the name of the person picked, or null.
+        /// </summary>
+        public static async Task<string?> AutoAssignAsync(IMarketingDbContext db, WaAutomation rules, Lead lead, DateTime now, CancellationToken ct)
+        {
+            if (lead.OwnerId != null || rules.AssignMode != "balance" || rules.AssignTo.Count == 0) return null;
+            var pool = await db.Agents.AsNoTracking().Where(a => rules.AssignTo.Contains(a.AgentId) && a.IsActive).Select(a => new { a.AgentId, a.Name }).ToListAsync(ct);
+            if (pool.Count == 0) return null;
+            var ids = pool.Select(p => p.AgentId).ToList();
+            var load = await db.Leads.AsNoTracking().Where(l => l.OwnerId != null && ids.Contains(l.OwnerId) && Open.Contains(l.Status))
+                .GroupBy(l => l.OwnerId!).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
+            var pick = pool.OrderBy(p => load.GetValueOrDefault(p.AgentId)).ThenBy(p => p.Name).First();
+            lead.OwnerId = pick.AgentId;
+            db.LeadActivities.Add(new LeadActivity { LeadId = lead.Id, Kind = "owner", Text = $"Assigned to {pick.Name} automatically", CreatedAt = now.AddMilliseconds(1) });
+            return pick.Name;
         }
 
         /// <summary>Somebody on the desk did something with a lead: the first time counts as the response time.</summary>

@@ -59,6 +59,7 @@ const SOURCES: { key: string; label: string }[] = [
   { key: 'whatsapp', label: 'WhatsApp' }, { key: 'partner_qr', label: 'Partner QR' }, { key: 'partner', label: 'Partner' },
   { key: 'ad', label: 'Ad' }, { key: 'camp', label: 'Camp' }, { key: 'missed_call', label: 'Missed call' },
   { key: 'desk', label: 'Call to desk' }, { key: 'walk_in', label: 'Walk-in' }, { key: 'agent', label: 'Field agent' }, { key: 'web', label: 'Website' },
+  { key: 'fb_form', label: 'Facebook form' }, { key: 'ig_form', label: 'Instagram form' }, { key: 'facebook', label: 'Facebook message' }, { key: 'instagram', label: 'Instagram message' },
 ];
 const LOST_REASONS = ['Went elsewhere', 'Too far / travel', 'Cost', 'Not reachable', 'Only an enquiry', 'Wrong number'];
 

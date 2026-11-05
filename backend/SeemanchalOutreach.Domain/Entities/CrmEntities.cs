@@ -551,4 +551,72 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
+
+    /// <summary>A Facebook Messenger or Instagram Direct conversation with one person, on the hospital's Page or account.</summary>
+    public class SocialConversation
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Channel { get; set; } = "messenger";         // messenger | instagram
+        public string ExternalId { get; set; } = string.Empty;     // the person's ID for this Page/account (PSID / IGSID)
+        public string? PageId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Username { get; set; }                      // Instagram handle
+        public string? Phone { get; set; }                         // 91XXXXXXXXXX, once they share it
+        public Guid? LeadId { get; set; }
+        public string? AssignedTo { get; set; }                    // agentId
+        public string Status { get; set; } = "open";               // open | done
+        public int Unread { get; set; }
+        public string? LastMessage { get; set; }
+        public string? LastDirection { get; set; }                 // in | out
+        public DateTime LastMessageAt { get; set; } = DateTime.UtcNow;
+        public DateTime? LastInboundAt { get; set; }               // replies are allowed for 24 hours after this
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>One message in a <see cref="SocialConversation"/>.</summary>
+    public class SocialMessage
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid ConversationId { get; set; }
+        public string Direction { get; set; } = "in";              // in | out
+        public string Type { get; set; } = "text";                 // text | image | video | audio | file | sticker | story_reply | other
+        public string? Text { get; set; }
+        public string? ExternalId { get; set; }                    // Meta's message id (mid)
+        public string Status { get; set; } = "received";           // received | sent | failed
+        public string? Error { get; set; }
+        public string? SentBy { get; set; }                        // agentId; null = from Meta's own inbox or automatic
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Someone who filled a Facebook or Instagram Lead Ads form: the answers as Meta sent them and the ad they came
+    /// from (for cost per lead). The person is also a <see cref="Lead"/> when they gave a phone number.
+    /// </summary>
+    public class AdLead
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string LeadgenId { get; set; } = string.Empty;
+        public string Platform { get; set; } = "fb";               // fb | ig
+        public string? PageId { get; set; }
+        public string? FormId { get; set; }
+        public string? FormName { get; set; }
+        public string? AdId { get; set; }
+        public string? AdName { get; set; }
+        public string? AdsetName { get; set; }
+        public string? CampaignId { get; set; }
+        public string? CampaignName { get; set; }
+        public bool IsOrganic { get; set; }
+        public string? FieldsJson { get; set; }                    // [{ "name": "full_name", "values": ["…"] }, …]
+        public string? Name { get; set; }
+        public string? Phone { get; set; }
+        public Guid? LeadId { get; set; }
+        public string? Error { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // when they filled it (Meta's time)
+        public DateTime ReceivedAt { get; set; } = DateTime.UtcNow;
+        /// <summary>The last lead stage reported back to Meta (Contacted, Appointment booked, Arrived, Admitted), so ads learn who becomes a patient.</summary>
+        public string? StageSent { get; set; }
+        /// <summary>When it was sent, or when sending last failed.</summary>
+        public DateTime? StageSentAt { get; set; }
+        public string? StageError { get; set; }
+    }
 }

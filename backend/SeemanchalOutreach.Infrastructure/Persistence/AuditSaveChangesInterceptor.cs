@@ -27,6 +27,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         {
             typeof(AuditLog), typeof(TrajectoryPoint), typeof(AgentRefreshToken), typeof(AiBriefing),
             typeof(ChatMessage), typeof(ChatRead), typeof(ChatThread), typeof(WaMessage), typeof(WaConversation), typeof(CampPatient), // camp health details stay out of the log
+            typeof(SocialConversation), typeof(SocialMessage), typeof(AdLead), // people's messages and form answers
         };
 
         private static readonly Dictionary<string, string> Friendly = new()
@@ -68,6 +69,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
             var entries = db.ChangeTracker.Entries()
                 .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
                 .Where(e => !Skip.Contains(e.Entity.GetType()) && !e.Metadata.IsOwned())
+                // Figures the server refreshes on its own every few minutes (e.g. WhatsApp spend), not people's changes.
+                .Where(e => !(e.Entity is AppSetting st && st.Key.EndsWith(".snapshot", StringComparison.Ordinal)))
                 .ToList();
             if (entries.Count == 0) return;
 

@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Inbox, ListChecks, Megaphone, Pause, Play, ScrollText, Settings2, Workflow } from 'lucide-react';
+import { AlertTriangle, Inbox, ListChecks, Megaphone, Pause, Play, ScrollText, Settings2, Wallet, Workflow } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canView, useAccess } from '@/lib/crm/access';
 import { friendlyError, PageHead, Pill, Skeleton, useToast } from '@/components/crm/ui';
@@ -12,15 +12,17 @@ import { WaTemplates } from '@/components/crm/wa/WaTemplates';
 import { WaAutomation } from '@/components/crm/wa/WaAutomation';
 import { WaBroadcasts } from '@/components/crm/wa/WaBroadcasts';
 import { WaSetup } from '@/components/crm/wa/WaSetup';
+import { WaBilling } from '@/components/crm/wa/WaBilling';
 import { showPhone, when, type WaStatus } from '@/components/crm/wa/shared';
 
-/** Who sees each tab: everyone on the WhatsApp page, or only those who can open broadcasts, or only admins. */
+/** Who sees each tab: everyone on the WhatsApp page, those who can open broadcasts, those who manage WhatsApp, or only admins. */
 const TABS = [
   { key: 'inbox', label: 'Inbox', icon: Inbox, who: 'all' },
   { key: 'broadcasts', label: 'Broadcasts', icon: Megaphone, who: 'whatsapp' },
   { key: 'messages', label: 'All messages', icon: ScrollText, who: 'all' },
   { key: 'templates', label: 'Templates', icon: ListChecks, who: 'all' },
   { key: 'automation', label: 'Automation', icon: Workflow, who: 'all' },
+  { key: 'billing', label: 'Billing', icon: Wallet, who: 'manage' },
   { key: 'setup', label: 'Setup', icon: Settings2, who: 'admin' },
 ] as const;
 
@@ -37,12 +39,12 @@ function WhatsAppHub() {
   const params = useSearchParams();
   const router = useRouter();
   const { access } = useAccess();
-  const tabs = TABS.filter((t) => t.who === 'all' || (t.who === 'admin' ? !!access?.isAdmin : canView(access, 'whatsapp')));
-  const asked = params.get('tab') ?? 'inbox';
-  // A tab this person can't open (or an old link) falls back to the inbox.
-  const tab = (access && !tabs.some((t) => t.key === asked) ? 'inbox' : asked) as typeof TABS[number]['key'];
-  const selected = params.get('c');
   const [status, setStatus] = useState<WaStatus | null>(null);
+  const tabs = TABS.filter((t) => t.who === 'all' || (t.who === 'admin' ? !!access?.isAdmin : t.who === 'manage' ? !!status?.canManage : canView(access, 'whatsapp')));
+  const asked = params.get('tab') ?? 'inbox';
+  // A tab this person can't open (or an old link) falls back to the inbox. (Billing waits for the status to know.)
+  const tab = (access && (asked !== 'billing' || status) && !tabs.some((t) => t.key === asked) ? 'inbox' : asked) as typeof TABS[number]['key'];
+  const selected = params.get('c');
   const [busy, setBusy] = useState(false);
   const [toast, showToast] = useToast();
 
@@ -72,6 +74,8 @@ function WhatsAppHub() {
       showToast(status.paused ? 'WhatsApp sending is back on.' : 'All WhatsApp sending is paused.');
     } catch (e) { showToast(friendlyError(e)); } finally { setBusy(false); }
   };
+  const bill = status?.billing;
+  const billPct = bill && bill.budget > 0 ? Math.round((bill.spent / bill.budget) * 100) : 0;
   const used = status && status.dailyLimit > 0 ? Math.min(100, Math.round((status.templatesToday / status.dailyLimit) * 100)) : 0;
 
   return (
@@ -100,6 +104,16 @@ function WhatsAppHub() {
             <span><strong>Nothing is going out on WhatsApp.</strong> Replies, instant replies, broadcasts and follow-ups are held{status.pausedBy ? ` (paused by ${status.pausedBy}${status.pausedAt ? `, ${when(status.pausedAt)}` : ''})` : ''}. Incoming messages still arrive.</span>
           </div>
         )}
+        {bill && billPct >= bill.alertPercent && tab !== 'billing' && (
+          <div className={billPct >= 100 ? 'wh-paused' : 'ld-banner'}>
+            <AlertTriangle size={18} aria-hidden />
+            <span>
+              <strong>{billPct >= 100 ? 'This month’s WhatsApp budget is spent.' : `${billPct}% of this month’s WhatsApp budget is spent.`}</strong>{' '}
+              {billPct >= 100 && bill.stopAtBudget ? 'Broadcasts and follow-up templates are on hold. ' : ''}
+              <button type="button" className="wa-link" style={{ lineHeight: 'inherit' }} onClick={() => go({ tab: 'billing', c: null })}>See billing →</button>
+            </span>
+          </div>
+        )}
         {status && !status.connected && tab !== 'setup' && (
           <div className="ld-banner"><span><strong>WhatsApp isn&apos;t connected yet.</strong> {status.isAdmin ? <button type="button" className="wa-link" style={{ lineHeight: 'inherit' }} onClick={() => go({ tab: 'setup', c: null })}>Connect it in Setup →</button> : 'An admin can connect it in the Setup tab.'}</span></div>
         )}
@@ -121,6 +135,7 @@ function WhatsAppHub() {
       {tab === 'templates' && <WaTemplates canManage={!!status?.canManage} toast={showToast} />}
       {tab === 'broadcasts' && <WaBroadcasts />}
       {tab === 'automation' && <WaAutomation canManage={!!status?.canManage} toast={showToast} />}
+      {tab === 'billing' && status?.canManage && <WaBilling isAdmin={!!status.isAdmin} toast={showToast} />}
       {tab === 'setup' && <WaSetup onSaved={loadStatus} />}
       {toast}
     </main>

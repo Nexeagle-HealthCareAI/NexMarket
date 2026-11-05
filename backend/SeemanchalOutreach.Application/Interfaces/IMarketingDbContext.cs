@@ -51,6 +51,9 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<WaConversation> WaConversations { get; }
         DbSet<HealthCamp> HealthCamps { get; }
         DbSet<CampPatient> CampPatients { get; }
+        DbSet<SocialConversation> SocialConversations { get; }
+        DbSet<SocialMessage> SocialMessages { get; }
+        DbSet<AdLead> AdLeads { get; }
 
         ChangeTracker ChangeTracker { get; }
 

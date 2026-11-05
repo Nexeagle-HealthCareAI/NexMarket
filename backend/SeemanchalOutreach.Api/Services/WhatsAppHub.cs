@@ -110,14 +110,18 @@ namespace SeemanchalOutreach.Api.Services
         private readonly IWhatsAppSender _wa;
         private readonly IAppSettings _settings;
         private readonly IConfiguration _config;
+        private readonly WaBillingService _billing;
         private int? _templatesToday;
+        private bool _budgetChecked;
+        private string? _budgetBlock;
 
-        public WhatsAppOutbox(IMarketingDbContext db, IWhatsAppSender wa, IAppSettings settings, IConfiguration config)
+        public WhatsAppOutbox(IMarketingDbContext db, IWhatsAppSender wa, IAppSettings settings, IConfiguration config, WaBillingService billing)
         {
             _db = db;
             _wa = wa;
             _settings = settings;
             _config = config;
+            _billing = billing;
         }
 
         public WhatsAppConfig Config => LeadInbox.Wa(_settings, _config);
@@ -155,7 +159,24 @@ namespace SeemanchalOutreach.Api.Services
                 _templatesToday ??= await _db.WaMessages.CountAsync(m => m.Direction == "out" && m.TemplateName != null && m.Status != "failed" && m.Status != "blocked" && m.CreatedAt >= IstClock.TodayStartUtc, ct);
                 if (_templatesToday >= rules.DailyTemplateLimit) return $"Today's limit of {rules.DailyTemplateLimit} template messages is reached. Raise it in WhatsApp → Automation.";
             }
+            if (template) return await BudgetBlockAsync(ct);
             return null;
+        }
+
+        /// <summary>
+        /// When the monthly WhatsApp budget is spent and "stop at budget" is on, template messages (the paid ones) wait.
+        /// Checked once per request; if Meta's spend can't be read the budget isn't enforced, so sending never stops by mistake.
+        /// </summary>
+        private async Task<string?> BudgetBlockAsync(CancellationToken ct)
+        {
+            if (_budgetChecked) return _budgetBlock;
+            _budgetChecked = true;
+            var b = WaBillingSettings.Load(_settings);
+            if (!b.StopAtBudget || b.MonthlyBudget <= 0) return null;
+            var spent = await _billing.SpentThisMonthAsync(ct);
+            if (spent != null && spent >= b.MonthlyBudget)
+                _budgetBlock = $"This month's WhatsApp budget ({b.MonthlyBudget:0.##}) is spent. Raise it in WhatsApp → Billing, or turn off “stop at budget”.";
+            return _budgetBlock;
         }
 
         /// <summary>A free-text message (only delivered within 24 hours of their last message).</summary>

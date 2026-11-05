@@ -40,6 +40,7 @@ namespace SeemanchalOutreach.Application.Interfaces
             ("schedule_change", "Broadcast: schedule change", new[] { "Name", "Doctor", "Department", "Details" }),
             ("camp_invite", "Broadcast: health camp invite", new[] { "Name", "Place", "Date", "Details" }),
             ("general_update", "Broadcast: general update", new[] { "Name", "Message" }),
+            ("form_welcome", "Facebook/Instagram form: instant thank-you", new[] { "Person's first name", "Hospital name" }),
         };
 
         /// <summary>Setting key → server configuration key it falls back to.</summary>
@@ -111,7 +112,7 @@ namespace SeemanchalOutreach.Application.Interfaces
             {
                 var t = pick("template." + kind, "WhatsApp:Templates:" + kind);
                 // Before this page existed, a broadcast kind with no template configured was sent as a template of the same name.
-                if (t == null && kind != "lead_followup") t = kind;
+                if (t == null && kind is not ("lead_followup" or "form_welcome")) t = kind;
                 if (t != null) c.Templates[kind] = t;
             }
             return c;

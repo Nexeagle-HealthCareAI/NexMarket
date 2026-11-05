@@ -14,7 +14,7 @@ const STATUS: Record<string, { label: string; tone: Tone }> = {
 };
 const USE_LABEL: Record<string, string> = {
   lead_followup: 'Lead follow-up', doctor_availability: 'Broadcast: doctor available', schedule_change: 'Broadcast: schedule change',
-  camp_invite: 'Broadcast: camp invite', general_update: 'Broadcast: general update',
+  camp_invite: 'Broadcast: camp invite', general_update: 'Broadcast: general update', form_welcome: 'Form lead: instant thank-you',
 };
 
 /** Message templates: what's approved, what's waiting, and writing new ones, all sent to Meta from here. */

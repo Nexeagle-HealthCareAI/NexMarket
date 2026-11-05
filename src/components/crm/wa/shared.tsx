@@ -14,6 +14,8 @@ export interface WaTemplate {
 export interface WaStatus {
   connected: boolean; displayPhone?: string | null; hospital: string; paused: boolean; pausedBy?: string | null; pausedAt?: string | null;
   templatesToday: number; dailyLimit: number; unread: number; canManage: boolean; isAdmin: boolean; me: string;
+  /** Only for people who manage WhatsApp, and only when a monthly budget is set. */
+  billing?: { budget: number; spent: number; currency?: string | null; alertPercent: number; stopAtBudget: boolean; at?: string | null } | null;
 }
 
 export const istTime = new Intl.DateTimeFormat('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' });
