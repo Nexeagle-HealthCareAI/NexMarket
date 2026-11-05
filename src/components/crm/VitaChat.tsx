@@ -8,10 +8,14 @@ import { crm } from '@/lib/sync/api-client';
 import { canView, useAccess } from '@/lib/crm/access';
 import { friendlyError } from '@/components/crm/ui';
 
-/** Opens the side drawer from anywhere (the top bar's Vita and Messages buttons). detail: { tab?: 'vita' | 'messages' } */
+/**
+ * Opens the side drawer from anywhere (the top bar's Vita and Messages buttons). detail: { tab?, area?, question? }.
+ * With a question, Vita is asked it straight away (about `area`, e.g. from a button on the command centre).
+ */
 export const VITA_EVENT = 'vita-open';
-export function openVita(tab: 'vita' | 'messages' = 'vita') {
-  window.dispatchEvent(new CustomEvent(VITA_EVENT, { detail: { tab } }));
+interface VitaOpen { tab?: 'vita' | 'messages'; area?: string; question?: string }
+export function openVita(tab: 'vita' | 'messages' = 'vita', opts: { area?: string; question?: string } = {}) {
+  window.dispatchEvent(new CustomEvent<VitaOpen>(VITA_EVENT, { detail: { tab, ...opts } }));
 }
 
 interface ThreadLite { id: string; kind: string; title: string; sub?: string | null; lastPreview?: string | null; lastMessageAt?: string | null; unread: number; photoUrl?: string | null }
@@ -65,6 +69,7 @@ export default function VitaChat() {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const askRef = useRef<((q: string, area?: string) => void) | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Remember the conversation for this browser tab, so moving between pages keeps it.
@@ -76,9 +81,11 @@ export default function VitaChat() {
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
   useEffect(() => {
     const on = (e: Event) => {
-      const want = (e as CustomEvent<{ tab?: 'vita' | 'messages' }>).detail?.tab ?? 'vita';
-      setTab(want);
+      const d = (e as CustomEvent<VitaOpen>).detail ?? {};
+      setTab(d.tab ?? 'vita');
       setOpen(true);
+      if (d.area && AREAS.some((a) => a.k === d.area)) { setArea(d.area); setPicked(true); }
+      if (d.question) askRef.current?.(d.question, d.area);
     };
     window.addEventListener(VITA_EVENT, on);
     return () => window.removeEventListener(VITA_EVENT, on);
@@ -90,12 +97,7 @@ export default function VitaChat() {
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  const vitaAllowed = !!access && canView(access, 'analytics');
-  const chatAllowed = !!access && (access.isAdmin || access.role === 'MarketingManager' || canView(access, 'field'));
-  if (!access || (!vitaAllowed && !chatAllowed)) return null;
-  const shownTab = !vitaAllowed ? 'messages' : !chatAllowed ? 'vita' : tab;
-
-  const ask = async (question: string) => {
+  const ask = async (question: string, forArea?: string) => {
     const text = question.trim();
     if (!text || busy) return;
     const history = turns.filter((t) => !t.failed).slice(-10).map(({ role, content }) => ({ role, content }));
@@ -103,7 +105,7 @@ export default function VitaChat() {
     setQ('');
     setBusy(true);
     try {
-      const r = await crm.post<{ answer: string; lookedUp: string[] }>('/api/v1/analytics/analyst/ask', { question: text, history, scope: area });
+      const r = await crm.post<{ answer: string; lookedUp: string[] }>('/api/v1/analytics/analyst/ask', { question: text, history, scope: forArea ?? area });
       setTurns((t) => [...t, { role: 'assistant', content: r.answer || 'No answer came back. Try asking another way.', tools: r.lookedUp }]);
     } catch (e) {
       setTurns((t) => [...t, { role: 'assistant', content: friendlyError(e), failed: true }]);
@@ -111,6 +113,14 @@ export default function VitaChat() {
       setBusy(false);
     }
   };
+
+  // The drawer's open event can carry a question; it calls the latest ask through this ref.
+  useEffect(() => { askRef.current = (q, a) => { void ask(q, a); }; });
+
+  const vitaAllowed = !!access && canView(access, 'analytics');
+  const chatAllowed = !!access && (access.isAdmin || access.role === 'MarketingManager' || canView(access, 'field'));
+  if (!access || (!vitaAllowed && !chatAllowed)) return null;
+  const shownTab = !vitaAllowed ? 'messages' : !chatAllowed ? 'vita' : tab;
 
   return (
     <>
@@ -130,7 +140,7 @@ export default function VitaChat() {
             <Image src={busy ? '/brand/vita/think.webp' : '/brand/vita/ai.webp'} alt="" width={52} height={52} unoptimized className={busy ? 'vita-bob' : undefined} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <strong>Vita <span className="vita-tag">Market analyst</span></strong>
-              <span>{busy ? 'Looking at the numbers…' : 'Ask about referrals, partners, agents, money or surveys.'}</span>
+              <span>{busy ? 'Looking at the numbers…' : 'Ask about referrals, leads, partners, agents, money or surveys.'}</span>
             </div>
             {turns.length > 0 && <button type="button" className="vita-icon" onClick={() => setTurns([])} aria-label="New conversation" title="New conversation"><RotateCcw size={16} /></button>}
             {!(vitaAllowed && chatAllowed) && <button type="button" className="vita-icon" onClick={() => setOpen(false)} aria-label="Close"><X size={18} /></button>}

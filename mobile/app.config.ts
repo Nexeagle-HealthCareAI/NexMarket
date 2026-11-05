@@ -65,6 +65,9 @@ const config: ExpoConfig = {
     predictiveBackGestureEnabled: false,
   },
   plugins: [
+    // Only the two phone CPU types (32-bit ARM for older phones, 64-bit ARM for newer ones); emulator-only
+    // x86 code is left out, which makes the APK much smaller to download and install.
+    ['expo-build-properties', { android: { buildArchs: ['armeabi-v7a', 'arm64-v8a'] } }],
     'expo-router',
     'expo-sqlite',
     'expo-secure-store',

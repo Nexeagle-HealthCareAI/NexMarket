@@ -11,6 +11,7 @@ import { useDb, useT } from '../lib/session';
 import { db } from '../lib/db';
 import { ymd } from '../lib/util';
 import { cachedUnread, useChatVersion } from '../lib/chat';
+import { lite } from '../lib/perf';
 
 // ─── Text ───
 export function T({ style, children, numberOfLines, onPress }: { style?: StyleProp<TextStyle>; children: React.ReactNode; numberOfLines?: number; onPress?: () => void }) {
@@ -184,7 +185,7 @@ export function Sheet({ visible, onClose, title, children, scroll = true }: { vi
   const insets = useSafeAreaInsets();
   const maxH = Dimensions.get('window').height * 0.88;
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={visible} transparent animationType={lite() ? 'none' : 'slide'} onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={s.scrim} onPress={onClose} accessibilityLabel="Close" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={[s.sheet, { paddingBottom: 16 + insets.bottom, maxHeight: maxH }]}>

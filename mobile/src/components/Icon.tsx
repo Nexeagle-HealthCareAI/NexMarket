@@ -6,7 +6,7 @@ export type IconName =
   | 'camera' | 'star' | 'back' | 'chevron' | 'close' | 'calendar' | 'clock' | 'upload' | 'alert' | 'note' | 'pin'
   | 'search' | 'refresh' | 'logout' | 'battery' | 'hospital' | 'flag' | 'cloudOff' | 'trash' | 'leave' | 'sparkle' | 'send'
   | 'chat' | 'attach' | 'smile' | 'tag' | 'doc' | 'image' | 'reply' | 'checks' | 'lock' | 'download' | 'pencil' | 'newChat' | 'bell' | 'bellOff' | 'settings'
-  | 'fingerprint' | 'eye' | 'eyeOff' | 'backspace';
+  | 'fingerprint' | 'eye' | 'eyeOff' | 'backspace' | 'bolt';
 
 /** Line icons drawn on a 24×24 grid, 2 px stroke, matching the design canvas. */
 export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { name: IconName; size?: number; color?: string; strokeWidth?: number }) {
@@ -38,6 +38,7 @@ export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { 
     case 'search': body = <><Circle {...p} cx={11} cy={11} r={6.5} /><Path {...p} d="M16 16l4.5 4.5" /></>; break;
     case 'refresh': body = <><Path {...p} d="M20 11a8 8 0 10-2.3 5.7" /><Path {...p} d="M20 4v7h-7" /></>; break;
     case 'logout': body = <><Path {...p} d="M14 4h5v16h-5" /><Path {...p} d="M10 8l-4 4 4 4M6 12h10" /></>; break;
+    case 'bolt': body = <><Path {...p} d="M13 3L5 14h6l-1 7 8-11h-6z" /></>; break;
     case 'battery': body = <><Rect {...p} x={3} y={7} width={16} height={10} rx={2} /><Path {...p} d="M21 10.5v3M7 10v4M10 10v4" /></>; break;
     case 'hospital': body = <><Path {...p} d="M4 21V7l8-4 8 4v14z" /><Path {...p} d="M12 9v6M9 12h6M10 21v-3h4v3" /></>; break;
     case 'flag': body = <><Path {...p} d="M5 21V4M5 4h11l-2 4 2 4H5" /></>; break;

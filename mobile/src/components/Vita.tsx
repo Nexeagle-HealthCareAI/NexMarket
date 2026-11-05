@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, Modal, Pressable, View, type ImageStyle, type StyleProp } from 'react-native';
 import { T } from './ui';
 import { C } from '../theme';
+import { lite } from '../lib/perf';
+import { toast } from './ui';
 
 /** Vita, the NexEagle eagle. One pose per mood; the home screen picks the mood from the agent's day. */
 export const VITA = {
@@ -24,15 +26,16 @@ const RATIO: Record<VitaMood, number> = { wave: 633 / 640, coffee: 539 / 640, fl
 /** Vita, gently floating (flying moods drift more). Pass bob={false} for a still picture. */
 export function Vita({ mood, height, bob = true, style }: { mood: VitaMood; height: number; bob?: boolean; style?: StyleProp<ImageStyle> }) {
   const v = useRef(new Animated.Value(0)).current;
+  const moving = bob && !lite();
   useEffect(() => {
-    if (!bob) return;
+    if (!moving) { v.setValue(0); return; }
     const loop = Animated.loop(Animated.sequence([
       Animated.timing(v, { toValue: 1, duration: mood === 'fly' ? 1400 : 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       Animated.timing(v, { toValue: 0, duration: mood === 'fly' ? 1400 : 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
     ]));
     loop.start();
     return () => loop.stop();
-  }, [v, bob, mood]);
+  }, [v, moving, mood]);
   const lift = mood === 'fly' ? 8 : mood === 'sleep' ? 2 : 4;
   return (
     <Animated.View style={{ transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, -lift] }) }, { scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, mood === 'sleep' ? 1.02 : 1.01] }) }] }}>
@@ -47,6 +50,8 @@ export function Vita({ mood, height, bob = true, style }: { mood: VitaMood; heig
 let show: ((msg: string) => void) | null = null;
 /** Vita cheers for a moment — after a task is done, the last stop of the day, and so on. */
 export function celebrate(msg: string) {
+  // On older phones a quick note instead of the full-screen picture.
+  if (lite()) { toast(msg); return; }
   show?.(msg);
 }
 

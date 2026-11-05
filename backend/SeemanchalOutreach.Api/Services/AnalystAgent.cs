@@ -233,6 +233,8 @@ namespace SeemanchalOutreach.Api.Services
             "Partners refer patients to the hospital. A referral moves: referred → arrived → seen in OPD → admitted → procedure → discharged, " +
             "or 'lost' if the patient never came. The hospital pays some partners (payouts). Agents also ask every new partner six survey " +
             "questions about local illnesses, missing specialists, where patients go today, who decides, how families pay and transport. " +
+            "People also contact the hospital directly as leads (WhatsApp, Facebook and Instagram forms and messages, partner QR codes, missed calls, health camps); " +
+            "the get_leads tool covers them. " +
             "Admissions are what the business cares about most, then arrival rate, then active partners, then field coverage. " +
             "Rules: use only numbers you were given or looked up with the tools; never invent figures; quote the numbers behind every point; " +
             "say plainly when the data is too thin to judge; write short, plain sentences a hospital marketing manager in India can act on; " +
@@ -251,6 +253,7 @@ namespace SeemanchalOutreach.Api.Services
           {"type":"function","function":{"name":"get_survey_needs","description":"Top answers to the survey questions the app asks, for the whole region or one block.","parameters":{"type":"object","properties":{"block":{"type":"string","description":"Block name, or empty for all"}},"required":[]}}},
           {"type":"function","function":{"name":"get_survey_coverage","description":"How well the survey is being done: answers and panchayats surveyed per block, and per agent how many were answered, skipped, or new contacts left without a survey (last 30 days).","parameters":{"type":"object","properties":{},"required":[]}}},
           {"type":"function","function":{"name":"get_money_summary","description":"Money paid to partners in the last N days against the admissions it brought: total, cost per admission, waiting approval, approved but unpaid, overdue, by purpose and partner type, top paid partners, partners paid with no admissions.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
+          {"type":"function","function":{"name":"get_leads","description":"People who contacted the hospital directly (WhatsApp, Facebook/Instagram forms and messages, partner QR codes, missed calls, health camps, walk-ins) in the last N days: count, appointment and arrival rate and first-reply time by source and by department, plus unanswered WhatsApp and Facebook/Instagram conversations right now.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_tracked_items","description":"Issues, opportunities and planned actions already being tracked, with owner, due date and status.","parameters":{"type":"object","properties":{"status":{"type":"string","enum":["open","in_progress","done","dismissed","all"]}},"required":[]}}}
         ]
         """)!.AsArray();
@@ -298,6 +301,9 @@ namespace SeemanchalOutreach.Api.Services
                 case "get_survey_coverage":
                     result = await _data.SurveyCoverageAsync(ct);
                     break;
+                case "get_leads":
+                    result = await LeadsSummaryAsync(from, to, ct);
+                    break;
                 case "get_tracked_items":
                     var st = Str(args["status"]) ?? "open";
                     var q = _db.AiItems.AsNoTracking();
@@ -314,6 +320,56 @@ namespace SeemanchalOutreach.Api.Services
             }
             var text = JsonSerializer.Serialize(result, Json);
             return text.Length > 6000 ? text[..6000] + "…(cut)" : text;
+        }
+
+        private sealed record LeadRow(string Source, string Status, string? Department, string? LostReason, DateTime CreatedAt, DateTime? FirstResponseAt);
+
+        private static int? MedianMinutes(IEnumerable<LeadRow> rows)
+        {
+            var a = rows.Where(l => l.FirstResponseAt != null).Select(l => (l.FirstResponseAt!.Value - l.CreatedAt).TotalMinutes).OrderBy(x => x).ToList();
+            return a.Count == 0 ? null : (int)Math.Round(a[a.Count / 2]);
+        }
+        private static bool GotAppointment(string s) => s is "appointment" or "arrived" or "admitted";
+        private static bool Came(string s) => s is "arrived" or "admitted";
+
+        private static object LeadGroups(IEnumerable<IGrouping<string, LeadRow>> groups) => groups.Select(g => new
+        {
+            key = g.Key,
+            leads = g.Count(),
+            appointment = g.Count(l => GotAppointment(l.Status)),
+            arrived = g.Count(l => Came(l.Status)),
+            admitted = g.Count(l => l.Status == "admitted"),
+            lost = g.Count(l => l.Status == "lost"),
+            medianFirstReplyMinutes = MedianMinutes(g),
+        }).OrderByDescending(x => x.leads).Take(15).ToList();
+
+        /// <summary>Leads by source and department for a period: counts and rates only, no names or numbers.</summary>
+        private async Task<object> LeadsSummaryAsync(DateTime from, DateTime to, CancellationToken ct)
+        {
+            var rows = await _db.Leads.AsNoTracking().Where(l => l.CreatedAt >= from && l.CreatedAt < to)
+                .Select(l => new LeadRow(l.Source, l.Status, l.Department, l.LostReason, l.CreatedAt, l.FirstResponseAt)).ToListAsync(ct);
+            var now = DateTime.UtcNow;
+            return new
+            {
+                from, to,
+                total = rows.Count,
+                appointment = rows.Count(l => GotAppointment(l.Status)),
+                arrived = rows.Count(l => Came(l.Status)),
+                admitted = rows.Count(l => l.Status == "admitted"),
+                lost = rows.Count(l => l.Status == "lost"),
+                stillNew = rows.Count(l => l.Status == "new"),
+                neverReplied = rows.Count(l => l.FirstResponseAt == null && l.Status == "new"),
+                medianFirstReplyMinutes = MedianMinutes(rows),
+                bySource = LeadGroups(rows.GroupBy(l => LeadInbox.SourceLabel(l.Source))),
+                byDepartment = LeadGroups(rows.Where(l => !string.IsNullOrWhiteSpace(l.Department)).GroupBy(l => l.Department!.Trim())),
+                lostReasons = rows.Where(l => l.Status == "lost" && !string.IsNullOrWhiteSpace(l.LostReason)).GroupBy(l => l.LostReason!)
+                    .Select(g => new { reason = g.Key, count = g.Count() }).OrderByDescending(x => x.count).Take(8).ToList(),
+                unansweredNow = new
+                {
+                    whatsapp = await _db.WaConversations.CountAsync(c => c.Status == "open" && c.LastDirection == "in" && c.LastInboundAt > now.AddDays(-1), ct),
+                    facebookInstagram = await _db.SocialConversations.CountAsync(c => c.Status == "open" && c.LastDirection == "in" && c.LastInboundAt > now.AddDays(-1), ct),
+                },
+            };
         }
 
         /// <summary>Lets the model look things up until it is ready. Returns tool calls made.</summary>
