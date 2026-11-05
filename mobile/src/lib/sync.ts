@@ -181,7 +181,7 @@ interface PullResponse {
   visits: { clientId: string; panchayatId: string; checkInAt: string; checkInLat: number; checkInLng: number; checkOutAt: string | null; checkOutLat: number | null; checkOutLng: number | null }[];
   shifts: { clientId: string; startAt: string; endAt: string | null }[];
   contactNotes: { clientId: string; contactId: string; text: string; source: string; createdAt: string; lat?: number | null; lng?: number | null; accuracyM?: number | null; agentId?: string | null; editedAt?: string | null }[];
-  referrals: { clientId: string; contactId: string; status: string; notes: string | null; createdAt: string; patientName?: string; department?: string; urgent?: boolean; updatedAt?: string }[];
+  referrals: { clientId: string; contactId: string; status: string; notes: string | null; createdAt: string; patientName?: string; department?: string; urgent?: boolean; updatedAt?: string; arrivedAt?: string | null; admittedAt?: string | null }[];
   surveys: { clientId: string; contactId: string; panchayatId: string; answersJson: string; createdAt: string }[];
 }
 
@@ -250,16 +250,20 @@ function applyPull(r: PullResponse) {
     }
     for (const x of r.referrals ?? []) {
       if (skip.has(x.clientId)) continue;
-      // The pull doesn't (yet) carry patient name / department: keep what the phone has.
+      // The hospital's stage, its notes ("admitted to ward 3…") and when the patient arrived / was admitted.
+      // Name and department stay as the agent typed them.
       d.runSync(
-        `INSERT INTO referrals (clientId, contactId, patientName, department, urgent, notes, status, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO referrals (clientId, contactId, patientName, department, urgent, notes, status, createdAt, updatedAt, arrivedAt, admittedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(clientId) DO UPDATE SET status = excluded.status,
            patientName = COALESCE(referrals.patientName, excluded.patientName),
            department = COALESCE(referrals.department, excluded.department),
+           notes = COALESCE(excluded.notes, referrals.notes),
+           arrivedAt = COALESCE(excluded.arrivedAt, referrals.arrivedAt),
+           admittedAt = COALESCE(excluded.admittedAt, referrals.admittedAt),
            updatedAt = excluded.updatedAt`,
         x.clientId, x.contactId, x.patientName ?? null, x.department ?? null, x.urgent ? 1 : 0, x.notes, x.status === 'converted' ? 'admitted' : x.status,
-        x.createdAt, x.updatedAt ?? nowIso());
+        x.createdAt, x.updatedAt ?? nowIso(), x.arrivedAt ?? null, x.admittedAt ?? null);
     }
     for (const s of r.surveys ?? []) {
       d.runSync('INSERT OR IGNORE INTO surveys (clientId, contactId, panchayatId, answersJson, createdAt) VALUES (?, ?, ?, ?, ?)',

@@ -903,6 +903,74 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.ToTable("chat_messages", "marketing");
                 });
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.ChatPin", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("PinnedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PinnedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PinnedByName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ThreadId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ThreadId")
+                        .IsUnique();
+
+                    b.ToTable("chat_pins", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.ChatReaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Emoji")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ThreadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ThreadId");
+
+                    b.HasIndex("MessageId", "UserId", "Emoji")
+                        .IsUnique();
+
+                    b.ToTable("chat_reactions", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.ChatRead", b =>
                 {
                     b.Property<Guid>("Id")

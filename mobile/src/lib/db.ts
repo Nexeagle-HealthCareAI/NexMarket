@@ -16,7 +16,7 @@ export function db(): SQLite.SQLiteDatabase {
   return _db;
 }
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 function migrate(d: SQLite.SQLiteDatabase) {
   const row = d.getFirstSync<{ user_version: number }>('PRAGMA user_version');
@@ -83,6 +83,14 @@ function migrate(d: SQLite.SQLiteDatabase) {
     for (const col of ['escalated INTEGER DEFAULT 0', 'escalationNote TEXT', 'escalatedAt TEXT', 'escalationResolved INTEGER DEFAULT 0', 'escalationResolution TEXT']) {
       try { d.execSync(`ALTER TABLE contacts ADD COLUMN ${col}`); } catch { /* already there */ }
     }
+  }
+  if (v < 5) {
+    // When the hospital saw each referred patient arrive / admitted them. A fresh full pull fills them in
+    // (and the hospital's notes) for referrals already on the phone.
+    for (const col of ['arrivedAt TEXT', 'admittedAt TEXT']) {
+      try { d.execSync(`ALTER TABLE referrals ADD COLUMN ${col}`); } catch { /* already there */ }
+    }
+    if (v > 0) d.runSync("DELETE FROM kv WHERE key = 'pullSince'");
   }
   if (v < SCHEMA_VERSION) d.execSync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
@@ -166,7 +174,7 @@ export interface Note {
 }
 export interface Shift { clientId: string; startTime: string; startLat: number; startLng: number; endTime: string | null; endLat: number | null; endLng: number | null }
 export interface Visit { clientId: string; panchayatId: string; shiftId: string | null; checkInAt: string; checkInLat: number; checkInLng: number; checkOutAt: string | null; checkOutLat: number | null; checkOutLng: number | null }
-export interface Referral { clientId: string; contactId: string; patientName: string; patientAge: number | null; patientSex: string | null; clientPhone: string | null; department: string; urgent: number; notes: string | null; status: string; createdAt: string; updatedAt: string | null }
+export interface Referral { clientId: string; contactId: string; patientName: string; patientAge: number | null; patientSex: string | null; clientPhone: string | null; department: string; urgent: number; notes: string | null; status: string; createdAt: string; updatedAt: string | null; arrivedAt?: string | null; admittedAt?: string | null }
 export interface Question { id: string; questionId: string; text: string; type: string; optionsJson: string | null; section: string; isOptional: number; ord: number }
 export interface Panchayat { id: string; name: string; block: string; district: string; lat: number | null; lng: number | null }
 export interface Assigned { panchayatId: string; name: string; visited: number; lastVisitedAt: string | null; lat: number | null; lng: number | null; source: string | null; visitCount: number | null; localVisits?: number; localLastAt?: string | null }

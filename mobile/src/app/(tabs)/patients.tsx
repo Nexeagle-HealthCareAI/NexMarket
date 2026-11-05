@@ -55,6 +55,13 @@ export default function Patients() {
   );
 }
 
+/** The hospital's latest note on a referral ("[Hospital - 2026-11-05]: Admitted to ward 3"), if any. */
+function lastHospitalNote(notes: string | null): string | null {
+  if (!notes) return null;
+  const all = [...notes.matchAll(/\[Hospital - [^\]]+\]:\s*([^\n]+)/g)];
+  return all.length ? all[all.length - 1][1].trim() : null;
+}
+
 function Gap() {
   return <View style={{ height: 12 }} />;
 }
@@ -65,6 +72,7 @@ const PatientCard = React.memo(function PatientCard({ r, t, lang, steps, onThank
   const step = stageStep(r.status);
   const lost = r.status === 'lost';
   const waiting = r.status === 'pending' ? Math.floor((Date.now() - new Date(r.createdAt).getTime()) / 86400000) : 0;
+  const hospitalNote = lastHospitalNote(r.notes);
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
@@ -97,6 +105,21 @@ const PatientCard = React.memo(function PatientCard({ r, t, lang, steps, onThank
               <T style={{ fontSize: 11, color: i <= step ? C.okInk : C.muted, fontWeight: i === step ? '700' : '500', textAlign: 'center' }}>{s}</T>
             </View>
           ))}
+        </View>
+      ) : null}
+
+      {r.arrivedAt || r.admittedAt ? (
+        <T style={{ color: C.text2, fontSize: 12.5 }}>
+          {[r.arrivedAt ? t('arrivedOn', { d: dayShort(lang, new Date(r.arrivedAt)) }) : null, r.admittedAt ? t('admittedOn', { d: dayShort(lang, new Date(r.admittedAt)) }) : null].filter(Boolean).join(' · ')}
+        </T>
+      ) : null}
+
+      {hospitalNote ? (
+        <View style={{ flexDirection: 'row', gap: 8, backgroundColor: C.blueSoft, borderRadius: 10, padding: 10 }}>
+          <Icon name="hospital" size={16} color={C.blueInk} />
+          <T style={{ flex: 1, color: C.text, fontSize: 13.5, lineHeight: 19 }}>
+            <T style={{ fontWeight: '700', color: C.blueInk }}>{t('hospitalSays')}: </T>{hospitalNote}
+          </T>
         </View>
       ) : null}
 

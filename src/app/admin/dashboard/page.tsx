@@ -341,7 +341,7 @@ function CommandCentre() {
         <section className="crm-card is-flush grow-2" aria-labelledby="ref-h">
           <div className="crm-card-head">
             <h2 id="ref-h" className="crm-h2">Latest referrals</h2>
-            {canView(access, 'pipeline') && <Link href="/admin/referrals" style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 600 }}>Open pipeline</Link>}
+            {canView(access, 'pipeline') && <Link href="/admin/referrals?tab=pipeline" style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 600 }}>Open pipeline</Link>}
           </div>
           {!data ? <div style={{ padding: '0 22px' }}><Skeleton h={220} /></div> : data.latestReferrals.length === 0 ? (
             <Empty title="No referrals yet" />
@@ -502,7 +502,7 @@ function buildActions(data: Summary, ov: Overview | null, access: Access): Actio
     add(canView(access, 'whatsapp') && !!spend && spend.budget > 0 && pct >= spend.alertPercent, { key: 'spend', count: `${pct}%`, tone: pct >= 100 ? 'bad' : 'warn',
       href: '/admin/whatsapp?tab=billing', title: 'WhatsApp budget', sub: `${rupees(spend?.spent)} of ${rupees(spend?.budget)} spent this month` });
   }
-  add(canView(access, 'desk') && al.notArrived48 > 0, { key: 'late', count: al.notArrived48, tone: 'warn', href: '/admin/desk',
+  add(canView(access, 'desk') && al.notArrived48 > 0, { key: 'late', count: al.notArrived48, tone: 'warn', href: '/admin/referrals?tab=desk',
     title: 'Referrals not arrived in 48 h', sub: 'Call the patient or the partner' });
   add(canView(access, 'partners') && al.openEscalations > 0, { key: 'esc', count: al.openEscalations, tone: 'warn', href: '/admin/partners?tab=escalated',
     title: 'Open escalations from agents', sub: 'Waiting for a reply' });
@@ -657,7 +657,7 @@ function TodaysWork({ work, ov, access }: { work: Summary['work']; ov: Overview 
   if (canView(access, 'desk')) {
     const total = work.desk.expected + work.desk.arrivedToday;
     cards.push(
-      <WorkCard key="desk" href="/admin/desk" icon={<Inbox size={18} aria-hidden />} title="Referral desk"
+      <WorkCard key="desk" href="/admin/referrals?tab=desk" icon={<Inbox size={18} aria-hidden />} title="Referral desk"
         big={`${work.desk.expected} patients expected`} sub={`${work.desk.arrivedToday} arrived today`}
         pct={total ? Math.round((work.desk.arrivedToday / total) * 100) : 0} color="var(--info)" tag={work.desk.late > 0 ? `${work.desk.late} late 48 h+` : undefined} tagTone="bad" />,
     );
@@ -753,9 +753,9 @@ const VITA_PAGES: Record<string, { href: string; label: string; can: (a: Access)
   leads: { href: '/admin/leads', label: 'Leads inbox', can: canLeads },
   whatsapp: { href: '/admin/whatsapp?tab=inbox', label: 'WhatsApp', can: (a) => canView(a, 'whatsapp') },
   social: { href: '/admin/social?tab=inbox', label: 'Facebook & Instagram', can: (a) => canView(a, 'social') },
-  desk: { href: '/admin/desk', label: 'Referral desk', can: (a) => canView(a, 'desk') },
+  desk: { href: '/admin/referrals?tab=desk', label: 'Referral desk', can: (a) => canView(a, 'desk') },
   calls: { href: '/admin/calls', label: 'Daily calls', can: (a) => canView(a, 'calls') },
-  pipeline: { href: '/admin/referrals', label: 'Pipeline', can: (a) => canView(a, 'pipeline') },
+  pipeline: { href: '/admin/referrals?tab=pipeline', label: 'Pipeline', can: (a) => canView(a, 'pipeline') },
   partners: { href: '/admin/partners', label: 'Partners', can: (a) => canView(a, 'partners') },
   payments: { href: '/admin/payments', label: 'Payments', can: (a) => canView(a, 'payments') },
   camps: { href: '/admin/camps', label: 'Health camps', can: (a) => canView(a, 'camps') },

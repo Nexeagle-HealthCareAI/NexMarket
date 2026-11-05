@@ -43,6 +43,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<ChatThread> ChatThreads => Set<ChatThread>();
         public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
         public DbSet<ChatRead> ChatReads => Set<ChatRead>();
+        public DbSet<ChatReaction> ChatReactions => Set<ChatReaction>();
+        public DbSet<ChatPin> ChatPins => Set<ChatPin>();
         public DbSet<FieldRole> FieldRoles => Set<FieldRole>();
         public DbSet<Notification> Notifications => Set<Notification>();
         public DbSet<PushDevice> PushDevices => Set<PushDevice>();
@@ -412,6 +414,19 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("chat_reads");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.ThreadId, e.UserId }).IsUnique();
+            });
+            modelBuilder.Entity<ChatReaction>(entity =>
+            {
+                entity.ToTable("chat_reactions");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.MessageId, e.UserId, e.Emoji }).IsUnique();
+                entity.HasIndex(e => e.ThreadId);
+            });
+            modelBuilder.Entity<ChatPin>(entity =>
+            {
+                entity.ToTable("chat_pins");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.ThreadId).IsUnique();
             });
 
             modelBuilder.Entity<AuditLog>(entity =>
