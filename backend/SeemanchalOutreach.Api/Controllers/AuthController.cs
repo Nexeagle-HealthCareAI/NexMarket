@@ -68,9 +68,11 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IMarketingDbContext _db;
         private readonly IConfiguration _config;
         private readonly IMemoryCache _cache;
+        private readonly INotifier _notifier;
 
-        public AuthController(IMarketingDbContext db, IConfiguration config, IMemoryCache cache)
+        public AuthController(IMarketingDbContext db, IConfiguration config, IMemoryCache cache, INotifier notifier)
         {
+            _notifier = notifier;
             _db = db;
             _config = config;
             _cache = cache;
@@ -85,21 +87,52 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
+            var typed = (request.UserId ?? "").Trim();
+            if (typed.Length == 0 || typed.Length > 120 || (request.Password ?? "").Length > 200)
+                return Unauthorized(new { message = "Wrong User ID or password." });
+
+            // Too many wrong passwords for this User ID: locked for a while, whatever is typed now.
+            var lockKey = LoginGuard.Key(typed);
+            if (_cache.TryGetValue<DateTime>(LoginGuard.LockPrefix + lockKey, out var lockedUntil) && lockedUntil > DateTime.UtcNow)
+                return StatusCode(StatusCodes.Status423Locked, new { message = LoginGuard.LockedMessage(lockedUntil), lockedUntil });
+
             var agent = await _db.Agents.FirstOrDefaultAsync(
-                a => a.AgentId == request.UserId || a.Phone == request.UserId || (a.Email != null && a.Email == request.UserId),
+                a => a.AgentId == typed || a.Phone == typed || (a.Email != null && a.Email == typed),
                 cancellationToken);
 
-            if (agent == null
-                || string.IsNullOrEmpty(agent.PasswordHash)
-                || !BCrypt.Net.BCrypt.Verify(request.Password, agent.PasswordHash))
+            // Always check a hash, even for an unknown User ID, so the answer takes the same time either way.
+            var ok = BCrypt.Net.BCrypt.Verify(request.Password, agent != null && !string.IsNullOrEmpty(agent.PasswordHash) ? agent.PasswordHash : LoginGuard.DummyHash);
+            if (agent == null || string.IsNullOrEmpty(agent.PasswordHash) || !ok)
             {
-                return Unauthorized("Invalid User ID or password.");
+                var (fails, until) = LoginGuard.Fail(_cache, lockKey);
+                if (agent != null)
+                {
+                    _db.AuditLogs.Add(AuthAudit.Event(HttpContext, agent, until != null ? "sign_in_locked" : "sign_in_failed",
+                        until != null ? $"Locked until {until:HH:mm} UTC after {fails} wrong passwords" : $"Wrong password ({fails} of {LoginGuard.MaxFails})",
+                        request.DeviceId, DeviceKinds.Detect(Request)));
+                    await _db.SaveChangesAsync(cancellationToken);
+                    if (until != null)
+                    {
+                        // Tell the person and the admins: it may be someone trying to get in.
+                        var admins = await _db.Agents.AsNoTracking().Where(a => a.IsActive && a.Role == RoleChecks.Admin && a.AgentId != agent.AgentId).Select(a => a.AgentId).ToListAsync(cancellationToken);
+                        _notifier.Notify(new NotifyJob
+                        {
+                            To = admins.Append(agent.AgentId).ToList(), Kind = "note",
+                            Title = $"Sign-in locked: {agent.Name}",
+                            Body = $"{fails} wrong passwords in a row from {DeviceKinds.Ip(HttpContext) ?? "an unknown address"}. Locked for {Math.Max(1, (int)Math.Round((until.Value - DateTime.UtcNow).TotalMinutes))} minutes. If this wasn't them, reset the password in Users & roles.",
+                        });
+                    }
+                }
+                if (until != null) return StatusCode(StatusCodes.Status423Locked, new { message = LoginGuard.LockedMessage(until.Value), lockedUntil = until });
+                var left = LoginGuard.MaxFails - fails;
+                return Unauthorized(new { message = left <= 2 ? $"Wrong User ID or password. {left} more {(left == 1 ? "try" : "tries")} before sign-in is locked for a while." : "Wrong User ID or password.", attemptsLeft = left });
             }
 
             if (!agent.IsActive)
             {
-                return Unauthorized("This account has been deactivated.");
+                return Unauthorized(new { message = "This account has been switched off. Ask your admin." });
             }
+            LoginGuard.Reset(_cache, lockKey);
 
             string deviceId = string.IsNullOrWhiteSpace(request.DeviceId)
                 ? Guid.NewGuid().ToString()
@@ -280,6 +313,10 @@ namespace SeemanchalOutreach.Api.Controllers
             if (BCrypt.Net.BCrypt.Verify(request.NewPassword, agent.PasswordHash))
             {
                 return BadRequest("New password must be different from the current password.");
+            }
+            if (LoginGuard.Weak(request.NewPassword, agent.AgentId, agent.Phone, agent.Name) is { } why)
+            {
+                return BadRequest(why);
             }
 
             agent.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);

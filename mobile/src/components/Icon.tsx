@@ -5,7 +5,8 @@ export type IconName =
   | 'home' | 'users' | 'plus' | 'patients' | 'user' | 'globe' | 'map' | 'nav' | 'check' | 'phone' | 'whatsapp'
   | 'camera' | 'star' | 'back' | 'chevron' | 'close' | 'calendar' | 'clock' | 'upload' | 'alert' | 'note' | 'pin'
   | 'search' | 'refresh' | 'logout' | 'battery' | 'hospital' | 'flag' | 'cloudOff' | 'trash' | 'leave' | 'sparkle' | 'send'
-  | 'chat' | 'attach' | 'smile' | 'tag' | 'doc' | 'image' | 'reply' | 'checks' | 'lock' | 'download' | 'pencil' | 'newChat' | 'bell' | 'bellOff' | 'settings';
+  | 'chat' | 'attach' | 'smile' | 'tag' | 'doc' | 'image' | 'reply' | 'checks' | 'lock' | 'download' | 'pencil' | 'newChat' | 'bell' | 'bellOff' | 'settings'
+  | 'fingerprint' | 'eye' | 'eyeOff' | 'backspace';
 
 /** Line icons drawn on a 24×24 grid, 2 px stroke, matching the design canvas. */
 export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { name: IconName; size?: number; color?: string; strokeWidth?: number }) {
@@ -60,6 +61,10 @@ export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { 
     case 'download': body = <Path {...p} d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16" />; break;
     case 'send': body = <><Path {...p} d="M4 12l16-8-6 16-2.5-6.5z" /><Path {...p} d="M11.5 13.5L20 4" /></>; break;
     case 'leave': body = <><Path {...p} d="M12 21c-4-3-7-6.5-7-11a7 7 0 0114 0c0 4.5-3 8-7 11z" /><Path {...p} d="M12 21V10" /></>; break;
+    case 'fingerprint': body = <><Path {...p} d="M6.5 6.5A8 8 0 0 1 20 12v1" /><Path {...p} d="M4 12a8 8 0 0 1 1-3.9" /><Path {...p} d="M8 12a4 4 0 0 1 8 0v2a8 8 0 0 1-1.5 4.7" /><Path {...p} d="M12 12v2.5a12 12 0 0 1-2.4 6.5" /><Path {...p} d="M4.5 16a12 12 0 0 0 .5-4" /><Path {...p} d="M7.5 19.5A12 12 0 0 0 8 16" /></>; break;
+    case 'eye': body = <><Path {...p} d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><Circle {...p} cx={12} cy={12} r={3} /></>; break;
+    case 'eyeOff': body = <><Path {...p} d="M3 3l18 18" /><Path {...p} d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.1 4M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6" /><Path {...p} d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>; break;
+    case 'backspace': body = <><Path {...p} d="M21 5H8l-6 7 6 7h13a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z" /><Path {...p} d="M17 9l-6 6M11 9l6 6" /></>; break;
   }
   return <Svg width={size} height={size} viewBox="0 0 24 24">{body}</Svg>;
 }

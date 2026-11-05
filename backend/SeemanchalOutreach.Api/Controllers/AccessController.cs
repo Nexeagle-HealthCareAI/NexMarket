@@ -299,6 +299,8 @@ namespace SeemanchalOutreach.Api.Controllers
             agent.MustChangePassword = true;
             var sessions = await _db.AgentRefreshTokens.Where(t => t.AgentId == agentId && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow).ToListAsync();
             foreach (var t in sessions) SessionGuard.End(t, "Your password was reset by an admin. Sign in with the new password.", _cache);
+            // A reset also lifts a sign-in lock from wrong passwords, so they can use the new one straight away.
+            foreach (var id in new[] { agent.AgentId, agent.Phone, agent.Email }.Where(x => !string.IsNullOrWhiteSpace(x))) LoginGuard.Reset(_cache, LoginGuard.Key(id!));
             await LogAdminAsync(agentId, "password_reset", "New one-time password given by an admin");
             await _db.SaveChangesAsync();
             return Ok(new { agent.AgentId, agent.Name, agent.Phone, password, signedOutDevices = sessions.Count });

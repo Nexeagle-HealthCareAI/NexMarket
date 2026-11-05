@@ -1,7 +1,7 @@
 import '../lib/location'; // registers the background location task before anything else runs
 import React, { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, AppState, View } from 'react-native';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -13,6 +13,8 @@ import { handleResponse, registerPush, setupNotifications } from '../lib/notific
 import { ToastHost } from '../components/ui';
 import { CelebrateHost } from '../components/Vita';
 import { C } from '../theme';
+import { LockScreen } from '../components/LockScreen';
+import { lockNow, lockState, useLock } from '../lib/lock';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 // Screens the agent can't see (behind the one on top, or other tabs) stop re-rendering until shown again.
@@ -20,7 +22,22 @@ enableFreeze(true);
 
 function Gate() {
   const { ready, agent } = useSession();
+  const lock = useLock();
   const segments = useSegments();
+
+  // Coming back to the app after a while asks for the PIN or fingerprint again.
+  const awayAt = useRef<number | null>(null);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'background') awayAt.current = Date.now();
+      else if (st === 'active' && awayAt.current != null) {
+        const away = Date.now() - awayAt.current;
+        awayAt.current = null;
+        if (lockState().pinSet && away >= lockState().afterMin * 60_000) lockNow();
+      }
+    });
+    return () => sub.remove();
+  }, []);
   const onLogin = segments[0] === 'login';
 
   useEffect(() => {
@@ -61,6 +78,7 @@ function Gate() {
       </Stack>
       <ToastHost />
       <CelebrateHost />
+      {agent && lock.pinSet && lock.locked ? <LockScreen /> : null}
     </>
   );
 }

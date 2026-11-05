@@ -805,3 +805,51 @@ textarea.field-input { resize: none; min-height: 80px; }
   animation: popScale 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
   display: inline-block;
 }
+
+/* ─── Sign-in (2026) ─── */
+.lg-shell { min-height: 100dvh; display: grid; grid-template-columns: 1fr; background: #f5f7fb; color: #0f172a; }
+.lg-side { display: none; }
+.lg-main { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 16px; gap: 16px; }
+.lg-card { width: 100%; max-width: 420px; background: #fff; border: 1px solid #e3e8f0; border-radius: 20px; padding: 28px 24px; box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.18); display: flex; flex-direction: column; gap: 18px; }
+.lg-head { display: flex; gap: 12px; align-items: center; }
+.lg-head h2 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+.lg-head p { margin: 2px 0 0; font-size: 13px; color: #5b6475; }
+.lg-mark { width: 52px; height: 52px; border-radius: 14px; background: #0e1525; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.lg-mark.is-sm { width: 46px; height: 46px; border-radius: 12px; }
+.lg-form { display: flex; flex-direction: column; gap: 16px; }
+.lg-field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: #334155; }
+.lg-field input { height: 50px; width: 100%; border: 1px solid #cfd6e2; border-radius: 12px; padding: 0 14px; font-size: 16px; font-weight: 500; color: #0f172a; background: #fff; outline: none; transition: border-color .15s, box-shadow .15s; }
+.lg-field input:focus { border-color: #0a72d6; box-shadow: 0 0 0 3px rgba(10, 114, 214, 0.18); }
+.lg-pw { position: relative; display: block; }
+.lg-pw input { padding-right: 52px; }
+.lg-eye { position: absolute; right: 4px; top: 3px; width: 44px; height: 44px; border: 0; background: none; color: #5b6475; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.lg-eye:hover { background: #f1f4f9; color: #0f172a; }
+.lg-eye:focus-visible { outline: 2px solid #0a72d6; outline-offset: 1px; }
+.lg-hint { font-size: 13px; font-weight: 600; }
+.lg-hint.is-warn { color: #9a5b00; }
+.lg-check { display: flex; gap: 10px; align-items: center; font-size: 14px; color: #334155; cursor: pointer; min-height: 32px; }
+.lg-check input { width: 18px; height: 18px; accent-color: #0a72d6; }
+.lg-note { border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.45; font-weight: 500; }
+.lg-note.is-warn { background: #fff7e6; color: #7a4b00; border: 1px solid #f6dca8; }
+.lg-note.is-bad { background: #fdecea; color: #a1180f; border: 1px solid #f6c7c1; }
+.lg-submit { height: 52px; border: 0; border-radius: 12px; background: #0a72d6; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; transition: background .15s; }
+.lg-submit:hover:not(:disabled) { background: #075bb0; }
+.lg-submit:focus-visible { outline: 3px solid rgba(10, 114, 214, 0.35); outline-offset: 2px; }
+.lg-submit:disabled { opacity: .55; cursor: not-allowed; }
+.lg-help { margin: 0; font-size: 13px; color: #5b6475; text-align: center; line-height: 1.5; }
+.lg-foot { margin: 0; font-size: 12px; color: #6b7385; text-align: center; max-width: 420px; }
+.lg-busy { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 28px 0; text-align: center; color: #5b6475; font-size: 14px; }
+.lg-busy strong { color: #0f172a; font-size: 17px; }
+.lg-spinner { width: 40px; height: 40px; border: 3px solid #e3e8f0; border-top-color: #0a72d6; border-radius: 50%; margin-bottom: 10px; }
+@media (min-width: 1024px) {
+  .lg-shell { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+  .lg-side { display: flex; flex-direction: column; justify-content: space-between; padding: 48px 56px; background: #0e1525; color: #fff; }
+  .lg-side-top { display: flex; align-items: center; gap: 12px; }
+  .lg-brand { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+  .lg-side-body h1 { font-size: 40px; line-height: 1.12; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 28px; max-width: 520px; text-wrap: balance; }
+  .lg-side-body ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 18px; max-width: 520px; }
+  .lg-side-body li { font-size: 15px; line-height: 1.55; color: #c8d1e3; padding-left: 16px; border-left: 2px solid #22c39a; }
+  .lg-side-body li strong { display: block; color: #fff; font-size: 16px; margin-bottom: 2px; }
+  .lg-side-foot { font-size: 13px; color: #8f9bb3; }
+  .lg-head .lg-mark { display: none; }
+}
