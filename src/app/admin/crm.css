@@ -1462,7 +1462,7 @@ button.ld-head-btn { border: 0; cursor: pointer; font: inherit; font-size: 13px;
 .so-auto code { font-size: 12.5px; }
 
 /* ─── Command centre: one-glance additions ─── */
-.crm .cc-actions { gap: 12px; }
+.crm .cc-actions { display: flex; flex-direction: column; gap: 12px; }
 .crm .cc-act-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 .crm .cc-act { display: flex; align-items: center; gap: 12px; padding: 8px 12px; min-height: 58px; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: var(--card); height: 100%; }
 .crm a.cc-act:hover { border-color: #a9d0f5; background: var(--accent-tint); color: var(--text); }
@@ -1494,3 +1494,42 @@ button.ld-head-btn { border: 0; cursor: pointer; font: inherit; font-size: 13px;
   .crm .cc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .crm .cc-act-grid { grid-template-columns: 1fr; }
 }
+
+/* Vita on the command centre */
+.crm .cc-vita { display: flex; flex-direction: column; gap: 12px; background: linear-gradient(180deg, #f6f3ff 0%, var(--card) 70%); border-color: #e2dafb; }
+.crm .cc-vita.is-off { flex-direction: row; align-items: center; background: var(--card); border-color: var(--border); }
+.crm .cc-vita img { border-radius: 12px; background: #fff; flex-shrink: 0; }
+.crm .cc-vita-head { display: flex; align-items: center; gap: 12px; }
+.crm .cc-vita-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.crm .cc-vita-title .crm-h2 { display: flex; align-items: center; gap: 6px; color: #5b3fc4; }
+.crm .cc-vita-title .crm-sub { font-size: 12px; }
+.crm .cc-vita-refresh { margin-left: auto; height: 32px; display: inline-flex; align-items: center; gap: 6px; }
+.crm .cc-spin { animation: ccSpin 1s linear infinite; }
+@keyframes ccSpin { to { transform: rotate(360deg); } }
+.crm .cc-vita-headline { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.45; }
+.crm .cc-vita-body { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 18px; }
+.crm .cc-vita-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.crm .cc-vita-points li { display: flex; gap: 10px; font-size: 14px; line-height: 1.5; }
+.crm .cc-vita-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 7px; }
+.crm .cc-vita-actions { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.crm .cc-vita-actions ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.45; }
+.crm .cc-vita-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--text-2); margin-top: 2px; }
+.crm .cc-vita-meta a { font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
+.crm .cc-vita-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); }
+.crm .cc-vita-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.crm .cc-vita-ask .crm-chip { height: auto; min-height: 32px; padding: 6px 12px; font-size: 13px; text-align: left; }
+.crm .cc-brief li { padding: 0; }
+.crm .cc-brief-row { display: grid; grid-template-columns: 110px 104px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 0; width: 100%; color: var(--text); }
+.crm .cc-brief-row:hover { color: var(--text); background: var(--accent-tint); }
+.crm .cc-brief-name { font-weight: 600; font-size: 14px; }
+.crm .cc-brief-sum { font-size: 13px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm .cc-brief-meta { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.crm .cc-camp { display: flex; flex-direction: column; gap: 5px; padding: 10px 0; width: 100%; color: var(--text); }
+.crm .cc-camp-top { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+@media (max-width: 900px) {
+  .crm .cc-vita-body { grid-template-columns: 1fr; }
+  .crm .cc-brief-row { grid-template-columns: 1fr auto; }
+  .crm .cc-brief-sum { grid-column: 1 / -1; white-space: normal; }
+  .crm .cc-brief-meta { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .crm .cc-spin { animation: none; } }

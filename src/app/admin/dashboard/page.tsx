@@ -1,12 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AtSign, CalendarCheck, CheckCircle2, ChevronRight, ClipboardList, Inbox, MessageCircle, PhoneCall, Star, Tent, UserPlus, Wallet } from 'lucide-react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
+import {
+  ArrowRight, AtSign, CalendarCheck, CheckCircle2, ChevronRight, ClipboardList, Columns3, Inbox, LayoutDashboard, MessageCircle, PhoneCall, RefreshCw, Sparkles, Star, Tent, UserPlus, Users, Wallet,
+} from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canView, useAccess } from '@/lib/crm/access';
 import { timeAgo, useLiveEvents, useNow, type LiveEvent } from '@/lib/crm/live';
 import { Pager, usePaged } from '@/components/crm/Pager';
+import { PageTabs, usePageTab, type PageTab } from '@/components/crm/PageTabs';
+import { openVita } from '@/components/crm/VitaChat';
 import {
   contactTypeLabel, ErrorBox, Empty, fmt, initials, PageHead, Pill, rupees, Skeleton, stageTone, useLoader,
 } from '@/components/crm/ui';
@@ -82,6 +87,18 @@ const TONE_BG: Record<string, [string, string]> = {
 const KIND_KPI: Record<string, string> = { visit: 'visits', referral: 'refs', arrived: 'arrived', admit: 'admissions', shift: 'agents' };
 
 export default function CommandCentrePage() {
+  return (
+    <Suspense fallback={<main className="crm-page"><Skeleton h={520} /></main>}>
+      <CommandCentre />
+    </Suspense>
+  );
+}
+
+type CcTab = 'overview' | 'referrals' | 'leads' | 'field';
+const TAB_LABEL: Record<CcTab, string> = { overview: 'Overview', referrals: 'Referrals', leads: 'Leads & channels', field: 'Field team' };
+const TAB_ICON: Record<CcTab, PageTab['icon']> = { overview: LayoutDashboard, referrals: Columns3, leads: UserPlus, field: Users };
+
+function CommandCentre() {
   const { access } = useAccess();
   const now = useNow(1000);
   const { data, error, loading, reload: reloadSummary } = useLoader(() => crm.get<Summary>('/api/v1/dashboard/summary'));
@@ -89,6 +106,21 @@ export default function CommandCentrePage() {
   const { data: ov, reload: reloadOverview } = useLoader(() => crm.get<Overview>('/api/v1/dashboard/overview').catch(() => null));
   const reload = useCallback(() => Promise.all([reloadSummary(), reloadOverview()]).then(() => undefined), [reloadSummary, reloadOverview]);
   const refPg = usePaged(data?.latestReferrals ?? [], '', 10);
+  const showLeads = canLeads(access) || canView(access, 'social') || canView(access, 'camps');
+  const showField = canView(access, 'field') || canView(access, 'calls');
+  const keys = (['overview', 'referrals', 'leads', 'field'] as const).filter((k) => (k === 'leads' ? showLeads : k === 'field' ? showField : true));
+  const [tab, setTab] = usePageTab(keys, 'overview');
+  const actions = data ? buildActions(data, ov ?? null, access) : [];
+  const tabs: PageTab<CcTab>[] = keys.map((k) => ({
+    key: k,
+    label: TAB_LABEL[k],
+    icon: TAB_ICON[k],
+    count: k === 'overview' ? actions.filter((a) => a.tone === 'bad').length || null
+      : k === 'leads' && ov ? (ov.leads.waiting + ov.inbox.waWaiting + ov.inbox.socialWaiting) || null
+      : k === 'referrals' && data ? data.alerts.notArrived48 || null
+      : k === 'field' && ov ? ov.tasks.overdue || null : null,
+    hot: true,
+  }));
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [paused, setPaused] = useState(false);
   const [flash, setFlash] = useState<{ kpi: string; at: number } | null>(null);
@@ -172,7 +204,12 @@ export default function CommandCentrePage() {
 
       {error && <ErrorBox message={error} onRetry={reload} />}
 
-      {data && <ActionQueue data={data} ov={ov ?? null} access={access} />}
+      <PageTabs tabs={tabs} value={tab} onChange={setTab} label="Command centre sections" />
+
+      {tab === 'overview' && (
+        <>
+          <VitaRead key="overview" tab="overview" access={access} />
+          {data && <ActionQueue actions={actions} />}
 
       <section aria-label="Today at a glance" className="crm-kpis cc-kpis">
         {!data && loading
@@ -197,9 +234,44 @@ export default function CommandCentrePage() {
       </section>
       {ov && <p className="crm-sub cc-spark-note">Small charts show the last 14 days.</p>}
 
-      {data && <TodaysWork work={data.work} ov={ov ?? null} access={access} />}
+          {data && <TodaysWork work={data.work} ov={ov ?? null} access={access} />}
 
-      <div className="crm-row">
+          <div className="crm-row">
+            {canView(access, 'analytics') && <Briefings />}
+        <section className="crm-card grow-1" aria-labelledby="live-h">
+          <div className="crm-card-head">
+            <h2 id="live-h" className="crm-h2">Live activity</h2>
+            {status === 'live' && <span className="crm-live-dot" aria-hidden="true" />}
+            <button type="button" className="crm-chip" style={{ marginLeft: 'auto', height: 32 }} onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
+              {paused ? 'Resume' : 'Pause'}
+            </button>
+          </div>
+          {feed.length === 0 ? <Empty title="Quiet so far">Visits, referrals, calls and arrivals appear here as they happen.</Empty> : (
+            <ol className="crm-list" aria-live="polite">
+              {feed.map((e) => {
+                const ks = KIND_STYLE[e.kind] ?? { tag: '•', tone: 'neutral' };
+                const [bg, fg] = TONE_BG[ks.tone];
+                return (
+                  <li key={e.key} className={e.fresh ? 'crm-feed-item' : undefined} style={{ alignItems: 'flex-start' }}>
+                    <span style={{ width: 34, height: 34, borderRadius: 10, background: bg, color: fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0 }} aria-hidden="true">{ks.tag}</span>
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                      <span style={{ fontSize: 13, lineHeight: 1.4 }}>{e.text}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{timeAgo(e.at, now)}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </section>
+          </div>
+        </>
+      )}
+
+      {tab === 'referrals' && (
+        <>
+          <VitaRead key="referrals" tab="referrals" access={access} />
+          <div className="crm-row">
         <section className="crm-card grow-2" aria-labelledby="funnel-h">
           <div className="crm-card-head">
             <h2 id="funnel-h" className="crm-h2">Referral funnel · this month</h2>
@@ -231,40 +303,41 @@ export default function CommandCentrePage() {
             </div>
           )}
         </section>
-
-        <section className="crm-card grow-1" aria-labelledby="src-h">
+        <section className="crm-card grow-1" aria-labelledby="top-h">
           <div className="crm-card-head">
-            <h2 id="src-h" className="crm-h2">Where patients come from</h2>
-            <span className="crm-sub" style={{ marginLeft: 'auto', fontSize: 12 }}>This month</span>
+            <h2 id="top-h" className="crm-h2">Top partners</h2>
+            <span className="crm-sub" style={{ marginLeft: 'auto', fontSize: 12 }}>Admitted / referred, 90 days</span>
           </div>
-          {!ov ? <Skeleton h={160} /> : ov.leads.sources.length === 0 ? <Empty title="Nothing yet this month">Leads and referrals appear here by where they came from.</Empty> : (
-            <Sources rows={ov.leads.sources} />
+          {!data ? <Skeleton h={200} /> : data.topPartners.length === 0 ? <Empty title="No referrals in the last 90 days" /> : (
+            <ol className="crm-list">
+              {data.topPartners.map((p, i) => (
+                <li key={p.clientId}>
+                  <span style={{ width: 20, fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>{i + 1}</span>
+                  <span className="crm-initials">{initials(p.name)}</span>
+                  <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 2 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {p.name}
+                      {p.important && <Star size={13} fill="#d9822b" color="#d9822b" aria-label="Important" />}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{contactTypeLabel(p.type)}</span>
+                  </span>
+                  <span style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 700 }}>{p.admitted}<span style={{ color: 'var(--text-2)', fontWeight: 500 }}> / {p.referred}</span></span>
+                </li>
+              ))}
+            </ol>
           )}
         </section>
-      </div>
-
-      {ov && ov.departments.length > 0 && (
-        <div className="crm-row">
-          <section className="crm-card grow-2" aria-labelledby="dept-h">
-            <div className="crm-card-head">
-              <h2 id="dept-h" className="crm-h2">Departments · this month</h2>
-              <span className="crm-sub" style={{ marginLeft: 'auto', fontSize: 12 }}>Referrals and leads asking for each department</span>
-            </div>
-            <Departments rows={ov.departments} />
-          </section>
-          {ov.leads.month > 0 && canLeads(access) && (
-            <section className="crm-card grow-1" aria-labelledby="lf-h">
+          </div>
+          {ov && ov.departments.length > 0 && (
+            <section className="crm-card" aria-labelledby="dept-h">
               <div className="crm-card-head">
-                <h2 id="lf-h" className="crm-h2">Leads · this month</h2>
-                {<Link href="/admin/leads" style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 600 }}>Open inbox</Link>}
+                <h2 id="dept-h" className="crm-h2">Departments · this month</h2>
+                <span className="crm-sub" style={{ marginLeft: 'auto', fontSize: 12 }}>Referrals and leads asking for each department</span>
               </div>
-              <LeadStats l={ov.leads} />
+              <Departments rows={ov.departments} />
             </section>
           )}
-        </div>
-      )}
-
-      <div className="crm-row">
+          <div className="crm-row">
         <section className="crm-card is-flush grow-2" aria-labelledby="ref-h">
           <div className="crm-card-head">
             <h2 id="ref-h" className="crm-h2">Latest referrals</h2>
@@ -304,61 +377,43 @@ export default function CommandCentrePage() {
             <Pager {...refPg.pager} noun="referrals" /></>
           )}
         </section>
-
-        <section className="crm-card grow-1" aria-labelledby="live-h">
-          <div className="crm-card-head">
-            <h2 id="live-h" className="crm-h2">Live activity</h2>
-            {status === 'live' && <span className="crm-live-dot" aria-hidden="true" />}
-            <button type="button" className="crm-chip" style={{ marginLeft: 'auto', height: 32 }} onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
-              {paused ? 'Resume' : 'Pause'}
-            </button>
           </div>
-          {feed.length === 0 ? <Empty title="Quiet so far">Visits, referrals, calls and arrivals appear here as they happen.</Empty> : (
-            <ol className="crm-list" aria-live="polite">
-              {feed.map((e) => {
-                const ks = KIND_STYLE[e.kind] ?? { tag: '•', tone: 'neutral' };
-                const [bg, fg] = TONE_BG[ks.tone];
-                return (
-                  <li key={e.key} className={e.fresh ? 'crm-feed-item' : undefined} style={{ alignItems: 'flex-start' }}>
-                    <span style={{ width: 34, height: 34, borderRadius: 10, background: bg, color: fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0 }} aria-hidden="true">{ks.tag}</span>
-                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                      <span style={{ fontSize: 13, lineHeight: 1.4 }}>{e.text}</span>
-                      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{timeAgo(e.at, now)}</span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
+        </>
+      )}
+
+      {tab === 'leads' && (
+        <>
+          <VitaRead key="leads" tab="leads" access={access} />
+          {!ov ? <Skeleton h={140} /> : <ChannelKpis ov={ov} access={access} />}
+          <div className="crm-row">
+        <section className="crm-card grow-1" aria-labelledby="src-h">
+          <div className="crm-card-head">
+            <h2 id="src-h" className="crm-h2">Where patients come from</h2>
+            <span className="crm-sub" style={{ marginLeft: 'auto', fontSize: 12 }}>This month</span>
+          </div>
+          {!ov ? <Skeleton h={160} /> : ov.leads.sources.length === 0 ? <Empty title="Nothing yet this month">Leads and referrals appear here by where they came from.</Empty> : (
+            <Sources rows={ov.leads.sources} />
           )}
         </section>
-      </div>
-
-      <div className="crm-row">
-        <section className="crm-card grow-1" aria-labelledby="top-h">
-          <div className="crm-card-head">
-            <h2 id="top-h" className="crm-h2">Top partners</h2>
-            <span className="crm-sub" style={{ marginLeft: 'auto', fontSize: 12 }}>Admitted / referred, 90 days</span>
+            {ov && ov.leads.month > 0 && canLeads(access) && (
+              <section className="crm-card grow-1" aria-labelledby="lf-h">
+                <div className="crm-card-head">
+                  <h2 id="lf-h" className="crm-h2">Leads · this month</h2>
+                  <Link href="/admin/leads" style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 600 }}>Open inbox</Link>
+                </div>
+                <LeadStats l={ov.leads} />
+              </section>
+            )}
+            {ov && canView(access, 'camps') && <UpcomingCamps camps={ov.camps} />}
           </div>
-          {!data ? <Skeleton h={200} /> : data.topPartners.length === 0 ? <Empty title="No referrals in the last 90 days" /> : (
-            <ol className="crm-list">
-              {data.topPartners.map((p, i) => (
-                <li key={p.clientId}>
-                  <span style={{ width: 20, fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>{i + 1}</span>
-                  <span className="crm-initials">{initials(p.name)}</span>
-                  <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 2 }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {p.name}
-                      {p.important && <Star size={13} fill="#d9822b" color="#d9822b" aria-label="Important" />}
-                    </span>
-                    <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{contactTypeLabel(p.type)}</span>
-                  </span>
-                  <span style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 700 }}>{p.admitted}<span style={{ color: 'var(--text-2)', fontWeight: 500 }}> / {p.referred}</span></span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+        </>
+      )}
 
+      {tab === 'field' && (
+        <>
+          <VitaRead key="field" tab="field" access={access} />
+          {data && <FieldKpis data={data} ov={ov ?? null} />}
+          <div className="crm-row">
         <section className="crm-card grow-2" aria-labelledby="ff-h">
           <div className="crm-card-head">
             <h2 id="ff-h" className="crm-h2">Field force today</h2>
@@ -387,7 +442,9 @@ export default function CommandCentrePage() {
             </div>
           )}
         </section>
-      </div>
+          </div>
+        </>
+      )}
     </main>
   );
 }
@@ -428,8 +485,7 @@ const TONE_RANK = { bad: 0, warn: 1, accent: 2 } as const;
 
 const ACTIONS_SHOWN = 8;
 
-function ActionQueue({ data, ov, access }: { data: Summary; ov: Overview | null; access: Access }) {
-  const [all, setAll] = useState(false);
+function buildActions(data: Summary, ov: Overview | null, access: Access): Action[] {
   const a: Action[] = [];
   const add = (show: boolean, x: Action) => { if (show) a.push(x); };
   const al = data.alerts;
@@ -470,6 +526,11 @@ function ActionQueue({ data, ov, access }: { data: Summary; ov: Overview | null;
       title: 'Camps short of bookings', sub: 'Within 7 days, under half the target' });
   }
   a.sort((x, y) => TONE_RANK[x.tone] - TONE_RANK[y.tone]);
+  return a;
+}
+
+function ActionQueue({ actions: a }: { actions: Action[] }) {
+  const [all, setAll] = useState(false);
   return (
     <section className="crm-card cc-actions" aria-labelledby="act-h">
       <div className="crm-card-head">
@@ -675,5 +736,247 @@ function WorkCard({ href, icon, title, big, sub, pct, color, tag, tagTone }: { h
         {tag && <span style={{ marginLeft: 'auto' }}><Pill tone={tagTone}>{tag}</Pill></span>}
       </span>
     </Link>
+  );
+}
+
+// ─── Vita (the AI analyst) on the board ───
+
+type InsightTab = 'overview' | 'referrals' | 'leads' | 'field';
+interface InsightRes {
+  configured: boolean; tab?: string; at?: string; model?: string; headline?: string; error?: string | null;
+  points?: { text: string; tone: 'good' | 'watch' | 'bad' }[];
+  actions?: { text: string; owner?: string | null; page?: string | null }[];
+}
+
+/** Where each page Vita may point to lives, and who may open it. */
+const VITA_PAGES: Record<string, { href: string; label: string; can: (a: Access) => boolean }> = {
+  leads: { href: '/admin/leads', label: 'Leads inbox', can: canLeads },
+  whatsapp: { href: '/admin/whatsapp?tab=inbox', label: 'WhatsApp', can: (a) => canView(a, 'whatsapp') },
+  social: { href: '/admin/social?tab=inbox', label: 'Facebook & Instagram', can: (a) => canView(a, 'social') },
+  desk: { href: '/admin/desk', label: 'Referral desk', can: (a) => canView(a, 'desk') },
+  calls: { href: '/admin/calls', label: 'Daily calls', can: (a) => canView(a, 'calls') },
+  pipeline: { href: '/admin/referrals', label: 'Pipeline', can: (a) => canView(a, 'pipeline') },
+  partners: { href: '/admin/partners', label: 'Partners', can: (a) => canView(a, 'partners') },
+  payments: { href: '/admin/payments', label: 'Payments', can: (a) => canView(a, 'payments') },
+  camps: { href: '/admin/camps', label: 'Health camps', can: (a) => canView(a, 'camps') },
+  map: { href: '/admin/map', label: 'Live map', can: (a) => canView(a, 'field') },
+  tasks: { href: '/admin/assignments?view=tasks', label: 'Agent tasks', can: (a) => canView(a, 'field') },
+  leave: { href: '/admin/leave', label: 'Attendance & leave', can: (a) => canView(a, 'field') },
+  agents: { href: '/admin/agents', label: 'Field agents', can: (a) => canView(a, 'field') },
+  analytics: { href: '/admin/reports?tab=ai', label: 'AI analyst', can: (a) => canView(a, 'analytics') },
+};
+
+/** Questions to hand to Vita's chat from each tab, and which of her areas they are about. */
+const VITA_ASK: Record<InsightTab, { area: string; qs: string[] }> = {
+  overview: { area: 'business', qs: ['What are the 3 most important things to fix this week?', 'How is this month going compared with last month?'] },
+  referrals: { area: 'referrals', qs: ['Where are we losing patients between referral and arrival?', 'Which blocks send patients who actually arrive?'] },
+  leads: { area: 'business', qs: ['Which lead sources bring patients who actually come, and which waste our time?', 'How fast are we replying to leads, and where are we slow?'] },
+  field: { area: 'field', qs: ['Which agent needs support, and with what?', 'Which assigned panchayats have never been visited?'] },
+};
+
+const TONE_DOT: Record<string, string> = { good: 'var(--ok)', watch: 'var(--warn)', bad: 'var(--bad)' };
+
+/**
+ * Vita's short read of the tab: a headline, a few points with the numbers, and up to three actions that link to
+ * the page where they are done. Written by the AI from this board's totals (no patient details), kept for 45 minutes.
+ */
+function VitaRead({ tab, access }: { tab: InsightTab; access: Access }) {
+  const now = useNow(30000);
+  const { data: first, loading } = useLoader(() => crm.get<InsightRes>(`/api/v1/dashboard/insight?tab=${tab}`), [tab]);
+  const [fresh, setFresh] = useState<InsightRes | null>(null);
+  const [busy, setBusy] = useState(false);
+  const r = fresh ?? first;
+  const canAsk = canView(access, 'analytics');
+
+  const refresh = async () => {
+    setBusy(true);
+    try { setFresh(await crm.get<InsightRes>(`/api/v1/dashboard/insight?tab=${tab}&refresh=true`)); }
+    catch { /* keep what is shown */ }
+    finally { setBusy(false); }
+  };
+
+  if (r && !r.configured) {
+    if (!access?.isAdmin) return null;
+    return (
+      <section className="crm-card cc-vita is-off" aria-label="Vita">
+        <Image src="/brand/vita/think.webp" alt="" width={40} height={40} unoptimized />
+        <p className="crm-sub" style={{ margin: 0 }}>Vita can sum up each tab once the Groq key is added on the server (<code>Groq__ApiKey</code>).</p>
+      </section>
+    );
+  }
+  const working = (loading && !r) || busy;
+  return (
+    <section className="crm-card cc-vita" aria-labelledby={`vita-${tab}`} aria-busy={working}>
+      <div className="cc-vita-head">
+        <Image src={working ? '/brand/vita/think.webp' : '/brand/vita/ai.webp'} alt="" width={40} height={40} unoptimized />
+        <div className="cc-vita-title">
+          <h2 id={`vita-${tab}`} className="crm-h2"><Sparkles size={15} aria-hidden /> Vita&apos;s read</h2>
+          <span className="crm-sub">
+            {working ? 'Reading the numbers…' : r?.at ? <>Written by AI from this board&apos;s numbers · {timeAgo(r.at, now)}</> : 'Written by AI from this board’s numbers'}
+          </span>
+        </div>
+        <button type="button" className="crm-chip cc-vita-refresh" onClick={() => void refresh()} disabled={busy} aria-label="Ask Vita for a fresh read">
+          <RefreshCw size={14} aria-hidden className={busy ? 'cc-spin' : undefined} /> Refresh
+        </button>
+      </div>
+
+      {working && !r?.headline ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}><Skeleton h={18} w="70%" /><Skeleton h={14} w="90%" /><Skeleton h={14} w="80%" /></div>
+      ) : !r?.headline ? (
+        <p className="crm-sub" style={{ margin: 0 }}>{r?.error ?? 'Vita has nothing to say yet.'}</p>
+      ) : (
+        <>
+          <p className="cc-vita-headline">{r.headline}</p>
+          <div className="cc-vita-body">
+            {r.points && r.points.length > 0 && (
+              <ul className="cc-vita-points">
+                {r.points.map((p, i) => (
+                  <li key={i}><span className="cc-vita-dot" style={{ background: TONE_DOT[p.tone] ?? TONE_DOT.watch }} aria-label={p.tone === 'good' ? 'Going well' : p.tone === 'bad' ? 'Problem' : 'Keep an eye on'} />{p.text}</li>
+                ))}
+              </ul>
+            )}
+            {r.actions && r.actions.length > 0 && (
+              <div className="cc-vita-actions">
+                <span className="cc-vita-label">Do next</span>
+                <ol>
+                  {r.actions.map((x, i) => {
+                    const pg = x.page ? VITA_PAGES[x.page] : undefined;
+                    const link = pg && pg.can(access) ? pg : undefined;
+                    return (
+                      <li key={i}>
+                        <span>{x.text}</span>
+                        <span className="cc-vita-meta">
+                          {x.owner && <span>{x.owner}</span>}
+                          {link && <Link href={link.href}>{link.label} <ArrowRight size={12} aria-hidden /></Link>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            )}
+          </div>
+          {r.error && <p className="crm-sub" style={{ margin: 0, fontSize: 12 }}>Couldn&apos;t refresh: {r.error}</p>}
+        </>
+      )}
+
+      {canAsk && (
+        <div className="cc-vita-ask">
+          <span className="cc-vita-label">Ask Vita</span>
+          {VITA_ASK[tab].qs.map((q) => (
+            <button key={q} type="button" className="crm-chip" onClick={() => openVita('vita', { area: VITA_ASK[tab].area, question: q })}>{q}</button>
+          ))}
+          <button type="button" className="crm-chip" onClick={() => openVita('vita', { area: VITA_ASK[tab].area })}>Ask something else…</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface AreaRow { key: string; label: string; latestAt?: string | null; health?: string | null; summary?: string | null; running: boolean; open: number; overdue: number; high: number }
+const HEALTH_PILL: Record<string, { tone: 'ok' | 'warn' | 'bad'; label: string }> = { good: { tone: 'ok', label: 'Good' }, watch: { tone: 'warn', label: 'Watch' }, bad: { tone: 'bad', label: 'Needs work' } };
+
+/** The analyst's own briefings (daily overview, weekly per area) and the issues it is tracking, one line each. */
+function Briefings() {
+  const now = useNow(60000);
+  const { data } = useLoader(() => crm.get<{ configured: boolean; areas: AreaRow[] }>('/api/v1/analytics/analyst/areas'), []);
+  if (!data || !data.configured) return null;
+  return (
+    <section className="crm-card grow-2" aria-labelledby="brief-h">
+      <div className="crm-card-head">
+        <h2 id="brief-h" className="crm-h2">Vita&apos;s briefings</h2>
+        <Link href="/admin/reports?tab=ai" style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 600 }}>Open AI analyst</Link>
+      </div>
+      <ul className="crm-list cc-brief">
+        {data.areas.map((a) => {
+          const h = a.health ? HEALTH_PILL[a.health] : undefined;
+          return (
+            <li key={a.key}>
+              <Link href={a.key === 'business' ? '/admin/reports?tab=ai' : `/admin/reports?tab=ai&area=${a.key}`} className="cc-brief-row">
+                <span className="cc-brief-name">{a.label}</span>
+                <span className="cc-brief-pill">{a.running ? <Pill tone="info">Writing…</Pill> : h ? <Pill tone={h.tone} dot>{h.label}</Pill> : <Pill>Not yet</Pill>}</span>
+                <span className="cc-brief-sum">{a.summary ?? 'No briefing yet.'}</span>
+                <span className="cc-brief-meta">
+                  {a.open > 0 && <span>{a.open} open{a.overdue > 0 ? ` · ${a.overdue} overdue` : ''}</span>}
+                  {a.latestAt && <span>{timeAgo(a.latestAt, now)}</span>}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+// ─── Tab tiles ───
+
+function ChannelKpis({ ov, access }: { ov: Overview; access: Access }) {
+  const spend = ov.waSpend;
+  const pct = spend && spend.budget > 0 ? Math.round((spend.spent / spend.budget) * 100) : null;
+  return (
+    <section aria-label="Channels at a glance" className="crm-kpis cc-kpis">
+      {canLeads(access) && <Kpi label="New leads today" value={ov.leads.today} spark={ov.trend.leads} color="#7c5cd6" note={`${ov.leads.yesterday} yesterday`} tone="neutral" />}
+      {canLeads(access) && <Kpi label="Leads not contacted" value={ov.leads.waiting} note={`Target ${ov.leads.targetMinutes} min`} tone={ov.leads.waiting > 0 ? 'bad' : 'ok'} />}
+      {canLeads(access) && <Kpi label="WhatsApp unread" value={ov.inbox.waUnread} note={ov.inbox.waWaiting > 0 ? `${ov.inbox.waWaiting} waiting` : 'All answered'} tone={ov.inbox.waWaiting > 0 ? 'bad' : 'ok'} />}
+      {canView(access, 'social') && <Kpi label="Facebook & Instagram unread" value={ov.inbox.socialUnread} note={`${ov.inbox.formLeadsToday} form leads today`} tone="neutral" />}
+      {canView(access, 'whatsapp') && spend && (
+        <div className="crm-card crm-kpi">
+          <span className="crm-kpi-label">WhatsApp spend this month</span>
+          <span className="crm-kpi-value" style={{ fontSize: 24 }}>{rupees(spend.spent)}</span>
+          {pct != null && (
+            <>
+              <span className="crm-bar"><span style={{ width: `${Math.min(100, pct)}%`, background: pct >= spend.alertPercent ? 'var(--bad)' : 'var(--ok)' }} /></span>
+              <span className="crm-sub" style={{ fontSize: 12 }}>{pct}% of {rupees(spend.budget)} budget</span>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function UpcomingCamps({ camps }: { camps: Overview['camps'] }) {
+  const when = (d: number) => (d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : `In ${d} days`);
+  return (
+    <section className="crm-card grow-1" aria-labelledby="camps-h">
+      <div className="crm-card-head">
+        <h2 id="camps-h" className="crm-h2">Health camps</h2>
+        <Link href="/admin/camps" style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 600 }}>Open camps</Link>
+      </div>
+      {camps.upcoming.length === 0 ? <Empty title="No camp in the next 2 weeks" /> : (
+        <ul className="crm-list">
+          {camps.upcoming.map((c) => {
+            const pct = c.target ? Math.round((c.booked / c.target) * 100) : 0;
+            const short = c.daysAway <= 7 && c.target > 0 && c.booked * 2 < c.target;
+            return (
+              <li key={c.id} style={{ padding: 0 }}>
+                <Link href={`/admin/camps?id=${c.id}`} className="cc-camp">
+                  <span className="cc-camp-top"><strong>{c.title}</strong><span className="crm-sub">{when(c.daysAway)}</span></span>
+                  <span className="crm-sub" style={{ fontSize: 12 }}>{[c.block, c.venue].filter(Boolean).join(' · ')}</span>
+                  <span className="crm-bar"><span style={{ width: `${Math.min(100, pct)}%`, background: short ? 'var(--warn)' : 'var(--ok)' }} /></span>
+                  <span className="crm-sub" style={{ fontSize: 12 }}>{c.booked} of {c.target} booked{short ? ' · short of bookings' : ''}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {camps.doneThisMonth > 0 && <p className="crm-sub" style={{ margin: 0, fontSize: 12 }}>This month: {camps.doneThisMonth} held · {camps.attendedThisMonth} people seen · {camps.referredThisMonth} referred to the hospital</p>}
+    </section>
+  );
+}
+
+function FieldKpis({ data, ov }: { data: Summary; ov: Overview | null }) {
+  const k = data.kpis;
+  const c = data.work.calls;
+  return (
+    <section aria-label="Field team at a glance" className="crm-kpis cc-kpis">
+      <Kpi label="Agents on shift" value={k.agentsOnShift} unit={`of ${k.totalAgents}`} note={ov && ov.leave.onLeaveToday > 0 ? `${ov.leave.onLeaveToday} on leave` : undefined} tone="neutral" />
+      <Kpi label="Visits today" value={k.visitsToday} spark={ov?.trend.visits} color="#0a72d6" />
+      <Kpi label="Partner calls today" value={c.done} note={`${c.due} still due`} tone={c.due > 0 ? 'neutral' : 'ok'} />
+      {ov && <Kpi label="Open agent tasks" value={ov.tasks.open} note={ov.tasks.overdue > 0 ? `${ov.tasks.overdue} overdue` : `${ov.tasks.doneToday} done today`} tone={ov.tasks.overdue > 0 ? 'bad' : 'ok'} />}
+      <Kpi label="Partners needing a visit" value={data.alerts.needsVisit} note={data.alerts.openEscalations > 0 ? `${data.alerts.openEscalations} escalations open` : undefined} tone="bad" />
+    </section>
   );
 }

@@ -8,6 +8,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Api.Services;
+using System.Collections.Concurrent;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using SeemanchalOutreach.Application.Interfaces;
 
 namespace SeemanchalOutreach.Api.Controllers
@@ -26,17 +31,28 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly CallCycleService _cycles;
         private readonly IWhatsAppSender _wa;
         private readonly IAppSettings _settings;
+        private readonly GroqClient _groq;
+        private readonly BusinessData _data;
+        private readonly IMemoryCache _cache;
+        private readonly ILogger<DashboardController> _log;
 
-        public DashboardController(IMarketingDbContext db, CallCycleService cycles, IWhatsAppSender wa, IAppSettings settings)
+        public DashboardController(IMarketingDbContext db, CallCycleService cycles, IWhatsAppSender wa, IAppSettings settings,
+            GroqClient groq, BusinessData data, IMemoryCache cache, ILogger<DashboardController> log)
         {
             _db = db;
             _cycles = cycles;
             _wa = wa;
             _settings = settings;
+            _groq = groq;
+            _data = data;
+            _cache = cache;
+            _log = log;
         }
 
         [HttpGet("summary")]
-        public async Task<IActionResult> Summary(CancellationToken ct)
+        public async Task<IActionResult> Summary(CancellationToken ct) => Ok(await BuildSummaryAsync(ct));
+
+        private async Task<object> BuildSummaryAsync(CancellationToken ct)
         {
             var now = DateTime.UtcNow;
             var today = IstClock.TodayStartUtc;
@@ -135,7 +151,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Select(b => new { b.Title, b.SentCount, b.ReadCount, b.ReplyCount }).FirstOrDefaultAsync(ct);
             int scheduledBroadcasts = await _db.Broadcasts.CountAsync(b => b.Status == "scheduled", ct);
 
-            return Ok(new
+            return (new
             {
                 generatedAt = now,
                 kpis = new
@@ -217,7 +233,9 @@ namespace SeemanchalOutreach.Api.Controllers
         /// WhatsApp spend against the budget and the department mix. Counts only — no patient details.
         /// </summary>
         [HttpGet("overview")]
-        public async Task<IActionResult> Overview(CancellationToken ct)
+        public async Task<IActionResult> Overview(CancellationToken ct) => Ok(await BuildOverviewAsync(ct));
+
+        private async Task<object> BuildOverviewAsync(CancellationToken ct)
         {
             var now = DateTime.UtcNow;
             var today = IstClock.TodayStartUtc;
@@ -307,7 +325,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Select(g => new { name = g.First().Name, referrals = g.Count(x => !x.Lead), leads = g.Count(x => x.Lead), admitted = g.Count(x => x.Won) })
                 .OrderByDescending(d => d.referrals + d.leads).Take(7).ToList();
 
-            return Ok(new
+            return (new
             {
                 trend = new
                 {
@@ -339,6 +357,193 @@ namespace SeemanchalOutreach.Api.Controllers
                     : null,
                 departments = depts,
             });
+        }
+
+        // ─── Vita's read of each tab ───
+
+        public static readonly string[] InsightTabs = { "overview", "referrals", "leads", "field" };
+        /// <summary>Pages Vita may point an action at; the website turns each into a link.</summary>
+        private static readonly string[] InsightPages =
+            { "leads", "whatsapp", "social", "desk", "calls", "pipeline", "partners", "payments", "camps", "map", "tasks", "leave", "agents", "analytics" };
+        private static readonly TimeSpan InsightFresh = TimeSpan.FromMinutes(45);
+        private static readonly TimeSpan InsightMinRefresh = TimeSpan.FromMinutes(3);
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> InsightLocks = new();
+        private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
+        private sealed record Insight(DateTime At, string Headline, List<InsightPoint> Points, List<InsightAction> Actions, string Model);
+        private sealed record InsightPoint(string Text, string Tone);
+        private sealed record InsightAction(string Text, string? Owner, string? Page);
+
+        private const string InsightContext =
+            "You are Vita, the analyst for Glisan Akbari SuperSpeciality Hospital's outreach programme in Seemanchal, Bihar. " +
+            "Field agents visit panchayats and sign up partners (ASHA workers, RMPs, doctors, chemists, nursing homes, mukhiyas) who refer patients. " +
+            "Patients also come as leads from WhatsApp, Facebook and Instagram forms and messages, partner QR codes, missed calls and health camps. " +
+            "A referral moves referred → arrived → seen in OPD → admitted → discharged, or 'lost'. Admissions matter most, then arrival rate, then replying fast to leads. " +
+            "You are given the numbers on one tab of the admin's command centre. Rules: use only the numbers given; never invent figures; quote the numbers behind each point; " +
+            "'today' figures are only part of the day so far, so judge them against the time given; say plainly when numbers are too small to judge; " +
+            "short plain sentences a hospital marketing manager in India can act on; no patient names; name the block, department, channel or agent concerned.";
+
+        private static readonly Dictionary<string, string> InsightFocus = new()
+        {
+            ["overview"] = "This is the overview tab: what needs action now, today's work across every team, and the 14-day trend. Say what matters most today.",
+            ["referrals"] = "This is the referrals tab: the funnel, departments, and blocks and partner types over 30 days. Say where patients are being lost and what to do.",
+            ["leads"] = "This is the leads and channels tab: leads by source, reply speed, WhatsApp, Facebook and Instagram inboxes, form leads, camps and WhatsApp spend. Say which channels work and where replies are slow.",
+            ["field"] = "This is the field team tab: who is on shift and what they did today, calls, tasks, leave and 30-day field work per agent. Be fair to agents; say who needs support and with what.",
+        };
+
+        /// <summary>
+        /// A short read of one command-centre tab by the AI analyst: a headline, a few points and up to three actions.
+        /// Only totals and counts go to the model (no patient names). Kept for 45 minutes; anyone can ask for a fresh one
+        /// after 3 minutes.
+        /// </summary>
+        [HttpGet("insight")]
+        public async Task<IActionResult> GetInsight([FromQuery] string? tab, [FromQuery] bool refresh = false, CancellationToken ct = default)
+        {
+            var t = InsightTabs.Contains(tab) ? tab! : "overview";
+            if (!_groq.Configured) return Ok(new { configured = false });
+            var key = $"cc-insight:{t}";
+            _cache.TryGetValue(key, out Insight? have);
+            var age = have == null ? TimeSpan.MaxValue : DateTime.UtcNow - have.At;
+            if (have != null && (age < InsightFresh && (!refresh || age < InsightMinRefresh)))
+                return Ok(InsightDto(have, t));
+
+            var gate = InsightLocks.GetOrAdd(t, _ => new SemaphoreSlim(1, 1));
+            if (!await gate.WaitAsync(TimeSpan.FromSeconds(40), ct))
+                return have != null ? Ok(InsightDto(have, t)) : Ok(new { configured = true, error = "Vita is busy. Try again in a minute." });
+            try
+            {
+                // Someone else may have just written it while we waited.
+                if (_cache.TryGetValue(key, out Insight? fresh) && fresh != null && DateTime.UtcNow - fresh.At < InsightMinRefresh)
+                    return Ok(InsightDto(fresh, t));
+                var facts = await InsightFactsAsync(t, ct);
+                var ist = IstClock.NowIst;
+                var messages = new JsonArray
+                {
+                    new JsonObject { ["role"] = "system", ["content"] = InsightContext + " " + InsightFocus[t] },
+                    new JsonObject
+                    {
+                        ["role"] = "user",
+                        ["content"] =
+                            $"It is {ist:dddd d MMMM, h:mm tt} IST. Numbers for this tab (JSON):\n{facts}\n\n" +
+                            "Reply with JSON only: {\"headline\": one sentence, \"points\": [2 to 4 of {\"text\": one or two sentences with the numbers, \"tone\": \"good\" | \"watch\" | \"bad\"}], " +
+                            "\"actions\": [up to 3 of {\"text\": what to do, \"owner\": a role such as Call desk, Referral desk, Marketing manager, Field agent <name>, Admin, " +
+                            $"\"page\": one of {string.Join(", ", InsightPages)} or null}}]}}",
+                    },
+                };
+                var (msg, _) = await _groq.ChatAsync(messages, null, new JsonObject { ["type"] = "json_object" }, ct);
+                var parsed = ParseInsight(msg["content"]?.GetValue<string>());
+                if (parsed == null) return have != null ? Ok(InsightDto(have, t)) : Ok(new { configured = true, error = "Vita's answer couldn't be read. Try again." });
+                _cache.Set(key, parsed, TimeSpan.FromHours(6));
+                return Ok(InsightDto(parsed, t));
+            }
+            catch (AnalystUnavailableException ex)
+            {
+                return have != null ? Ok(InsightDto(have, t, ex.Message)) : Ok(new { configured = true, error = ex.Message });
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _log.LogError(ex, "Command centre insight failed for {Tab}", t);
+                return have != null ? Ok(InsightDto(have, t)) : Ok(new { configured = true, error = "Vita couldn't look at this just now. Try again in a minute." });
+            }
+            finally { gate.Release(); }
+        }
+
+        private static object InsightDto(Insight i, string tab, string? error = null) => new
+        {
+            configured = true, tab, at = i.At, model = i.Model, headline = i.Headline,
+            points = i.Points.Select(p => new { text = p.Text, tone = p.Tone }),
+            actions = i.Actions.Select(a => new { text = a.Text, owner = a.Owner, page = a.Page }),
+            error,
+        };
+
+        private Insight? ParseInsight(string? content)
+        {
+            if (string.IsNullOrWhiteSpace(content)) return null;
+            JsonObject? o;
+            try { o = JsonNode.Parse(content) as JsonObject; } catch (JsonException) { return null; }
+            if (o == null) return null;
+            static string? S(JsonNode? n) => n is JsonValue v && v.TryGetValue<string>(out var x) && !string.IsNullOrWhiteSpace(x) ? x.Trim() : null;
+            static string Cut(string s, int n) => s.Length > n ? s[..n].TrimEnd() + "…" : s;
+            var headline = S(o["headline"]);
+            if (headline == null) return null;
+            var points = (o["points"] as JsonArray ?? new JsonArray()).OfType<JsonObject>()
+                .Select(p => (Text: S(p["text"]), Tone: S(p["tone"])))
+                .Where(p => p.Text != null)
+                .Select(p => new InsightPoint(Cut(p.Text!, 400), p.Tone is "good" or "watch" or "bad" ? p.Tone : "watch"))
+                .Take(4).ToList();
+            var actions = (o["actions"] as JsonArray ?? new JsonArray()).OfType<JsonObject>()
+                .Select(a => (Text: S(a["text"]), Owner: S(a["owner"]), Page: S(a["page"])))
+                .Where(a => a.Text != null)
+                .Select(a => new InsightAction(Cut(a.Text!, 300), a.Owner == null ? null : Cut(a.Owner, 60), InsightPages.Contains(a.Page) ? a.Page : null))
+                .Take(3).ToList();
+            return new Insight(DateTime.UtcNow, Cut(headline, 300), points, actions, _groq.Model);
+        }
+
+        /// <summary>The numbers for one tab, as compact JSON. Totals and counts only: patient names and partner names are left out.</summary>
+        private async Task<string> InsightFactsAsync(string tab, CancellationToken ct)
+        {
+            JsonObject Node(object o) => JsonSerializer.SerializeToNode(o, WebJson)!.AsObject();
+            var sum = Node(await BuildSummaryAsync(ct));
+            var ov = Node(await BuildOverviewAsync(ct));
+            sum.Remove("latestReferrals");
+            sum.Remove("generatedAt");
+            // Top partners without their names: type and numbers are enough to judge.
+            if (sum["topPartners"] is JsonArray tp)
+                foreach (var p in tp.OfType<JsonObject>()) { p.Remove("name"); p.Remove("clientId"); }
+            if (ov["camps"]?["upcoming"] is JsonArray up)
+                foreach (var c in up.OfType<JsonObject>()) { c.Remove("id"); c.Remove("venue"); }
+            if (sum["fieldForce"] is JsonArray ff)
+                foreach (var a in ff.OfType<JsonObject>()) a.Remove("agentId");
+
+            JsonNode? Pick(JsonObject o, params string[] keys)
+            {
+                var r = new JsonObject();
+                foreach (var k in keys) if (o[k] != null) r[k] = o[k]!.DeepClone();
+                return r;
+            }
+            var facts = new JsonObject();
+            switch (tab)
+            {
+                case "overview":
+                    facts["today"] = Pick(sum, "kpis", "alerts", "work", "funnel", "lost");
+                    facts["more"] = Pick(ov, "leads", "inbox", "camps", "tasks", "leave", "waSpend", "trend");
+                    if (facts["more"]?["leads"] is JsonObject lo) lo.Remove("sources");
+                    break;
+                case "referrals":
+                {
+                    facts["thisMonth"] = Pick(sum, "funnel", "lost", "kpis", "topPartners");
+                    facts["notArrived48h"] = sum["alerts"]?["notArrived48"]?.DeepClone();
+                    facts["departmentsThisMonth"] = ov["departments"]?.DeepClone();
+                    facts["trend14Days"] = Pick(ov["trend"]!.AsObject(), "days", "referrals", "arrived", "admitted");
+                    var (from, to) = BusinessData.Days(30);
+                    var snap = await _data.LoadAsync(from, to, ct);
+                    facts["last30DaysByBlock"] = JsonSerializer.SerializeToNode(_data.Breakdown(snap, "block", 12), WebJson);
+                    facts["last30DaysByPartnerType"] = JsonSerializer.SerializeToNode(_data.Breakdown(snap, "type", 10), WebJson);
+                    break;
+                }
+                case "leads":
+                    facts["leadsThisMonth"] = ov["leads"]?.DeepClone();
+                    facts["inboxes"] = ov["inbox"]?.DeepClone();
+                    facts["camps"] = ov["camps"]?.DeepClone();
+                    facts["whatsappSpend"] = ov["waSpend"]?.DeepClone();
+                    facts["whatsappBroadcasts"] = sum["work"]?["whatsapp"]?.DeepClone();
+                    facts["trend14Days"] = Pick(ov["trend"]!.AsObject(), "days", "leads");
+                    break;
+                case "field":
+                {
+                    facts["today"] = Pick(sum, "kpis", "fieldForce");
+                    facts["calls"] = sum["work"]?["calls"]?.DeepClone();
+                    facts["alerts"] = sum["alerts"]?.DeepClone();
+                    facts["tasks"] = ov["tasks"]?.DeepClone();
+                    facts["leave"] = ov["leave"]?.DeepClone();
+                    facts["visitsTrend14Days"] = Pick(ov["trend"]!.AsObject(), "days", "visits");
+                    var (from, to) = BusinessData.Days(30);
+                    facts["last30Days"] = JsonSerializer.SerializeToNode(await _data.FieldAsync(await _data.LoadAsync(from, to, ct), ct), WebJson);
+                    break;
+                }
+            }
+            var text = facts.ToJsonString(WebJson);
+            return text.Length > 12000 ? text[..12000] + "…(cut)" : text;
         }
 
         /// <summary>Recent activity for the live feed, newest first (the live hub streams new items after this).</summary>
