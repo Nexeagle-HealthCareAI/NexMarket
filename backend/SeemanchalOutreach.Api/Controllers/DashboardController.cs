@@ -25,12 +25,14 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IMarketingDbContext _db;
         private readonly CallCycleService _cycles;
         private readonly IWhatsAppSender _wa;
+        private readonly IAppSettings _settings;
 
-        public DashboardController(IMarketingDbContext db, CallCycleService cycles, IWhatsAppSender wa)
+        public DashboardController(IMarketingDbContext db, CallCycleService cycles, IWhatsAppSender wa, IAppSettings settings)
         {
             _db = db;
             _cycles = cycles;
             _wa = wa;
+            _settings = settings;
         }
 
         [HttpGet("summary")]
@@ -205,6 +207,137 @@ namespace SeemanchalOutreach.Api.Controllers
                         lastReplies = lastBroadcast?.ReplyCount,
                     },
                 },
+            });
+        }
+
+        private static readonly string[] LeadWon = { "arrived", "admitted" };
+
+        /// <summary>
+        /// Everything else on one page: 14-day trends, leads and where they come from, both inboxes, camps, tasks, leave,
+        /// WhatsApp spend against the budget and the department mix. Counts only — no patient details.
+        /// </summary>
+        [HttpGet("overview")]
+        public async Task<IActionResult> Overview(CancellationToken ct)
+        {
+            var now = DateTime.UtcNow;
+            var today = IstClock.TodayStartUtc;
+            var month = IstClock.MonthStartUtc;
+            var todayIst = DateOnly.FromDateTime(IstClock.NowIst);
+            const int Days = 14;
+            var from = today.AddDays(-(Days - 1));
+            var rules = WaAutomation.Load(_settings);
+            var target = Math.Max(1, rules.ReplyTargetMinutes);
+            var replyBy = now.AddMinutes(-target);
+
+            // ─── 14-day trend (IST days) ───
+            int Day(DateTime utc) => (int)Math.Floor((IstClock.StartOfDayUtc(utc) - from).TotalDays);
+            int[] Bucket(IEnumerable<DateTime> times)
+            {
+                var a = new int[Days];
+                foreach (var t in times) { var i = Day(t); if (i >= 0 && i < Days) a[i]++; }
+                return a;
+            }
+            var tVisits = await _db.Visits.AsNoTracking().Where(v => v.CheckInAt >= from).Select(v => v.CheckInAt).ToListAsync(ct);
+            var tRefs = await _db.Referrals.AsNoTracking().Where(r => r.CreatedAt >= from).Select(r => r.CreatedAt).ToListAsync(ct);
+            var tArrived = await _db.Referrals.AsNoTracking().Where(r => r.ArrivedAt >= from).Select(r => r.ArrivedAt!.Value).ToListAsync(ct);
+            var tAdmitted = await _db.Referrals.AsNoTracking().Where(r => r.AdmittedAt >= from).Select(r => r.AdmittedAt!.Value).ToListAsync(ct);
+            var tLeads = await _db.Leads.AsNoTracking().Where(l => l.CreatedAt >= from).Select(l => l.CreatedAt).ToListAsync(ct);
+
+            // ─── Leads ───
+            var monthLeads = await _db.Leads.AsNoTracking().Where(l => l.CreatedAt >= month)
+                .Select(l => new { l.Source, l.Status, l.Department, l.CreatedAt, l.FirstResponseAt }).ToListAsync(ct);
+            int waitingReply = await _db.Leads.CountAsync(l => l.Status == "new" && l.FirstResponseAt == null && l.CreatedAt < replyBy && l.CreatedAt > now.AddDays(-7), ct);
+            var replyMins = monthLeads.Where(l => l.FirstResponseAt != null).Select(l => (l.FirstResponseAt!.Value - l.CreatedAt).TotalMinutes).OrderBy(m => m).ToList();
+            int? medianReply = replyMins.Count == 0 ? null : (int)Math.Round(replyMins[replyMins.Count / 2]);
+            int leadsToday = tLeads.Count(t => t >= today);
+            int leadsYesterday = tLeads.Count(t => t >= today.AddDays(-1) && t < today);
+
+            // Field referrals count as a source too, so the admin sees every way patients reach the hospital.
+            var monthRefs = await _db.Referrals.AsNoTracking().Where(r => r.CreatedAt >= month).Select(r => new { r.Status, r.Department }).ToListAsync(ct);
+            var sources = monthLeads.GroupBy(l => l.Source)
+                .Select(g => new { source = g.Key, label = LeadInbox.SourceLabel(g.Key), count = g.Count(), won = g.Count(l => LeadWon.Contains(l.Status)) })
+                .ToList();
+            if (monthRefs.Count > 0)
+                sources.Add(new { source = "field", label = "Field agents (referrals)", count = monthRefs.Count, won = monthRefs.Count(r => ArrivedStatuses.Contains(r.Status)) });
+            sources = sources.OrderByDescending(x => x.count).ToList();
+
+            // ─── Inboxes ───
+            int waUnread = await _db.WaConversations.CountAsync(c => c.Status == "open" && c.Unread > 0, ct);
+            int waWaiting = await _db.WaConversations.CountAsync(c => c.Status == "open" && c.LastDirection == "in" && c.LastInboundAt < replyBy && c.LastInboundAt > now.AddDays(-1), ct);
+            int soUnread = await _db.SocialConversations.CountAsync(c => c.Status == "open" && c.Unread > 0, ct);
+            int soWaiting = await _db.SocialConversations.CountAsync(c => c.Status == "open" && c.LastDirection == "in" && c.LastInboundAt < replyBy && c.LastInboundAt > now.AddDays(-1), ct);
+            int formLeadsToday = await _db.AdLeads.CountAsync(a => a.CreatedAt >= today, ct);
+            int formLeadsMonth = await _db.AdLeads.CountAsync(a => a.CreatedAt >= month, ct);
+
+            // ─── Camps ───
+            var soon = todayIst.AddDays(14);
+            var monthIst = new DateOnly(todayIst.Year, todayIst.Month, 1);
+            var camps = await _db.HealthCamps.AsNoTracking()
+                .Where(c => (c.Date >= todayIst && c.Date <= soon && (c.Status == "planned" || c.Status == "confirmed")) || (c.Date >= monthIst && c.Date <= todayIst && c.Status == "done"))
+                .Select(c => new { c.Id, c.Title, c.Date, c.Block, c.Venue, c.Status, c.TargetRegistrations }).ToListAsync(ct);
+            var campIds = camps.Select(c => c.Id).ToList();
+            var campCounts = await _db.CampPatients.AsNoTracking().Where(p => campIds.Contains(p.CampId) && p.Status != "cancelled")
+                .GroupBy(p => p.CampId)
+                .Select(g => new { CampId = g.Key, Booked = g.Count(), Attended = g.Count(p => p.Status == "attended"), Referred = g.Count(p => p.ReferToHospital) })
+                .ToListAsync(ct);
+            var cc = campCounts.ToDictionary(c => c.CampId);
+            var upcoming = camps.Where(c => c.Status != "done").OrderBy(c => c.Date).Take(4).Select(c => new
+            {
+                c.Id, c.Title, date = c.Date.ToString("yyyy-MM-dd"), c.Block, c.Venue, c.Status,
+                booked = cc.TryGetValue(c.Id, out var x) ? x.Booked : 0, target = c.TargetRegistrations,
+                daysAway = c.Date.DayNumber - todayIst.DayNumber,
+            }).ToList();
+            var done = camps.Where(c => c.Status == "done").ToList();
+
+            // ─── Tasks and leave ───
+            int tasksOpen = await _db.AgentTasks.CountAsync(t => t.Status == "open", ct);
+            int tasksOverdue = await _db.AgentTasks.CountAsync(t => t.Status == "open" && t.DueDate != null && t.DueDate < todayIst, ct);
+            int tasksDoneToday = await _db.AgentTasks.CountAsync(t => t.Status == "done" && t.DoneAt >= today, ct);
+            int leavePending = await _db.LeaveRequests.CountAsync(l => l.Status == "pending", ct);
+            int onLeaveToday = await _db.LeaveRequests.Where(l => l.Status == "approved" && l.FromDate <= todayIst && l.ToDate >= todayIst).Select(l => l.AgentId).Distinct().CountAsync(ct);
+
+            // ─── WhatsApp spend (the saved figure only; the billing tab refreshes it from Meta) ───
+            var bill = WaBillingSettings.Load(_settings);
+            var snap = WaBillingSnapshot.Load(_settings);
+
+            // ─── Department mix (this month) ───
+            var depts = monthRefs.Where(r => !string.IsNullOrWhiteSpace(r.Department)).Select(r => (Name: r.Department.Trim(), Lead: false, Won: AdmittedStatuses.Contains(r.Status)))
+                .Concat(monthLeads.Where(l => !string.IsNullOrWhiteSpace(l.Department)).Select(l => (Name: l.Department!.Trim(), Lead: true, Won: l.Status == "admitted")))
+                .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new { name = g.First().Name, referrals = g.Count(x => !x.Lead), leads = g.Count(x => x.Lead), admitted = g.Count(x => x.Won) })
+                .OrderByDescending(d => d.referrals + d.leads).Take(7).ToList();
+
+            return Ok(new
+            {
+                trend = new
+                {
+                    days = Enumerable.Range(0, Days).Select(i => DateOnly.FromDateTime(from.AddDays(i) + IstClock.Offset).ToString("yyyy-MM-dd")),
+                    visits = Bucket(tVisits), referrals = Bucket(tRefs), leads = Bucket(tLeads), arrived = Bucket(tArrived), admitted = Bucket(tAdmitted),
+                },
+                leads = new
+                {
+                    today = leadsToday, yesterday = leadsYesterday, month = monthLeads.Count, waiting = waitingReply, targetMinutes = target,
+                    medianReplyMinutes = medianReply,
+                    appointments = monthLeads.Count(l => l.Status == "appointment" || LeadWon.Contains(l.Status)),
+                    won = monthLeads.Count(l => LeadWon.Contains(l.Status)),
+                    lost = monthLeads.Count(l => l.Status == "lost"),
+                    sources,
+                },
+                inbox = new { waUnread, waWaiting, socialUnread = soUnread, socialWaiting = soWaiting, formLeadsToday, formLeadsMonth },
+                camps = new
+                {
+                    upcoming,
+                    doneThisMonth = done.Count,
+                    attendedThisMonth = done.Sum(c => cc.TryGetValue(c.Id, out var x) ? x.Attended : 0),
+                    referredThisMonth = done.Sum(c => cc.TryGetValue(c.Id, out var x) ? x.Referred : 0),
+                    atRisk = upcoming.Count(c => c.daysAway <= 7 && c.target > 0 && c.booked * 2 < c.target),
+                },
+                tasks = new { open = tasksOpen, overdue = tasksOverdue, doneToday = tasksDoneToday },
+                leave = new { pending = leavePending, onLeaveToday },
+                waSpend = bill.MonthlyBudget > 0 || snap.SpentThisMonth > 0
+                    ? new { spent = snap.SpentThisMonth, budget = bill.MonthlyBudget, alertPercent = bill.AlertPercent, currency = snap.Currency ?? "INR", at = snap.At }
+                    : null,
+                departments = depts,
             });
         }
 
