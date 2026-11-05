@@ -40,6 +40,8 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<ChatThread> ChatThreads { get; }
         DbSet<ChatMessage> ChatMessages { get; }
         DbSet<ChatRead> ChatReads { get; }
+        DbSet<ChatReaction> ChatReactions { get; }
+        DbSet<ChatPin> ChatPins { get; }
         DbSet<FieldRole> FieldRoles { get; }
         DbSet<Notification> Notifications { get; }
         DbSet<PushDevice> PushDevices { get; }

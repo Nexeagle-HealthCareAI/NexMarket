@@ -326,6 +326,29 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
+    /// <summary>One person's emoji reaction to a chat message (👍, ✅, 🙏…). One row per person and emoji.</summary>
+    public class ChatReaction
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid ThreadId { get; set; }
+        public Guid MessageId { get; set; }
+        public string UserId { get; set; } = string.Empty;
+        public string UserName { get; set; } = string.Empty;
+        public string Emoji { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>The message pinned at the top of a chat (at most one per chat), e.g. this week's targets.</summary>
+    public class ChatPin
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid ThreadId { get; set; }
+        public Guid MessageId { get; set; }
+        public string PinnedBy { get; set; } = string.Empty;
+        public string PinnedByName { get; set; } = string.Empty;
+        public DateTime PinnedAt { get; set; } = DateTime.UtcNow;
+    }
+
     /// <summary>How far each person has read a chat (for unread counts and the blue ticks).</summary>
     public class ChatRead
     {
