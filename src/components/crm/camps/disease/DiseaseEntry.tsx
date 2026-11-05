@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { Copy, Download, FileUp, Plus, Trash2, Undo2 } from 'lucide-react';
+import { Copy, Download, FileUp, Plus, RefreshCw, Trash2, Undo2 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Pager } from '@/components/crm/Pager';
 import { friendlyError } from '@/components/crm/ui';
@@ -201,7 +201,9 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
           {options.camps.map((c) => <option key={c.id} value={c.id}>{c.title} · {c.date}</option>)}
         </select>
         {fileNote && <span className="crm-note dz-file">{fileNote}</span>}
+        <SyncCamps toast={toast} onDone={onSaved} />
       </div>
+      <span className="crm-cell-sub">People registered in a camp&apos;s patient register are counted here automatically (by what the doctor ticked, their age, gender and the camp&apos;s place). Only add people who weren&apos;t registered there, so nobody is counted twice.</span>
 
       {msg && (
         <div className={`crm-note dz-msg is-${msg.tone}`} role={msg.tone === 'bad' ? 'alert' : 'status'}>
@@ -277,4 +279,18 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
       </div>
     </section>
   );
+}
+
+/** Brings every camp's patient register into Disease data. Needed once for camps held before this existed; later camps update by themselves. */
+function SyncCamps({ toast, onDone }: { toast: (m: string) => void; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await crm.post<{ camps: number; people: number }>('/api/v1/camps/disease/sync-camps', {});
+      toast(`Camp registers brought in: ${r.people.toLocaleString('en-IN')} people from ${r.camps} camp${r.camps === 1 ? '' : 's'}.`);
+      onDone();
+    } catch (e) { toast(friendlyError(e)); } finally { setBusy(false); }
+  };
+  return <button type="button" className="crm-btn is-ghost is-sm" style={{ marginLeft: 'auto' }} onClick={() => void run()} disabled={busy}><RefreshCw size={15} aria-hidden /> {busy ? 'Bringing in…' : 'Bring in camp registers'}</button>;
 }

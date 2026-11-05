@@ -157,8 +157,8 @@ function Records({ filters, version, editable, toast, onChanged }: { filters: Fi
                       <span className="crm-cell-sub" style={{ display: 'block' }}>{[r.block, r.district].filter(Boolean).join(' · ')}</span>
                     </td>
                     <td className="wb-num"><strong>{r.count.toLocaleString('en-IN')}</strong></td>
-                    <td className="crm-cell-sub">{r.by}{r.source === 'upload' ? ' · upload' : ''}{r.camp ? <span style={{ display: 'block' }}>{r.camp}</span> : null}</td>
-                    {editable && <td><button type="button" className="crm-btn is-ghost is-sm" onClick={() => setRemoving(r)} aria-label={`Remove ${r.disease}, ${r.date}`}><Trash2 size={14} aria-hidden /></button></td>}
+                    <td className="crm-cell-sub">{r.source === 'camp' ? 'Camp register' : `${r.by}${r.source === 'upload' ? ' · upload' : ''}`}{r.camp ? <span style={{ display: 'block' }}>{r.camp}</span> : null}</td>
+                    {editable && <td>{r.source !== 'camp' && <button type="button" className="crm-btn is-ghost is-sm" onClick={() => setRemoving(r)} aria-label={`Remove ${r.disease}, ${r.date}`}><Trash2 size={14} aria-hidden /></button>}</td>}
                   </tr>
                 ))}
               </tbody>

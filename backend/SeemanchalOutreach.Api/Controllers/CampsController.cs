@@ -221,6 +221,9 @@ namespace SeemanchalOutreach.Api.Controllers
             if (err != null) return BadRequest(new { message = err });
             Apply(c, dto);
             await _db.SaveChangesAsync(ct);
+            // Date, place or status may have changed: keep the camp's counts in Disease data in step.
+            await DiseaseRegister.SyncCampAsync(_db, id, ct);
+            await _db.SaveChangesAsync(ct);
             return Ok(new { ok = true });
         }
 
@@ -390,6 +393,7 @@ namespace SeemanchalOutreach.Api.Controllers
             if (dto.Status == "attended") p.ArrivedAt = DateTime.UtcNow;
             _db.CampPatients.Add(p);
             await _db.SaveChangesAsync(ct);
+            if (p.Status == "attended") { await DiseaseRegister.SyncCampAsync(_db, id, ct); await _db.SaveChangesAsync(ct); }
             return Ok(new { id = p.Id, token = p.Token, existed = false });
         }
 
@@ -402,6 +406,8 @@ namespace SeemanchalOutreach.Api.Controllers
             if (err != null) return BadRequest(new { message = err });
             // Referred to the hospital: make sure the desk follows up.
             if (p.ReferToHospital && p.LeadId == null && p.Phone != null && p.Consent) await FollowUpAsync(p, ct);
+            await _db.SaveChangesAsync(ct);
+            await DiseaseRegister.SyncCampAsync(_db, p.CampId, ct);
             await _db.SaveChangesAsync(ct);
             return Ok(new { ok = true, leadId = p.LeadId, flags = CampBook.Flags(p) });
         }
