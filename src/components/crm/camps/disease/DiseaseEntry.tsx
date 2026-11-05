@@ -63,9 +63,40 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
     setRows((rs) => (rs.length === 1 ? [blank()] : rs.filter((_, k) => k !== i)));
     setErrors((e) => { const n: typeof e = {}; for (const [k, v] of Object.entries(e)) { const r = Number(k); if (r < i) n[r] = v; else if (r > i) n[r - 1] = v; } return n; });
   };
+  // ─── Setting the place for many rows at once ───
+  const [picked, setPicked] = useState<Set<number>>(() => new Set());
+  const [bulk, setBulk] = useState({ district: '', block: '', panchayat: '' });
+  const togglePick = (key: number) => setPicked((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  const allPicked = rows.length > 0 && rows.every((r) => picked.has(r.key));
+  const applyBulk = (onlyEmpty: boolean) => {
+    const district = bulk.district || (bulk.block ? options.districts.find((d) => d.blocks.some((b) => b.name === bulk.block))?.name ?? '' : '');
+    if (!district && !bulk.block && !bulk.panchayat.trim()) { setMsg({ tone: 'bad', text: 'Choose a district, block or panchayat to set.' }); return; }
+    const target = (r: GridRow) => (picked.size === 0 || picked.has(r.key));
+    let n = 0;
+    const touched: number[] = [];
+    const updated = rows.map((r, i) => {
+      if (!target(r)) return r;
+      const next = { ...r };
+      // A new district or block makes the old panchayat meaningless, unless only empty cells are being filled.
+      const placeChanges = !onlyEmpty && ((district && district !== r.district) || (bulk.block && bulk.block !== r.block));
+      if (district && (!onlyEmpty || !r.district)) next.district = district;
+      if (bulk.block && (!onlyEmpty || !r.block)) next.block = bulk.block;
+      if (bulk.panchayat.trim() && (!onlyEmpty || !r.panchayat)) next.panchayat = bulk.panchayat.trim();
+      else if (placeChanges && !bulk.panchayat.trim()) next.panchayat = '';
+      if (next.district !== r.district || next.block !== r.block || next.panchayat !== r.panchayat) { n++; touched.push(i); }
+      return next;
+    });
+    setRows(updated);
+    setErrors((e) => { const out = { ...e }; for (const i of touched) { if (!out[i]) continue; const f = { ...out[i] }; delete f.district; delete f.block; delete f.panchayat; if (Object.keys(f).length) out[i] = f; else delete out[i]; } return out; });
+    setMsg({ tone: 'info', text: n ? `Place set on ${n} row${n === 1 ? '' : 's'}.` : 'Nothing to change.' });
+  };
+  const bulkBlocks = blocksOf(bulk.district);
+  const bulkDistrict = bulk.district || options.districts.find((d) => d.blocks.some((b) => b.name === bulk.block))?.name || '';
+  const bulkPanchayats = bulk.block ? panchayatsOf(bulkDistrict, bulk.block) : [];
+
   const reset = (keep?: GridRow) => {
     setRows(Array.from({ length: 5 }, () => blank(keep ? { date: keep.date, district: keep.district, block: keep.block } : undefined)));
-    setErrors({}); setPage(1); setSource('grid'); setFileNote(null);
+    setErrors({}); setPage(1); setSource('grid'); setFileNote(null); setPicked(new Set());
   };
 
   /** A block of cells pasted from Excel or Google Sheets fills the grid from this cell, adding rows as needed. */
@@ -212,11 +243,34 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
         </div>
       )}
 
+      <div className="dz-bulk" role="group" aria-label="Set the place for many rows">
+        <strong className="dz-bulk-title">Set place for {picked.size ? `${picked.size} ticked row${picked.size === 1 ? '' : 's'}` : 'all rows'}</strong>
+        <label className="crm-sr" htmlFor="dz-bd">District</label>
+        <select id="dz-bd" className="crm-select" value={bulk.district} onChange={(e) => setBulk({ district: e.target.value, block: bulkBlocks.length && e.target.value && !blocksOf(e.target.value).some((b) => b.name === bulk.block) ? '' : bulk.block, panchayat: '' })}>
+          <option value="">District</option>
+          {options.districts.map((d) => <option key={d.name}>{d.name}</option>)}
+        </select>
+        <label className="crm-sr" htmlFor="dz-bb">Block</label>
+        <select id="dz-bb" className="crm-select" value={bulk.block} onChange={(e) => setBulk({ ...bulk, block: e.target.value, panchayat: '' })}>
+          <option value="">Block</option>
+          {bulkBlocks.map((b) => <option key={b.name}>{b.name}</option>)}
+        </select>
+        <label className="crm-sr" htmlFor="dz-bp">Panchayat</label>
+        <input id="dz-bp" className="crm-input" list="dz-bulk-p" value={bulk.panchayat} onChange={(e) => setBulk({ ...bulk, panchayat: e.target.value })}
+          placeholder={bulk.block ? 'Panchayat (optional)' : 'Pick a block first'} disabled={!bulk.block} maxLength={80} />
+        <datalist id="dz-bulk-p">{bulkPanchayats.map((p) => <option key={p.id} value={p.name} />)}</datalist>
+        <button type="button" className="crm-btn is-sm" onClick={() => applyBulk(false)}>Apply to {picked.size ? 'ticked' : 'all'}</button>
+        <button type="button" className="crm-btn is-secondary is-sm" onClick={() => applyBulk(true)} title="Only rows where the place is still blank">Fill blanks only</button>
+        {picked.size > 0 && <button type="button" className="crm-btn is-ghost is-sm" onClick={() => setPicked(new Set())}>Untick all</button>}
+      </div>
+
       <div className="dz-grid-wrap">
         <table className="dz-grid">
           <thead>
             <tr>
-              <th scope="col" className="dz-n">#</th>
+              <th scope="col" className="dz-n">
+                <input type="checkbox" checked={allPicked} aria-label="Tick all rows" onChange={() => setPicked(allPicked ? new Set() : new Set(rows.map((r) => r.key)))} />
+              </th>
               {COLS.map((c) => <th key={c} scope="col" className={`dz-c-${c}`}>{COL_LABEL[c]}</th>)}
               <th scope="col"><span className="crm-sr">Row actions</span></th>
             </tr>
@@ -226,8 +280,10 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
               const i = (page - 1) * PAGE + k;
               const blockKey = `${r.district}|${r.block}`;
               return (
-                <tr key={r.key} className={errors[i] ? 'has-err' : undefined}>
-                  <td className="dz-n">{i + 1}</td>
+                <tr key={r.key} className={[errors[i] ? 'has-err' : '', picked.has(r.key) ? 'is-picked' : ''].filter(Boolean).join(' ') || undefined}>
+                  <td className="dz-n">
+                    <label className="dz-pick"><input type="checkbox" checked={picked.has(r.key)} onChange={() => togglePick(r.key)} aria-label={`Tick row ${i + 1}`} /><span>{i + 1}</span></label>
+                  </td>
                   <td><input type="date" value={r.date} max={options.today} onChange={(e) => set(i, 'date', e.target.value)} {...inputProps(i, 'date')} /></td>
                   <td><input value={r.disease} list="dz-diseases" maxLength={80} placeholder="e.g. High BP" onChange={(e) => set(i, 'disease', e.target.value)} {...inputProps(i, 'disease')} /></td>
                   <td><input value={r.age} placeholder="42 or 30-44" maxLength={12} onChange={(e) => set(i, 'age', e.target.value)} {...inputProps(i, 'age')} /></td>
