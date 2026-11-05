@@ -68,6 +68,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
             var entries = db.ChangeTracker.Entries()
                 .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
                 .Where(e => !Skip.Contains(e.Entity.GetType()) && !e.Metadata.IsOwned())
+                // Figures the server refreshes on its own every few minutes (e.g. WhatsApp spend), not people's changes.
+                .Where(e => !(e.Entity is AppSetting st && st.Key.EndsWith(".snapshot", StringComparison.Ordinal)))
                 .ToList();
             if (entries.Count == 0) return;
 

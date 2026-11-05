@@ -36,6 +36,7 @@ builder.Services.AddSignalR();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<CallCycleService>();
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.WhatsAppOutbox>();
+builder.Services.AddScoped<SeemanchalOutreach.Api.Services.WaBillingService>();
 builder.Services.Configure<SeemanchalOutreach.Api.Services.LeaveSettings>(builder.Configuration.GetSection("Leave"));
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.AttendanceService>();
 builder.Services.Configure<SeemanchalOutreach.Api.Services.AnalystSettings>(builder.Configuration.GetSection("Groq"));

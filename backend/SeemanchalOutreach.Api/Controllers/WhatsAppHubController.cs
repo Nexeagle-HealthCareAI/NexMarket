@@ -91,8 +91,18 @@ namespace SeemanchalOutreach.Api.Controllers
             var pausedByName = rules.PausedBy != null ? (await NamesAsync(new[] { rules.PausedBy }, ct)).GetValueOrDefault(rules.PausedBy) : null;
             var me = User.AgentIdOf();
             var level = User.IsAdmin() ? Pages.Edit : await _perms.GetLevelAsync(User, Pages.WhatsApp);
+            // Spend against the budget, from the last figure read from Meta (only for people who manage WhatsApp).
+            object? billing = null;
+            if (level >= Pages.Edit)
+            {
+                var b = WaBillingSettings.Load(_settings);
+                var snap = WaBillingSnapshot.Load(_settings);
+                if (b.MonthlyBudget > 0)
+                    billing = new { budget = b.MonthlyBudget, spent = snap.SpentThisMonth, currency = snap.Currency, alertPercent = b.AlertPercent, stopAtBudget = b.StopAtBudget, at = snap.At };
+            }
             return Ok(new
             {
+                billing,
                 connected = cfg.IsConfigured,
                 displayPhone = LeadInbox.DisplayPhone(cfg),
                 hospital = cfg.HospitalName,

@@ -1395,3 +1395,35 @@ button.ld-head-btn { border: 0; cursor: pointer; font: inherit; font-size: 13px;
 .cp-hero .cp-hero-title { color: #fff; }
 .cp-hero-side .crm-btn.is-secondary, .cp-hero-side a.crm-btn { color: #fff !important; }
 .cp-phases { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+
+/* WhatsApp → Billing */
+.wb-wrap { display: flex; flex-direction: column; gap: 16px; padding-bottom: 40px; }
+.wb-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.wb-bar .crm-select { width: auto; height: 40px; }
+.wb-bar .crm-btn { display: inline-flex; align-items: center; gap: 6px; }
+.wb-spin { animation: wb-spin 0.9s linear infinite; }
+@keyframes wb-spin { to { transform: rotate(360deg); } }
+.wb-kpi.is-warn { border-color: #f1c58f; background: var(--warn-soft, #fff6ea); }
+.wb-kpi.is-bad { border-color: #f2c4c0; background: var(--bad-soft); }
+.wb-meter { display: block; }
+.wb-pay { display: inline-flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; }
+.wb-pay.is-ok { color: var(--ok); }
+.wb-pay.is-bad { color: var(--bad); }
+.wb-ext { display: inline-flex; align-items: center; gap: 5px; line-height: 1.4; font-size: 13.5px; }
+.wb-chart { height: 260px; width: 100%; }
+.wb-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.wb-num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wb-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: end; }
+.wb-stop { grid-column: 1 / -1; align-items: flex-start; line-height: 1.45; }
+.wb-labels { display: flex; flex-direction: column; gap: 8px; }
+.wb-label-row { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 10px; align-items: center; font-variant-numeric: tabular-nums; }
+.wb-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.5; }
+.wb-meta .crm-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.ld-banner svg { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .wb-split { grid-template-columns: 1fr; }
+  .wb-label-row { grid-template-columns: 1fr; gap: 4px; }
+}
+.wh-meter-bar span.is-warn { background: var(--warn); }
+.wb-stop-text { display: flex; flex-direction: column; gap: 2px; }
+.wb-stop-text .crm-sub { font-weight: 400; }
