@@ -56,7 +56,9 @@ namespace SeemanchalOutreach.Api.Controllers
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 50,
             [FromQuery] string? search = null,
-            [FromQuery] string? department = null)
+            [FromQuery] string? department = null,
+            [FromQuery] int? days = null,
+            [FromQuery] string? agentId = null)
         {
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 1, 1000);
@@ -73,6 +75,17 @@ namespace SeemanchalOutreach.Api.Controllers
             if (!string.IsNullOrWhiteSpace(department))
             {
                 query = query.Where(r => r.Department == department);
+            }
+
+            if (days is > 0)
+            {
+                var since = IstClock.TodayStartUtc.AddDays(-Math.Min(days.Value, 3650));
+                query = query.Where(r => r.CreatedAt >= since || (r.UpdatedAt != null && r.UpdatedAt >= since));
+            }
+
+            if (!string.IsNullOrWhiteSpace(agentId))
+            {
+                query = query.Where(r => r.AgentId == agentId);
             }
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -121,6 +134,35 @@ namespace SeemanchalOutreach.Api.Controllers
                 .ToListAsync();
             var arrivedToday = await _context.Referrals.CountAsync(r => r.ArrivedAt >= IstClock.TodayStartUtc);
             return Ok(new { arrivedToday, items = await EnrichAsync(list) });
+        }
+
+        /// <summary>Numbers for the top of the board.</summary>
+        [HttpGet("summary")]
+        public async Task<IActionResult> Summary()
+        {
+            var today = IstClock.TodayStartUtc;
+            var month = IstClock.MonthStartUtc;
+            var cutoff48 = DateTime.UtcNow.AddHours(-48);
+            return Ok(new
+            {
+                expected = await _context.Referrals.CountAsync(r => r.Status == "pending" && r.CreatedAt >= today.AddDays(-7)),
+                late = await _context.Referrals.CountAsync(r => r.Status == "pending" && r.CreatedAt < cutoff48 && r.CreatedAt >= today.AddDays(-30)),
+                referredToday = await _context.Referrals.CountAsync(r => r.CreatedAt >= today),
+                arrivedToday = await _context.Referrals.CountAsync(r => r.ArrivedAt >= today),
+                admittedToday = await _context.Referrals.CountAsync(r => r.AdmittedAt >= today),
+                inHospital = await _context.Referrals.CountAsync(r => (r.Status == "admitted" || r.Status == "converted" || r.Status == "procedure") && r.UpdatedAt >= today.AddDays(-60)),
+                admittedMonth = await _context.Referrals.CountAsync(r => r.AdmittedAt >= month),
+                referredMonth = await _context.Referrals.CountAsync(r => r.CreatedAt >= month),
+            });
+        }
+
+        /// <summary>One referral (e.g. opened from a notification link).</summary>
+        [HttpGet("{clientId}")]
+        public async Task<IActionResult> One(string clientId)
+        {
+            var r = await _context.Referrals.AsNoTracking().FirstOrDefaultAsync(x => x.ClientId == clientId);
+            if (r == null) return NotFound("Referral not found");
+            return Ok((await EnrichAsync(new List<PatientReferral> { r }))[0]);
         }
 
         [HttpGet("{clientId}/history")]
@@ -270,8 +312,94 @@ namespace SeemanchalOutreach.Api.Controllers
                     r.ArrivedAt,
                     r.AdmittedAt,
                     r.CreatedAt,
+                    r.UpdatedAt,
+                    // Where it came from, and how long it sat on the phone before it reached the server (no signal).
+                    Source = r.DeviceId == "crm-leads" ? "leads" : r.DeviceId == "crm" ? "crm" : "app",
+                    SyncDelayMinutes = r.DeviceId == "crm-leads" || r.DeviceId == "crm" ? (int?)null : Math.Max(0, (int)(r.ServerReceivedAt - r.CreatedAt).TotalMinutes),
+                    r.ServerReceivedAt,
                 };
             }).ToList();
+        }
+
+        // ─── Link with the agents' app ───────────────────────────────────
+
+        /// <summary>
+        /// How well each field agent's phone is connected: when the app last talked to the server, whether push
+        /// notifications can reach it, how long referrals waited on the phone before syncing, and stage changes
+        /// made here since the phone last checked in (so the agent may not have seen them yet).
+        /// </summary>
+        [HttpGet("app-link")]
+        public async Task<IActionResult> AppLink()
+        {
+            var now = DateTime.UtcNow;
+            var since30 = now.AddDays(-30);
+            var agents = (await _context.Agents.AsNoTracking().Where(a => a.IsActive)
+                    .Select(a => new { a.AgentId, a.Name, a.Role, a.Block }).ToListAsync())
+                .Where(a => !RoleChecks.IsDashboardRole(a.Role)).ToList();
+            var ids = agents.Select(a => a.AgentId).ToList();
+
+            var sessions = await _context.AgentRefreshTokens.AsNoTracking()
+                .Where(t => ids.Contains(t.AgentId) && t.RevokedAt == null)
+                .GroupBy(t => t.AgentId).Select(g => new { AgentId = g.Key, Seen = g.Max(t => t.LastSeenAt), Devices = g.Count() })
+                .ToDictionaryAsync(x => x.AgentId);
+            var pushes = await _context.PushDevices.AsNoTracking()
+                .Where(p => ids.Contains(p.UserId) && p.Enabled)
+                .GroupBy(p => p.UserId).Select(g => new { UserId = g.Key, Seen = g.Max(p => p.LastSeenAt) })
+                .ToDictionaryAsync(x => x.UserId);
+            var since2 = now.AddDays(-2);
+            var points = await _context.TrajectoryPoints.AsNoTracking()
+                .Where(p => ids.Contains(p.AgentId) && p.ServerReceivedAt >= since2)
+                .GroupBy(p => p.AgentId).Select(g => new { AgentId = g.Key, At = g.Max(p => p.ServerReceivedAt) })
+                .ToDictionaryAsync(x => x.AgentId, x => x.At);
+            var refs = await _context.Referrals.AsNoTracking()
+                .Where(r => ids.Contains(r.AgentId) && (r.CreatedAt >= since30 || (r.UpdatedAt != null && r.UpdatedAt >= since30)))
+                .Select(r => new { r.AgentId, r.DeviceId, r.CreatedAt, r.ServerReceivedAt, r.UpdatedAt })
+                .ToListAsync();
+
+            var rows = agents.Select(a =>
+            {
+                var mine = refs.Where(r => r.AgentId == a.AgentId).ToList();
+                var fromApp = mine.Where(r => r.DeviceId != "crm-leads" && r.DeviceId != "crm" && r.CreatedAt >= since30).ToList();
+                DateTime? session = sessions.TryGetValue(a.AgentId, out var s) ? s.Seen : null;
+                DateTime? point = points.TryGetValue(a.AgentId, out var p) ? p : null;
+                DateTime? data = fromApp.Count > 0 ? fromApp.Max(r => r.ServerReceivedAt) : null;
+                var lastOnline = new[] { session, point, data }.Where(x => x != null).Select(x => x!.Value).DefaultIfEmpty().Max();
+                DateTime? online = lastOnline == default ? null : lastOnline;
+                // Stage changes made in the CRM after the phone last checked in.
+                var unseen = online == null ? mine.Count(r => r.UpdatedAt != null) : mine.Count(r => r.UpdatedAt != null && r.UpdatedAt > online);
+                var delays = fromApp.Select(r => Math.Max(0, (r.ServerReceivedAt - r.CreatedAt).TotalMinutes)).OrderBy(x => x).ToList();
+                var state = online == null ? "never" : (now - online.Value).TotalHours <= 2 ? "ok" : (now - online.Value).TotalHours <= 24 ? "quiet" : "offline";
+                return new
+                {
+                    agentId = a.AgentId, name = a.Name, block = a.Block,
+                    state, lastOnlineAt = online,
+                    push = pushes.ContainsKey(a.AgentId),
+                    devices = sessions.TryGetValue(a.AgentId, out var s2) ? s2.Devices : 0,
+                    referrals30 = fromApp.Count,
+                    medianDelayMinutes = delays.Count == 0 ? (int?)null : (int)Math.Round(delays[delays.Count / 2]),
+                    lateSyncs = delays.Count(d => d >= 60),
+                    unseenUpdates = unseen,
+                };
+            })
+            .OrderBy(r => r.state switch { "never" => 0, "offline" => 1, "quiet" => 2, _ => 3 })
+            .ThenByDescending(r => r.unseenUpdates).ThenBy(r => r.name)
+            .ToList();
+
+            return Ok(new
+            {
+                summary = new
+                {
+                    agents = rows.Count,
+                    online = rows.Count(r => r.state == "ok"),
+                    quiet = rows.Count(r => r.state == "quiet"),
+                    offline = rows.Count(r => r.state is "offline" or "never"),
+                    noPush = rows.Count(r => !r.push),
+                    unseenUpdates = rows.Sum(r => r.unseenUpdates),
+                    lateSyncs = rows.Sum(r => r.lateSyncs),
+                    lastReferralReceivedAt = refs.Where(r => r.DeviceId != "crm-leads" && r.DeviceId != "crm").Select(r => (DateTime?)r.ServerReceivedAt).DefaultIfEmpty().Max(),
+                },
+                agents = rows,
+            });
         }
     }
 }

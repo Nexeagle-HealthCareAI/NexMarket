@@ -1705,3 +1705,72 @@ button.ch-fail { border: 0; background: #fff; color: #b42318; border-radius: 999
   .ch-lb-nav { width: 40px; height: 40px; }
 }
 @media (prefers-reduced-motion: reduce) { .ch-msg.is-flash .ch-bubble { animation: none; outline: 3px solid #fdb022; } .ch-tools { transition: none; } }
+
+/* ─── Referrals board (front desk + pipeline + list + app link) ─── */
+.crm .rf-search { position: relative; }
+.crm .rf-clear { border: 0; background: transparent; color: var(--text-2); cursor: pointer; display: inline-flex; padding: 3px; border-radius: 999px; }
+.crm .rf-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.crm .rf-kpi { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; text-align: left; font: inherit; color: var(--text); }
+.crm button.rf-kpi { cursor: pointer; }
+.crm button.rf-kpi:hover { border-color: #a9d0f5; }
+.crm .rf-kpi-label { font-size: 12.5px; color: var(--text-2); font-weight: 600; }
+.crm .rf-kpi-value { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 26px; font-weight: 800; line-height: 1.1; }
+.crm .rf-kpi-value.is-ok { color: var(--ok-ink); }
+.crm .rf-kpi-value.is-bad { color: var(--bad); }
+.crm .rf-kpi-value.is-warn { color: var(--warn-ink); }
+.crm .rf-kpi-value.is-info { color: var(--info-ink); }
+.crm .rf-kpi-note { font-size: 12px; color: var(--text-2); }
+.crm .rf-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.crm .rf-sel { height: 36px; width: auto; padding: 0 10px; font-size: 13.5px; }
+.crm .rf-link { border: 0; background: transparent; color: var(--accent-ink); font: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer; padding: 4px; }
+.crm .rf-count { margin-left: auto; font-size: 13px; }
+.crm .rf-board { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 12px; scroll-snap-type: x proximity; }
+.crm .rf-col { width: 272px; flex-shrink: 0; background: #eceef3; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 10px; scroll-snap-align: start; min-height: 220px; transition: background .12s ease, box-shadow .12s ease; }
+.crm .rf-col.is-over { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+.crm .rf-col-head { display: flex; align-items: center; gap: 8px; padding: 4px 4px 2px; }
+.crm .rf-col-head h2 { font-size: 14px; font-weight: 700; }
+.crm .rf-dot { width: 8px; height: 8px; border-radius: 999px; }
+.crm .rf-col-n { font-size: 13px; color: var(--text-2); font-weight: 600; }
+.crm .rf-col-late { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--bad); background: var(--bad-soft); border-radius: 999px; padding: 1px 8px; }
+.crm .rf-col-empty { font-size: 12.5px; color: var(--text-2); text-align: center; padding: 18px 0; border: 1px dashed #c9cfda; border-radius: 12px; }
+.crm .rf-card { background: #fff; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow); cursor: grab; overflow: hidden; }
+.crm .rf-card.is-late { border-left: 3px solid var(--bad); }
+.crm .rf-card.is-dragging { opacity: .45; }
+.crm .rf-card-main { all: unset; display: flex; flex-direction: column; gap: 9px; padding: 12px 14px; width: 100%; box-sizing: border-box; cursor: pointer; }
+.crm .rf-card-main:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.crm .rf-card-top { display: flex; align-items: flex-start; gap: 8px; }
+.crm .rf-card-name { font-size: 15px; font-weight: 600; color: var(--text); }
+.crm .rf-card-sub { font-size: 12px; color: var(--text-2); }
+.crm .rf-card-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.crm .rf-tag { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; }
+.crm .rf-tag.is-dept { color: var(--accent-ink); background: var(--accent-soft); }
+.crm .rf-tag.is-leads { color: #5b21b6; background: #ede9fe; }
+.crm .rf-tag.is-warn { color: var(--warn-ink); background: var(--warn-soft); }
+.crm .rf-tag.is-dup { color: #b42318; background: #fef3f2; }
+.crm .rf-card-foot { display: flex; align-items: center; gap: 8px; padding-top: 9px; border-top: 1px solid var(--line); }
+.crm .rf-avatar { width: 24px; height: 24px; border-radius: 999px; background: #e9ebf1; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; color: var(--text); flex-shrink: 0; }
+.crm .rf-card-via { font-size: 12px; color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm .rf-card-age { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--text-2); flex-shrink: 0; }
+.crm .rf-card-age.is-late { color: var(--bad); }
+.crm .rf-next { width: 100%; border: 0; border-top: 1px solid var(--line); background: #f8fafc; color: var(--accent-ink); font: inherit; font-size: 12.5px; font-weight: 700; padding: 7px 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.crm .rf-next:hover { background: var(--accent-soft); }
+.crm .rf-hit { display: flex; gap: 12px; align-items: center; width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--text); padding: 4px; border-radius: 10px; font: inherit; }
+.crm .rf-hit[aria-current='true'] { background: var(--accent-soft); }
+.crm .rf-exp { gap: 8px; }
+.crm .rf-exp.is-active { background: var(--accent-tint); border-radius: 10px; }
+.crm .rf-exp-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; border: 0; background: transparent; text-align: left; padding: 0; cursor: pointer; color: var(--text); font: inherit; }
+.crm .rf-icon-btn { width: 32px; height: 32px; border-radius: 999px; border: 1px solid var(--border); display: inline-flex; align-items: center; justify-content: center; color: var(--accent-ink); flex-shrink: 0; }
+.crm .rf-row { cursor: pointer; }
+.crm .rf-row:hover td { background: var(--accent-tint); }
+.crm .rf-source { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); background: var(--bg); border-radius: 10px; padding: 8px 12px; }
+.crm .rf-howto { display: flex; gap: 14px; align-items: flex-start; flex-direction: row; }
+.crm .rf-howto > svg { color: var(--accent); flex-shrink: 0; margin-top: 2px; }
+.crm .rf-howto div { flex: 1; }
+.crm .rf-howto p { margin: 4px 0 0; font-size: 13.5px; color: var(--text-2); line-height: 1.5; }
+.crm .rf-nopush { display: inline-flex; gap: 4px; align-items: center; color: var(--warn-ink); font-weight: 600; }
+.crm .rf-unseen { display: inline-flex; gap: 5px; align-items: center; color: var(--warn-ink); font-weight: 700; }
+@media (max-width: 767px) {
+  .crm .rf-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .crm .rf-howto { flex-direction: column; }
+  .crm .rf-count { margin-left: 0; width: 100%; }
+}

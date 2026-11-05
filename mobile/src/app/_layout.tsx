@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableFreeze } from 'react-native-screens';
 import { SessionProvider, useSession } from '../lib/session';
 import { pendingPasswordChange } from '../lib/api';
+import { syncNow } from '../lib/sync';
 import { handleResponse, registerPush, setupNotifications } from '../lib/notifications';
 import { ToastHost } from '../components/ui';
 import { CelebrateHost } from '../components/Vita';
@@ -59,11 +60,17 @@ function Gate() {
       void registerPush();
     }
     const sub = Notifications.addNotificationResponseReceivedListener(handleResponse);
+    // A patient's stage changed at the hospital while the app is open: fetch it now, so My patients updates
+    // at once instead of at the next sync.
+    const received = Notifications.addNotificationReceivedListener((n) => {
+      const link = String(n.request.content.data?.link ?? (n.request.trigger as { remoteMessage?: { data?: Record<string, string> } } | null)?.remoteMessage?.data?.link ?? '');
+      if (link.startsWith('referral:')) void syncNow(true).catch(() => undefined);
+    });
     // The tap that opened the app from the tray.
     Notifications.getLastNotificationResponseAsync().then((r) => {
       if (r) { handleResponse(r); void Notifications.clearLastNotificationResponseAsync().catch(() => undefined); }
     }).catch(() => undefined);
-    return () => sub.remove();
+    return () => { sub.remove(); received.remove(); };
   }, [ready, agent]);
 
   if (!ready) {

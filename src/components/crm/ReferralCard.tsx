@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check, Phone, Smartphone } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { contactTypeLabel, fmt, friendlyError, initials, Pill, Skeleton, STAGES, stageTone, useLoader } from '@/components/crm/ui';
 
@@ -10,6 +10,16 @@ export interface ReferralRow {
   agentId: string; agentName: string; patientName: string; patientAge?: number | null; patientSex?: string | null; urgent: boolean;
   department: string; notes?: string | null; clientPhone?: string | null; referralDate?: string | null; status: string; stageLabel: string;
   arrivedAt?: string | null; admittedAt?: string | null; createdAt: string;
+  updatedAt?: string | null; source?: 'app' | 'leads' | 'crm'; syncDelayMinutes?: number | null; serverReceivedAt?: string | null;
+}
+
+/** "From the agent's app", and whether it waited on the phone (no signal) before reaching the hospital. */
+export function sourceText(r: ReferralRow): string {
+  if (r.source === 'leads') return 'From the Leads inbox (QR code / WhatsApp)';
+  if (r.source === 'crm') return 'Added in the CRM';
+  const d = r.syncDelayMinutes ?? 0;
+  if (d >= 60) return `From ${r.agentName}'s app · reached us ${d >= 1440 ? `${Math.round(d / 1440)} day${d >= 2880 ? 's' : ''}` : `${Math.round(d / 60)} h`} after it was made (no signal on the phone)`;
+  return `From ${r.agentName}'s app · reached us ${d <= 1 ? 'straight away' : `in ${d} min`}`;
 }
 
 interface HistoryItem { status: string; label: string; note?: string | null; by: string; at: string }
@@ -51,12 +61,19 @@ export function ReferralCard({ r, editable, onUpdated }: { r: ReferralRow; edita
         <Info label="Referred by" value={`${r.contactName}${r.contactRole ? ` (${contactTypeLabel(r.contactRole)})` : ''}`} />
         <Info label="Field agent" value={r.agentName} />
         <Info label="Referred on" value={fmt.dateTime(r.createdAt)} />
+        {r.arrivedAt && <Info label="Arrived" value={fmt.dateTime(r.arrivedAt)} />}
+        {r.admittedAt && <Info label="Admitted" value={fmt.dateTime(r.admittedAt)} />}
       </dl>
+      <div className="rf-source">
+        <Smartphone size={15} aria-hidden />
+        <span>{sourceText(r)}</span>
+        {r.clientPhone && <a className="crm-btn is-secondary is-sm" href={`tel:${r.clientPhone.replace(/[^\d+]/g, '')}`} style={{ marginLeft: 'auto' }}><Phone size={14} aria-hidden /> Call patient</a>}
+      </div>
       {r.notes && <div className="crm-note" style={{ whiteSpace: 'pre-line' }}>{r.notes}</div>}
 
       {editable ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>Update stage · the agent and partner are notified</span>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>Update stage · the agent gets a notification and sees it in their app</span>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
             {STAGES.filter((s) => s.key !== 'pending').map((s) => {
               const current = r.status === s.key || (r.status === 'converted' && s.key === 'admitted');

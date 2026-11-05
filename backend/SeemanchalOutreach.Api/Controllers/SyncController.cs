@@ -241,6 +241,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     updatedAt = (r.UpdatedAt ?? r.CreatedAt).ToString("o"),
                     status = r.Status,
                     notes = r.Notes,
+                    arrivedAt = r.ArrivedAt?.ToString("o"),
+                    admittedAt = r.AdmittedAt?.ToString("o"),
                     createdAt = r.CreatedAt.ToString("o"),
                 }),
                 panchayats = panchayats.Select(p => new

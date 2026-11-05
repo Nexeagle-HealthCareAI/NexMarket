@@ -435,7 +435,7 @@ function LeadPane({ id, ping, editable, onBack, onChanged, toast }: {
             {l.firstResponseAt ? <strong>{mins((new Date(l.firstResponseAt).getTime() - new Date(l.createdAt).getTime()) / 60000)}</strong> : <span className="ld-wait is-late">Not yet</span>}
           </div>
         </div>
-        {d.referral && <span className="crm-sub ld-ref-note"><Check size={13} aria-hidden /> On the Referral desk as {d.partner?.name ?? 'the partner'}&apos;s patient · <Link href="/admin/desk">Open desk</Link></span>}
+        {d.referral && <span className="crm-sub ld-ref-note"><Check size={13} aria-hidden /> On the Referral desk as {d.partner?.name ?? 'the partner'}&apos;s patient · <Link href="/admin/referrals?tab=desk">Open desk</Link></span>}
         {l.status === 'lost' && l.lostReason && <span className="crm-sub">Reason: {l.lostReason}</span>}
       </div>
 
