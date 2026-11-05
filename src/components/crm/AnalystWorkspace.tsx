@@ -24,6 +24,11 @@ const INTRO: Record<string, string> = {
 };
 
 const SUGGEST: Record<string, string[]> = {
+  health: [
+    'Which diseases are most common in each block, and where should the next camps go?',
+    'What seasonal patterns does the disease register show?',
+    'Which hospital services would meet the biggest unmet demand?',
+  ],
   business: [
     'Which block lost the most admissions this month, and why?',
     'What are the three most important things to fix this week?',

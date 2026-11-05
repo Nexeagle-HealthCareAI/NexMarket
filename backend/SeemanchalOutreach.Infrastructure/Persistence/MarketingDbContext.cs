@@ -29,6 +29,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<CallLog> CallLogs => Set<CallLog>();
         public DbSet<PartnerPayment> PartnerPayments => Set<PartnerPayment>();
         public DbSet<ReferralBill> ReferralBills => Set<ReferralBill>();
+        public DbSet<DiseaseRecord> DiseaseRecords => Set<DiseaseRecord>();
         public DbSet<AgentIncentive> AgentIncentives => Set<AgentIncentive>();
         public DbSet<Department> Departments => Set<Department>();
         public DbSet<Doctor> Doctors => Set<Doctor>();
@@ -212,6 +213,17 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.ContactClientId);
                 entity.HasIndex(e => e.Status);
                 entity.HasIndex(e => e.ReferralClientId);
+                entity.HasIndex(e => e.CashAgentId);
+            });
+            modelBuilder.Entity<DiseaseRecord>(entity =>
+            {
+                entity.ToTable("disease_records");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Date);
+                entity.HasIndex(e => new { e.District, e.Block });
+                entity.HasIndex(e => e.ConditionCode);
+                entity.HasIndex(e => e.Status);
+                entity.HasIndex(e => e.BatchId);
             });
             modelBuilder.Entity<ReferralBill>(entity =>
             {

@@ -313,6 +313,100 @@ namespace SeemanchalOutreach.Api.Controllers
             return Ok();
         }
 
+        private static readonly Dictionary<string, string> OutcomeLabels = new()
+        { ["connected"] = "Connected", ["no_answer"] = "Not able to connect", ["call_later"] = "Call back later", ["wrong_number"] = "Wrong number" };
+
+        private IQueryable<CallLog> HistoryQuery(string? from, string? to, string? calledBy, string? outcome)
+        {
+            var today = DateOnly.FromDateTime(IstClock.NowIst);
+            var f = DateOnly.TryParse(from, out var fd) ? fd : today.AddDays(-1);
+            var t = DateOnly.TryParse(to, out var td) ? td : f;
+            if (t < f) (f, t) = (t, f);
+            var a = IstClock.StartOfIstDayUtc(f); var b = IstClock.StartOfIstDayUtc(t.AddDays(1));
+            var q = _db.CallLogs.AsNoTracking().Where(l => l.CreatedAt >= a && l.CreatedAt < b);
+            if (!string.IsNullOrWhiteSpace(calledBy)) q = q.Where(l => l.CalledBy == calledBy);
+            if (!string.IsNullOrWhiteSpace(outcome)) q = q.Where(l => l.Outcome == outcome);
+            return q;
+        }
+
+        /// <summary>
+        /// Who was called in a date range (India time, both days included; default yesterday): every call with the
+        /// partner, the caller, what came of it, plus totals by outcome and by caller.
+        /// </summary>
+        [HttpGet("history")]
+        public async Task<IActionResult> History([FromQuery] string? from, [FromQuery] string? to, [FromQuery] string? calledBy, [FromQuery] string? outcome,
+            [FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
+        {
+            page = Math.Max(1, page); pageSize = Math.Clamp(pageSize, 10, 200);
+            var logs = await HistoryQuery(from, to, calledBy, null).OrderByDescending(l => l.CreatedAt).ToListAsync(ct);
+            var contactIds = logs.Select(l => l.ContactClientId).Distinct().ToList();
+            var contacts = await _db.Contacts.AsNoTracking().Where(c => contactIds.Contains(c.ClientId))
+                .Select(c => new { c.ClientId, c.Name, c.Role, c.Phone, c.PanchayatId }).ToListAsync(ct);
+            var cById = contacts.GroupBy(c => c.ClientId).ToDictionary(g => g.Key, g => g.First());
+            var pids = contacts.Select(c => c.PanchayatId).Distinct().ToList();
+            var places = await _db.Panchayats.AsNoTracking().Where(p => pids.Contains(p.PanchayatId)).Select(p => new { p.PanchayatId, p.Name, p.Block }).ToListAsync(ct);
+            var pById = places.GroupBy(p => p.PanchayatId).ToDictionary(g => g.Key, g => g.First());
+            var callerIds = logs.Select(l => l.CalledBy).Distinct().ToList();
+            var callers = await _db.Agents.AsNoTracking().Where(a => callerIds.Contains(a.AgentId)).ToDictionaryAsync(a => a.AgentId, a => a.Name, ct);
+            string caller(string id) => callers.GetValueOrDefault(id) ?? id;
+
+            var rows = logs.Select(l =>
+            {
+                var c = cById.GetValueOrDefault(l.ContactClientId);
+                var pl = c?.PanchayatId != null ? pById.GetValueOrDefault(c.PanchayatId) : null;
+                return new
+                {
+                    id = l.Id, at = l.CreatedAt, contactId = l.ContactClientId, name = c?.Name ?? "(removed partner)", type = c?.Role, phone = c?.Phone,
+                    panchayat = pl?.Name, block = pl?.Block, calledById = l.CalledBy, calledBy = caller(l.CalledBy), outcome = l.Outcome,
+                    outcomeLabel = OutcomeLabels.GetValueOrDefault(l.Outcome, l.Outcome),
+                    responses = (l.Responses ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(r => ResponseLabels.GetValueOrDefault(r, r)).ToList(),
+                    note = l.Note, attempt = l.Attempt, callBackAt = l.CallBackAt,
+                };
+            }).ToList();
+
+            var summary = new
+            {
+                calls = rows.Count,
+                people = rows.Select(r => r.contactId).Distinct().Count(),
+                connected = rows.Count(r => r.outcome == "connected"),
+                byOutcome = OutcomeLabels.Keys.Select(k => new { key = k, label = OutcomeLabels[k], n = rows.Count(r => r.outcome == k) }),
+                byCaller = rows.GroupBy(r => r.calledById).Select(g => new { id = g.Key, name = g.First().calledBy, calls = g.Count(), connected = g.Count(r => r.outcome == "connected"), people = g.Select(r => r.contactId).Distinct().Count() })
+                    .OrderByDescending(x => x.calls),
+            };
+            var list = rows.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(outcome)) list = list.Where(r => r.outcome == outcome);
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var t = q.Trim().ToLowerInvariant(); var digits = new string(q.Where(char.IsDigit).ToArray());
+                list = list.Where(r => r.name.ToLowerInvariant().Contains(t) || (r.panchayat ?? "").ToLowerInvariant().Contains(t) || (r.block ?? "").ToLowerInvariant().Contains(t)
+                    || (digits.Length >= 4 && (r.phone ?? "").Contains(digits)));
+            }
+            var filtered = list.ToList();
+            return Ok(new { summary, total = filtered.Count, page, pageSize, items = filtered.Skip((page - 1) * pageSize).Take(pageSize) });
+        }
+
+        [HttpGet("history/export.csv")]
+        public async Task<IActionResult> HistoryCsv([FromQuery] string? from, [FromQuery] string? to, [FromQuery] string? calledBy, [FromQuery] string? outcome, CancellationToken ct)
+        {
+            var logs = await HistoryQuery(from, to, calledBy, outcome).OrderByDescending(l => l.CreatedAt).Take(20000).ToListAsync(ct);
+            var ids = logs.Select(l => l.ContactClientId).Distinct().ToList();
+            var contacts = await _db.Contacts.AsNoTracking().Where(c => ids.Contains(c.ClientId)).Select(c => new { c.ClientId, c.Name, c.Role, c.Phone, c.PanchayatId }).ToListAsync(ct);
+            var cById = contacts.GroupBy(c => c.ClientId).ToDictionary(g => g.Key, g => g.First());
+            var blocks = await BlocksAsync(contacts.Select(c => c.PanchayatId), ct);
+            var callerIds = logs.Select(l => l.CalledBy).Distinct().ToList();
+            var callers = await _db.Agents.AsNoTracking().Where(a => callerIds.Contains(a.AgentId)).ToDictionaryAsync(a => a.AgentId, a => a.Name, ct);
+            static string c(string? v) => "\"" + (v ?? "").Replace("\"", "\"\"") + "\"";
+            var sb = new System.Text.StringBuilder("Date,Time,Partner,Type,Phone,Block,Called by,Outcome,What they said,Note\n");
+            foreach (var l in logs)
+            {
+                var ist = l.CreatedAt + IstClock.Offset; var k = cById.GetValueOrDefault(l.ContactClientId);
+                sb.Append(string.Join(",", c(ist.ToString("yyyy-MM-dd")), c(ist.ToString("HH:mm")), c(k?.Name), c(k?.Role), c(k?.Phone), c(k?.PanchayatId != null ? blocks.GetValueOrDefault(k.PanchayatId) : null),
+                    c(callers.GetValueOrDefault(l.CalledBy) ?? l.CalledBy), c(OutcomeLabels.GetValueOrDefault(l.Outcome, l.Outcome)),
+                    c(string.Join("; ", (l.Responses ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(r => ResponseLabels.GetValueOrDefault(r, r)))), c(l.Note))).Append('\n');
+            }
+            return File(System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(sb.ToString())).ToArray(), "text/csv", "calls.csv");
+        }
+
         private async Task<Dictionary<string, string>> BlocksAsync(IEnumerable<string> panchayatIds, CancellationToken ct)
         {
             var ids = panchayatIds.Distinct().ToList();

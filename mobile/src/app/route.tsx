@@ -8,7 +8,7 @@ import { useDb, useSession } from '../lib/session';
 import { q } from '../lib/db';
 import { buildPlan, formatDist } from '../lib/plan';
 import { useHere } from '../lib/useHere';
-import { openDirections } from '../lib/links';
+import { navigateTo } from '../lib/links';
 import { C } from '../theme';
 
 export default function RouteScreen() {
@@ -37,6 +37,10 @@ export default function RouteScreen() {
     else router.push({ pathname: '/checkin', params: { panchayatId: id } });
   };
   const next = stops[0];
+  const go = (p: typeof plan[number]) => navigateTo({
+    lat: p.lat!, lng: p.lng!, name: p.kind === 'contact' ? p.contact.name : p.panchayat.name,
+    panchayatId: p.kind === 'contact' ? p.contact.panchayatId ?? '' : p.id, contactId: p.kind === 'contact' ? p.id : '',
+  });
 
   return (
     <Screen header={<TopBar title={t('todaysRoute')} sub={t('routeSub', { n: stops.length })} />}
@@ -44,8 +48,8 @@ export default function RouteScreen() {
         <View style={{ padding: 16, backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border, gap: 8 }}>
           <T style={{ color: C.text2, fontSize: 13 }}>{t('nextStopLabel')}: {next.kind === 'contact' ? next.contact.name : next.panchayat.name}</T>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Btn flex kind="secondary" icon="nav" label={t('openGoogleMaps')} onPress={() => openDirections(next.lat!, next.lng!)} />
-            <Btn flex icon="pin" label={t('reached')} onPress={() => router.push({ pathname: '/checkin', params: {
+            <Btn flex icon="nav" label={t('navStart')} onPress={() => go(next)} />
+            <Btn flex kind="secondary" icon="pin" label={t('reached')} onPress={() => router.push({ pathname: '/checkin', params: {
               panchayatId: next.kind === 'contact' ? next.contact.panchayatId ?? '' : next.id, contactId: next.kind === 'contact' ? next.id : '' } })} />
           </View>
         </View>
@@ -68,7 +72,7 @@ export default function RouteScreen() {
               </T>
             </View>
             {p.lat != null && p.lng != null ? (
-              <Pressable hitSlop={8} onPress={() => openDirections(p.lat!, p.lng!)} accessibilityLabel={t('route')}
+              <Pressable hitSlop={8} onPress={() => go(p)} accessibilityLabel={t('navStart')}
                 style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.blueSoft, alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="nav" size={18} color={C.blueInk} />
               </Pressable>

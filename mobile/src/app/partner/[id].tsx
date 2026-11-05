@@ -7,7 +7,7 @@ import { useDb, useSession } from '../../lib/session';
 import { q } from '../../lib/db';
 import { addNote, addPhoto, setFollowUp, setPriority } from '../../lib/repo';
 import { takePhoto } from '../../lib/photo';
-import { callNumber } from '../../lib/links';
+import { callNumber, navigateTo } from '../../lib/links';
 import { api } from '../../lib/api';
 import { dayShort, relDay, timeOf } from '../../lib/format';
 import { daysFromToday } from '../../lib/util';
@@ -100,6 +100,7 @@ export default function PartnerProfile() {
           <Btn flex small icon="hospital" label={t('referPatient')} onPress={() => router.push({ pathname: '/refer', params: { contactId: c.clientId } })} />
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
+          {c.lat != null && c.lng != null ? <Btn kind="secondary" icon="nav" label={t('navGo')} onPress={() => navigateTo({ lat: c.lat!, lng: c.lng!, name: c.name, panchayatId: c.panchayatId, contactId: c.clientId })} /> : null}
           <Btn flex kind="ok" icon="check" label={t('revisitPerson')} onPress={() => setRevisitOpen(true)} />
           <Btn kind="danger" icon="flag" label={t('escalate')} onPress={() => setEscOpen(true)} />
         </View>

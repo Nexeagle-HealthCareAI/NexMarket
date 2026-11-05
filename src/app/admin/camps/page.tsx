@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BarChart3, BookOpen, CalendarDays, History, MapPin, Plus, Search, Tent } from 'lucide-react';
+import { Activity, BarChart3, BookOpen, CalendarDays, History, MapPin, Plus, Search, Tent } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit as canEditPage, useAccess } from '@/lib/crm/access';
 import { Pager } from '@/components/crm/Pager';
@@ -10,6 +10,7 @@ import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 import { Empty, ErrorBox, friendlyError, PageHead, Pill, rupees, Skeleton, useToast } from '@/components/crm/ui';
 import { CampForm } from '@/components/crm/camps/CampForm';
 import { CampDetail } from '@/components/crm/camps/CampDetail';
+import { DiseaseBoard } from '@/components/crm/camps/disease/DiseaseBoard';
 import { CAMP_STATUS, campDate, daysTo, pct, type CampOptions, type CampRow, type CountRow } from '@/components/crm/camps/shared';
 
 interface ListRes { items: CampRow[]; total: number; counts: { upcoming: number; past: number; cancelled: number } }
@@ -31,7 +32,7 @@ function CampsPage() {
   const openId = params.get('id');
   const { access } = useAccess();
   const editable = canEditPage(access, 'camps');
-  const [tab, setTab] = usePageTab(['upcoming', 'past', 'insights', 'playbook'] as const, 'upcoming');
+  const [tab, setTab] = usePageTab(['upcoming', 'past', 'disease', 'insights', 'playbook'] as const, 'upcoming');
   const [options, setOptions] = useState<CampOptions | null>(null);
   const [planning, setPlanning] = useState(false);
   const [counts, setCounts] = useState<ListRes['counts'] | null>(null);
@@ -50,10 +51,12 @@ function CampsPage() {
           <PageTabs label="Camps views" value={tab} onChange={setTab} tabs={[
             { key: 'upcoming', label: 'Upcoming', icon: CalendarDays, count: counts?.upcoming },
             { key: 'past', label: 'Past camps', icon: History, count: counts?.past },
+            { key: 'disease', label: 'Disease data', icon: Activity },
             { key: 'insights', label: 'What camps find', icon: BarChart3 },
             { key: 'playbook', label: 'Marketing playbook', icon: BookOpen },
           ]} />
           {(tab === 'upcoming' || tab === 'past') && <CampList when={tab} onOpen={open} onCounts={setCounts} canPlan={editable} onPlan={() => setPlanning(true)} />}
+          {tab === 'disease' && <DiseaseBoard toast={showToast} />}
           {tab === 'insights' && <InsightsView />}
           {tab === 'playbook' && <Playbook />}
         </>

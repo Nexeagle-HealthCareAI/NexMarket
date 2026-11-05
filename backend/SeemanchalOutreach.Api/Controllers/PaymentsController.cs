@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SeemanchalOutreach.Api.Security;
@@ -56,9 +57,11 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly ILiveEvents _live;
         private readonly INotifier _notifier;
         private readonly IAppSettings _settings;
+        private readonly IFileStore _files;
 
-        public PaymentsController(IMarketingDbContext db, ILiveEvents live, INotifier notifier, IAppSettings settings)
+        public PaymentsController(IMarketingDbContext db, ILiveEvents live, INotifier notifier, IAppSettings settings, IFileStore files)
         {
+            _files = files;
             _db = db;
             _live = live;
             _notifier = notifier;
@@ -203,11 +206,98 @@ namespace SeemanchalOutreach.Api.Controllers
             var p = await _db.PartnerPayments.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (p == null) return NotFound();
             if (p.Status != "approved") return BadRequest("Only approved entries can be marked paid.");
+            // Every payment needs proof, so it can't be disputed later. Use "pay" with the screenshot, or let the agent pay in cash.
+            if (p.ProofKey == null) return BadRequest(new { message = "Attach the payment screenshot or receipt first." });
             p.Status = "paid";
             p.PaidAt = DateTime.UtcNow;
             p.PaidBy = User.AgentIdOf();
-            p.PaymentReference = string.IsNullOrWhiteSpace(dto.Reference) ? null : dto.Reference.Trim();
+            p.PaymentReference = string.IsNullOrWhiteSpace(dto.Reference) ? p.PaymentReference : dto.Reference.Trim();
             await _db.SaveChangesAsync(ct);
+            await NotifyPaidAsync(p, ct);
+            return Ok(new { p.Id, p.Status });
+        }
+
+        /// <summary>
+        /// Pay an approved entry with proof in one step: UPI / bank / cheque with a screenshot or receipt (photo or PDF),
+        /// or cash paid at the hospital with a photo.
+        /// </summary>
+        [HttpPost("{id:guid}/pay")]
+        [RequestSizeLimit(PaymentProof.MaxBytes + 1_000_000)]
+        [RequestFormLimits(MultipartBodyLengthLimit = PaymentProof.MaxBytes + 1_000_000)]
+        public async Task<IActionResult> Pay(Guid id, [FromForm] IFormFile? file, [FromForm] string? method, [FromForm] string? reference, CancellationToken ct)
+        {
+            var p = await _db.PartnerPayments.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (p == null) return NotFound();
+            if (p.Status != "approved") return BadRequest(new { message = "Only approved entries can be paid." });
+            if (string.IsNullOrWhiteSpace(method) || !PaymentProof.Methods.Contains(method)) return BadRequest(new { message = "Choose how it was paid: UPI, bank, cash or cheque." });
+            var me = User.AgentIdOf();
+            p.ProofAt = DateTime.UtcNow;
+            var err = await PaymentProof.SaveAsync(_files, p, file, method == "cash" ? "cash_photo" : "screenshot", me, ct);
+            if (err != null) return BadRequest(new { message = err });
+            p.Method = method;
+            p.Status = "paid";
+            p.PaidAt = DateTime.UtcNow;
+            p.PaidBy = me;
+            p.CashAgentId = method == "cash" ? p.CashAgentId : null;
+            var r = (reference ?? "").Trim();
+            p.PaymentReference = r.Length == 0 ? null : r[..Math.Min(r.Length, 80)];
+            await _db.SaveChangesAsync(ct);
+            await NotifyPaidAsync(p, ct);
+            return Ok(new { p.Id, p.Status });
+        }
+
+        public class CashAgentDto { public string? AgentId { get; set; } }
+
+        /// <summary>The partner's field agent (or another agent) will hand this over in cash and record it with a photo in the app.</summary>
+        [HttpPost("{id:guid}/cash-agent")]
+        public async Task<IActionResult> CashByAgent(Guid id, [FromBody] CashAgentDto dto, CancellationToken ct)
+        {
+            var p = await _db.PartnerPayments.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (p == null) return NotFound();
+            if (p.Status != "approved") return BadRequest(new { message = "Approve it first." });
+            var partner = await _db.Contacts.AsNoTracking().Where(c => c.ClientId == p.ContactClientId).Select(c => new { c.Name, c.AgentId }).FirstOrDefaultAsync(ct);
+            var agentId = string.IsNullOrWhiteSpace(dto.AgentId) ? partner?.AgentId : dto.AgentId.Trim();
+            if (string.IsNullOrEmpty(agentId) || !await _db.Agents.AnyAsync(a => a.AgentId == agentId, ct)) return BadRequest(new { message = "Pick the agent who will hand over the cash." });
+            p.Method = "cash";
+            p.CashAgentId = agentId;
+            await _db.SaveChangesAsync(ct);
+            _notifier.Notify(new NotifyJob
+            {
+                To = new() { agentId }, Except = User.AgentIdOf(), Kind = "payment",
+                Title = $"Hand over ₹{p.Amount:N0} cash to {partner?.Name}",
+                Body = $"{p.Purpose}. When you give it, open Money in the app and take a photo with them as proof.",
+                Link = "money:", RefId = p.Id.ToString(),
+            });
+            return Ok(new { p.Id, p.CashAgentId });
+        }
+
+        [HttpPost("{id:guid}/cash-agent/cancel")]
+        public async Task<IActionResult> CancelCashByAgent(Guid id, CancellationToken ct)
+        {
+            var p = await _db.PartnerPayments.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (p == null) return NotFound();
+            if (p.Status == "paid") return BadRequest(new { message = "It's already paid." });
+            p.CashAgentId = null;
+            if (p.Method == "cash") p.Method = null;
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { p.Id });
+        }
+
+        /// <summary>The partner said they got the money.</summary>
+        [HttpPost("{id:guid}/received")]
+        public async Task<IActionResult> Received(Guid id, CancellationToken ct)
+        {
+            var p = await _db.PartnerPayments.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (p == null) return NotFound();
+            if (p.Status != "paid") return BadRequest(new { message = "Only a paid entry can be confirmed as received." });
+            p.ReceivedConfirmedAt ??= DateTime.UtcNow;
+            p.ReceivedConfirmedBy ??= User.AgentIdOf();
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { p.Id, p.ReceivedConfirmedAt });
+        }
+
+        private async Task NotifyPaidAsync(PartnerPayment p, CancellationToken ct)
+        {
             var partner = await _db.Contacts.AsNoTracking().Where(c => c.ClientId == p.ContactClientId).Select(c => new { c.Name, c.AgentId }).FirstOrDefaultAsync(ct);
             await _live.PublishAsync(new LiveEvent { Kind = "payment", Text = $"₹{p.Amount:N0} paid to {partner?.Name}", RefId = p.Id.ToString() });
             // The agent who looks after this partner can tell them it's done.
@@ -222,7 +312,6 @@ namespace SeemanchalOutreach.Api.Controllers
                     Link = "money:", RefId = p.Id.ToString(),
                 });
             }
-            return Ok(new { p.Id, p.Status });
         }
 
         // ─── Field agents' incentives ────────────────────────────────────────
@@ -388,6 +477,7 @@ namespace SeemanchalOutreach.Api.Controllers
             public string? Notes { get; set; }
             public string? ReferralClientId { get; set; }
             public string? PatientName { get; set; }
+            public object? Proof { get; set; }
         }
 
         private async Task<List<PaymentRow>> EnrichAsync(List<PartnerPayment> rows, CancellationToken ct)
@@ -405,6 +495,9 @@ namespace SeemanchalOutreach.Api.Controllers
             var patients = refIds.Count == 0 ? new Dictionary<string, string>()
                 : await _db.Referrals.AsNoTracking().Where(r => refIds.Contains(r.ClientId)).ToDictionaryAsync(r => r.ClientId, r => r.PatientName, ct);
 
+            var people = rows.SelectMany(r => new[] { r.CashAgentId, r.ProofBy, r.ReceivedConfirmedBy }).Where(x => x != null).Distinct().ToList();
+            var names = await _db.Agents.AsNoTracking().Where(a => people.Contains(a.AgentId)).ToDictionaryAsync(a => a.AgentId, a => a.Name, ct);
+            string? name(string? id) => id == null ? null : names.GetValueOrDefault(id) ?? id;
             return rows.Select(r =>
             {
                 cmap.TryGetValue(r.ContactClientId, out var c);
@@ -432,6 +525,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     Notes = r.Notes,
                     ReferralClientId = r.ReferralClientId,
                     PatientName = r.ReferralClientId != null ? patients.GetValueOrDefault(r.ReferralClientId) : null,
+                    Proof = PaymentProof.Info(r, name),
                 };
             }).ToList();
         }

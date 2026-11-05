@@ -81,18 +81,20 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpGet("insights")]
+        /// <param name="unit">"panchayat" returns every panchayat in scope (with its location, for the survey map),
+        /// even without a block. Otherwise blocks, or the panchayats of one block.</param>
         public async Task<IActionResult> Insights([FromQuery] string? district, [FromQuery] string? block,
-            [FromQuery] string? from, [FromQuery] string? to, CancellationToken ct)
+            [FromQuery] string? from, [FromQuery] string? to, [FromQuery] string? unit, CancellationToken ct)
         {
             var questions = await SurveyCore.ActiveAsync(_db, ct);
             var qids = questions.Select(q => q.QuestionId).ToList();
             var opts = questions.ToDictionary(q => q.QuestionId, SurveyCore.Options);
             var places = await _db.Panchayats.AsNoTracking().Where(p => p.IsActiveForMarketing)
-                .Select(p => new { p.PanchayatId, p.Name, p.Block, p.District }).ToListAsync(ct);
+                .Select(p => new { p.PanchayatId, p.Name, p.Block, p.District, p.LgdCode, Lat = p.ManualLat ?? p.CentroidLat, Lng = p.ManualLng ?? p.CentroidLng }).ToListAsync(ct);
             var blocks = places.GroupBy(p => (p.District, p.Block)).Select(g => new { district = g.Key.District, block = g.Key.Block }).OrderBy(b => b.district).ThenBy(b => b.block).ToList();
             var scoped = places.Where(p => (string.IsNullOrWhiteSpace(district) || p.District == district) && (string.IsNullOrWhiteSpace(block) || p.Block == block)).ToList();
             var placeById = scoped.ToDictionary(p => p.PanchayatId);
-            bool byPanchayat = !string.IsNullOrWhiteSpace(block);
+            bool byPanchayat = !string.IsNullOrWhiteSpace(block) || unit == "panchayat";
 
             var (fromUtc, toUtc) = DayRange(from, to);
             bool ranged = fromUtc != null || toUtc != null;
@@ -111,9 +113,13 @@ namespace SeemanchalOutreach.Api.Controllers
             var deptNames = await _db.Departments.AsNoTracking().Where(d => d.IsActive).Select(d => d.Name).ToListAsync(ct);
             var haveKeys = deptNames.Select(SpecialistKey).Where(k => k != null).ToHashSet();
 
+            var byUnit = parsed.GroupBy(x => UnitOf(x.r.PanchayatId!)).ToDictionary(g => g.Key, g => g.ToList());
+            var skippedByPlace = all.Where(r => r.IsSkipped && r.PanchayatId != null && placeById.ContainsKey(r.PanchayatId))
+                .GroupBy(r => UnitOf(r.PanchayatId!)).ToDictionary(g => g.Key, g => g.Count());
             var units = unitNames.Select(kv =>
             {
-                var rs = parsed.Where(x => UnitOf(x.r.PanchayatId!) == kv.Key).ToList();
+                var rs = byUnit.GetValueOrDefault(kv.Key) ?? new();
+                var place = byPanchayat ? placeById[kv.Key] : null;
                 var counts = new Dictionary<string, Dictionary<string, int>>();
                 var answered = new Dictionary<string, int>();
                 foreach (var qid in qids)
@@ -150,6 +156,11 @@ namespace SeemanchalOutreach.Api.Controllers
                     topSpecialist = topSpec == null ? null : GeoController.ShortLabel(topSpec),
                     topSpecialistWeHave = topSpec != null && haveKeys.Contains(SpecialistKey(topSpec)),
                     topDestination = topDest == null ? null : GeoController.ShortLabel(topDest),
+                    skipped = skippedByPlace.GetValueOrDefault(kv.Key),
+                    agents = rs.Select(x => x.r.AgentId).Distinct().Count(),
+                    lgd = place?.LgdCode,
+                    lat = place?.Lat,
+                    lng = place?.Lng,
                     answered,
                     counts = counts.ToDictionary(q => q.Key, q => q.Value.OrderByDescending(x => x.Value).ToDictionary(x => x.Key, x => x.Value)),
                 };
@@ -185,7 +196,7 @@ namespace SeemanchalOutreach.Api.Controllers
 
         [HttpGet("responses")]
         public async Task<IActionResult> Responses([FromQuery] string? view, [FromQuery] string? block, [FromQuery] string? agentId,
-            [FromQuery] string? q, [FromQuery] string? from = null, [FromQuery] string? to = null,
+            [FromQuery] string? q, [FromQuery] string? from = null, [FromQuery] string? to = null, [FromQuery] string? panchayatId = null,
             [FromQuery] int page = 1, [FromQuery] int pageSize = 25, CancellationToken ct = default)
         {
             page = Math.Max(1, page);
@@ -215,6 +226,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     contactId = r.ContactId,
                     contactName = c?.Name,
                     contactType = c?.Role,
+                    panchayatId = r.PanchayatId,
                     panchayat = pl?.Name,
                     block = pl?.Block,
                     agentId = r.AgentId,
@@ -230,6 +242,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var v = view is "skipped" or "older" ? view : "current";
             var list = rows.Where(r => r.kind == v);
             if (!string.IsNullOrWhiteSpace(block)) list = list.Where(r => r.block == block);
+            if (!string.IsNullOrWhiteSpace(panchayatId)) list = list.Where(r => r.panchayatId == panchayatId);
             if (!string.IsNullOrWhiteSpace(agentId)) list = list.Where(r => r.agentId == agentId);
             if (!string.IsNullOrWhiteSpace(q))
             {

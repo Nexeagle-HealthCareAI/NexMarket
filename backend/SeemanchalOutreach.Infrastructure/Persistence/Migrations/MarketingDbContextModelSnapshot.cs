@@ -1286,6 +1286,87 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.ToTable("departments", "marketing");
                 });
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.DiseaseRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgeBand")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Block")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("CampId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConditionCode")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Disease")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("District")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Panchayat")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PanchayatId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RemovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Sex")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId");
+
+                    b.HasIndex("ConditionCode");
+
+                    b.HasIndex("Date");
+
+                    b.HasIndex("District", "Block");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("disease_records", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.Doctor", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2143,6 +2224,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("ApprovedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("CashAgentId")
+                        .HasColumnType("text");
+
                     b.Property<string>("ContactClientId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -2156,6 +2240,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Method")
+                        .HasColumnType("text");
 
                     b.Property<string>("Notes")
                         .HasColumnType("text");
@@ -2172,8 +2259,35 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("Period")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("ProofAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProofBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProofKey")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProofKind")
+                        .HasColumnType("text");
+
+                    b.Property<double?>("ProofLat")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("ProofLng")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("ProofMime")
+                        .HasColumnType("text");
+
                     b.Property<string>("Purpose")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReceivedConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReceivedConfirmedBy")
                         .HasColumnType("text");
 
                     b.Property<string>("ReferralClientId")
@@ -2186,6 +2300,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ContactClientId");
+
+                    b.HasIndex("CashAgentId");
 
                     b.HasIndex("ReferralClientId");
 

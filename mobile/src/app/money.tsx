@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
-import { Card, Chip, Empty, Pill, Screen, T, TopBar } from '../components/ui';
+import { Btn, Card, Chip, Empty, Pill, Screen, T, TopBar, toast } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { useSession, useSync } from '../lib/session';
 import { syncNow } from '../lib/sync';
 import { useMoney } from '../lib/useMoney';
-import { inr, statusLine, type MyIncentive, type PartnerPayout } from '../lib/money';
+import { confirmReceived, inr, openProofPdf, proofSource, recordCashHandover, statusLine, type MyIncentive, type PartnerPayout } from '../lib/money';
+import { takePhoto } from '../lib/photo';
 import { dayShort } from '../lib/format';
 import { C } from '../theme';
 import type { Lang, TFn } from '../i18n';
@@ -38,6 +39,15 @@ export default function MoneyScreen() {
               <SumCard title={t('moneyPartners')} paid={m.summary.partnerPaid} waiting={m.summary.partnerWaiting} t={t} warn={m.summary.partnerOverdue > 0 ? t('moneyOverdue', { n: m.summary.partnerOverdue }) : undefined} />
               <SumCard title={t('moneyMine')} paid={m.summary.myPaid} waiting={m.summary.myWaiting} t={t} />
             </View>
+            {(m.summary.cashToHandOverCount ?? 0) > 0 ? (
+              <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.warnSoft, borderColor: C.warn }}>
+                <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: C.warn, alignItems: 'center', justifyContent: 'center' }}><T style={{ color: '#fff', fontSize: 20, fontWeight: '800' }}>₹</T></View>
+                <View style={{ flex: 1 }}>
+                  <T style={{ fontWeight: '800', fontSize: 16 }}>{t('moneyCashToGive', { amount: inr(m.summary.cashToHandOver ?? 0) })}</T>
+                  <T style={{ color: C.text2, fontSize: 13 }}>{t('moneyCashToGiveSub', { n: m.summary.cashToHandOverCount ?? 0 })}</T>
+                </View>
+              </Card>
+            ) : null}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ flexGrow: 0 }}>
               {(['all', 'waiting', 'paid'] as Filter[]).map((f) => (
                 <Chip key={f} label={f === 'all' ? t('all') : f === 'waiting' ? t('moneyWaiting') : t('moneyPaidF')} selected={filter === f} onPress={() => setFilter(f)} />
@@ -73,17 +83,60 @@ function SumCard({ title, paid, waiting, t, warn }: { title: string; paid: numbe
 
 function PayoutRow({ p, t, lang }: { p: PartnerPayout; t: TFn; lang: Lang }) {
   const st = statusLine(p, t, lang);
+  const [busy, setBusy] = useState(false);
+  const [viewing, setViewing] = useState(false);
+  const handOver = async () => {
+    const photo = await takePhoto();
+    if (photo === 'denied') { Alert.alert(t('photo'), t('cameraDenied')); return; }
+    if (!photo) return;
+    setBusy(true);
+    try { await recordCashHandover(p.id, photo); toast(t('moneyCashSaved')); }
+    catch { Alert.alert(t('moneyCashTitle'), t('moneyNeedInternet')); }
+    finally { setBusy(false); }
+  };
+  const received = async () => {
+    setBusy(true);
+    try { await confirmReceived(p.id); toast(t('moneyReceivedSaved')); } catch { toast(t('moneyNeedInternet')); } finally { setBusy(false); }
+  };
   return (
-    <Pressable onPress={() => router.push({ pathname: '/partner/[id]', params: { id: p.contactClientId } })} accessibilityRole="button"
-      style={({ pressed }) => [{ backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 12, gap: 6 }, pressed && { opacity: 0.85 }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Icon name="users" size={16} color={C.blueInk} />
-        <T style={{ flex: 1, fontWeight: '700' }} numberOfLines={1}>{p.partner}</T>
-        <T style={{ fontSize: 17, fontWeight: '800' }}>{inr(p.amount)}</T>
+    <View style={{ backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: p.cashByMe ? C.warn : C.border, padding: 12, gap: 8 }}>
+      <Pressable onPress={() => router.push({ pathname: '/partner/[id]', params: { id: p.contactClientId } })} accessibilityRole="button" style={{ gap: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Icon name="users" size={16} color={C.blueInk} />
+          <T style={{ flex: 1, fontWeight: '700' }} numberOfLines={1}>{p.partner}</T>
+          <T style={{ fontSize: 17, fontWeight: '800' }}>{inr(p.amount)}</T>
+        </View>
+        <T style={{ color: C.text2, fontSize: 13 }}>{[p.purpose, p.patient ? t('moneyForPatient', { name: p.patient }) : null, dayShort(lang, new Date(p.createdAt))].filter(Boolean).join(' · ')}</T>
+      </Pressable>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+        <Pill label={st.label} tone={st.tone} />
+        {p.status === 'paid' && p.methodLabel && p.method ? <Pill label={p.methodLabel} tone="muted" /> : null}
+        {p.status === 'paid' && p.hasProof ? (
+          <Pressable onPress={() => (p.proofIsPdf ? void openProofPdf(p.id).catch(() => toast(t('moneyNeedInternet'))) : setViewing(true))} accessibilityRole="button" hitSlop={6}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: C.blueSoft, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 }}>
+            <Icon name="image" size={14} color={C.blueInk} />
+            <T style={{ color: C.blueInk, fontWeight: '700', fontSize: 12.5 }}>{p.proofKind === 'cash_photo' ? t('moneyCashPhoto') : t('moneyProof')}</T>
+          </Pressable>
+        ) : null}
       </View>
-      <T style={{ color: C.text2, fontSize: 13 }}>{[p.purpose, p.patient ? t('moneyForPatient', { name: p.patient }) : null, dayShort(lang, new Date(p.createdAt))].filter(Boolean).join(' · ')}</T>
-      <View style={{ alignSelf: 'flex-start' }}><Pill label={st.label} tone={st.tone} /></View>
-    </Pressable>
+      {p.cashByMe ? (
+        <View style={{ gap: 6 }}>
+          <T style={{ fontSize: 13, color: C.warnInk }}>{t('moneyCashHelp')}</T>
+          <Btn icon="camera" label={t('moneyCashButton', { amount: inr(p.amount) })} loading={busy} onPress={handOver} />
+        </View>
+      ) : p.status === 'paid' && !p.receivedAt ? (
+        <Btn small kind="secondary" icon="check" label={t('moneyGotIt')} loading={busy} onPress={received} />
+      ) : null}
+      <Modal visible={viewing} transparent animationType="fade" onRequestClose={() => setViewing(false)}>
+        <Pressable onPress={() => setViewing(false)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', alignItems: 'center', justifyContent: 'center', padding: 16, gap: 12 }}>
+          {viewing ? <Image source={proofSource(p.id)} style={{ width: '100%', height: '75%' }} resizeMode="contain" /> : null}
+          <T style={{ color: '#fff', textAlign: 'center' }}>
+            {[p.methodLabel, p.proofAt ? new Date(p.proofAt).toLocaleString(lang === 'en' ? 'en-IN' : 'hi-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : null].filter(Boolean).join(' · ')}
+          </T>
+          <T style={{ color: '#cbd5e1', fontSize: 13 }}>{t('tapToClose')}</T>
+        </Pressable>
+      </Modal>
+    </View>
   );
 }
 

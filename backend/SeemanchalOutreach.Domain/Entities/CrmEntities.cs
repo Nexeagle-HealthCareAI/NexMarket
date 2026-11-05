@@ -63,6 +63,22 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? PaymentReference { get; set; }
         /// <summary>The referred patient this service was for (travel with them, ambulance…), when it was for one.</summary>
         public string? ReferralClientId { get; set; }
+
+        // Proof of payment, so nobody can dispute it: a UPI/bank screenshot from the office, or, for cash handed over by
+        // the field agent, a photo with the person taken in the app (time and place recorded).
+        public string? Method { get; set; }              // upi | bank | cash | cheque
+        public string? ProofKey { get; set; }            // private file storage key
+        public string? ProofMime { get; set; }
+        public string? ProofKind { get; set; }           // screenshot | cash_photo | receipt
+        public DateTime? ProofAt { get; set; }           // when the photo was taken / the proof added
+        public double? ProofLat { get; set; }
+        public double? ProofLng { get; set; }
+        public string? ProofBy { get; set; }
+        /// <summary>The field agent asked to hand this over in cash (they record it with a photo in the app).</summary>
+        public string? CashAgentId { get; set; }
+        /// <summary>The partner confirmed they got the money (recorded by their agent or the office).</summary>
+        public DateTime? ReceivedConfirmedAt { get; set; }
+        public string? ReceivedConfirmedBy { get; set; }
     }
 
     /// <summary>
@@ -622,6 +638,33 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? CreatedBy { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// One line of the disease register: how many people of one age group and gender, from one place, were seen with one
+    /// disease or complaint on one day (at a health camp or elsewhere). No names or phone numbers: it is for spotting patterns.
+    /// </summary>
+    public class DiseaseRecord
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public DateOnly Date { get; set; }
+        public string? ConditionCode { get; set; }             // a CampBook condition code when the disease matches one
+        public string Disease { get; set; } = string.Empty;    // as shown: the condition's name, or what was typed
+        public string AgeBand { get; set; } = "unknown";       // 0-5 | 6-14 | 15-29 | 30-44 | 45-59 | 60+ | unknown
+        public string Sex { get; set; } = "U";                 // M | F | O | U (not recorded)
+        public string? District { get; set; }
+        public string? Block { get; set; }
+        public string? PanchayatId { get; set; }
+        public string? Panchayat { get; set; }                 // the name as entered when it didn't match a known panchayat
+        public int Count { get; set; } = 1;
+        public Guid? CampId { get; set; }
+        public string Source { get; set; } = "grid";           // grid | upload
+        public Guid? BatchId { get; set; }                     // rows saved together (one upload or one Save)
+        public string Status { get; set; } = "active";         // active | removed
+        public string? RemovedBy { get; set; }
+        public DateTime? RemovedAt { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
     /// <summary>A Facebook Messenger or Instagram Direct conversation with one person, on the hospital's Page or account.</summary>

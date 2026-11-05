@@ -184,7 +184,18 @@ namespace SeemanchalOutreach.Api.Services
                 "the money summary, top partners, partner types", 7),
             new("surveys", "Surveys", "s-", SurveyFocusText,
                 "needs in other blocks, survey coverage, admissions that match the needs", 7),
+            new("health", "Disease patterns", "h-", HealthFocusText,
+                "disease patterns by block, age group and month, survey needs, admissions by department", 7),
         };
+
+        internal const string HealthFocusText =
+            " This briefing is about the disease register: counts of people seen with each disease at health camps and in the field, by date, age group, " +
+            "gender and place (no names). Find the patterns that matter for NexMarket's strategy and business plan: which diseases are most common where, " +
+            "in which age groups and genders, and in which months (seasonal rises such as fever, diarrhoea or skin disease in the monsoon). Turn them into a plan: " +
+            "which camps to hold where and when, with which specialists; which hospital departments, packages and services to promote in which blocks; " +
+            "where the hospital lacks a department that the demand calls for (a business opportunity); and the likely number of patients this could bring. " +
+            "Compare with admissions by department and block, and with what the community survey says people miss. Say when numbers are too small to trust, " +
+            "and when diseases were typed in free text and not matched to a department.";
 
         internal const string SurveyFocusText =
             " This briefing is about the community survey. Read the answers to find what each area needs and how the hospital can serve it: " +
@@ -212,6 +223,29 @@ namespace SeemanchalOutreach.Api.Services
         private readonly AnalystSettings _settings;
         private readonly ILogger<AnalystAgent> _logger;
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+        /// <summary>The disease register added up for the analyst. Counts only; the register holds no names.</summary>
+        private async Task<object> DiseasePackAsync(int days, string? district, string? block, CancellationToken ct, bool small = false)
+        {
+            var from = DateOnly.FromDateTime(IstClock.NowIst).AddDays(-days + 1);
+            var rows = await DiseaseRegister.Filter(_db.DiseaseRecords.AsNoTracking(), from, null, district, block, null, null, null, null, null).ToListAsync(ct);
+            if (rows.Count == 0) return new { days, district, block, cases = 0, note = "No disease data recorded for this period and place yet." };
+            var places = await DiseaseRegister.PlacesAsync(_db, ct);
+            var full = JsonSerializer.SerializeToNode(DiseaseRegister.Patterns(rows, places, small ? 8 : 12), Json)!.AsObject();
+            // Keep it compact: the busiest places only, without map coordinates.
+            if (full["panchayats"] is JsonArray pans)
+            {
+                var keep = new JsonArray();
+                foreach (var p in pans.Take(small ? 10 : 25).OfType<JsonObject>())
+                    keep.Add(new JsonObject { ["name"] = p["name"]?.DeepClone(), ["block"] = p["block"]?.DeepClone(), ["cases"] = p["n"]?.DeepClone(), ["diseases"] = p["diseases"]?.DeepClone() });
+                full["panchayats"] = keep;
+            }
+            if (full["blocks"] is JsonArray bl && bl.Count > 25) full["blocks"] = new JsonArray(bl.Take(25).Select(x => x?.DeepClone()).ToArray());
+            if (small) { full.Remove("diseaseBySex"); full.Remove("months"); }
+            full["days"] = days; full["district"] = district; full["block"] = block;
+            full["note"] = "Disease keys starting with txt: were typed in free text and not matched to a department.";
+            return full;
+        }
         private string _scope = "business";
 
         public AnalystAgent(IMarketingDbContext db, BusinessData data, GroqClient groq, IOptions<AnalystSettings> settings, ILogger<AnalystAgent> logger)
@@ -252,6 +286,7 @@ namespace SeemanchalOutreach.Api.Services
           {"type":"function","function":{"name":"get_field_work","description":"Visits, panchayats visited vs in scope, least-covered blocks, per-agent visits and new partners, overdue follow-ups, open escalations and pending leave for the last N days.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_survey_needs","description":"Top answers to the survey questions the app asks, for the whole region or one block.","parameters":{"type":"object","properties":{"block":{"type":"string","description":"Block name, or empty for all"}},"required":[]}}},
           {"type":"function","function":{"name":"get_survey_coverage","description":"How well the survey is being done: answers and panchayats surveyed per block, and per agent how many were answered, skipped, or new contacts left without a survey (last 30 days).","parameters":{"type":"object","properties":{},"required":[]}}},
+          {"type":"function","function":{"name":"get_disease_patterns","description":"The disease register (health camps and field, counts only, no names): cases by disease, age group, gender, block and month for the last N days, optionally for one district or block.","parameters":{"type":"object","properties":{"days":{"type":"integer"},"district":{"type":"string","description":"District name, or empty for all"},"block":{"type":"string","description":"Block name, or empty for all"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_money_summary","description":"Money paid to partners in the last N days against the admissions it brought: total, cost per admission, waiting approval, approved but unpaid, overdue, by purpose and partner type, top paid partners, partners paid with no admissions.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_leads","description":"People who contacted the hospital directly (WhatsApp, Facebook/Instagram forms and messages, partner QR codes, missed calls, health camps, walk-ins) in the last N days: count, appointment and arrival rate and first-reply time by source and by department, plus unanswered WhatsApp and Facebook/Instagram conversations right now.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_tracked_items","description":"Issues, opportunities and planned actions already being tracked, with owner, due date and status.","parameters":{"type":"object","properties":{"status":{"type":"string","enum":["open","in_progress","done","dismissed","all"]}},"required":[]}}}
@@ -300,6 +335,9 @@ namespace SeemanchalOutreach.Api.Services
                     break;
                 case "get_survey_coverage":
                     result = await _data.SurveyCoverageAsync(ct);
+                    break;
+                case "get_disease_patterns":
+                    result = await DiseasePackAsync(Math.Clamp((int?)Int(args["days"]) ?? 365, 7, 1095), Str(args["district"]), Str(args["block"]), ct);
                     break;
                 case "get_leads":
                     result = await LeadsSummaryAsync(from, to, ct);
@@ -471,6 +509,20 @@ namespace SeemanchalOutreach.Api.Services
                         needsWholeRegion = await _data.SurveyNeedsAsync(null, ct),
                         needsInBusiestBlocks = needsByBlock,
                         admissionsByDepartment = _data.Breakdown(snap, "department", 10),
+                        admissionsByBlock = _data.Breakdown(snap, "block", 12),
+                        trackedItems = open,
+                    };
+                }
+                else if (_scope == "health")
+                {
+                    pack = new
+                    {
+                        today = IstClock.NowIst.ToString("dddd d MMMM yyyy"),
+                        hospitalDepartments = await _db.Departments.AsNoTracking().Where(d => d.IsActive).Select(d => d.Name).ToListAsync(ct),
+                        diseaseRegisterLastYear = await DiseasePackAsync(365, null, null, ct),
+                        diseaseRegisterLast90Days = await DiseasePackAsync(90, null, null, ct, small: true),
+                        surveyNeedsWholeRegion = await _data.SurveyNeedsAsync(null, ct),
+                        admissionsByDepartment = _data.Breakdown(snap, "department", 12),
                         admissionsByBlock = _data.Breakdown(snap, "block", 12),
                         trackedItems = open,
                     };

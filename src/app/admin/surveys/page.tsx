@@ -2,8 +2,9 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowDown, ArrowLeft, ArrowUp, Search, Sparkles } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Map as MapIcon, Search, Sparkles, X } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import AnalystPanel from '@/components/crm/AnalystPanel';
 import { contactTypeLabel, Empty, ErrorBox, fmt, friendlyError, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
@@ -36,8 +37,10 @@ interface RespDetail {
 interface QRow { id: string; questionId: string; title: string; text: string; type: string; order: number; options: string[]; answers: number }
 interface QRes { canEdit: boolean; asked: QRow[]; retired: QRow[] }
 
-type Tab = 'insights' | 'responses' | 'questions' | 'ai';
-const TABS: { k: Tab; l: string }[] = [{ k: 'insights', l: 'Panchayat insights' }, { k: 'responses', l: 'Responses' }, { k: 'questions', l: 'Questions' }, { k: 'ai', l: 'AI analyst' }];
+const SurveyMap = dynamic(() => import('./SurveyMap'), { ssr: false, loading: () => <Skeleton h={560} /> });
+
+type Tab = 'insights' | 'map' | 'responses' | 'questions' | 'ai';
+const TABS: { k: Tab; l: string }[] = [{ k: 'insights', l: 'Panchayat insights' }, { k: 'map', l: 'Map' }, { k: 'responses', l: 'Responses' }, { k: 'questions', l: 'Questions' }, { k: 'ai', l: 'AI analyst' }];
 const shortLabel = (s: string) => {
   const cut = [s.indexOf(' ('), s.indexOf(': ')].filter((i) => i > 3);
   const t = cut.length ? s.slice(0, Math.min(...cut)) : s;
@@ -59,16 +62,18 @@ function SurveysPage() {
   const tab = (TABS.find((t) => t.k === params.get('tab'))?.k ?? 'insights') as Tab;
   // The date filter lives in the address (?d=today, or d=custom&from=…&to=…) so it holds across tabs and a reload.
   const range: DateRangeValue = { key: (params.get('d') ?? '') as DateRangeKey, from: params.get('from') ?? '', to: params.get('to') ?? '' };
-  const url = (t: Tab, r: DateRangeValue) => {
+  const panchayat = params.get('p') ?? '';
+  const url = (t: Tab, r: DateRangeValue, p = '') => {
     const sp = new URLSearchParams();
     if (t !== 'insights') sp.set('tab', t);
+    if (p) sp.set('p', p);
     if (r.key) sp.set('d', r.key);
     if (r.key === 'custom') { if (r.from) sp.set('from', r.from); if (r.to) sp.set('to', r.to); }
     const qs = sp.toString();
     return qs ? `/admin/surveys?${qs}` : '/admin/surveys';
   };
   const go = (t: Tab) => router.replace(url(t, range), { scroll: false });
-  const setRange = (r: DateRangeValue) => router.replace(url(tab, r), { scroll: false });
+  const setRange = (r: DateRangeValue) => router.replace(url(tab, r, tab === 'responses' ? panchayat : ''), { scroll: false });
   const [toast, showToast] = useToast();
 
   return (
@@ -77,13 +82,15 @@ function SurveysPage() {
       <div className="crm-tabs" role="tablist" aria-label="Survey views">
         {TABS.map((t) => (
           <button key={t.k} type="button" role="tab" className="crm-tab" aria-selected={tab === t.k} onClick={() => go(t.k)}>
+            {t.k === 'map' && <MapIcon size={14} aria-hidden style={{ verticalAlign: -2, marginRight: 6 }} />}
             {t.k === 'ai' && <Sparkles size={14} aria-hidden style={{ verticalAlign: -2, marginRight: 6 }} />}{t.l}
           </button>
         ))}
       </div>
-      {(tab === 'insights' || tab === 'responses') && <DateRangeBar value={range} onChange={setRange} id="sv-date" />}
+      {(tab === 'insights' || tab === 'map' || tab === 'responses') && <DateRangeBar value={range} onChange={setRange} id="sv-date" />}
       {tab === 'insights' && <Insights range={range} />}
-      {tab === 'responses' && <Responses showToast={showToast} range={range} />}
+      {tab === 'map' && <SurveyMap range={range} onResponses={(id) => router.push(url('responses', range, id), { scroll: false })} />}
+      {tab === 'responses' && <Responses showToast={showToast} range={range} panchayatId={panchayat} onClearPanchayat={() => router.replace(url('responses', range), { scroll: false })} />}
       {tab === 'questions' && <Questions showToast={showToast} />}
       {tab === 'ai' && (
         <AnalystPanel scope="surveys"
@@ -289,7 +296,9 @@ function CompareTable({ d, q }: { d: InsightsRes; q: QMeta }) {
 
 // ─── Responses ──────────────────────────────────────────────────────────────
 
-function Responses({ showToast, range }: { showToast: (m: string) => void; range: DateRangeValue }) {
+function Responses({ showToast, range, panchayatId, onClearPanchayat }: {
+  showToast: (m: string) => void; range: DateRangeValue; panchayatId: string; onClearPanchayat: () => void;
+}) {
   const [view, setView] = useState<'current' | 'skipped' | 'older'>('current');
   const [block, setBlock] = useState('');
   const [agentId, setAgentId] = useState('');
@@ -305,10 +314,11 @@ function Responses({ showToast, range }: { showToast: (m: string) => void; range
     if (agentId) sp.set('agentId', agentId);
     if (q) sp.set('q', q);
     addRange(sp, range);
+    if (panchayatId) sp.set('panchayatId', panchayatId);
     return crm.get<RespList>(`/api/v1/surveys/responses?${sp}`);
-  }, [view, block, agentId, q, page, pageSize, range.key, range.from, range.to]);
+  }, [view, block, agentId, q, page, pageSize, range.key, range.from, range.to, panchayatId]);
   // A new date range starts again from the first page.
-  const rangeKey = `${range.key}|${range.from}|${range.to}`;
+  const rangeKey = `${range.key}|${range.from}|${range.to}|${panchayatId}`;
   const [seenRange, setSeenRange] = useState(rangeKey);
   if (seenRange !== rangeKey) { setSeenRange(rangeKey); setPage(1); }
   const d = list.data;
@@ -338,6 +348,15 @@ function Responses({ showToast, range }: { showToast: (m: string) => void; range
           {d?.agents.map((a) => <option key={a.agentId} value={a.agentId}>{a.agent}</option>)}
         </select>
       </div>
+      {panchayatId && (
+        <div className="crm-chips" style={{ alignItems: 'center' }}>
+          <span className="crm-chip" aria-pressed="true" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            Only {d?.rows[0]?.panchayat ?? 'one panchayat'}
+            <button type="button" onClick={onClearPanchayat} aria-label="Show all panchayats" style={{ border: 0, background: 'transparent', color: 'inherit', cursor: 'pointer', display: 'inline-flex', padding: 0 }}><X size={14} aria-hidden /></button>
+          </span>
+          <span className="crm-sub" style={{ fontSize: 13 }}>Opened from the map. The counts on the buttons are for all panchayats.</span>
+        </div>
+      )}
       {view === 'older' && <div className="crm-note" style={{ background: 'var(--accent-tint)', color: 'var(--text)' }}>These answers were given to the longer questionnaire used before the six questions. They are kept as they were and can be read and exported, but they aren&apos;t counted in Panchayat insights.</div>}
       {list.error && <ErrorBox message={list.error} onRetry={list.reload} />}
 
