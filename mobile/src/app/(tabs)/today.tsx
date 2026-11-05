@@ -19,7 +19,6 @@ import { dayShort, km, timeOf, weekday } from '../../lib/format';
 import { routeKm, startOfDay, ymd } from '../../lib/util';
 import { cachedTasks } from '../../lib/tasks';
 import { cachedTips, ensureTips } from '../../lib/aiTips';
-import { cachedUnread, useChatVersion } from '../../lib/chat';
 import { cachedNotifyUnread, useNotifyVersion } from '../../lib/notifications';
 import { C, PRIORITY_COLOR } from '../../theme';
 import type { Lang, TFn } from '../../i18n';
@@ -39,8 +38,6 @@ const greetingKey = () => {
 export default function Today() {
   const { t, agent, lang } = useSession();
   const sync = useSync();
-  useChatVersion();
-  const chatUnread = cachedUnread();
   useNotifyVersion();
   const notifyUnread = cachedNotifyUnread();
   const here = useHere();
@@ -77,6 +74,7 @@ export default function Today() {
       })(),
       openTasks: cachedTasks().filter((x) => x.status === 'open').length, tip: cachedTips(lang)?.tips[0] ?? null,
       lateTasks: cachedTasks().filter((x) => x.status === 'open' && x.dueDate != null && x.dueDate < ymd()).length,
+      dueFollowUps: db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM contacts WHERE followUpDate IS NOT NULL AND followUpDate <= ?', ymd())?.n ?? 0,
       shiftDoneToday: (db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM shifts WHERE endTime IS NOT NULL AND endTime >= ?', today)?.n ?? 0) > 0,
     };
   }, [lang]);
@@ -137,14 +135,14 @@ export default function Today() {
                   <T style={{ color: '#ffcf7a', fontSize: 13, fontWeight: '800' }}>{data.unsent}</T>
                 </Pressable>
               ) : null}
-              <Pressable onPress={() => router.push('/chat')} accessibilityRole="button" accessibilityLabel={t('chatTitle')} hitSlop={6}
-                style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>
-                <Icon name="chat" size={18} color="#fff" />
-                {chatUnread > 0 ? (
-                  <View style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: C.ink }}>
-                    <T style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{chatUnread > 99 ? '99+' : chatUnread}</T>
-                  </View>
-                ) : null}
+              {/* Vita, the AI analyst, always in the top bar */}
+              <Pressable onPress={() => router.navigate('/assistant')} accessibilityRole="button" accessibilityLabel={t('vitaTop')} hitSlop={6}
+                style={({ pressed }) => [{ height: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 3, paddingRight: 11, borderRadius: 18,
+                  backgroundColor: 'rgba(167,139,250,0.18)', borderWidth: 1, borderColor: 'rgba(167,139,250,0.45)' }, pressed && { opacity: 0.8 }]}>
+                <View style={{ width: 28, height: 28, borderRadius: 14, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end', backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                  <Image source={require('../../../assets/mascot/think.webp')} style={{ width: 24, height: 30 }} resizeMode="contain" />
+                </View>
+                <T style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>{t('tabVita')}</T>
               </Pressable>
               <Pressable onPress={() => router.push('/notifications')} accessibilityRole="button" accessibilityLabel={t('ntTitle')} hitSlop={6}
                 style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>
@@ -199,8 +197,45 @@ export default function Today() {
             </View>
           </View>
 
-          {/* Ask the AI helper */}
-          <View style={{ paddingHorizontal: 14, marginTop: -20, gap: 8 }}>
+          {/* Front row: the four things an agent does most, with what's waiting on each */}
+          <View style={{ paddingHorizontal: 14, marginTop: -20, gap: 10 }}>
+            <View style={{ flexDirection: 'row', gap: 8, backgroundColor: C.card, borderRadius: 20, padding: 8, borderWidth: 1, borderColor: C.border,
+              elevation: 4, shadowColor: C.ink, shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } }}>
+              {data.shift
+                ? <Quick icon="pin" bg={C.infoSoft} fg={C.infoInk} label={data.here ? t('changePanchayat') : t('checkIn')} onPress={() => router.push('/checkin')} hot={!data.here} />
+                : <Quick icon="map" bg={C.infoSoft} fg={C.infoInk} label={t('map')} onPress={() => router.push('/route')} />}
+              <Quick icon="users" bg={C.blueSoft} fg={C.blueInk} label={t('addNewPerson')}
+                onPress={() => router.push({ pathname: '/partner-new', params: data.here ? { panchayatId: data.here.id } : {} })} />
+              <Quick icon="hospital" bg={C.okSoft} fg={C.okInk} label={t('referPatient')} onPress={() => router.push('/refer')} />
+              <Quick icon="calendar" bg={C.warnSoft} fg={C.warnInk} label={t('followUps')} onPress={() => router.navigate('/followups')} badge={data.dueFollowUps} />
+            </View>
+          </View>
+
+          {/* Today's plan */}
+          <View style={{ paddingHorizontal: 14, paddingTop: 20, gap: 10 }}>
+            <SectionHead icon="pin" color={C.blue} title={t('todaysPlan')} sub={t('planSub', { n: plan.length })}
+              right={<Pressable onPress={() => router.push('/route')} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.blueSoft, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 }}>
+                <Icon name="map" size={15} color={C.blueInk} /><T style={{ color: C.blueInk, fontWeight: '700', fontSize: 13 }}>{t('map')}</T>
+              </Pressable>} />
+
+            {!next ? <Empty text={t('planEmpty')} icon="map" /> : <NextStop item={next} t={t} />}
+            {rest.length > 0 ? (
+              <View style={{ paddingLeft: 22 }}>
+                <View style={{ position: 'absolute', left: 9, top: 14, bottom: 14, width: 2, backgroundColor: C.borderStrong, borderRadius: 1 }} />
+                {visible.map((item) => <TimelineRow key={item.kind + item.id} item={item} t={t} />)}
+                {!showAll && rest.length > 3 ? (
+                  <Pressable onPress={() => setShowAll(true)} style={{ padding: 12, alignItems: 'center', backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border }}>
+                    <T style={{ color: C.blueInk, fontWeight: '700' }}>{t('seeMoreStops', { n: rest.length - 3 })}</T>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+          {/* Tasks from the manager */}
+          <TasksSection />
+
+          {/* Ask the AI helper: useful, but not what the day depends on, so it sits last */}
+          <View style={{ paddingHorizontal: 14, paddingTop: 22, gap: 8 }}>
             <Pressable onPress={() => router.navigate('/assistant')} accessibilityRole="button" accessibilityLabel={t('aiHelper')}
               style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.card, borderRadius: 18, paddingVertical: 11, paddingHorizontal: 12,
                 borderWidth: 1, borderColor: C.border, elevation: 4, shadowColor: C.ink, shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } }, pressed && { opacity: 0.9 }]}>
@@ -223,45 +258,6 @@ export default function Today() {
             ) : null}
           </View>
 
-          {/* Quick actions: what the agent needs right now */}
-          <View style={{ paddingHorizontal: 14, paddingTop: 18, gap: 10 }}>
-            <SectionHead icon="star" color={C.star} title={t('quickActions')} />
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Quick icon="users" bg={C.blueSoft} fg={C.blueInk} label={t('addNewPerson')}
-                onPress={() => router.push({ pathname: '/partner-new', params: data.here ? { panchayatId: data.here.id } : {} })} />
-              <Quick icon="hospital" bg={C.okSoft} fg={C.okInk} label={t('referPatient')} onPress={() => router.push('/refer')} />
-              {data.shift
-                ? <Quick icon="pin" bg={C.infoSoft} fg={C.infoInk} label={data.here ? t('changePanchayat') : t('checkIn')} onPress={() => router.push('/checkin')} />
-                : <Quick icon="map" bg={C.infoSoft} fg={C.infoInk} label={t('map')} onPress={() => router.push('/route')} />}
-              {data.shift
-                ? <Quick icon="map" bg={C.purpleSoft} fg={C.purple} label={t('map')} onPress={() => router.push('/route')} />
-                : <Quick icon="leave" bg={C.warnSoft} fg={C.warnInk} label={t('qaLeave')} onPress={() => router.push('/leave')} />}
-            </View>
-          </View>
-
-          {/* Tasks from the manager */}
-          <TasksSection />
-
-          {/* Today's plan */}
-          <View style={{ paddingHorizontal: 14, paddingTop: 20, gap: 10 }}>
-            <SectionHead icon="pin" color={C.blue} title={t('todaysPlan')} sub={t('planSub', { n: plan.length })}
-              right={<Pressable onPress={() => router.push('/route')} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.blueSoft, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 }}>
-                <Icon name="map" size={15} color={C.blueInk} /><T style={{ color: C.blueInk, fontWeight: '700', fontSize: 13 }}>{t('map')}</T>
-              </Pressable>} />
-
-            {!next ? <Empty text={t('planEmpty')} icon="map" /> : <NextStop item={next} t={t} />}
-            {rest.length > 0 ? (
-              <View style={{ paddingLeft: 22 }}>
-                <View style={{ position: 'absolute', left: 9, top: 14, bottom: 14, width: 2, backgroundColor: C.borderStrong, borderRadius: 1 }} />
-                {visible.map((item) => <TimelineRow key={item.kind + item.id} item={item} t={t} />)}
-                {!showAll && rest.length > 3 ? (
-                  <Pressable onPress={() => setShowAll(true)} style={{ padding: 12, alignItems: 'center', backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border }}>
-                    <T style={{ color: C.blueInk, fontWeight: '700' }}>{t('seeMoreStops', { n: rest.length - 3 })}</T>
-                  </Pressable>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
         </ScrollView>
       </View>
       <LanguageSheet visible={langOpen} onClose={() => setLangOpen(false)} />
@@ -465,12 +461,18 @@ function SectionHead({ icon, color, title, sub, right }: { icon: IconName; color
   );
 }
 
-function Quick({ icon, bg, fg, label, onPress }: { icon: IconName; bg: string; fg: string; label: string; onPress: () => void }) {
+function Quick({ icon, bg, fg, label, onPress, badge, hot }: { icon: IconName; bg: string; fg: string; label: string; onPress: () => void; badge?: number; hot?: boolean }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}
-      style={({ pressed }) => [{ flex: 1, alignItems: 'center', gap: 6, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 16, paddingVertical: 12, paddingHorizontal: 4 }, pressed && { opacity: 0.8 }]}>
-      <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name={icon} size={19} color={fg} />
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={badge ? `${label}, ${badge}` : label}
+      style={({ pressed }) => [{ flex: 1, alignItems: 'center', gap: 6, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 2, minHeight: 84 },
+        hot && { backgroundColor: bg }, pressed && { opacity: 0.75 }]}>
+      <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: hot ? C.card : bg, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon name={icon} size={21} color={fg} />
+        {badge ? (
+          <View style={{ position: 'absolute', top: -6, right: -8, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: C.bad, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.card }}>
+            <T style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>{badge > 99 ? '99+' : String(badge)}</T>
+          </View>
+        ) : null}
       </View>
       <T style={{ fontSize: 11, fontWeight: '700', color: C.text3, textAlign: 'center' }} numberOfLines={2}>{label}</T>
     </Pressable>

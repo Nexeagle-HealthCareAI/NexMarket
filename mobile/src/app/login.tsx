@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { lockState } from '../lib/lock';
+import { Icon } from '../components/Icon';
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -14,6 +16,7 @@ export default function Login() {
   const { t, lang, setLang, signIn } = useSession();
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Signed out by the server: a newer sign-in on another phone, a password reset, or an admin.
@@ -26,10 +29,14 @@ export default function Login() {
     setError(null);
     try {
       await signIn(userId, password);
-      router.replace(pendingPasswordChange() ? '/set-password' : '/today');
+      // First time on this phone: offer a PIN and fingerprint so the password isn't needed every day.
+      const l = lockState();
+      router.replace(pendingPasswordChange() ? '/set-password' : !l.pinSet && !l.asked ? '/quick-unlock?first=1' : '/today');
     } catch (e) {
       if (e instanceof OfflineError) setError(t('loginOffline'));
-      else if (e instanceof ApiError && (e.status === 401 || e.status === 400)) setError(t('loginFailed'));
+      else if (e instanceof ApiError && e.status === 423) setError(t('loginLocked'));
+      else if (e instanceof ApiError && e.status === 429) setError(t('loginTooMany'));
+      else if (e instanceof ApiError && (e.status === 401 || e.status === 400)) setError(/more tr(y|ies)/.test(e.message) ? `${t('loginFailed')} ${e.message.replace(/^.*?\. /, '')}` : t('loginFailed'));
       else setError(e instanceof Error ? e.message : t('somethingWrong'));
     } finally {
       setBusy(false);
@@ -67,8 +74,14 @@ export default function Login() {
             <T style={{ fontSize: 20, fontWeight: '800' }}>{t('login')}</T>
             <Field label={t('agentId')} value={userId} onChangeText={setUserId} autoCapitalize="characters" autoCorrect={false}
               placeholder="MKT-1001" returnKeyType="next" textContentType="username" autoComplete="username" />
-            <Field label={t('password')} value={password} onChangeText={setPassword} secureTextEntry returnKeyType="go"
-              onSubmitEditing={submit} textContentType="password" autoComplete="password" />
+            <View>
+              <Field label={t('password')} value={password} onChangeText={setPassword} secureTextEntry={!showPw} returnKeyType="go"
+                onSubmitEditing={submit} textContentType="password" autoComplete="password" autoCapitalize="none" autoCorrect={false} style={{ paddingRight: 52 }} />
+              <Pressable onPress={() => setShowPw(!showPw)} accessibilityRole="button" accessibilityLabel={showPw ? t('hidePassword') : t('showPassword')} hitSlop={6}
+                style={{ position: 'absolute', right: 4, bottom: 4, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name={showPw ? 'eyeOff' : 'eye'} color={C.text2} size={22} />
+              </Pressable>
+            </View>
             {endedText && !error ? (
               <View style={{ backgroundColor: '#fff7e6', borderRadius: 12, padding: 12 }} accessibilityRole="alert">
                 <T style={{ color: '#92400e', fontWeight: '600', fontSize: 14 }}>{endedText}</T>

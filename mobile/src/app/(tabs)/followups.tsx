@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
-import { Btn, Card, Chip, Empty, Field, Screen, T, TopBar, toast } from '../../components/ui';
+import { Btn, Card, Chip, Empty, Field, Screen, Sheet, T, TopBar, toast } from '../../components/ui';
 import { Icon } from '../../components/Icon';
 import { MoveSheet } from '../../components/MoveSheet';
 import { WhatsAppSheet } from '../../components/WhatsAppSheet';
@@ -25,6 +25,8 @@ export default function FollowUps() {
   const [day, setDay] = useState<string>('due'); // 'due' = overdue + today
   const [prio, setPrio] = useState<Priority | null>(null);
   const [term, setTerm] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [f, setF] = useState<Filters>(NO_FILTERS);
   const [moving, setMoving] = useState<string | null>(null);
   const [wa, setWa] = useState<{ name: string; phone: string | null } | null>(null);
 
@@ -41,11 +43,26 @@ export default function FollowUps() {
     let l = rows;
     if (mode === 'followUps') l = l.filter((r) => r.followUpDate && (day === 'due' ? r.followUpDate <= today : r.followUpDate === day));
     if (prio) l = l.filter((r) => r.priority === prio);
+    if (f.types.length) l = l.filter((r) => f.types.includes(r.role));
+    if (f.places.length) l = l.filter((r) => r.place != null && f.places.includes(r.place));
+    if (f.whatsapp) l = l.filter((r) => !!r.whatsappAdded);
+    if (f.card) l = l.filter((r) => !!r.cardGiven);
+    if (f.sent) l = l.filter((r) => r.refs > 0);
+    if (f.noFollowUp) l = l.filter((r) => !r.followUpDate);
     const s = term.trim().toLowerCase();
-    if (s) l = l.filter((r) => r.name.toLowerCase().includes(s) || (r.phone ?? '').includes(s) || (r.place ?? '').toLowerCase().includes(s));
-    return [...l].sort((a, b) => (RANK[a.priority] ?? 2) - (RANK[b.priority] ?? 2)
-      || (a.followUpDate ?? '9').localeCompare(b.followUpDate ?? '9') || a.name.localeCompare(b.name));
-  }, [rows, mode, day, prio, term, today]);
+    const digits = s.replace(/\D/g, '');
+    if (s) l = l.filter((r) => r.name.toLowerCase().includes(s) || (digits.length >= 3 && (r.phone ?? '').replace(/\D/g, '').includes(digits))
+      || (r.place ?? '').toLowerCase().includes(s) || typeLabel(t, r.role).toLowerCase().includes(s));
+    const byPriority = (a: Row, b: Row) => (RANK[a.priority] ?? 2) - (RANK[b.priority] ?? 2) || (a.followUpDate ?? '9').localeCompare(b.followUpDate ?? '9') || a.name.localeCompare(b.name);
+    const sorters: Record<Sort, (a: Row, b: Row) => number> = {
+      priority: byPriority,
+      name: (a, b) => a.name.localeCompare(b.name),
+      newest: (a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
+      patients: (a, b) => b.refs - a.refs || byPriority(a, b),
+    };
+    return [...l].sort(sorters[f.sort]);
+  }, [rows, mode, day, prio, term, today, f, t]);
+  const activeFilters = f.types.length + f.places.length + (f.whatsapp ? 1 : 0) + (f.card ? 1 : 0) + (f.sent ? 1 : 0) + (f.noFollowUp ? 1 : 0) + (f.sort !== 'priority' ? 1 : 0);
 
   const header = (
     <View style={{ gap: 12, paddingBottom: 12 }}>
@@ -62,14 +79,39 @@ export default function FollowUps() {
             return <DayCell key={k} top={weekday(lang, d)} bottom={String(d.getDate())} n={countFor(k)} on={day === k} onPress={() => setDay(k)} />;
           })}
         </ScrollView>
-      ) : (
-        <Field placeholder={t('searchPartners')} value={term} onChangeText={setTerm} autoCorrect={false} />
-      )}
+      ) : null}
+
+      {/* Search and filters, in both views */}
+      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <View style={{ flex: 1 }}>
+          <Field placeholder={t('fltSearch')} value={term} onChangeText={setTerm} autoCorrect={false} returnKeyType="search" accessibilityLabel={t('searchPartners')} />
+          {term ? (
+            <Pressable onPress={() => setTerm('')} accessibilityRole="button" accessibilityLabel={t('fltClear')} hitSlop={6}
+              style={{ position: 'absolute', right: 4, top: 4, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="close" size={18} color={C.text2} />
+            </Pressable>
+          ) : null}
+        </View>
+        <Pressable onPress={() => setFilterOpen(true)} accessibilityRole="button" accessibilityLabel={activeFilters ? `${t('fltFilter')}, ${activeFilters}` : t('fltFilter')}
+          style={({ pressed }) => [{ height: 52, minWidth: 52, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+            borderColor: activeFilters ? C.blue : C.borderStrong, backgroundColor: activeFilters ? C.blueSoft : C.card }, pressed && { opacity: 0.8 }]}>
+          <Icon name="settings" size={20} color={activeFilters ? C.blueInk : C.text} />
+          {activeFilters ? <T style={{ color: C.blueInk, fontWeight: '800' }}>{activeFilters}</T> : null}
+        </Pressable>
+      </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         <Chip label={t('all')} selected={!prio} onPress={() => setPrio(null)} />
         {PRIOS.map((p) => <Chip key={p} label={t(`priority_${p}`)} selected={prio === p} color={PRIORITY_COLOR[p].dot} onPress={() => setPrio(p)} />)}
       </ScrollView>
+      {activeFilters || term ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <T style={{ flex: 1, color: C.text2, fontSize: 13 }}>{t('fltShowing', { n: list.length, total: rows.length })}</T>
+          <Pressable onPress={() => { setF(NO_FILTERS); setTerm(''); setPrio(null); }} hitSlop={8} accessibilityRole="button">
+            <T style={{ color: C.blueInk, fontWeight: '700', fontSize: 13 }}>{t('fltClear')}</T>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 
@@ -91,8 +133,69 @@ export default function FollowUps() {
         removeClippedSubviews
       />
       <WhatsAppSheet visible={!!wa} onClose={() => setWa(null)} name={wa?.name ?? ''} phone={wa?.phone ?? null} />
+      <FilterSheet visible={filterOpen} onClose={() => setFilterOpen(false)} value={f} onChange={setF} rows={rows} t={t} />
       <MoveSheet visible={!!moving} onClose={() => setMoving(null)} onPick={(d) => { if (moving) setFollowUp(moving, d); setMoving(null); toast(t('savedOnPhone')); }} />
     </Screen>
+  );
+}
+
+type Sort = 'priority' | 'name' | 'newest' | 'patients';
+interface Filters { types: string[]; places: string[]; whatsapp: boolean; card: boolean; sent: boolean; noFollowUp: boolean; sort: Sort }
+const NO_FILTERS: Filters = { types: [], places: [], whatsapp: false, card: false, sent: false, noFollowUp: false, sort: 'priority' };
+const typeLabel = (t: TFn, role: string) => {
+  const key = `type_${role}`;
+  const v = t(key as never);
+  return v && v !== key ? v : role.replace(/_/g, ' ');
+};
+
+/** Filter by type, panchayat and a few yes/no facts, and choose the order. Only what this agent's partners actually have is offered. */
+function FilterSheet({ visible, onClose, value, onChange, rows, t }: {
+  visible: boolean; onClose: () => void; value: Filters; onChange: (f: Filters) => void; rows: Row[]; t: TFn;
+}) {
+  const types = useMemo(() => [...new Set(rows.map((r) => r.role))].sort((a, b) => typeLabel(t, a).localeCompare(typeLabel(t, b))), [rows, t]);
+  const places = useMemo(() => {
+    const n = new Map<string, number>();
+    rows.forEach((r) => { if (r.place) n.set(r.place, (n.get(r.place) ?? 0) + 1); });
+    return [...n.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [rows]);
+  const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  const sorts: { k: Sort; label: string }[] = [
+    { k: 'priority', label: t('fltSortPriority') }, { k: 'name', label: t('fltSortName') }, { k: 'newest', label: t('fltSortNew') }, { k: 'patients', label: t('fltSortPatients') },
+  ];
+  return (
+    <Sheet visible={visible} onClose={onClose} title={t('fltFilter')}>
+      <T style={{ fontWeight: '700' }}>{t('fltSort')}</T>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {sorts.map((x) => <Chip key={x.k} label={x.label} selected={value.sort === x.k} onPress={() => onChange({ ...value, sort: x.k })} />)}
+      </View>
+
+      <T style={{ fontWeight: '700' }}>{t('fltType')}</T>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {types.map((r) => <Chip key={r} label={typeLabel(t, r)} selected={value.types.includes(r)} onPress={() => onChange({ ...value, types: toggle(value.types, r) })} />)}
+      </View>
+
+      {places.length > 0 ? (
+        <>
+          <T style={{ fontWeight: '700' }}>{t('fltPlace')}</T>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {places.slice(0, 30).map(([p, n]) => <Chip key={p} label={`${p} · ${n}`} selected={value.places.includes(p)} onPress={() => onChange({ ...value, places: toggle(value.places, p) })} />)}
+          </View>
+        </>
+      ) : null}
+
+      <T style={{ fontWeight: '700' }}>{t('fltOnly')}</T>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        <Chip icon="whatsapp" label={t('fltWhatsApp')} selected={value.whatsapp} onPress={() => onChange({ ...value, whatsapp: !value.whatsapp })} />
+        <Chip icon="doc" label={t('fltCard')} selected={value.card} onPress={() => onChange({ ...value, card: !value.card })} />
+        <Chip icon="hospital" label={t('fltSent')} selected={value.sent} onPress={() => onChange({ ...value, sent: !value.sent })} />
+        <Chip icon="calendar" label={t('fltNoFollowUp')} selected={value.noFollowUp} onPress={() => onChange({ ...value, noFollowUp: !value.noFollowUp })} />
+      </View>
+
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+        <Btn flex kind="secondary" label={t('fltClear')} onPress={() => onChange(NO_FILTERS)} />
+        <Btn flex label={t('fltDone')} onPress={onClose} />
+      </View>
+    </Sheet>
   );
 }
 

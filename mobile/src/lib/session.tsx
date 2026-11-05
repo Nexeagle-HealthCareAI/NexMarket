@@ -7,6 +7,7 @@ import { uuid } from './util';
 import { onSyncState, startAutoSync, stopAutoSync, syncNow, syncState, type SyncState } from './sync';
 import { stopTracking } from './location';
 import { unregisterPush } from './notifications';
+import { clearQuickUnlock, loadLock } from './lock';
 
 /**
  * App-wide state: who is signed in and which language they read. The language lives in
@@ -23,6 +24,8 @@ interface Session {
   t: TFn;
   signIn(userId: string, password: string): Promise<LoginResult>;
   signOut(): Promise<void>;
+  /** Back to the password screen without clearing the phone (forgot PIN, too many wrong PINs). */
+  passwordAgain(): Promise<void>;
   /** After the agent edits their profile: show the new name everywhere. */
   updateAgent(patch: Partial<Agent>): void;
 }
@@ -64,6 +67,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let alive = true;
     (async () => {
+      await loadLock().catch(() => undefined);
       const { agentId } = await loadTokens();
       const stored = kvGet('agent');
       if (agentId && stored) {
@@ -97,6 +101,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       const keep = langRef.current;
       wipeAll();
       kvSet('lang', keep);
+      await clearQuickUnlock(); // the PIN belonged to the other person
     }
     const a: Agent = { agentId: r.agentId, name: r.name, district: r.district ?? '', block: r.block ?? '' };
     kvSet('agentId', r.agentId);
@@ -111,8 +116,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     await unregisterPush();
     await logoutRemote();
+    await clearQuickUnlock();
     await resetLocal();
   }, [resetLocal]);
+
+  const passwordAgain = useCallback(async () => {
+    // Everything on the phone stays (unsent work included); the same agent signing in again sends it.
+    stopAutoSync();
+    await logoutRemote();
+    await clearTokens();
+    await clearQuickUnlock();
+    setAgent(null);
+  }, []);
 
   const updateAgent = useCallback((patch: Partial<Agent>) => {
     setAgent((a) => {
@@ -123,8 +138,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const value = useMemo<Session>(() => ({ ready, agent, lang, setLang, t, signIn, signOut, updateAgent }),
-    [ready, agent, lang, setLang, t, signIn, signOut, updateAgent]);
+  const value = useMemo<Session>(() => ({ ready, agent, lang, setLang, t, signIn, signOut, passwordAgain, updateAgent }),
+    [ready, agent, lang, setLang, t, signIn, signOut, passwordAgain, updateAgent]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

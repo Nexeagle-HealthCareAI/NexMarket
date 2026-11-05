@@ -70,6 +70,7 @@ const config: ExpoConfig = {
     'expo-secure-store',
     'expo-localization',
     'expo-font',
+    ['expo-local-authentication', { faceIDPermission: 'NexEagle uses Face ID to unlock the app instead of your PIN.' }],
     [
       'expo-splash-screen',
       {

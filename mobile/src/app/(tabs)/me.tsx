@@ -5,6 +5,7 @@ import { Avatar, Btn, Card, Screen, T, TopBar } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 import { LanguageSheet } from '../../components/LanguageSheet';
 import { useDb, useSession, useSync } from '../../lib/session';
+import { useLock } from '../../lib/lock';
 import { db, kvGet, q } from '../../lib/db';
 import { syncNow, assignment } from '../../lib/sync';
 import { openAppSettings } from '../../lib/shift';
@@ -15,6 +16,7 @@ import { myPhotoUrl } from '../../lib/profile';
 import { C } from '../../theme';
 
 export default function Me() {
+  const lock = useLock();
   const { t, lang, agent, signOut } = useSession();
   const sync = useSync();
   const [langOpen, setLangOpen] = useState(false);
@@ -98,6 +100,7 @@ export default function Me() {
 
       <Row icon="chat" label={t('chatTitle')} sub={t('chatPrivate')} onPress={() => router.push('/chat')} />
       <Row icon="calendar" label={t('attendanceAndLeave')} sub={t('daysWorked', { n: d.days })} onPress={() => router.push('/attendance')} />
+      <Row icon="lock" label={t('quTitle')} sub={lock.pinSet ? `${t('quOn')}${lock.bio ? ' · ' + t('quUseBio') : ''}` : t('quOff')} onPress={() => router.push('/quick-unlock')} />
       <Row icon="globe" label={t('language')} sub={LANGS.find((l) => l.code === lang)?.label} onPress={() => setLangOpen(true)} />
       <Row icon="battery" label={t('batteryLocation')} onPress={openAppSettings} />
       <Row icon="logout" label={t('logout')} danger onPress={logout} />
