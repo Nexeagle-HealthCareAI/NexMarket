@@ -5,6 +5,7 @@ import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Skeleton } from '@/components/crm/ui';
 import { addRange, type DateRangeValue } from '@/components/crm/DateRange';
 import { money, n0, type GoogleStatus } from './shared';
+import { GoogleTracking } from './GoogleTracking';
 
 interface Res {
   status: GoogleStatus;
@@ -14,7 +15,7 @@ interface Res {
 }
 
 /** Website visits by where they came from and by campaign tag, and Google Ads campaigns, each set against the leads and patients they brought. */
-export function GoogleWebsite({ range }: { range: DateRangeValue }) {
+export function GoogleWebsite({ range, toast }: { range: DateRangeValue; toast: (m: string) => void }) {
   const [data, setData] = useState<Res | null>(null);
   const [error, setError] = useState<string | null>(null);
   const qs = useMemo(() => { const sp = new URLSearchParams(); addRange(sp, range); return sp.toString(); }, [range]);
@@ -83,7 +84,7 @@ export function GoogleWebsite({ range }: { range: DateRangeValue }) {
             <h2 className="crm-h2" style={{ margin: 0 }}>Campaign links</h2>
             {data.campaigns.length === 0 ? (
               <p className="crm-sub" style={{ margin: 0 }}>
-                No tagged links yet. Add tags to every link you share, for example <code>?utm_source=facebook&amp;utm_campaign=cardiology_nov</code>, and each campaign appears here with its visits, leads and patients.
+                No tagged links yet. Make tagged links with the builder below, and each campaign appears here with its visits, leads and patients.
               </p>
             ) : (
               <div className="crm-table-wrap">
@@ -100,6 +101,7 @@ export function GoogleWebsite({ range }: { range: DateRangeValue }) {
           </section>
         </div>
       )}
+      <GoogleTracking toast={toast} />
     </div>
   );
 }

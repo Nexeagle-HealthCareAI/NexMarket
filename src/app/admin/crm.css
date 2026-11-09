@@ -2067,3 +2067,6 @@ button.pp-chip { cursor: pointer; }
   .gg-cards { grid-template-columns: minmax(0, 1fr); }
   .gg-metric-v { font-size: 19px; }
 }
+.gg-track h2 { display: flex; align-items: center; gap: 8px; }
+.gg-track-step { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.gg-code { margin: 0; max-height: 320px; overflow: auto; font-size: 12px; line-height: 1.5; background: var(--grey-soft); border-radius: 10px; padding: 12px; white-space: pre; }

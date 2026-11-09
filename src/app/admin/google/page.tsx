@@ -99,7 +99,7 @@ function GooglePage() {
       {tab === 'overview' && <GoogleOverview range={range} onTab={(t) => go(t)} onSynced={loadStatus} toast={showToast} />}
       {tab === 'search' && <GoogleSearch range={range} />}
       {tab === 'reviews' && <GoogleReviews canReply={canEdit(access, 'social')} onTab={(t) => go(t)} toast={showToast} />}
-      {tab === 'website' && <GoogleWebsite range={range} />}
+      {tab === 'website' && <GoogleWebsite range={range} toast={showToast} />}
       {tab === 'setup' && <GoogleSetup onSaved={loadStatus} toast={showToast} />}
       {toast}
     </main>
