@@ -2,9 +2,10 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Globe, LayoutDashboard, Search, Settings2, Star } from 'lucide-react';
+import { Bot, Globe, LayoutDashboard, Search, Settings2, Star } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit, useAccess } from '@/lib/crm/access';
+import { canEdit, canView, useAccess } from '@/lib/crm/access';
+import AnalystPanel from '@/components/crm/AnalystPanel';
 import { PageHead, Pill, Skeleton, useToast } from '@/components/crm/ui';
 import { DateRangeBar, type DateRangeKey, type DateRangeValue } from '@/components/crm/DateRange';
 import { GoogleOverview } from '@/components/crm/google/GoogleOverview';
@@ -18,6 +19,7 @@ const TABS = [
   { key: 'search', label: 'Search terms', icon: Search, admin: false, dates: true },
   { key: 'reviews', label: 'Reviews', icon: Star, admin: false, dates: false },
   { key: 'website', label: 'Website & ads', icon: Globe, admin: false, dates: true },
+  { key: 'ai', label: 'AI analyst', icon: Bot, admin: false, dates: false },
   { key: 'setup', label: 'Setup', icon: Settings2, admin: true, dates: false },
 ] as const;
 const KEYS: DateRangeKey[] = ['', '7d', '30d', 'month', 'custom'];
@@ -40,7 +42,7 @@ function GooglePage() {
   const params = useSearchParams();
   const router = useRouter();
   const { access } = useAccess();
-  const tabs = TABS.filter((t) => !t.admin || !!access?.isAdmin);
+  const tabs = TABS.filter((t) => (!t.admin || !!access?.isAdmin) && (t.key !== 'ai' || canView(access, 'analytics')));
   const asked = params.get('tab') ?? 'overview';
   const tab = (access && !tabs.some((t) => t.key === asked) ? 'overview' : asked) as typeof TABS[number]['key'];
   const [range, setRange] = useState<DateRangeValue>(() => {
@@ -100,6 +102,16 @@ function GooglePage() {
       {tab === 'search' && <GoogleSearch range={range} />}
       {tab === 'reviews' && <GoogleReviews canReply={canEdit(access, 'social')} onTab={(t) => go(t)} toast={showToast} />}
       {tab === 'website' && <GoogleWebsite range={range} toast={showToast} />}
+      {tab === 'ai' && (
+        <AnalystPanel scope="google"
+          intro="The analyst reads the Google numbers NexMarket fetches (listing calls and directions, search terms, website visits, YouTube, Google Ads and reviews, totals only, no reviewer names) next to the leads Google brought and admissions by department, and turns them into actions for the marketing team. It writes a new briefing every week."
+          suggestions={[
+            'Which Google searches have demand we are not winning yet, and what page or doctor profile would win them?',
+            'Are calls and direction requests from the Google listing going up or down, and why?',
+            'Which Google Ads campaign costs the most per patient, and where should the budget move?',
+            'How is our Google rating moving, and how many low-rated reviews still need a reply?',
+          ]} />
+      )}
       {tab === 'setup' && <GoogleSetup onSaved={loadStatus} toast={showToast} />}
       {toast}
     </main>

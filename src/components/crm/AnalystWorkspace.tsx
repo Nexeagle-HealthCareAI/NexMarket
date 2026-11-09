@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BarChart3, Bot, ClipboardList, History, IndianRupee, Loader2, Smartphone, Stethoscope, Users, ListChecks, type LucideIcon } from 'lucide-react';
+import { BarChart3, Bot, ClipboardList, Globe, History, IndianRupee, Loader2, Smartphone, Stethoscope, Users, ListChecks, type LucideIcon } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { ErrorBox, fmt, Skeleton, useLoader } from '@/components/crm/ui';
 import AnalystPanel, { type AnalystView } from '@/components/crm/AnalystPanel';
@@ -11,7 +11,7 @@ interface AreaRow {
   running: boolean; open: number; overdue: number; high: number;
 }
 
-const ICON: Record<string, LucideIcon> = { business: BarChart3, partners: Users, field: Smartphone, referrals: Stethoscope, money: IndianRupee, surveys: ListChecks };
+const ICON: Record<string, LucideIcon> = { business: BarChart3, partners: Users, field: Smartphone, referrals: Stethoscope, money: IndianRupee, surveys: ListChecks, google: Globe };
 const HEALTH_DOT: Record<string, string> = { good: 'var(--ok)', watch: 'var(--warn)', bad: 'var(--bad)' };
 
 const INTRO: Record<string, string> = {
@@ -21,9 +21,15 @@ const INTRO: Record<string, string> = {
   referrals: 'Where patients drop out between referral, arrival and admission, and which departments, blocks and partner types bring them.',
   money: 'What is paid to partners against the admissions it brings: cost per admission, pending and overdue payouts, partners paid with no admissions.',
   surveys: 'What the community survey says each area needs, and how well the survey is being done.',
+  google: 'How patients find the hospital on Google: listing calls and directions, search terms, website, YouTube, Google Ads and reviews, against the leads and patients they bring.',
 };
 
 const SUGGEST: Record<string, string[]> = {
+  google: [
+    'Which Google searches have demand we are not winning yet?',
+    'Which Google Ads campaign costs the most per patient?',
+    'How is our Google rating moving?',
+  ],
   health: [
     'Which diseases are most common in each block, and where should the next camps go?',
     'What seasonal patterns does the disease register show?',

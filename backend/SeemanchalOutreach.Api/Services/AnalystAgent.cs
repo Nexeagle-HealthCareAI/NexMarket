@@ -186,7 +186,20 @@ namespace SeemanchalOutreach.Api.Services
                 "needs in other blocks, survey coverage, admissions that match the needs", 7),
             new("health", "Disease patterns", "h-", HealthFocusText,
                 "disease patterns by block, age group and month, survey needs, admissions by department", 7),
+            new("google", "Google & website", "g-", GoogleFocusText,
+                "Google numbers, search terms, reviews, leads and arrivals by source, admissions by department", 7),
         };
+
+        internal const string GoogleFocusText =
+            " This briefing is about how patients find the hospital on Google: the Google listing on Search and Maps (calls, direction requests, " +
+            "website clicks, times shown), what people search before they find the hospital (search terms to the website and terms that showed the listing), " +
+            "website visits and where they came from, YouTube, Google Ads (spend, clicks, calls) and Google reviews (rating, new reviews, unanswered and low ratings). " +
+            "Set them against the leads that came from Google and how many arrived, and against admissions by department. Find what to do: searches with demand " +
+            "the hospital doesn't win yet (shown a lot, clicked little, or far down the page) and which department page or doctor profile would win them; " +
+            "listing calls and directions rising or falling; unanswered and low-rated reviews (you get counts only, never review text or names); " +
+            "Google Ads campaigns that cost the most per patient and where to move the budget; and leads not tagged with a Google source. " +
+            "Remember Google sends listing, Search Console and YouTube numbers 2-5 days late, so the last few days look low; don't call that a drop. " +
+            "Actions are for the marketing manager, the website person and the desk.";
 
         internal const string HealthFocusText =
             " This briefing is about the disease register: counts of people seen with each disease at health camps and in the field, by date, age group, " +
@@ -560,6 +573,19 @@ namespace SeemanchalOutreach.Api.Services
                         needsInBusiestBlocks = needsByBlock,
                         admissionsByDepartment = _data.Breakdown(snap, "department", 10),
                         admissionsByBlock = _data.Breakdown(snap, "block", 12),
+                        trackedItems = open,
+                    };
+                }
+                else if (_scope == "google")
+                {
+                    pack = new
+                    {
+                        today = IstClock.NowIst.ToString("dddd d MMMM yyyy"),
+                        hospitalDepartments = await _db.Departments.AsNoTracking().Where(d => d.IsActive).Select(d => d.Name).ToListAsync(ct),
+                        googleLast30Days = await GooglePackAsync(30, ct),
+                        googleLast90Days = await GooglePackAsync(90, ct),
+                        leads = await LeadsSummaryAsync(from, to, ct),
+                        admissionsByDepartment = _data.Breakdown(snap, "department", 12),
                         trackedItems = open,
                     };
                 }
