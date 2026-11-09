@@ -79,7 +79,7 @@ export default function ChatList() {
           ) : shown.map((th) => (
             <Pressable key={th.id} onPress={() => router.push({ pathname: '/chat/[id]', params: { id: th.id } })}
               style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: pressed ? C.line : C.card, borderBottomWidth: 1, borderBottomColor: C.line }]}>
-              <ChatAvatar kind={th.kind} name={th.title} photoUrl={th.photoUrl} size={52} ring={th.unread > 0} />
+              <ChatAvatar kind={th.kind} name={th.title} photoUrl={th.photoUrl} size={52} ring={th.unread > 0} online={!!th.live?.online} />
               <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <T style={{ flex: 1, fontSize: 17, fontWeight: th.unread ? '800' : '700' }} numberOfLines={1}>{titleOf(th)}</T>

@@ -9,8 +9,9 @@ import { ChatAvatar, NX } from '../../components/ChatAvatar';
 import { useSession } from '../../lib/session';
 import { q } from '../../lib/db';
 import {
-  cachedMessages, cachedThreads, failedReason, isOfficeUser, markRead, olderMessages, otherMarks, refreshMessages, retry, send, useChatVersion, type ChatMsg,
+  cachedLive, cachedMessages, cachedThreads, failedReason, isOfficeUser, markRead, olderMessages, otherMarks, refreshMessages, retry, send, useChatVersion, type ChatMsg,
 } from '../../lib/chat';
+import { liveLine } from '../../lib/presence';
 import { imageSource, MAX_FILE_BYTES, openChatFile, pickCamera, pickDocument, pickGallery, type Picked } from '../../lib/chatFiles';
 import { EMOJI } from '../../lib/emoji';
 import { setOpenChat } from '../../lib/notifications';
@@ -29,6 +30,7 @@ export default function Conversation() {
   const thread = cachedThreads().find((x) => x.id === id);
   const msgs = cachedMessages(id);
   const marks = otherMarks(id);
+  const live = cachedLive(id);
   const [text, setText] = useState('');
   const [emoji, setEmoji] = useState(false);
   const [group, setGroup] = useState(0);
@@ -96,7 +98,9 @@ export default function Conversation() {
   };
 
   const title = isTeam ? t('chatTeam') : isDirect ? thread?.title ?? '' : isOfficeUser() ? thread?.title ?? t('chatOffice') : t('chatOffice');
-  const sub = isTeam ? t('chatTeamSub') : isDirect ? thread?.sub ?? t('chatDirectSub') : t('chatOfficeSub');
+  const now = liveLine(t, lang, live, thread?.kind ?? 'agent', isOfficeUser());
+  const sub = now ?? (isTeam ? t('chatTeamSub') : isDirect ? thread?.sub ?? t('chatDirectSub') : t('chatOfficeSub'));
+  const onlineNow = !!live?.online && !isTeam;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: WA.head }} edges={['top', 'left', 'right']}>
@@ -105,10 +109,10 @@ export default function Conversation() {
         <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/chat'))} hitSlop={10} accessibilityLabel={t('back')} style={{ padding: 6 }}>
           <Icon name="back" color="#fff" size={22} />
         </Pressable>
-        <ChatAvatar kind={thread?.kind ?? 'agent'} name={title} photoUrl={thread?.photoUrl} size={40} />
+        <ChatAvatar kind={thread?.kind ?? 'agent'} name={title} photoUrl={thread?.photoUrl} size={40} online={onlineNow} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <T style={{ color: '#fff', fontSize: 17, fontWeight: '800' }} numberOfLines={1}>{title}</T>
-          <T style={{ color: NX.headSub, fontSize: 12 }} numberOfLines={1}>{sub}</T>
+          <T style={{ color: onlineNow ? NX.accent : NX.headSub, fontSize: 12, fontWeight: onlineNow ? '700' : '400' }} numberOfLines={1}>{sub}</T>
         </View>
       </View>
 

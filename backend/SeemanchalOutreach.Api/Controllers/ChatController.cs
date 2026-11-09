@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SeemanchalOutreach.Api.Security;
+using SeemanchalOutreach.Api.Services;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
 
@@ -59,9 +60,11 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IFileStore _files;
         private readonly ILiveEvents _live;
         private readonly INotifier _notifier;
+        private readonly PresenceTracker _presence;
 
-        public ChatController(IMarketingDbContext db, IPermissionService perms, IFileStore files, ILiveEvents live, INotifier notifier)
+        public ChatController(IMarketingDbContext db, IPermissionService perms, IFileStore files, ILiveEvents live, INotifier notifier, PresenceTracker presence)
         {
+            _presence = presence;
             _db = db;
             _perms = perms;
             _files = files;
@@ -240,6 +243,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     : t.Kind == "direct" && PeerOf(t) is { } p && peers.TryGetValue(p, out var pr) && !RoleChecks.IsDashboardRole(pr.Role) ? p : null)
                 .Where(x => x != null).Cast<string>().Distinct().ToList();
             var presence = await PresenceAsync(fieldIds, ct);
+            var everyone = await EveryoneAsync(ct);
 
             var ids = threads.Select(t => t.Id).ToList();
             var reads = await _db.ChatReads.AsNoTracking().Where(r => ids.Contains(r.ThreadId) && r.UserId == Me)
@@ -280,6 +284,7 @@ namespace SeemanchalOutreach.Api.Controllers
                             lastPreview = t.LastPreview,
                             unread = unread.GetValueOrDefault(t.Id),
                             presence = presence.GetValueOrDefault((t.Kind == "direct" ? peerId : t.AgentId) ?? ""),
+                            live = LiveFor(t, office, everyone),
                         };
                     }),
             });
@@ -386,6 +391,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 otherSeenAt,
                 hasMore = after == null && list.Count == limit,
                 pinned = await PinnedAsync(t, ct),
+                live = LiveFor(t, office, await EveryoneAsync(ct)),
             });
         }
 
@@ -651,6 +657,33 @@ namespace SeemanchalOutreach.Api.Controllers
                 else result[a] = new { state = "off", place = (string?)null, since = (DateTime?)null, lastSeenAt = seen };
             }
             return result;
+        }
+
+        /// <summary>Everyone active, with whether they are in the office and their online / last-seen state.</summary>
+        private async Task<Dictionary<string, (bool Office, PresenceView View)>> EveryoneAsync(CancellationToken ct)
+        {
+            var rows = await _db.Agents.AsNoTracking().Where(a => a.IsActive)
+                .Select(a => new { a.AgentId, a.Role, a.LastActiveAt, a.LastActiveOn }).ToListAsync(ct);
+            var views = _presence.Merge(rows.Select(r => (r.AgentId, r.LastActiveAt, r.LastActiveOn)), DateTime.UtcNow);
+            return rows.ToDictionary(r => r.AgentId, r => (RoleChecks.IsDashboardRole(r.Role), views[r.AgentId]));
+        }
+
+        /// <summary>
+        /// "Online" / "last seen" for the header and list: the other person in a direct chat; the agent in an agent's
+        /// chat (office side); the office in the agent's own chat (anyone in the office online); and how many are online in Team.
+        /// </summary>
+        private object? LiveFor(ChatThread t, bool office, Dictionary<string, (bool Office, PresenceView View)> everyone)
+        {
+            var me = Me;
+            if (t.Kind == "direct" || (t.Kind == "agent" && office))
+            {
+                var id = t.Kind == "direct" ? PeerOf(t) : t.AgentId;
+                if (id == null || !everyone.TryGetValue(id, out var p)) return null;
+                return new { online = p.View.Online, lastSeenAt = p.View.LastSeenAt, on = p.View.On, count = p.View.Online ? 1 : 0 };
+            }
+            var group = everyone.Where(e => e.Key != me && (t.Kind == "team" || e.Value.Office)).Select(e => e.Value.View).ToList();
+            var n = group.Count(v => v.Online);
+            return new { online = n > 0, lastSeenAt = group.Max(v => v.LastSeenAt), on = (string?)null, count = n };
         }
 
         private async Task TouchAsync(Guid threadId, bool office, bool seen, bool read, CancellationToken ct)

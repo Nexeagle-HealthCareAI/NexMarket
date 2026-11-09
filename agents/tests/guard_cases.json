@@ -1,0 +1,414 @@
+{
+ "facts": {
+  "text": "Free eye check-up camp at Amour High School on 14 Nov, Saturday, 10 am to 2 pm. OPD Monday to Saturday 9 am to 5 pm. Emergency 24 hours. Dr. Anjali Verma (eye) sees patients on Tuesday and Friday.",
+  "phones": [
+   "06454 222333",
+   "9431012345"
+  ],
+  "domains": [
+   "glisanhospital.in"
+  ]
+ },
+ "cases": [
+  {
+   "id": "p01",
+   "channel": "whatsapp",
+   "text": "Namaste! Free eye check-up camp at Amour High School on Saturday, 14 Nov, 10 am to 2 pm. Please come.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p02",
+   "channel": "whatsapp",
+   "text": "Our OPD is open Monday to Saturday, 9 am to 5 pm. For any help call 9431012345.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p03",
+   "channel": "facebook",
+   "text": "Free eye check-up camp this Saturday, 14 Nov, at Amour High School. 10 am to 2 pm. Bring your old reports.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p04",
+   "channel": "google_review",
+   "text": "Thank you so much for your kind words. We are glad you had a good experience.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p05",
+   "channel": "google_review",
+   "text": "We are sorry your visit was not good enough. Please call us on 06454 222333 so we can help.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p06",
+   "channel": "whatsapp",
+   "text": "Aapka message mil gaya. Hamari team jaldi aapse baat karegi.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p07",
+   "channel": "whatsapp",
+   "text": "Shukriya! Aankhon ka free camp Shanivar 14 Nov ko Amour High School mein, 10 am se 2 pm tak.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p08",
+   "channel": "sms",
+   "text": "Emergency? Come straight to the emergency department, open 24 hours.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p09",
+   "channel": "partner",
+   "text": "Thank you for staying in touch with the hospital. Our field team will visit your village soon.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p10",
+   "channel": "instagram",
+   "text": "Healthy eyes, happy life. Free eye check-up camp at Amour High School, Saturday 14 Nov.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p11",
+   "channel": "whatsapp",
+   "text": "नमस्ते! अमौर हाई स्कूल में शनिवार 14 Nov को मुफ्त आँख जाँच शिविर, 10 am से 2 pm तक।",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p12",
+   "channel": "whatsapp",
+   "text": "নমস্কার! শনিবার 14 Nov আমৌর হাই স্কুলে বিনামূল্যে চোখ পরীক্ষা শিবির, 10 am থেকে 2 pm।",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p13",
+   "channel": "whatsapp",
+   "text": "Dr. Anjali Verma sees eye patients on Tuesday and Friday in the OPD.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p14",
+   "channel": "facebook",
+   "text": "Visit glisanhospital.in for OPD timings and camp news.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p15",
+   "channel": "whatsapp",
+   "text": "Please reply to this message if you would like a call back from our desk.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p16",
+   "channel": "google_review",
+   "text": "Thank you for taking the time to share your feedback with us.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p17",
+   "channel": "partner",
+   "text": "Dhanyavaad! Aapke gaon mein agle hafte hamari team aayegi.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p18",
+   "channel": "whatsapp",
+   "text": "If this is urgent, please come to the emergency department or call 06454 222333.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p19",
+   "channel": "whatsapp_status",
+   "text": "Free eye check-up camp. Saturday 14 Nov. Amour High School. 10 am - 2 pm.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p20",
+   "channel": "sms",
+   "text": "Reminder: free eye camp tomorrow at Amour High School, 10 am to 2 pm.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p21",
+   "channel": "facebook",
+   "text": "Our doctors and nurses are ready to help. OPD Monday to Saturday.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p22",
+   "channel": "whatsapp",
+   "text": "Hum aapki madad ke liye yahan hain. Kripya hamare desk se baat karein.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p23",
+   "channel": "google_review",
+   "text": "Thank you! Wishing you and your family good health.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p24",
+   "channel": "whatsapp",
+   "text": "Kal aankhon ka free camp hai, Amour High School, 10 am se 2 pm.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "p25",
+   "channel": "instagram",
+   "text": "Bring your family for a free eye check-up this Saturday at Amour High School.",
+   "expect": "pass",
+   "rule": null,
+   "optedIn": null
+  },
+  {
+   "id": "f01",
+   "channel": "facebook",
+   "text": "Diabetes ka pakka ilaj sirf hamare hospital mein!",
+   "expect": "fail",
+   "rule": "cure_claim",
+   "optedIn": null
+  },
+  {
+   "id": "f02",
+   "channel": "whatsapp",
+   "text": "100% cure for knee pain guaranteed.",
+   "expect": "fail",
+   "rule": "cure_claim",
+   "optedIn": null
+  },
+  {
+   "id": "f03",
+   "channel": "facebook",
+   "text": "We are the best hospital in Seemanchal.",
+   "expect": "fail",
+   "rule": "superlative",
+   "optedIn": null
+  },
+  {
+   "id": "f04",
+   "channel": "instagram",
+   "text": "No. 1 eye care in Purnia!",
+   "expect": "fail",
+   "rule": "superlative",
+   "optedIn": null
+  },
+  {
+   "id": "f05",
+   "channel": "facebook",
+   "text": "Better than other hospitals in the district.",
+   "expect": "fail",
+   "rule": "comparison",
+   "optedIn": null
+  },
+  {
+   "id": "f06",
+   "channel": "facebook",
+   "text": "Meet our renowned gold medallist surgeon.",
+   "expect": "fail",
+   "rule": "doctor_promo",
+   "optedIn": null
+  },
+  {
+   "id": "f07",
+   "channel": "partner",
+   "text": "Har patient laane par 500 rupaye commission milega.",
+   "expect": "fail",
+   "rule": "inducement",
+   "optedIn": null
+  },
+  {
+   "id": "f08",
+   "channel": "whatsapp",
+   "text": "Take metformin 500 mg twice a day.",
+   "expect": "fail",
+   "rule": "medical_advice",
+   "optedIn": null
+  },
+  {
+   "id": "f09",
+   "channel": "google_review",
+   "text": "Sorry the surgery bill was higher than expected.",
+   "expect": "fail",
+   "rule": "review_health",
+   "optedIn": null
+  },
+  {
+   "id": "f10",
+   "channel": "google_review",
+   "text": "We hope your diabetes treatment is going well.",
+   "expect": "fail",
+   "rule": "review_health",
+   "optedIn": null
+  },
+  {
+   "id": "f11",
+   "channel": "whatsapp",
+   "text": "Camp on Sunday at 4 pm.",
+   "expect": "fail",
+   "rule": "unsupported_fact",
+   "optedIn": null
+  },
+  {
+   "id": "f12",
+   "channel": "whatsapp",
+   "text": "Check-up only ₹99 this week!",
+   "expect": "fail",
+   "rule": "price",
+   "optedIn": null
+  },
+  {
+   "id": "f13",
+   "channel": "facebook",
+   "text": "50% off on all tests this month.",
+   "expect": "fail",
+   "rule": "price",
+   "optedIn": null
+  },
+  {
+   "id": "f14",
+   "channel": "whatsapp",
+   "text": "Call our manager on 9876543210 for details.",
+   "expect": "fail",
+   "rule": "personal_number",
+   "optedIn": null
+  },
+  {
+   "id": "f15",
+   "channel": "whatsapp",
+   "text": "Click https://bit.ly/abc123 to book.",
+   "expect": "fail",
+   "rule": "link",
+   "optedIn": null
+  },
+  {
+   "id": "f16",
+   "channel": "facebook",
+   "text": "Don't ignore chest pain, you may die before it's too late.",
+   "expect": "fail",
+   "rule": "fear",
+   "optedIn": null
+  },
+  {
+   "id": "f17",
+   "channel": "facebook",
+   "text": "FREE FREE FREE CAMP FOR EVERYONE COME NOW TODAY",
+   "expect": "fail",
+   "rule": "shouting",
+   "optedIn": null
+  },
+  {
+   "id": "f18",
+   "channel": "whatsapp",
+   "text": "Camp tomorrow!!! Come fast!!!",
+   "expect": "fail",
+   "rule": "shouting",
+   "optedIn": null
+  },
+  {
+   "id": "f19",
+   "channel": "broadcast",
+   "text": "Free eye camp Saturday 14 Nov at Amour High School.",
+   "expect": "fail",
+   "rule": "not_opted_in",
+   "optedIn": false
+  },
+  {
+   "id": "f20",
+   "channel": "whatsapp",
+   "text": "इस बीमारी का पक्का इलाज, गारंटी के साथ।",
+   "expect": "fail",
+   "rule": "cure_claim",
+   "optedIn": null
+  },
+  {
+   "id": "f21",
+   "channel": "facebook",
+   "text": "पूर्णिया का सबसे अच्छा अस्पताल।",
+   "expect": "fail",
+   "rule": "superlative",
+   "optedIn": null
+  },
+  {
+   "id": "f22",
+   "channel": "facebook",
+   "text": "সেরা হাসপাতাল, নিশ্চিত আরোগ্য।",
+   "expect": "fail",
+   "rule": "cure_claim",
+   "optedIn": null
+  },
+  {
+   "id": "f23",
+   "channel": "whatsapp",
+   "text": "Dr. Anjali Verma will see you on Wednesday at 6 pm.",
+   "expect": "fail",
+   "rule": "unsupported_fact",
+   "optedIn": null
+  },
+  {
+   "id": "f24",
+   "channel": "whatsapp",
+   "text": "",
+   "expect": "fail",
+   "rule": "empty",
+   "optedIn": null
+  },
+  {
+   "id": "f25",
+   "channel": "facebook",
+   "text": "Patient Ramesh recovered fully after his operation here.",
+   "expect": "fail",
+   "rule": "patient_named",
+   "optedIn": null
+  }
+ ]
+}
