@@ -186,9 +186,27 @@ namespace SeemanchalOutreach.Api.Services
                 "needs in other blocks, survey coverage, admissions that match the needs", 7),
             new("health", "Disease patterns", "h-", HealthFocusText,
                 "disease patterns by block, age group and month, survey needs, admissions by department", 7),
+            new("social", "Facebook & Instagram", "fb-", SocialFocusText,
+                "posts, topics and formats, lead forms, ad spend per patient, Messenger and Instagram replies, leads by source", 7),
+            new("whatsapp", "WhatsApp", "wa-", WhatsAppFocusText,
+                "conversations, first-reply time, busy hours, broadcasts, WhatsApp and QR leads", 7),
             new("google", "Google & website", "g-", GoogleFocusText,
                 "Google numbers, search terms, reviews, leads and arrivals by source, admissions by department", 7),
         };
+
+        internal const string SocialFocusText =
+            " This briefing is about the hospital's Facebook Page and Instagram account: which posts reach and engage people (by topic, format, channel " +
+            "and weekday), how often the hospital posts, Lead Ads forms and how many of those people actually came to the hospital, ad spend per campaign " +
+            "with cost per lead and per patient, and Messenger and Instagram messages (reply speed, unanswered, how many became leads). Say what to post " +
+            "more and less of, which campaigns to stop, keep or grow, and how fast replies must be. Engagement is not the goal by itself: always tie it back to " +
+            "leads and patients who came in. Actions are for the marketing manager, whoever makes the posts, and the desk.";
+
+        internal const string WhatsAppFocusText =
+            " This briefing is about WhatsApp: people writing in, how fast staff reply (first reply time, never answered, busiest hours to staff), " +
+            "WhatsApp and partner-QR leads and how many came in, opt-outs, and broadcasts (delivered, read and reply rates by kind and language). " +
+            "Say which broadcasts work and which to stop, when to send them, which language, whether the desk needs more people at certain hours, and " +
+            "where leads stall. Never suggest messaging people more often than is respectful; opt-outs are a warning sign. Actions are for the desk lead " +
+            "and the marketing manager.";
 
         internal const string GoogleFocusText =
             " This briefing is about how patients find the hospital on Google: the Google listing on Search and Maps (calls, direction requests, " +
@@ -236,6 +254,184 @@ namespace SeemanchalOutreach.Api.Services
         private readonly AnalystSettings _settings;
         private readonly ILogger<AnalystAgent> _logger;
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+        private static double? Median(List<double> xs)
+        {
+            if (xs.Count == 0) return null;
+            xs.Sort();
+            return Math.Round(xs.Count % 2 == 1 ? xs[xs.Count / 2] : (xs[xs.Count / 2 - 1] + xs[xs.Count / 2]) / 2, 0);
+        }
+
+        private static readonly string[] WeekDays = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+
+        /// <summary>Facebook and Instagram added up for the analyst: posts, forms, ads and messages. The hospital's own post text is included; no names or numbers of people.</summary>
+        private async Task<object> SocialPackAsync(int days, CancellationToken ct)
+        {
+            var now = DateTime.UtcNow;
+            var from = IstClock.TodayStartUtc.AddDays(-days + 1);
+            var prevFrom = from.AddDays(-days);
+            var posts = await _db.SocialPosts.AsNoTracking().Where(p => p.Status == "active" && p.PostedAt >= prevFrom)
+                .Select(p => new PostRow(p.Channel, p.PostedAt, p.Topic, p.MediaType, p.Text, p.Reach ?? p.Views ?? 0, (p.Likes ?? 0) + (p.Comments ?? 0) + (p.Shares ?? 0) + (p.Saves ?? 0)))
+                .ToListAsync(ct);
+            var cur = posts.Where(p => p.PostedAt >= from).ToList();
+            var prev = posts.Where(p => p.PostedAt < from).ToList();
+            object Sum<T>(IEnumerable<T> xs, Func<T, int> aud, Func<T, int> eng)
+            {
+                var l = xs.ToList();
+                return new { posts = l.Count, audience = l.Sum(aud), engagement = l.Sum(eng), avgEngagementPerPost = l.Count == 0 ? 0 : Math.Round(l.Average(x => (double)eng(x)), 1) };
+            }
+            static object Groups(IEnumerable<IGrouping<string, PostRow>> g) => g.Select(x => new { key = x.Key, posts = x.Count(), avgEngagement = Math.Round(x.Average(y => (double)y.Eng), 1), avgAudience = Math.Round(x.Average(y => (double)y.Audience), 0) })
+                .OrderByDescending(x => x.avgEngagement).ToList();
+            string Short(string? t) => t == null ? "" : (t.Length > 140 ? t[..140] + "…" : t).Replace('\n', ' ');
+
+            // Lead Ads forms, and how many of those people came in.
+            var forms = await _db.AdLeads.AsNoTracking().Where(a => a.ReceivedAt >= from)
+                .Select(a => new { a.Platform, Campaign = a.CampaignName ?? (a.IsOrganic ? "(organic form)" : "(unknown campaign)"), a.LeadId }).ToListAsync(ct);
+            var leadIds = forms.Where(f => f.LeadId != null).Select(f => f.LeadId!.Value).ToList();
+            var status = await _db.Leads.AsNoTracking().Where(l => leadIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.Status, ct);
+            bool CameIn(Guid? id) => id != null && status.TryGetValue(id.Value, out var st) && (st == "arrived" || st == "admitted");
+
+            // Ad spend from Meta (live), joined to leads.
+            object ads;
+            try
+            {
+                var (rows, currency, error) = await _meta.AdsAsync(DateOnly.FromDateTime(from + IstClock.Offset), DateOnly.FromDateTime(IstClock.NowIst), ct);
+                ads = new
+                {
+                    currency, error,
+                    campaigns = rows.Take(12).Select(r => new { r.Name, r.Status, r.Spend, r.Impressions, r.Clicks, r.MetaLeads, chatsStarted = r.Chats, leadsInCrm = r.CrmLeads, cameIn = r.Arrived, r.CostPerLead, r.CostPerArrival }),
+                    totalSpend = rows.Sum(r => r.Spend),
+                };
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException) { ads = new { error = "Couldn't read the ad account." }; }
+
+            // Messenger and Instagram conversations.
+            var convs = await _db.SocialConversations.AsNoTracking().Where(c => c.CreatedAt >= from)
+                .Select(c => new { c.Id, c.Channel, c.LeadId, HasPhone = c.Phone != null }).ToListAsync(ct);
+            var ids = convs.Select(c => c.Id).ToList();
+            var msgs = await _db.SocialMessages.AsNoTracking().Where(m => ids.Contains(m.ConversationId))
+                .Select(m => new { m.ConversationId, m.Direction, m.CreatedAt }).ToListAsync(ct);
+            var firstReply = msgs.GroupBy(m => m.ConversationId).Select(g =>
+            {
+                var firstIn = g.Where(m => m.Direction == "in").Select(m => (DateTime?)m.CreatedAt).Min();
+                var reply = firstIn == null ? null : g.Where(m => m.Direction == "out" && m.CreatedAt > firstIn).Select(m => (DateTime?)m.CreatedAt).Min();
+                return firstIn != null && reply != null ? (reply.Value - firstIn.Value).TotalMinutes : (double?)null;
+            }).Where(x => x != null).Select(x => x!.Value).ToList();
+            var convLeads = convs.Where(c => c.LeadId != null).Select(c => c.LeadId!.Value).ToList();
+            var convStatus = await _db.Leads.AsNoTracking().Where(l => convLeads.Contains(l.Id)).Select(l => l.Status).ToListAsync(ct);
+
+            return new
+            {
+                days,
+                posts = new
+                {
+                    thisPeriod = Sum(cur, x => x.Audience, x => x.Eng),
+                    previousPeriod = Sum(prev, x => x.Audience, x => x.Eng),
+                    byChannel = Groups(cur.GroupBy(p => p.Channel)),
+                    byTopic = Groups(cur.GroupBy(p => p.Topic ?? "(no topic)")),
+                    byFormat = Groups(cur.GroupBy(p => p.MediaType ?? "other")),
+                    byWeekday = Groups(cur.GroupBy(p => WeekDays[(int)(p.PostedAt + IstClock.Offset).DayOfWeek])),
+                    top = cur.OrderByDescending(p => p.Eng).Take(5).Select(p => new { p.Channel, date = (p.PostedAt + IstClock.Offset).ToString("d MMM"), p.Topic, p.MediaType, p.Audience, engagement = p.Eng, text = Short(p.Text) }),
+                    weakest = cur.Where(p => p.Audience > 0).OrderBy(p => p.Eng).Take(3).Select(p => new { p.Channel, date = (p.PostedAt + IstClock.Offset).ToString("d MMM"), p.Topic, p.MediaType, p.Audience, engagement = p.Eng, text = Short(p.Text) }),
+                    note = "WhatsApp Status, Channel and group posts are logged by hand, so they may be missing. Engagement = likes + comments + shares + saves.",
+                },
+                leadForms = new
+                {
+                    total = forms.Count,
+                    byPlatform = forms.GroupBy(f => f.Platform == "ig" ? "Instagram" : "Facebook").Select(g => new { platform = g.Key, forms = g.Count(), cameIn = g.Count(x => CameIn(x.LeadId)) }),
+                    byCampaign = forms.GroupBy(f => f.Campaign).Select(g => new { campaign = g.Key, forms = g.Count(), cameIn = g.Count(x => CameIn(x.LeadId)) }).OrderByDescending(x => x.forms).Take(10),
+                },
+                ads,
+                messages = new
+                {
+                    newConversations = convs.Count,
+                    byChannel = convs.GroupBy(c => c.Channel).Select(g => new { channel = g.Key, conversations = g.Count(), sharedPhone = g.Count(x => x.HasPhone), becameLeads = g.Count(x => x.LeadId != null) }),
+                    medianFirstReplyMinutes = Median(firstReply),
+                    repliedWithin15Min = firstReply.Count(x => x <= 15),
+                    neverReplied = ids.Count - firstReply.Count,
+                    leadsThatCameIn = convStatus.Count(st => st == "arrived" || st == "admitted"),
+                    unansweredNow = await _db.SocialConversations.CountAsync(c => c.Status == "open" && c.LastDirection == "in" && c.LastInboundAt > now.AddDays(-1), ct),
+                },
+            };
+        }
+
+        private sealed record PostRow(string Channel, DateTime PostedAt, string? Topic, string? MediaType, string? Text, int Audience, int Eng);
+
+        /// <summary>WhatsApp added up for the analyst: conversations, reply speed, busy hours, broadcasts and leads. Counts only; no phone numbers or names.</summary>
+        private async Task<object> WhatsAppPackAsync(int days, CancellationToken ct)
+        {
+            var now = DateTime.UtcNow;
+            var from = IstClock.TodayStartUtc.AddDays(-days + 1);
+            var prevFrom = from.AddDays(-days);
+            var msgs = await _db.WaMessages.AsNoTracking().Where(m => m.CreatedAt >= prevFrom)
+                .Select(m => new { m.Phone, m.Direction, m.CreatedAt, m.Status, m.SentBy }).ToListAsync(ct);
+            var cur = msgs.Where(m => m.CreatedAt >= from).ToList();
+            var prev = msgs.Where(m => m.CreatedAt < from).ToList();
+            object Volume<T>(List<T> xs, Func<T, string> dir, Func<T, string> phone) => new
+            {
+                messagesIn = xs.Count(x => dir(x) == "in"),
+                messagesOut = xs.Count(x => dir(x) == "out"),
+                peopleWhoWrote = xs.Where(x => dir(x) == "in").Select(phone).Distinct().Count(),
+            };
+            // First reply to each person's first message in the period.
+            var replies = cur.GroupBy(m => m.Phone).Select(g =>
+            {
+                var firstIn = g.Where(m => m.Direction == "in").Select(m => (DateTime?)m.CreatedAt).Min();
+                var reply = firstIn == null ? null : g.Where(m => m.Direction == "out" && m.SentBy != null && m.CreatedAt > firstIn).Select(m => (DateTime?)m.CreatedAt).Min();
+                return (HasIn: firstIn != null, Minutes: firstIn != null && reply != null ? (reply.Value - firstIn.Value).TotalMinutes : (double?)null);
+            }).Where(x => x.HasIn).ToList();
+            var answered = replies.Where(r => r.Minutes != null).Select(r => r.Minutes!.Value).ToList();
+            var busyHours = cur.Where(m => m.Direction == "in").GroupBy(m => (m.CreatedAt + IstClock.Offset).Hour)
+                .Select(g => new { hourIst = g.Key, messages = g.Count() }).OrderByDescending(x => x.messages).Take(6).OrderBy(x => x.hourIst);
+
+            var newConvs = await _db.WaConversations.CountAsync(c => c.CreatedAt >= from, ct);
+            var optOuts = await _db.WaConversations.CountAsync(c => c.OptOut, ct);
+            var leads = await _db.Leads.AsNoTracking().Where(l => (l.Source == "whatsapp" || l.Source == "partner_qr") && l.CreatedAt >= from)
+                .GroupBy(l => l.Source).Select(g => new { source = g.Key, leads = g.Count(), cameIn = g.Count(x => x.Status == "arrived" || x.Status == "admitted"), stillNew = g.Count(x => x.Status == "new") })
+                .ToListAsync(ct);
+
+            var bc = await _db.Broadcasts.AsNoTracking().Where(b => b.SentAt >= from && (b.Status == "sent" || b.Status == "failed"))
+                .Select(b => new { b.Kind, b.Title, b.Language, b.SentAt, b.RecipientCount, b.SentCount, b.DeliveredCount, b.ReadCount, b.ReplyCount, b.FailedCount }).ToListAsync(ct);
+            static double Pct(int a, int b) => b == 0 ? 0 : Math.Round(100.0 * a / b, 1);
+
+            return new
+            {
+                days,
+                thisPeriod = Volume(cur, x => x.Direction, x => x.Phone),
+                previousPeriod = Volume(prev, x => x.Direction, x => x.Phone),
+                newConversations = newConvs,
+                firstReply = new
+                {
+                    peopleWhoWrote = replies.Count,
+                    answeredByStaff = answered.Count,
+                    medianMinutes = Median(answered),
+                    within15Min = answered.Count(x => x <= 15),
+                    over2Hours = answered.Count(x => x > 120),
+                    neverAnswered = replies.Count - answered.Count,
+                    note = "Counts only replies typed by staff, not automatic replies.",
+                },
+                unansweredNow = await _db.WaConversations.CountAsync(c => c.Status == "open" && c.LastDirection == "in" && c.LastInboundAt > now.AddDays(-1), ct),
+                busiestHoursIst = busyHours,
+                optedOutTotal = optOuts,
+                leads,
+                broadcasts = new
+                {
+                    count = bc.Count,
+                    byKind = bc.GroupBy(b => b.Kind).Select(g => new
+                    {
+                        kind = g.Key, broadcasts = g.Count(), sent = g.Sum(x => x.SentCount),
+                        deliveredPct = Pct(g.Sum(x => x.DeliveredCount), g.Sum(x => x.SentCount)), readPct = Pct(g.Sum(x => x.ReadCount), g.Sum(x => x.SentCount)),
+                        replyPct = Pct(g.Sum(x => x.ReplyCount), g.Sum(x => x.SentCount)), failed = g.Sum(x => x.FailedCount),
+                    }),
+                    byLanguage = bc.GroupBy(b => b.Language).Select(g => new { language = g.Key, broadcasts = g.Count(), readPct = Pct(g.Sum(x => x.ReadCount), g.Sum(x => x.SentCount)), replyPct = Pct(g.Sum(x => x.ReplyCount), g.Sum(x => x.SentCount)) }),
+                    list = bc.OrderByDescending(b => b.SentAt).Take(10).Select(b => new
+                    {
+                        b.Title, b.Kind, b.Language, date = (b.SentAt!.Value + IstClock.Offset).ToString("d MMM"), sent = b.SentCount,
+                        readPct = Pct(b.ReadCount, b.SentCount), replies = b.ReplyCount, failed = b.FailedCount,
+                    }),
+                },
+            };
+        }
 
         /// <summary>The Google numbers added up for the analyst: totals per source, top search terms, review counts. No names, no review text.</summary>
         private async Task<object> GooglePackAsync(int days, CancellationToken ct)
@@ -306,9 +502,11 @@ namespace SeemanchalOutreach.Api.Services
             return full;
         }
         private string _scope = "business";
+        private readonly MetaService _meta;
 
-        public AnalystAgent(IMarketingDbContext db, BusinessData data, GroqClient groq, IOptions<AnalystSettings> settings, ILogger<AnalystAgent> logger)
+        public AnalystAgent(IMarketingDbContext db, BusinessData data, GroqClient groq, IOptions<AnalystSettings> settings, ILogger<AnalystAgent> logger, MetaService meta)
         {
+            _meta = meta;
             _db = db;
             _data = data;
             _groq = groq;
@@ -349,6 +547,8 @@ namespace SeemanchalOutreach.Api.Services
           {"type":"function","function":{"name":"get_money_summary","description":"Money paid to partners in the last N days against the admissions it brought: total, cost per admission, waiting approval, approved but unpaid, overdue, by purpose and partner type, top paid partners, partners paid with no admissions.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_leads","description":"People who contacted the hospital directly (WhatsApp, Facebook/Instagram forms and messages, partner QR codes, missed calls, health camps, walk-ins) in the last N days: count, appointment and arrival rate and first-reply time by source and by department, plus unanswered WhatsApp and Facebook/Instagram conversations right now.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_google_numbers","description":"The hospital's Google presence for the last N days against the previous N days, read from Google by NexMarket: Google listing (calls, direction requests, website clicks, times shown), Google Search clicks to the website and top search terms, website visits, YouTube views, Google Ads spend and calls, Google reviews (rating, unanswered, low ratings; no reviewer names), and leads from Google with how many arrived.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
+          {"type":"function","function":{"name":"get_social_numbers","description":"Facebook and Instagram for the last N days against the previous N days: posts by channel with reach and engagement, which topics, formats and weekdays work best, top and weakest posts, Lead Ads forms by campaign with how many leads came to the hospital, ad spend and cost per patient per campaign, and Messenger/Instagram conversations with reply speed and how many became leads.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
+          {"type":"function","function":{"name":"get_whatsapp_numbers","description":"WhatsApp for the last N days against the previous N days: new conversations, messages in and out, first-reply time, conversations left unanswered, busiest hours, opt-outs, WhatsApp and partner-QR leads with arrivals, and broadcasts by kind with delivered, read and reply rates (no phone numbers or names).","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_tracked_items","description":"Issues, opportunities and planned actions already being tracked, with owner, due date and status.","parameters":{"type":"object","properties":{"status":{"type":"string","enum":["open","in_progress","done","dismissed","all"]}},"required":[]}}}
         ]
         """)!.AsArray();
@@ -404,6 +604,12 @@ namespace SeemanchalOutreach.Api.Services
                     break;
                 case "get_google_numbers":
                     result = await GooglePackAsync(Math.Clamp((int?)Int(args["days"]) ?? 30, 7, 365), ct);
+                    break;
+                case "get_social_numbers":
+                    result = await SocialPackAsync(Math.Clamp((int?)Int(args["days"]) ?? 30, 7, 365), ct);
+                    break;
+                case "get_whatsapp_numbers":
+                    result = await WhatsAppPackAsync(Math.Clamp((int?)Int(args["days"]) ?? 30, 7, 365), ct);
                     break;
                 case "get_tracked_items":
                     var st = Str(args["status"]) ?? "open";
@@ -573,6 +779,28 @@ namespace SeemanchalOutreach.Api.Services
                         needsInBusiestBlocks = needsByBlock,
                         admissionsByDepartment = _data.Breakdown(snap, "department", 10),
                         admissionsByBlock = _data.Breakdown(snap, "block", 12),
+                        trackedItems = open,
+                    };
+                }
+                else if (_scope == "social")
+                {
+                    pack = new
+                    {
+                        today = IstClock.NowIst.ToString("dddd d MMMM yyyy"),
+                        hospitalDepartments = await _db.Departments.AsNoTracking().Where(d => d.IsActive).Select(d => d.Name).ToListAsync(ct),
+                        facebookInstagramLast30Days = await SocialPackAsync(30, ct),
+                        leads = await LeadsSummaryAsync(from, to, ct),
+                        admissionsByDepartment = _data.Breakdown(snap, "department", 12),
+                        trackedItems = open,
+                    };
+                }
+                else if (_scope == "whatsapp")
+                {
+                    pack = new
+                    {
+                        today = IstClock.NowIst.ToString("dddd d MMMM yyyy"),
+                        whatsappLast30Days = await WhatsAppPackAsync(30, ct),
+                        leads = await LeadsSummaryAsync(from, to, ct),
                         trackedItems = open,
                     };
                 }
