@@ -158,9 +158,13 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IWhatsAppSender _wa;
         private readonly IAppSettings _settings;
         private readonly WhatsAppOutbox _outbox;
+        private readonly AgentEvents _agents;
+        /// <summary>Leads that wrote in this request, told to the Vita agents once everything is saved.</summary>
+        private readonly HashSet<Guid> _wroteIn = new();
 
-        public WhatsAppWebhookController(IMarketingDbContext db, IConfiguration config, ILiveEvents live, IPermissionService perms, INotifier notifier, IWhatsAppSender wa, IAppSettings settings, WhatsAppOutbox outbox)
+        public WhatsAppWebhookController(IMarketingDbContext db, IConfiguration config, ILiveEvents live, IPermissionService perms, INotifier notifier, IWhatsAppSender wa, IAppSettings settings, WhatsAppOutbox outbox, AgentEvents agents)
         {
+            _agents = agents;
             _settings = settings;
             _outbox = outbox;
             _db = db;
@@ -219,6 +223,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 }
             }
             await _db.SaveChangesAsync(ct);
+            foreach (var id in _wroteIn) _agents.Publish("lead.message", id.ToString());
             return Ok();
         }
 
@@ -343,6 +348,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 WaMessageId = m.TryGetProperty("id", out var mid) ? mid.GetString() : null, AdRef = adRef,
             }, ct);
 
+            if (res.Lead != null && !isStop && !string.IsNullOrWhiteSpace(text)) _wroteIn.Add(res.Lead.Id);
             var who = res.Lead?.Name ?? res.Conversation?.Name ?? contacts.FirstOrDefault()?.Name ?? from;
             await _live.PublishAsync(new LiveEvent
             {

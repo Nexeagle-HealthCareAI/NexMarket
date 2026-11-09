@@ -147,6 +147,26 @@ def _norm_time(h: str, m: str | None, ap: str) -> str:
     return f"{int(h)}:{m or '00'}{ap}"
 
 
+_MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+ISO_DATE = re.compile(r"(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)")
+
+
+def _date_of(m: re.Match[str]) -> tuple[int, int] | None:
+    """A DATE match → (day, month)."""
+    if m.group(1) and m.group(3):
+        return int(m.group(1)), _MONTHS.index(m.group(3).lower()[:3]) + 1
+    if m.group(4) and m.group(5):
+        return int(m.group(4)), int(m.group(5))
+    return None
+
+
+def _dates(text: str) -> set[tuple[int, int]]:
+    """Every (day, month) a source mentions, written as 14 Nov, 14/11 or 2026-11-14."""
+    out = {d for m in DATE.finditer(text) if (d := _date_of(m))}
+    out |= {(int(d), int(mo)) for _, mo, d in ISO_DATE.findall(text)}
+    return out
+
+
 def _times(text: str) -> set[str]:
     return {_norm_time(h, m, ap) for h, m, ap in TIME.findall(text)}
 
@@ -161,10 +181,11 @@ def unsupported_facts(text: str, facts: Facts) -> list[str]:
         bare = f"{int(h)}:{m or '00'}"
         if t not in src_times and not any(x.startswith(bare) for x in src_times):
             missing.append(f"{h}{':' + m if m else ''} {ap}".strip())
+    src_dates = _dates(src)
     for m in DATE.finditer(text):
-        token = m.group(0).strip()
-        if token.lower() not in src and _digits(token) not in _digits(src):
-            missing.append(token)
+        dm = _date_of(m)
+        if dm is None or dm not in src_dates:
+            missing.append(m.group(0).strip())
     src_days = {_day(m.group(0)) for m in WEEKDAY.finditer(src)}
     for m in WEEKDAY.finditer(text):
         if _day(m.group(0)) not in src_days:

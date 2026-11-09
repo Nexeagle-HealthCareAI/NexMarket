@@ -1,0 +1,5 @@
+.env.local
+.env
+evals/reports/
+__pycache__/
+.pytest_cache/

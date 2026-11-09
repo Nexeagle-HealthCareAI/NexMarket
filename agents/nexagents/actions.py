@@ -45,7 +45,9 @@ async def today_counts() -> dict[str, dict[str, int]]:
     """Per agent: today's actions by status (India day)."""
     rows = await db.fetch(
         "SELECT agent_id, status, count(*) AS n FROM agents.actions "
-        "WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata' GROUP BY agent_id, status"
+        "WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata' "
+        # Switches people flip (mode, pause, Stop all, settings) are in the log but aren't the agent's work.
+        "AND kind NOT IN ('mode', 'pause', 'resume', 'stop_all', 'resume_all', 'settings') GROUP BY agent_id, status"
     )
     out: dict[str, dict[str, int]] = {}
     for r in rows:

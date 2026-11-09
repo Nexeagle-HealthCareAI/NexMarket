@@ -21,6 +21,7 @@ class AgentDef:
     limits: str
     talks_to: tuple[str, ...] = field(default_factory=tuple)
     start_mode: str = "off"   # off until its phase ships; then shadow first, live after a clean trial
+    built: bool = False       # its code is in this service (only built agents can be switched on)
 
 
 AGENTS: tuple[AgentDef, ...] = (
@@ -29,12 +30,13 @@ AGENTS: tuple[AgentDef, ...] = (
              ("*",)),
     AgentDef("compliance_guard", "Compliance Guard", "Checks every outgoing message, post and reply before it leaves", "command", 1, "safeguard",
              "Every outgoing action", "Block, or ask for a rewrite", "Cannot be switched off for outgoing actions",
-             ("content_writer", "broadcast_manager", "social_publisher", "reputation", "lead_responder"), start_mode="live"),
+             ("content_writer", "broadcast_manager", "social_publisher", "reputation", "lead_responder"), start_mode="live", built=True),
     AgentDef("data_watcher", "Data Watcher", "Reads the numbers and spots changes worth acting on", "command", 2, "small",
              "6:30 am, hourly", "Raise alerts for other agents", "Read only; totals only, never patient details", ("chief_of_staff", "reporter_coach")),
-    AgentDef("lead_responder", "Lead Responder", "First reply to every new lead within a minute; assigns an owner", "leads", 2, "small",
-             "New lead (WhatsApp, form, Facebook, website)", "Send an approved template; assign the lead; set a follow-up",
-             "Templates only; 1 auto-reply per person per day", ("lead_follow_up", "compliance_guard")),
+    AgentDef("lead_responder", "Lead Responder", "Answers what a new lead asked on WhatsApp, from live records", "leads", 2, "small",
+             "A lead writes on WhatsApp (after 3 minutes in office hours, so the desk can answer first)", "Reply inside the 24-hour window; set the department; hand to a person; emergency alert",
+             "Answers only from doctor, OPD and camp records; never prices, complaints, reports or medical questions; 1 reply per lead per hour",
+             ("lead_follow_up", "compliance_guard"), built=True),
     AgentDef("lead_follow_up", "Lead Follow-up", "Moves leads towards a visit: reminders, call queue, lost reasons", "leads", 2, "small",
              "2 pm; lead idle 24 h", "Template follow-ups; add to the call queue", "At most 3 follow-ups per lead; never after an opt-out",
              ("lead_responder", "partner_network")),

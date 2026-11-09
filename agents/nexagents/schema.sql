@@ -86,7 +86,11 @@ CREATE TABLE IF NOT EXISTS agents.tasks (
     created_at     timestamptz NOT NULL DEFAULT now(),
     updated_at     timestamptz NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS tasks_one_open ON agents.tasks (kind, subject_key) WHERE status IN ('open', 'claimed');
+-- One WAITING task per subject and kind (a new one may wait while the previous is being worked on).
+DROP INDEX IF EXISTS agents.tasks_one_open;
+CREATE UNIQUE INDEX IF NOT EXISTS tasks_one_waiting ON agents.tasks (kind, subject_key) WHERE status = 'open';
+-- Tasks can wait: the Lead Responder gives the desk 3 minutes first in office hours.
+ALTER TABLE agents.tasks ADD COLUMN IF NOT EXISTS not_before timestamptz;
 CREATE INDEX IF NOT EXISTS tasks_for_status ON agents.tasks (for_agent, status, created_at);
 
 -- Groq use per agent per day, for the daily token budget and the cost line on the Agents page.

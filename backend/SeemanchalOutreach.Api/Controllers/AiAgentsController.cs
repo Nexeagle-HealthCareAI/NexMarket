@@ -13,6 +13,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using SeemanchalOutreach.Api.Security;
+using SeemanchalOutreach.Api.Services;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
 
@@ -24,6 +27,35 @@ namespace SeemanchalOutreach.Api.Controllers
         public string Url { get; set; } = "http://localhost:5020";
         /// <summary>Long random string, the same value as the agents service's AGENTS_SECRET. Never in the repo.</summary>
         public string? Secret { get; set; }
+    }
+
+    /// <summary>
+    /// Tells the Vita agents service that something happened (a lead wrote in). Fire and forget: a slow or stopped agents
+    /// service never delays or breaks NexMarket. Does nothing until the shared secret is set.
+    /// </summary>
+    public class AgentEvents
+    {
+        private readonly IHttpClientFactory _http;
+        private readonly AgentsSettings _cfg;
+        private readonly ILogger<AgentEvents> _log;
+        public AgentEvents(IHttpClientFactory http, IOptions<AgentsSettings> cfg, ILogger<AgentEvents> log) { _http = http; _cfg = cfg.Value; _log = log; }
+
+        public void Publish(string kind, string refId, object? data = null)
+        {
+            if (string.IsNullOrWhiteSpace(_cfg.Secret)) return;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var c = _http.CreateClient("agents");
+                    using var req = new HttpRequestMessage(HttpMethod.Post, _cfg.Url.TrimEnd('/') + "/v1/events") { Content = JsonContent.Create(new { kind, refId, data = data ?? new { } }) };
+                    req.Headers.Add("X-Agents-Secret", _cfg.Secret);
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    using var res = await c.SendAsync(req, cts.Token);
+                }
+                catch (Exception ex) { _log.LogInformation("Vita agents not told about {Kind} {Ref}: {Error}", kind, refId, ex.Message); }
+            });
+        }
     }
 
     public class AiReasonDto { public string? Reason { get; set; } }
@@ -219,6 +251,17 @@ namespace SeemanchalOutreach.Api.Controllers
         public List<string> Roles { get; set; } = new();
     }
 
+    public class AgentLeadReplyDto { public string Text { get; set; } = ""; public string AgentId { get; set; } = ""; }
+    public class AgentLeadUpdateDto
+    {
+        public string AgentId { get; set; } = "";
+        public string? Department { get; set; }
+        public string? Note { get; set; }
+        /// <summary>Tell the lead's owner (or the desk) now, e.g. an emergency or a question only a person can answer.</summary>
+        public string? Alert { get; set; }
+        public bool Urgent { get; set; }
+    }
+
     public class AgentCardDto
     {
         public string Title { get; set; } = "";
@@ -242,9 +285,13 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly IMarketingDbContext _db;
         private readonly INotifier _notifier;
         private readonly ILiveEvents _live;
+        private readonly WhatsAppOutbox _outbox;
+        private readonly IPermissionService _perms;
 
-        public AgentToolsController(IOptions<AgentsSettings> cfg, IMarketingDbContext db, INotifier notifier, ILiveEvents live)
+        public AgentToolsController(IOptions<AgentsSettings> cfg, IMarketingDbContext db, INotifier notifier, ILiveEvents live, WhatsAppOutbox outbox, IPermissionService perms)
         {
+            _outbox = outbox;
+            _perms = perms;
             _cfg = cfg.Value;
             _db = db;
             _notifier = notifier;
@@ -299,6 +346,126 @@ namespace SeemanchalOutreach.Api.Controllers
             await _db.SaveChangesAsync(ct);
             await _live.PublishAsync(new LiveEvent { Kind = "work", Text = $"New card from an AI agent: {c.Title}", RefId = c.Id.ToString() });
             return Ok(new { id = c.Id, number = c.Number });
+        }
+
+        // ─── Lead Responder ────────────────────────────────────────────────
+
+        private static readonly string[] HumanSources = { "inbox", "lead", "resend" };
+
+        /// <summary>
+        /// What the Lead Responder needs about one lead. No name and no phone number: the agent never needs them.
+        /// Messages are the conversation's last 15, oldest first, each marked who sent it (the person, a desk member, Vita or an automatic reply).
+        /// </summary>
+        [HttpGet("leads/{id:guid}/context")]
+        public async Task<IActionResult> LeadContext(Guid id, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var l = await _db.Leads.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (l == null) return NotFound();
+            var msgs = (await _db.WaMessages.AsNoTracking().Where(m => m.Phone == l.Phone).OrderByDescending(m => m.CreatedAt).Take(15).ToListAsync(ct))
+                .OrderBy(m => m.CreatedAt).Select(m => new
+                {
+                    id = m.Id, at = m.CreatedAt, direction = m.Direction, type = m.Type, text = m.Text, status = m.Status,
+                    by = m.Direction == "in" ? "person" : m.SentBy != null && m.SentBy.StartsWith("ai:") ? "vita" : HumanSources.Contains(m.Source) && m.SentBy != null ? "desk" : "auto",
+                });
+            var rules = _outbox.Rules;
+            var conv = await _db.WaConversations.AsNoTracking().Where(c => c.Phone == l.Phone).Select(c => new { c.OptOut }).FirstOrDefaultAsync(ct);
+            return Ok(new
+            {
+                lead = new
+                {
+                    id = l.Id, status = l.Status, source = l.Source, department = l.Department, hasOwner = l.OwnerId != null,
+                    optOut = l.OptOut || conv?.OptOut == true, createdAt = l.CreatedAt, lastInboundAt = l.LastInboundAt,
+                    windowOpen = l.LastInboundAt != null && l.LastInboundAt > DateTime.UtcNow.AddHours(-24),
+                },
+                messages = msgs,
+                whatsapp = new { paused = rules.Paused, inOfficeHours = rules.InOfficeHours(DateTime.UtcNow) },
+            });
+        }
+
+        /// <summary>The live facts the Lead Responder may use: departments, doctors and their OPD, upcoming camps, office hours.</summary>
+        [HttpGet("directory")]
+        public async Task<IActionResult> Directory(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var deps = await _db.Departments.AsNoTracking().Where(d => d.IsActive).OrderBy(d => d.Order).Select(d => new { id = d.Id, name = d.Name }).ToListAsync(ct);
+            var depName = deps.ToDictionary(d => d.id, d => d.name);
+            var docs = (await _db.Doctors.AsNoTracking().Where(d => d.IsActive).OrderBy(d => d.Name).ToListAsync(ct))
+                .Select(d => new { id = d.Id, name = d.Name, department = d.DepartmentId != null && depName.TryGetValue(d.DepartmentId.Value, out var n) ? n : null, qualification = d.Qualification, opdDays = d.OpdDays, opdTimings = d.OpdTimings });
+            var today = DateOnly.FromDateTime(IstClock.NowIst);
+            var camps = await _db.HealthCamps.AsNoTracking().Where(c => c.Date >= today && c.Date <= today.AddDays(45) && c.Status != "cancelled" && c.Status != "done")
+                .OrderBy(c => c.Date).Take(20)
+                .Select(c => new { id = c.Id, title = c.Title, type = c.CampType, date = c.Date, start = c.StartTime, end = c.EndTime, venue = c.Venue, block = c.Block, district = c.District, departments = c.Departments, doctors = c.Doctors, code = c.Code })
+                .ToListAsync(ct);
+            var r = _outbox.Rules;
+            return Ok(new
+            {
+                departments = deps, doctors = docs, camps,
+                officeHours = new { on = r.OfficeHoursOn, days = r.OfficeDays, start = r.OfficeStart, end = r.OfficeEnd },
+                hospitalWhatsApp = LeadInbox.DisplayPhone(_outbox.Config),
+                todayIst = today,
+            });
+        }
+
+        /// <summary>
+        /// Sends the Lead Responder's reply on WhatsApp. Only inside the 24-hour window (the person wrote in), never to someone who
+        /// said stop, never while WhatsApp is paused, and never when a desk member already answered their last message.
+        /// </summary>
+        [HttpPost("leads/{id:guid}/reply")]
+        public async Task<IActionResult> LeadReply(Guid id, [FromBody] AgentLeadReplyDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var text = (d.Text ?? "").Trim();
+            if (text.Length == 0 || text.Length > 2000) return BadRequest(new { message = "Reply must be 1–2000 characters." });
+            var l = await _db.Leads.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (l == null) return NotFound();
+            if (l.OptOut) return Conflict(new { message = "opted_out" });
+            if (l.LastInboundAt == null || l.LastInboundAt < DateTime.UtcNow.AddHours(-24)) return Conflict(new { message = "window_closed" });
+            if (_outbox.Rules.Paused) return Conflict(new { message = "whatsapp_paused" });
+            var lastIn = await _db.WaMessages.AsNoTracking().Where(m => m.Phone == l.Phone && m.Direction == "in").MaxAsync(m => (DateTime?)m.CreatedAt, ct);
+            var deskSince = await _db.WaMessages.AsNoTracking().AnyAsync(m => m.Phone == l.Phone && m.Direction == "out" && m.CreatedAt > lastIn
+                && m.SentBy != null && !m.SentBy.StartsWith("ai:") && HumanSources.Contains(m.Source), ct);
+            if (deskSince) return Conflict(new { message = "desk_replied" });
+            var agent = "ai:" + (d.AgentId.Length > 40 ? d.AgentId[..40] : d.AgentId);
+            var msg = await _outbox.SendTextAsync(l.Phone, text, "vita", agent, l.Id, ct);
+            l.LastActivityAt = DateTime.UtcNow;
+            _db.LeadActivities.Add(new LeadActivity { LeadId = l.Id, Kind = "note", By = agent, Text = $"Vita replied on WhatsApp: {(text.Length > 300 ? text[..300] + "…" : text)}" });
+            await _db.SaveChangesAsync(ct);
+            await _live.PublishAsync(new LiveEvent { Kind = "lead", Text = $"Vita replied to {l.Name}", RefId = l.Id.ToString() });
+            return Ok(new { status = msg.Status, error = msg.Error, messageId = msg.Id });
+        }
+
+        /// <summary>Sets the lead's department, adds a note, and when asked tells its owner (or the desk) straight away.</summary>
+        [HttpPost("leads/{id:guid}/update")]
+        public async Task<IActionResult> LeadUpdate(Guid id, [FromBody] AgentLeadUpdateDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var l = await _db.Leads.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (l == null) return NotFound();
+            var agent = "ai:" + (d.AgentId.Length > 40 ? d.AgentId[..40] : d.AgentId);
+            if (!string.IsNullOrWhiteSpace(d.Department))
+            {
+                var dep = await _db.Departments.AsNoTracking().Where(x => x.IsActive && x.Name == d.Department).Select(x => x.Name).FirstOrDefaultAsync(ct);
+                if (dep != null && l.Department != dep)
+                {
+                    _db.LeadActivities.Add(new LeadActivity { LeadId = l.Id, Kind = "note", By = agent, Text = l.Department == null ? $"Vita set the department: {dep}" : $"Vita thinks the department is {dep} (was {l.Department})" });
+                    if (l.Department == null) l.Department = dep;
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(d.Note))
+                _db.LeadActivities.Add(new LeadActivity { LeadId = l.Id, Kind = "note", By = agent, Text = d.Note.Length > 1000 ? d.Note[..1000] : d.Note });
+            await _db.SaveChangesAsync(ct);
+            if (!string.IsNullOrWhiteSpace(d.Alert))
+            {
+                var to = l.OwnerId != null ? new List<string> { l.OwnerId } : await LeadInbox.DeskPeopleAsync(_db, _perms, ct);
+                _notifier.Notify(new NotifyJob
+                {
+                    To = to, Kind = "lead", Link = $"lead:{l.Id}", RefId = l.Id.ToString(),
+                    Title = (d.Urgent ? "URGENT · " : "Vita · ") + l.Name,
+                    Body = d.Alert.Length > 300 ? d.Alert[..300] : d.Alert,
+                });
+            }
+            return Ok(new { department = l.Department });
         }
     }
 }
