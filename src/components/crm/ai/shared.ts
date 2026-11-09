@@ -1,4 +1,4 @@
-/** Types and helpers for the AI agents page. */
+/** Types and helpers for the Vita Marketing Autonomous Agents page. */
 
 export type Mode = 'off' | 'shadow' | 'live';
 export interface AgentRow {

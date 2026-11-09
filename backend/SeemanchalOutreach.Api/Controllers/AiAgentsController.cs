@@ -97,7 +97,7 @@ namespace SeemanchalOutreach.Api.Controllers
             {
                 ActorId = _actor.ActorId, ActorName = _actor.ActorName, ActorRole = _actor.ActorRole, Source = _actor.Source,
                 DeviceId = _actor.DeviceId, DeviceType = _actor.DeviceType, Ip = _actor.Ip, Request = _actor.Request,
-                Action = action, Entity = "AI agents", EntityId = entityId, Summary = summary,
+                Action = action, Entity = "Vita marketing agents", EntityId = entityId, Summary = summary,
             });
         }
 
@@ -136,35 +136,35 @@ namespace SeemanchalOutreach.Api.Controllers
         public Task<IActionResult> StopAll([FromBody] AiReasonDto? d, CancellationToken ct)
         {
             if (!CanView) return Task.FromResult<IActionResult>(Forbid());
-            return Change(HttpMethod.Post, "v1/stop-all", new { by = By, reason = d?.Reason }, "Stop", "all", "Stopped all AI agents", ct);
+            return Change(HttpMethod.Post, "v1/stop-all", new { by = By, reason = d?.Reason }, "Stop", "all", "Stopped all Vita marketing agents", ct);
         }
 
         [HttpPost("resume-all")]
         public Task<IActionResult> ResumeAll(CancellationToken ct)
         {
             if (!CanView) return Task.FromResult<IActionResult>(Forbid());
-            return Change(HttpMethod.Post, "v1/resume-all", new { by = By }, "Resume", "all", "Resumed all AI agents", ct);
+            return Change(HttpMethod.Post, "v1/resume-all", new { by = By }, "Resume", "all", "Resumed all Vita marketing agents", ct);
         }
 
         [HttpPost("agents/{id}/pause")]
         public Task<IActionResult> Pause(string id, [FromBody] AiReasonDto? d, CancellationToken ct)
         {
             if (!CanView) return Task.FromResult<IActionResult>(Forbid());
-            return Change(HttpMethod.Post, $"v1/agents/{Uri.EscapeDataString(id)}/pause", new { by = By, reason = d?.Reason }, "Pause", id, $"Paused AI agent {id}", ct);
+            return Change(HttpMethod.Post, $"v1/agents/{Uri.EscapeDataString(id)}/pause", new { by = By, reason = d?.Reason }, "Pause", id, $"Paused Vita agent {id}", ct);
         }
 
         [HttpPost("agents/{id}/resume")]
         public Task<IActionResult> Resume(string id, CancellationToken ct)
         {
             if (!CanView) return Task.FromResult<IActionResult>(Forbid());
-            return Change(HttpMethod.Post, $"v1/agents/{Uri.EscapeDataString(id)}/resume", new { by = By }, "Resume", id, $"Resumed AI agent {id}", ct);
+            return Change(HttpMethod.Post, $"v1/agents/{Uri.EscapeDataString(id)}/resume", new { by = By }, "Resume", id, $"Resumed Vita agent {id}", ct);
         }
 
         [HttpPut("agents/{id}/mode")]
         public Task<IActionResult> Mode(string id, [FromBody] AiModeDto d, CancellationToken ct)
         {
             if (!IsAdmin) return Task.FromResult<IActionResult>(StatusCode(403, new { message = "Only an admin can switch an agent on or off." }));
-            return Change(HttpMethod.Put, $"v1/agents/{Uri.EscapeDataString(id)}/mode", new { by = By, mode = d.Mode }, "Update", id, $"Set AI agent {id} to {d.Mode}", ct);
+            return Change(HttpMethod.Put, $"v1/agents/{Uri.EscapeDataString(id)}/mode", new { by = By, mode = d.Mode }, "Update", id, $"Set Vita agent {id} to {d.Mode}", ct);
         }
 
         [HttpGet("settings")]
@@ -179,7 +179,7 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             if (!IsAdmin) return Task.FromResult<IActionResult>(StatusCode(403, new { message = "Only an admin can change the agents' limits, policy or facts." }));
             if (key is not ("limits" or "policy" or "facts" or "recipients")) return Task.FromResult<IActionResult>(NotFound());
-            return Change(HttpMethod.Put, $"v1/settings/{key}", new { by = By, value = d.Value }, "Update", key, $"Changed AI agents {key}", ct);
+            return Change(HttpMethod.Put, $"v1/settings/{key}", new { by = By, value = d.Value }, "Update", key, $"Changed Vita marketing agents {key}", ct);
         }
 
         [HttpPost("guard/check")]
@@ -272,7 +272,7 @@ namespace SeemanchalOutreach.Api.Controllers
             if (people.Count == 0) return Ok(new { sent = 0 });
             var title = d.Title.Length > 120 ? d.Title[..120] : d.Title;
             var body = d.Body.Length > 600 ? d.Body[..600] : d.Body;
-            _notifier.Notify(new NotifyJob { Kind = "note", Title = $"AI · {title}", Body = body, Link = d.Link ?? "ai-agents", To = people });
+            _notifier.Notify(new NotifyJob { Kind = "note", Title = $"Vita · {title}", Body = body, Link = d.Link ?? "ai-agents", To = people });
             return Ok(new { sent = people.Count });
         }
 

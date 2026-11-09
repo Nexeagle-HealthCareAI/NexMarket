@@ -2262,7 +2262,7 @@ div.wk-stat { cursor: default; }
 .ai-page { --ai-ink: #0b1220; --ai-room: #141d33; --ai-room-2: #0f1729; --ai-line: #22304f; --ai-text: #e8eefc; --ai-mute: #9aa8c4; --ai-live: #38f6a9; --ai-shadow: #5cc8ff; --ai-wait: #f5b544; --ai-off: #8090ad; }
 .ai-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 18px; border-radius: 16px; background: #111a2e; color: var(--ai-text); border: 1px solid #1f2c48; }
 .ai-brand { display: flex; align-items: center; gap: 12px; }
-.ai-brand img { width: 40px; height: 40px; object-fit: contain; }
+.ai-brand img { width: 52px; height: 52px; object-fit: contain; animation: ai-bob 2.6s ease-in-out infinite; }
 .ai-brand h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.01em; color: #fff; }
 .ai-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--ai-mute); }
 .ai-warn-chip { padding: 2px 8px; border-radius: 999px; background: #3a2d12; color: var(--ai-wait); font-size: 11.5px; font-weight: 700; }

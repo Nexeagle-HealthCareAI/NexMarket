@@ -101,9 +101,9 @@ function AiAgents() {
       {toast}
       <header className="ai-top">
         <div className="ai-brand">
-          <img src="/brand/nexeagle-mark.png" alt="" />
+          <img src="/brand/vita/ai.webp" alt="Vita" />
           <div>
-            <h1>AI agents</h1>
+            <h1>Vita Marketing Autonomous Agents</h1>
             <span className="ai-sub">
               <span className={`ai-dot ${d.stopAll.on ? 'is-off' : 'is-live'}`} aria-hidden />
               {d.stopAll.on ? `All agents stopped${d.stopAll.by ? ` by ${d.stopAll.by.replace(/\s*\(.*\)$/, '')}` : ''} — nothing is sent` : `${on} of ${d.agents.length} on duty · works while you're away`}
@@ -123,7 +123,7 @@ function AiAgents() {
           : <button type="button" className="ai-stop" disabled={busy} onClick={() => setStopOpen(true)}><Square size={16} aria-hidden /> Stop all agents</button>}
       </header>
 
-      <nav className="ai-tabs" role="tablist" aria-label="AI agents">
+      <nav className="ai-tabs" role="tablist" aria-label="Vita marketing agents">
         {TABS.map((t) => (
           <button key={t.k} type="button" role="tab" aria-selected={tab === t.k} onClick={() => go(t.k)}><t.icon size={16} aria-hidden />{t.l}</button>
         ))}
@@ -176,7 +176,7 @@ function Offline({ message, onRetry }: { message: string | null; onRetry: () => 
     <main className="crm-page ai-page">
       <div className="ai-offline">
         <img src={POSE.sleep} alt="" />
-        <h1>The AI agents aren&apos;t running yet</h1>
+        <h1>Vita&apos;s marketing agents aren&apos;t running yet</h1>
         <p>{message ?? 'The agents service is not answering.'} While it is down, no agent sends anything.</p>
         <ol>
           <li>Run the agents service next to the API (see <code>agents/README.md</code>).</li>
