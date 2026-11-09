@@ -55,6 +55,13 @@ namespace SeemanchalOutreach.Api.Security
                 [WhatsApp] = None, [Field] = None, [Payments] = None, [Targets] = None, [Analytics] = View,
                 [Camps] = View, [Social] = None, [Departments] = Edit, [Users] = None,
             },
+            // Digital marketing specialist: everything under Network; no money, field or user pages.
+            [RoleChecks.DigitalMarketing] = new()
+            {
+                [Dashboard] = None, [Calls] = None, [Desk] = None, [Pipeline] = None, [Partners] = Edit,
+                [WhatsApp] = Edit, [Field] = None, [Payments] = None, [Targets] = None, [Analytics] = None,
+                [Camps] = Edit, [Social] = Edit, [Departments] = None, [Users] = None,
+            },
         };
     }
 

@@ -398,7 +398,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     return new
                     {
                         agentId = a.AgentId, name = a.Name, block = cur?.Block, district = cur?.District, partial = cur != null && Scope(cur) != null,
-                        role = dash switch { "Admin" => "Admin", "MarketingManager" => "Marketing manager", "HospitalRep" => "Hospital representative", _ => a.Role },
+                        role = dash switch { "Admin" => "Admin", "MarketingManager" => "Marketing manager", "HospitalRep" => "Hospital representative", "DigitalMarketing" => "Digital marketing specialist", _ => a.Role },
                         fieldRole = dash == null,
                     };
                 }),

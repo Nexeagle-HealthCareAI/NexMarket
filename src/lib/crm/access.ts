@@ -15,10 +15,10 @@ export interface AccessMe {
   pages: Record<PageKey, number>; // 0 none, 1 view, 2 edit
 }
 
-export const DASHBOARD_ROLES = ['admin', 'marketingmanager', 'hospitalrep'];
+export const DASHBOARD_ROLES = ['admin', 'marketingmanager', 'hospitalrep', 'digitalmarketing'];
 
 export function normalizeRole(role?: string | null): string {
-  return (role ?? '').replace(/[\s_]/g, '').toLowerCase().replace('hospitalrepresentative', 'hospitalrep');
+  return (role ?? '').replace(/[\s_]/g, '').toLowerCase().replace('hospitalrepresentative', 'hospitalrep').replace('digitalmarketingspecialist', 'digitalmarketing');
 }
 
 export function isDashboardRole(role?: string | null): boolean {
@@ -29,6 +29,7 @@ export const ROLE_LABELS: Record<string, string> = {
   Admin: 'Admin',
   MarketingManager: 'Marketing manager',
   HospitalRep: 'Hospital representative',
+  DigitalMarketing: 'Digital marketing specialist',
 };
 
 let cached: AccessMe | null = null;

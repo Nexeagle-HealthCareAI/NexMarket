@@ -32,6 +32,7 @@ const LEVELS = [
 const ROLE_OPTIONS = [
   { value: 'MarketingManager', label: 'Marketing manager', kind: 'dashboard' },
   { value: 'HospitalRep', label: 'Hospital representative', kind: 'dashboard' },
+  { value: 'DigitalMarketing', label: 'Digital marketing specialist', kind: 'dashboard' },
   { value: 'Admin', label: 'Admin (full control)', kind: 'dashboard' },
   { value: 'Field Agent', label: 'Field agent', kind: 'field' },
   { value: 'Marketing Executive', label: 'Field agent · Marketing executive', kind: 'field' },
@@ -39,8 +40,8 @@ const ROLE_OPTIONS = [
   { value: 'Regional Representative', label: 'Field agent · Regional representative', kind: 'field' },
 ];
 
-const ROLE_TONE: Record<string, 'accent' | 'info' | 'ok' | 'warn'> = { Admin: 'accent', MarketingManager: 'info', HospitalRep: 'ok' };
-const ROLE_NAME: Record<string, string> = { Admin: 'Admin', MarketingManager: 'Marketing manager', HospitalRep: 'Hospital representative' };
+const ROLE_TONE: Record<string, 'accent' | 'info' | 'ok' | 'warn'> = { Admin: 'accent', MarketingManager: 'info', HospitalRep: 'ok', DigitalMarketing: 'warn' };
+const ROLE_NAME: Record<string, string> = { Admin: 'Admin', MarketingManager: 'Marketing manager', HospitalRep: 'Hospital representative', DigitalMarketing: 'Digital marketing specialist' };
 
 function tempPassword(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
@@ -537,6 +538,7 @@ function ChangeRole({ person, fieldRoles, onClose, onDone }: { person: Person; f
             <option value="Admin">Admin (full control)</option>
             <option value="MarketingManager">Marketing manager</option>
             <option value="HospitalRep">Hospital representative</option>
+            <option value="DigitalMarketing">Digital marketing specialist</option>
           </optgroup>
           <optgroup label="Field roles (app)">
             {fieldRoles.map((r) => <option key={r} value={r}>{r}</option>)}

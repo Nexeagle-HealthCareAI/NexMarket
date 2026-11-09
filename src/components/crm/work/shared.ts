@@ -9,7 +9,14 @@ export interface Card {
   dueDate?: string | null; assignees: string[]; labels: string[]; project?: string | null; checklist: CheckItem[]; checkDone: number; checkTotal: number;
   link?: string | null; repeat: Repeat; comments: number; archived: boolean; createdBy: string; createdAt: string; updatedAt: string;
   startedAt?: string | null; doneAt?: string | null; doneBy?: string | null; overdue: boolean;
+  /** Sub-tasks: the parent card (for a sub-task), and how many sub-tasks a card has and how many are done. */
+  parentId?: string | null; parent?: { id: string; number: number; title: string } | null; subTotal: number; subDone: number;
 }
+export interface DocRow {
+  id: string; title: string; kind: 'plan' | 'doc' | 'notes'; project?: string | null; cardId?: string | null; card?: { number: number; title: string } | null;
+  pinned: boolean; archived: boolean; createdBy: string; createdAt: string; updatedBy: string; updatedAt: string; preview: string; words: number; version: number;
+}
+export const DOC_KIND: Record<DocRow['kind'], string> = { plan: 'Plan', doc: 'Document', notes: 'Meeting notes' };
 export interface Person { agentId: string; name: string; role: string; photo?: string | null }
 export interface BoardRes {
   me: string; isAdmin: boolean;
