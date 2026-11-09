@@ -3,13 +3,22 @@
 /* eslint-disable @next/next/no-img-element */
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Activity as ActivityIcon, Building2, Gauge, Lightbulb, Play, ScrollText, ShieldCheck, Square } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { Activity as ActivityIcon, Box, Building2, Gauge, LayoutGrid, Lightbulb, Play, ScrollText, ShieldCheck, Square } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { ErrorBox, friendlyError, Modal, Skeleton, useToast } from '@/components/crm/ui';
 import { Floor, Lane, Side } from '@/components/crm/ai/Office';
 import { Activity, LessonsPanel, LimitsPanel, PolicyPanel, TryGuard } from '@/components/crm/ai/Panels';
 import type { ActionRow, Lesson, Mode, OverviewRes, Settings } from '@/components/crm/ai/shared';
 import { POSE } from '@/components/crm/ai/shared';
+
+const Office3D = dynamic(() => import('@/components/crm/ai/Office3D').then((m) => m.Office3D), {
+  ssr: false, loading: () => <div className="ai-3d ai-3d-loading">Building the office…</div>,
+});
+const VIEW_KEY = 'vita.office.view';
+function canWebGL(): boolean {
+  try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; }
+}
 
 type Tab = 'office' | 'activity' | 'guard' | 'limits' | 'policy' | 'lessons';
 const TABS: { k: Tab; l: string; icon: typeof Building2 }[] = [
@@ -33,6 +42,17 @@ function AiAgents() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [sel, setSel] = useState('compliance_guard');
+  const [view, setView] = useState<'3d' | '2d'>('2d');
+  const [has3d, setHas3d] = useState(false);
+  useEffect(() => {
+    const ok = canWebGL();
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(VIEW_KEY); } catch { /* private mode */ }
+    // Reading the browser once after mount; nothing to sync from React state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHas3d(ok); setView(ok && saved !== '2d' ? '3d' : '2d');
+  }, []);
+  const pickView = (v: '3d' | '2d') => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* ignore */ } };
   const [busy, setBusy] = useState(false);
   const [stopOpen, setStopOpen] = useState(false);
   const [reason, setReason] = useState('');
@@ -133,9 +153,19 @@ function AiAgents() {
 
       {tab === 'office' && (
         <>
-          <Lane items={handoffs} nameOf={nameOf} tick={tick} />
+          <div className="ai-view-row">
+            <Lane items={handoffs} nameOf={nameOf} tick={tick} />
+            {has3d && (
+              <div className="ai-view" role="group" aria-label="Office view">
+                <button type="button" aria-pressed={view === '3d'} onClick={() => pickView('3d')}><Box size={15} aria-hidden />3D</button>
+                <button type="button" aria-pressed={view === '2d'} onClick={() => pickView('2d')}><LayoutGrid size={15} aria-hidden />Floor plan</button>
+              </div>
+            )}
+          </div>
           <div className="ai-office">
-            <Floor data={d} selected={selected?.id ?? ''} onPick={pick} incoming={handoffs[0]?.to_agent ?? null} />
+            {view === '3d' && has3d
+              ? <Office3D data={d} selected={selected?.id ?? ''} onPick={pick} handoff={handoffs[0] ?? null} onFail={() => { setHas3d(false); setView('2d'); }} />
+              : <Floor data={d} selected={selected?.id ?? ''} onPick={pick} incoming={handoffs[0]?.to_agent ?? null} />}
             {selected && (
               <Side a={selected} stopAll={d.stopAll.on} me={ov.me} busy={busy} feed={selFeed}
                 onPause={() => void act(() => crm.post(`/api/v1/ai-agents/agents/${selected.id}/pause`, { reason: null }), `${selected.name} paused.`)}
