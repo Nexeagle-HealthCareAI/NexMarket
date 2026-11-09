@@ -12,7 +12,7 @@ import {
   LayoutDashboard, PhoneCall, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
   PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus, Tent,
-  AtSign, Search, Route,
+  AtSign, Search, Route, KanbanSquare,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
@@ -25,7 +25,7 @@ type IconType = ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidde
 interface NavItem {
   href: string;
   label: string;
-  page: PageKey | 'admin' | 'chat' | 'leads' | 'wa' | 'referrals';
+  page: PageKey | 'admin' | 'chat' | 'leads' | 'wa' | 'referrals' | 'everyone';
   icon: IconType;
   /** extra paths that should highlight this item */
   match?: string[];
@@ -37,6 +37,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Overview',
     items: [
       { href: '/admin/dashboard', label: 'Command centre', page: 'dashboard', icon: LayoutDashboard, phone: true },
+      { href: '/admin/work', label: 'Team board', page: 'everyone', icon: KanbanSquare },
       { href: '/admin/leads', label: 'Leads inbox', page: 'leads', icon: UserPlus, phone: true },
       { href: '/admin/calls', label: 'Daily calls', page: 'calls', icon: PhoneCall, phone: true },
       { href: '/admin/referrals', label: 'Referrals', page: 'referrals', icon: Columns3, match: ['/admin/hospital-crm', '/admin/desk'], phone: true },
@@ -177,7 +178,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const groups = useMemo(() => NAV.map((g) => ({
     group: g.group,
     // Chat: admins, marketing managers and anyone who can see the field pages (same rule as the API).
-    items: g.items.filter((i) => (i.page === 'admin' ? !!access?.isAdmin
+    // Team board: everyone who signs in to the CRM.
+    items: g.items.filter((i) => (i.page === 'everyone' ? !!access : i.page === 'admin' ? !!access?.isAdmin
       : i.page === 'chat' ? !!access && (access.isAdmin || access.role === 'MarketingManager' || canView(access, 'field'))
         // Leads: whoever works the Referral desk or WhatsApp (same rule as the API).
         : i.page === 'leads' || i.page === 'wa' ? canView(access, 'desk') || canView(access, 'whatsapp')
