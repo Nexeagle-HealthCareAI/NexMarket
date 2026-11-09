@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BarChart3, Bot, ClipboardList, History, IndianRupee, Loader2, Smartphone, Stethoscope, Users, ListChecks, type LucideIcon } from 'lucide-react';
+import { AtSign, BarChart3, Bot, ClipboardList, Globe, MessageCircle, History, IndianRupee, Loader2, Smartphone, Stethoscope, Users, ListChecks, type LucideIcon } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { ErrorBox, fmt, Skeleton, useLoader } from '@/components/crm/ui';
 import AnalystPanel, { type AnalystView } from '@/components/crm/AnalystPanel';
@@ -11,7 +11,7 @@ interface AreaRow {
   running: boolean; open: number; overdue: number; high: number;
 }
 
-const ICON: Record<string, LucideIcon> = { business: BarChart3, partners: Users, field: Smartphone, referrals: Stethoscope, money: IndianRupee, surveys: ListChecks };
+const ICON: Record<string, LucideIcon> = { business: BarChart3, partners: Users, field: Smartphone, referrals: Stethoscope, money: IndianRupee, surveys: ListChecks, google: Globe, social: AtSign, whatsapp: MessageCircle };
 const HEALTH_DOT: Record<string, string> = { good: 'var(--ok)', watch: 'var(--warn)', bad: 'var(--bad)' };
 
 const INTRO: Record<string, string> = {
@@ -21,9 +21,27 @@ const INTRO: Record<string, string> = {
   referrals: 'Where patients drop out between referral, arrival and admission, and which departments, blocks and partner types bring them.',
   money: 'What is paid to partners against the admissions it brings: cost per admission, pending and overdue payouts, partners paid with no admissions.',
   surveys: 'What the community survey says each area needs, and how well the survey is being done.',
+  social: 'The Facebook Page and Instagram: which posts work, lead forms, ad spend per patient and how fast messages are answered.',
+  whatsapp: 'WhatsApp: reply speed, busy hours, broadcasts that get read, opt-outs, and WhatsApp and QR-code leads that come in.',
+  google: 'How patients find the hospital on Google: listing calls and directions, search terms, website, YouTube, Google Ads and reviews, against the leads and patients they bring.',
 };
 
 const SUGGEST: Record<string, string[]> = {
+  social: [
+    'Which kinds of posts bring the most engagement and leads?',
+    'Which ad campaign costs the most per patient?',
+    'How fast do we answer Messenger and Instagram messages?',
+  ],
+  whatsapp: [
+    'How fast does the desk reply, and at which hours do we need more people?',
+    'Which broadcasts get read and replied to?',
+    'Where do WhatsApp leads stall?',
+  ],
+  google: [
+    'Which Google searches have demand we are not winning yet?',
+    'Which Google Ads campaign costs the most per patient?',
+    'How is our Google rating moving?',
+  ],
   health: [
     'Which diseases are most common in each block, and where should the next camps go?',
     'What seasonal patterns does the disease register show?',

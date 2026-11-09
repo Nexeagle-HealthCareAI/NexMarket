@@ -2,9 +2,10 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BarChart3, ClipboardList, Inbox, Newspaper, Settings2 } from 'lucide-react';
+import { BarChart3, Bot, ClipboardList, Inbox, Newspaper, Settings2 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { useAccess } from '@/lib/crm/access';
+import { canView, useAccess } from '@/lib/crm/access';
+import AnalystPanel from '@/components/crm/AnalystPanel';
 import { PageHead, Pill, Skeleton, useToast } from '@/components/crm/ui';
 import { SocialInbox } from '@/components/crm/social/SocialInbox';
 import { SocialForms } from '@/components/crm/social/SocialForms';
@@ -18,6 +19,7 @@ const TABS = [
   { key: 'posts', label: 'All posts', icon: Newspaper, admin: false },
   { key: 'forms', label: 'Lead forms', icon: ClipboardList, admin: false },
   { key: 'ads', label: 'Ads & results', icon: BarChart3, admin: false },
+  { key: 'ai', label: 'AI analyst', icon: Bot, admin: false },
   { key: 'setup', label: 'Setup', icon: Settings2, admin: true },
 ] as const;
 
@@ -34,7 +36,7 @@ function Social() {
   const params = useSearchParams();
   const router = useRouter();
   const { access } = useAccess();
-  const tabs = TABS.filter((t) => !t.admin || !!access?.isAdmin);
+  const tabs = TABS.filter((t) => (!t.admin || !!access?.isAdmin) && (t.key !== 'ai' || canView(access, 'analytics')));
   const asked = params.get('tab') ?? 'inbox';
   const tab = (access && !tabs.some((t) => t.key === asked) ? 'inbox' : asked) as typeof TABS[number]['key'];
   const selected = params.get('c');
@@ -88,6 +90,16 @@ function Social() {
       {tab === 'posts' && <SocialPosts connected={!!status?.connected} canManage={!!status?.canManage} toast={showToast} />}
       {tab === 'forms' && <SocialForms canManage={!!status?.canManage} connected={!!status?.connected} toast={showToast} />}
       {tab === 'ads' && <SocialAds hasAds={!!status?.hasAds} isAdmin={!!status?.isAdmin} onSetup={() => go({ tab: 'setup', c: null })} />}
+      {tab === 'ai' && (
+        <AnalystPanel scope="social"
+          intro="The analyst reads the Facebook Page and Instagram account: which posts work (by topic, format and day), Lead Ads forms and how many of those people came in, ad spend per patient, and how fast Messenger and Instagram messages are answered, and turns them into actions. It writes a new briefing every week."
+          suggestions={[
+            'Which kinds of posts bring the most engagement and leads, and what should we post more of?',
+            'Which Facebook/Instagram ad campaign costs the most per patient, and what should we do with it?',
+            'How fast do we answer Messenger and Instagram messages, and how many turn into patients?',
+            'Plan next month\'s posts: topics, formats and days.',
+          ]} />
+      )}
       {tab === 'setup' && <SocialSetup onSaved={loadStatus} toast={showToast} />}
       {toast}
     </main>

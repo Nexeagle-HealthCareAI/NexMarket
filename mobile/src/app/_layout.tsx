@@ -1,4 +1,5 @@
 import '../lib/location'; // registers the background location task before anything else runs
+import '../lib/fieldSurvey'; // and the field-mapping route task
 import React, { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import { ActivityIndicator, AppState, View } from 'react-native';

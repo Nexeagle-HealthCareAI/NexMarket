@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, Easing, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
+import { myFieldSurveys } from '../lib/fieldSurvey';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import { T, toast } from '../components/ui';
@@ -29,6 +30,7 @@ export default function AddSheet() {
   const { height: winH } = useWindowDimensions();
   const visit = useDb(() => q.activeVisit());
   const onShift = useDb(() => !!q.activeShift());
+  const fieldOpen = useDb(() => myFieldSurveys().filter((x) => x.config.status === 'active' && x.myStatus !== 'submitted').length);
   const [picking, setPicking] = useState<Pending>(null);
   const [issueFor, setIssueFor] = useState<Contact | null>(null);
   const [revisitFor, setRevisitFor] = useState<Contact | null>(null);
@@ -53,6 +55,8 @@ export default function AddSheet() {
       onPress: () => router.replace('/refer') },
     { key: 'revisit', icon: 'repeat', title: t('revisitSomeone'), sub: t('revisitSomeoneSub'), from: '#15803d', to: '#a3e635', tint: '#eff9e6',
       onPress: () => setPicking('revisit') },
+    ...(fieldOpen > 0 ? [{ key: 'fieldmap', icon: 'map' as IconName, title: t('fsTitle'), sub: t('fsAddSub'), from: '#9a3412', to: '#fb923c', tint: '#fff1e6',
+      onPress: () => router.replace('/field-surveys') }] : []),
     { key: 'route', icon: 'route', title: t('addNavigate'), sub: t('addNavigateSub'), from: '#c2410c', to: '#fbbf24', tint: '#fff4e5',
       onPress: () => router.replace('/route') },
     { key: 'photo', icon: 'camera', title: t('photo'), sub: t('photoSub'), from: '#7e22ce', to: '#f0abfc', tint: '#f7ecfd',

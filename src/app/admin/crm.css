@@ -2067,3 +2067,56 @@ button.pp-chip { cursor: pointer; }
   .gg-cards { grid-template-columns: minmax(0, 1fr); }
   .gg-metric-v { font-size: 19px; }
 }
+.gg-track h2 { display: flex; align-items: center; gap: 8px; }
+.gg-track-step { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.gg-code { margin: 0; max-height: 320px; overflow: auto; font-size: 12px; line-height: 1.5; background: var(--grey-soft); border-radius: 10px; padding: 12px; white-space: pre; }
+
+/* ─── Field mapping (occasional field surveys) ─── */
+.fs-map { position: relative; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #e9eef5; }
+.fs-map-box { position: absolute; inset: 0; }
+.fs-map-box.maplibregl-map { position: absolute; inset: 0; }
+.fs-map-tools { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; z-index: 2; }
+.fs-map-tools .crm-chip { background: #fff; box-shadow: var(--shadow); }
+.fs-map-tools .crm-chip[aria-pressed='true'] { background: var(--ink); color: #fff; }
+.fs-corner { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 3px solid #0a72d6; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: grab; }
+.fs-spot { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.4); cursor: pointer; padding: 0; }
+.fs-map-wrap { position: relative; }
+.fs-spot-card { position: absolute; right: 12px; top: 56px; width: 280px; max-height: calc(100% - 70px); overflow: auto; display: flex; flex-direction: column; gap: 6px; z-index: 3; box-shadow: 0 8px 24px rgba(14,21,37,.18); }
+.fs-spot-x { position: absolute; right: 8px; top: 8px; border: 0; background: transparent; cursor: pointer; color: var(--text-2); }
+.fs-photo { width: 100%; max-height: 200px; object-fit: cover; border-radius: 10px; display: block; }
+.fs-photo.is-loading { height: 120px; background: var(--grey-soft); display: flex; align-items: center; justify-content: center; color: var(--text-2); }
+.fs-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: 0; }
+.fs-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; }
+.fs-legend i { display: inline-block; width: 18px; height: 4px; border-radius: 2px; margin-right: 6px; vertical-align: 3px; }
+.fs-bars li { grid-template-columns: minmax(120px, 1.2fr) 1fr 64px; }
+.fs-row { cursor: pointer; }
+.fs-note { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-answers { display: flex; flex-direction: column; gap: 16px; }
+.fs-answer { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.fs-editor { display: flex; flex-direction: column; gap: 16px; max-width: 1100px; }
+.fs-field-l { font-weight: 600; font-size: 14px; }
+.fs-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fs-tag { display: inline-flex; align-items: center; gap: 4px; padding: 5px 6px 5px 11px; border-radius: 999px; background: var(--accent-tint); border: 1px solid var(--accent-soft); font-size: 13.5px; }
+.fs-tag button { border: 0; background: transparent; cursor: pointer; color: var(--text-2); display: inline-flex; padding: 2px; border-radius: 50%; }
+.fs-tag button:hover { background: var(--accent-soft); color: var(--text); }
+.fs-tag-add { display: inline-flex; gap: 6px; align-items: center; }
+.fs-tag-add .crm-input { width: 200px; height: 34px; }
+.fs-tag-add .crm-btn { display: inline-flex; align-items: center; gap: 4px; }
+.fs-q { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.fs-q-n { width: 26px; height: 26px; border-radius: 50%; background: var(--grey-soft); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+.fs-q-body { display: flex; flex-direction: column; gap: 8px; }
+.fs-q-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.fs-q-row .crm-btn { display: inline-flex; align-items: center; }
+.fs-check { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
+.fs-people-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.fs-people { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; max-height: 360px; overflow: auto; }
+.fs-person { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; }
+.fs-person.is-on { border-color: var(--accent); background: var(--accent-tint); }
+.fs-person > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fs-person input { margin-top: 3px; }
+.fs-save { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: sticky; bottom: 0; padding: 12px 0; background: var(--bg); }
+.fs-back { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 12px; }
+@media (max-width: 760px) {
+  .fs-spot-card { position: static; width: auto; margin-top: 10px; }
+  .fs-tag-add .crm-input { width: 150px; }
+}

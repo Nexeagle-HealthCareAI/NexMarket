@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertTriangle, Inbox, ListChecks, Megaphone, Pause, Play, ScrollText, Settings2, Wallet, Workflow } from 'lucide-react';
+import { AlertTriangle, Bot, Inbox, ListChecks, Megaphone, Pause, Play, ScrollText, Settings2, Wallet, Workflow } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canView, useAccess } from '@/lib/crm/access';
 import { friendlyError, PageHead, Pill, Skeleton, useToast } from '@/components/crm/ui';
@@ -13,6 +13,7 @@ import { WaAutomation } from '@/components/crm/wa/WaAutomation';
 import { WaBroadcasts } from '@/components/crm/wa/WaBroadcasts';
 import { WaSetup } from '@/components/crm/wa/WaSetup';
 import { WaBilling } from '@/components/crm/wa/WaBilling';
+import AnalystPanel from '@/components/crm/AnalystPanel';
 import { showPhone, when, type WaStatus } from '@/components/crm/wa/shared';
 
 /** Who sees each tab: everyone on the WhatsApp page, those who can open broadcasts, those who manage WhatsApp, or only admins. */
@@ -22,6 +23,7 @@ const TABS = [
   { key: 'messages', label: 'All messages', icon: ScrollText, who: 'all' },
   { key: 'templates', label: 'Templates', icon: ListChecks, who: 'all' },
   { key: 'automation', label: 'Automation', icon: Workflow, who: 'all' },
+  { key: 'ai', label: 'AI analyst', icon: Bot, who: 'analytics' },
   { key: 'billing', label: 'Billing', icon: Wallet, who: 'manage' },
   { key: 'setup', label: 'Setup', icon: Settings2, who: 'admin' },
 ] as const;
@@ -40,7 +42,7 @@ function WhatsAppHub() {
   const router = useRouter();
   const { access } = useAccess();
   const [status, setStatus] = useState<WaStatus | null>(null);
-  const tabs = TABS.filter((t) => t.who === 'all' || (t.who === 'admin' ? !!access?.isAdmin : t.who === 'manage' ? !!status?.canManage : canView(access, 'whatsapp')));
+  const tabs = TABS.filter((t) => t.who === 'all' || (t.who === 'admin' ? !!access?.isAdmin : t.who === 'manage' ? !!status?.canManage : t.who === 'analytics' ? canView(access, 'analytics') : canView(access, 'whatsapp')));
   const asked = params.get('tab') ?? 'inbox';
   // A tab this person can't open (or an old link) falls back to the inbox. (Billing waits for the status to know.)
   const tab = (access && (asked !== 'billing' || status) && !tabs.some((t) => t.key === asked) ? 'inbox' : asked) as typeof TABS[number]['key'];
@@ -136,6 +138,16 @@ function WhatsAppHub() {
       {tab === 'broadcasts' && <WaBroadcasts />}
       {tab === 'automation' && <WaAutomation canManage={!!status?.canManage} toast={showToast} />}
       {tab === 'billing' && status?.canManage && <WaBilling isAdmin={!!status.isAdmin} toast={showToast} />}
+      {tab === 'ai' && (
+        <AnalystPanel scope="whatsapp"
+          intro="The analyst reads WhatsApp as counts only (no phone numbers or names): people writing in, how fast staff reply, busy hours, opt-outs, broadcasts and how many WhatsApp and QR-code leads came to the hospital, and turns them into actions for the desk and marketing. It writes a new briefing every week."
+          suggestions={[
+            'How fast does the desk reply on WhatsApp, and at which hours do we need more people?',
+            'Which broadcasts get read and replied to, and which should we stop?',
+            'Where do WhatsApp leads stall before coming to the hospital?',
+            'Are opt-outs going up, and what is causing them?',
+          ]} />
+      )}
       {tab === 'setup' && <WaSetup onSaved={loadStatus} />}
       {toast}
     </main>

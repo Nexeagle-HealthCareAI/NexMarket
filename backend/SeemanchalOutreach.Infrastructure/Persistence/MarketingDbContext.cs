@@ -33,6 +33,10 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<SocialPost> SocialPosts => Set<SocialPost>();
         public DbSet<ChannelMetric> ChannelMetrics => Set<ChannelMetric>();
         public DbSet<GoogleReview> GoogleReviews => Set<GoogleReview>();
+        public DbSet<FieldSurvey> FieldSurveys => Set<FieldSurvey>();
+        public DbSet<FieldSurveyAssignee> FieldSurveyAssignees => Set<FieldSurveyAssignee>();
+        public DbSet<FieldSurveyTrack> FieldSurveyTracks => Set<FieldSurveyTrack>();
+        public DbSet<FieldSurveySpot> FieldSurveySpots => Set<FieldSurveySpot>();
         public DbSet<AgentIncentive> AgentIncentives => Set<AgentIncentive>();
         public DbSet<Department> Departments => Set<Department>();
         public DbSet<Doctor> Doctors => Set<Doctor>();
@@ -239,6 +243,33 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.ReviewName).IsUnique();
                 entity.HasIndex(e => e.PostedAt);
+            });
+            modelBuilder.Entity<FieldSurvey>(entity =>
+            {
+                entity.ToTable("field_surveys");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Status);
+            });
+            modelBuilder.Entity<FieldSurveyAssignee>(entity =>
+            {
+                entity.ToTable("field_survey_assignees");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.SurveyId, e.AgentId }).IsUnique();
+                entity.HasIndex(e => e.AgentId);
+            });
+            modelBuilder.Entity<FieldSurveyTrack>(entity =>
+            {
+                entity.ToTable("field_survey_tracks");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.ClientId).IsUnique();
+                entity.HasIndex(e => new { e.SurveyId, e.AgentId });
+            });
+            modelBuilder.Entity<FieldSurveySpot>(entity =>
+            {
+                entity.ToTable("field_survey_spots");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.ClientId).IsUnique();
+                entity.HasIndex(e => new { e.SurveyId, e.AgentId });
             });
             modelBuilder.Entity<DiseaseRecord>(entity =>
             {

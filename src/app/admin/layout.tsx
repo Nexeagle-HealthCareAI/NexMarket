@@ -12,7 +12,7 @@ import {
   LayoutDashboard, PhoneCall, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
   PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus, Tent,
-  AtSign, Search,
+  AtSign, Search, Route,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
@@ -59,6 +59,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/admin/map', label: 'Live map', page: 'field', icon: MapPin },
       { href: '/admin/activity', label: 'Agent activity', page: 'field', icon: Activity },
       { href: '/admin/coverage', label: 'Panchayat coverage', page: 'field', icon: Grid2x2Check, match: ['/admin/panchayats'] },
+      { href: '/admin/field-surveys', label: 'Field mapping', page: 'field', icon: Route },
       { href: '/admin/leave', label: 'Attendance & leave', page: 'field', icon: CalendarCheck },
       { href: '/admin/agents', label: 'Field agents', page: 'field', icon: Smartphone },
       { href: '/admin/assignments', label: 'Block assignments', page: 'field', icon: ClipboardList },

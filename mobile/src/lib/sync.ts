@@ -9,6 +9,7 @@ import { refreshTasks } from './tasks';
 import { flushChat, refreshUnread } from './chat';
 import { pollNotifications } from './notifications';
 import { refreshMoney } from './money';
+import { refreshFieldSurveys, syncFieldSurveys } from './fieldSurvey';
 
 /**
  * The sync engine. Pushes the outbox in order (oldest first), then pulls what changed
@@ -64,6 +65,9 @@ async function run() {
     await refreshTasks().catch(() => undefined);
     // Payments to my partners and my incentives.
     await refreshMoney().catch(() => undefined);
+    // Field mapping: send routes, spots and answers waiting on the phone, and get my surveys.
+    await syncFieldSurveys().catch(() => undefined);
+    await refreshFieldSurveys().catch(() => undefined);
     // Chat: send what waited for signal, and update the unread badge.
     await flushChat().catch(() => undefined);
     await refreshUnread().catch(() => undefined);

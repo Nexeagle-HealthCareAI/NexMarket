@@ -568,6 +568,14 @@ function AddLead({ onClose, onAdded }: { onClose: () => void; onAdded: (id: stri
   const [source, setSource] = useState('desk');
   const [sourceRef, setSourceRef] = useState('');
   const [dept, setDept] = useState('');
+  const [adNames, setAdNames] = useState<string[] | null>(null);
+  // Google Ads campaign names, so "Which ad?" matches the campaign exactly.
+  useEffect(() => {
+    if (source !== 'google_ads' || adNames) return;
+    let live = true;
+    crm.get<{ google: string[] }>('/api/v1/leads/ad-campaigns').then((r) => { if (live) setAdNames(r.google); }).catch(() => { if (live) setAdNames([]); });
+    return () => { live = false; };
+  }, [source, adNames]);
   const [note, setNote] = useState('');
   const [mine, setMine] = useState(true);
   const [partner, setPartner] = useState<PartnerHit | null>(null);
@@ -620,7 +628,18 @@ function AddLead({ onClose, onAdded }: { onClose: () => void; onAdded: (id: stri
       </div>
       {(source === 'camp' || source === 'ad' || source === 'web' || source === 'google_ads') && (
         <label className="crm-field">{source === 'camp' ? 'Which camp?' : source === 'ad' || source === 'google_ads' ? 'Which ad?' : 'Which page or campaign?'}
-          <input className="crm-input" value={sourceRef} onChange={(e) => setSourceRef(e.target.value)} maxLength={80} placeholder={source === 'camp' ? 'e.g. Kasba, 12 Nov' : ''} />
+          <input className="crm-input" value={sourceRef} onChange={(e) => setSourceRef(e.target.value)} maxLength={80} placeholder={source === 'camp' ? 'e.g. Kasba, 12 Nov' : source === 'google_ads' ? 'Pick the campaign' : ''}
+            list={source === 'google_ads' ? 'ld-ad-campaigns' : undefined} />
+          {source === 'google_ads' && (
+            <>
+              <datalist id="ld-ad-campaigns">{(adNames ?? []).map((n) => <option key={n} value={n} />)}</datalist>
+              {adNames && adNames.length > 0 && (
+                <span className="crm-chips" style={{ marginTop: 6 }}>
+                  {adNames.slice(0, 6).map((n) => <button key={n} type="button" className="crm-chip" aria-pressed={sourceRef === n} onClick={() => setSourceRef(n)}>{n}</button>)}
+                </span>
+              )}
+            </>
+          )}
         </label>
       )}
       <div className="crm-field">Sent by a partner? (optional)
