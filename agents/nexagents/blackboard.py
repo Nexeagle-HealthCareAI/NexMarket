@@ -6,6 +6,7 @@ work on the same lead or post; a claim expires after 30 minutes, so a crashed ru
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from psycopg.errors import UniqueViolation
@@ -17,15 +18,23 @@ MAX_ATTEMPTS = 3
 
 
 async def post(kind: str, subject_key: str, goal: str, *, for_agent: str | None, created_by: str,
-               payload: dict[str, Any] | None = None) -> uuid.UUID | None:
-    """Adds a task; returns None when the same kind of task for this subject is already open (no duplicates)."""
+               payload: dict[str, Any] | None = None, not_before: datetime | None = None) -> uuid.UUID | None:
+    """
+    Adds a task; returns None when the same kind of task for this subject is already waiting (no duplicates).
+    `not_before`: nobody picks it up before then. A waiting task that is due later is brought forward when an
+    earlier time is asked for (an emergency message after an ordinary one).
+    """
     tid = db.new_id()
     try:
         await db.execute(
-            "INSERT INTO agents.tasks (id, kind, subject_key, for_agent, goal, payload, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            tid, kind, subject_key, for_agent, goal, db.jb(payload or {}), created_by,
+            "INSERT INTO agents.tasks (id, kind, subject_key, for_agent, goal, payload, created_by, not_before) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            tid, kind, subject_key, for_agent, goal, db.jb(payload or {}), created_by, not_before,
         )
     except UniqueViolation:
+        if not_before is not None:
+            await db.execute(
+                "UPDATE agents.tasks SET not_before = %s, updated_at = now() WHERE kind = %s AND subject_key = %s AND status = 'open' "
+                "AND (not_before IS NULL OR not_before > %s)", not_before, kind, subject_key, not_before)
         return None
     return tid
 
@@ -35,13 +44,16 @@ async def claim(agent_id: str, kinds: list[str] | None = None, limit: int = 1) -
     sql = (
         "UPDATE agents.tasks SET status = 'claimed', claimed_by = %s, claimed_at = now(), "
         f"claim_expires = now() + interval '{CLAIM_MINUTES} minutes', attempts = attempts + 1, updated_at = now() "
-        "WHERE id IN (SELECT id FROM agents.tasks WHERE status = 'open' AND (for_agent = %s OR for_agent IS NULL)"
+        "WHERE id IN (SELECT t.id FROM agents.tasks t WHERE t.status = 'open' AND (t.for_agent = %s OR t.for_agent IS NULL) "
+        "AND (t.not_before IS NULL OR t.not_before <= now()) "
+        # never two at once for the same lead or post
+        "AND NOT EXISTS (SELECT 1 FROM agents.tasks c WHERE c.kind = t.kind AND c.subject_key = t.subject_key AND c.status = 'claimed')"
     )
     args: list[Any] = [agent_id, agent_id]
     if kinds:
-        sql += " AND kind = ANY(%s)"
+        sql += " AND t.kind = ANY(%s)"
         args.append(kinds)
-    sql += " ORDER BY created_at LIMIT %s FOR UPDATE SKIP LOCKED) RETURNING *"
+    sql += " ORDER BY t.created_at LIMIT %s FOR UPDATE SKIP LOCKED) RETURNING *"
     args.append(limit)
     return await db.fetch(sql, *args)
 

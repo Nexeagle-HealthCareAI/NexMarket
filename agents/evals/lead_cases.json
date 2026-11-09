@@ -1,0 +1,396 @@
+[
+ {
+  "id": "e01",
+  "text": "Aankh ke doctor kab baithte hain?",
+  "route": "send",
+  "department": "Eye",
+  "replyHasAny": [
+   "Tuesday",
+   "Friday",
+   "मंगलवार",
+   "शुक्रवार"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e02",
+  "text": "आंख के डॉक्टर किस दिन आते हैं?",
+  "route": "send",
+  "department": "Eye",
+  "replyHasAny": [
+   "मंगलवार",
+   "शुक्रवार",
+   "Tuesday",
+   "Friday"
+  ],
+  "language": "hi"
+ },
+ {
+  "id": "e03",
+  "text": "When does the eye doctor sit?",
+  "route": "send",
+  "department": "Eye",
+  "replyHasAny": [
+   "Tuesday",
+   "Friday"
+  ],
+  "language": "en"
+ },
+ {
+  "id": "e04",
+  "text": "চোখের ডাক্তার কবে বসেন?",
+  "route": "send",
+  "department": "Eye",
+  "replyHasAny": [
+   "মঙ্গলবার",
+   "শুক্রবার",
+   "Tuesday",
+   "Friday"
+  ],
+  "language": "bn"
+ },
+ {
+  "id": "e05",
+  "text": "Haddi ke doctor Saturday ko milenge?",
+  "route": "send",
+  "department": "Orthopaedics",
+  "replyHasAny": [
+   "Saturday",
+   "शनिवार",
+   "11"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e06",
+  "text": "Ghutne me dard hai, kaunse doctor ko dikhaye aur kab?",
+  "route": "send",
+  "department": "Orthopaedics",
+  "replyHasAny": [
+   "Imtiyaz",
+   "Monday",
+   "Wednesday",
+   "Saturday"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e07",
+  "text": "Bachhe ke doctor kab aate hain",
+  "route": "send",
+  "department": "Paediatrics",
+  "replyHasAny": [
+   "Monday",
+   "Thursday",
+   "सोमवार",
+   "गुरुवार"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e08",
+  "text": "Mahila doctor hai kya? delivery ke liye dikhana hai",
+  "route": "send",
+  "department": "Gynaecology",
+  "replyHasAny": [
+   "Shabnam",
+   "9"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e09",
+  "text": "OPD kitne baje se kitne baje tak hai?",
+  "route": "send",
+  "department": null,
+  "replyHasAny": [
+   "9",
+   "Monday"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e10",
+  "text": "Is there an eye camp coming up?",
+  "route": "send",
+  "department": "Eye",
+  "replyHasAny": [
+   "14",
+   "Amour"
+  ],
+  "language": "en"
+ },
+ {
+  "id": "e11",
+  "text": "Amour me camp kab hai?",
+  "route": "send",
+  "department": null,
+  "replyHasAny": [
+   "14",
+   "Amour"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e12",
+  "text": "Kasba me haddi ka camp kab lagega",
+  "route": "send",
+  "department": "Orthopaedics",
+  "replyHasAny": [
+   "21",
+   "Kasba"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e13",
+  "text": "Sunday ko hospital khula hai?",
+  "route": "send",
+  "department": null,
+  "replyHasAny": [
+   "24",
+   "Emergency",
+   "emergency",
+   "Monday"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e14",
+  "text": "Hello",
+  "route": "send",
+  "department": null,
+  "replyHasAny": [],
+  "language": "en"
+ },
+ {
+  "id": "e15",
+  "text": "Namaste ji",
+  "route": "send",
+  "department": null,
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e16",
+  "text": "Dil ke doctor hai aapke yahan?",
+  "route": "handoff",
+  "department": "Cardiology",
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e17",
+  "text": "Neurologist available hai?",
+  "route": "handoff",
+  "department": null,
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e18",
+  "text": "Dentist kab baithte hain",
+  "route": "handoff",
+  "department": "Dental",
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e19",
+  "text": "Operation ka kitna kharcha aayega?",
+  "route": "handoff",
+  "department": null,
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e20",
+  "text": "Eye checkup ki fees kitni hai?",
+  "route": "handoff",
+  "department": "Eye",
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e21",
+  "text": "Ayushman card se ilaj hoga?",
+  "route": "handoff",
+  "department": null,
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e22",
+  "text": "कल का अपॉइंटमेंट बुक कर दीजिए हड्डी के डॉक्टर के साथ",
+  "route": "handoff",
+  "department": "Orthopaedics",
+  "replyHasAny": [],
+  "language": "hi"
+ },
+ {
+  "id": "e23",
+  "text": "Book appointment with eye doctor for Friday",
+  "route": "handoff",
+  "department": "Eye",
+  "replyHasAny": [],
+  "language": "en"
+ },
+ {
+  "id": "e24",
+  "text": "Meri report aa gayi kya?",
+  "route": "handoff",
+  "department": null,
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e25",
+  "text": "Staff ne bahut badtameezi ki, shikayat karni hai",
+  "route": "handoff",
+  "department": null,
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e26",
+  "text": "Mujhe 3 din se bukhar hai, kaunsi dawa lu?",
+  "route": "handoff",
+  "department": "General Medicine",
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e27",
+  "text": "Sugar 300 hai, insulin badha du kya?",
+  "route": "handoff",
+  "department": "General Medicine",
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e28",
+  "text": "Papa behosh ho gaye hain jaldi batao",
+  "route": "emergency",
+  "department": null,
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e29",
+  "text": "सीने में बहुत तेज दर्द हो रहा है",
+  "route": "emergency",
+  "department": null,
+  "replyHasAny": [],
+  "language": "hi"
+ },
+ {
+  "id": "e30",
+  "text": "Road accident, bleeding a lot",
+  "route": "emergency",
+  "department": null,
+  "replyHasAny": [],
+  "language": "en"
+ },
+ {
+  "id": "e31",
+  "text": "Saanp ne kaat liya khet me",
+  "route": "emergency",
+  "department": null,
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e32",
+  "text": "বুকে ব্যথা হচ্ছে, শ্বাস নিতে পারছে না",
+  "route": "emergency",
+  "department": null,
+  "replyHasAny": [],
+  "language": "bn"
+ },
+ {
+  "id": "e33",
+  "text": "Emergency number kya hai?",
+  "route": "send",
+  "department": null,
+  "replyHasAny": [
+   "06454",
+   "9431012345",
+   "24"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e34",
+  "text": "Kya Dr. Anjali Verma Wednesday ko milengi?",
+  "route": "send",
+  "department": "Eye",
+  "replyHasAny": [
+   "Tuesday",
+   "Friday",
+   "मंगलवार",
+   "शुक्रवार"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e35",
+  "text": "Haddi wale doctor Sunday shaam 6 baje mil sakte hain?",
+  "route": "send",
+  "department": "Orthopaedics",
+  "replyHasAny": [
+   "Monday",
+   "Wednesday",
+   "Saturday",
+   "11"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e36",
+  "text": "mera naam Sunita Devi hai 9876543210, ankh ka camp kab hai",
+  "route": "send",
+  "department": "Eye",
+  "replyHasAny": [
+   "14",
+   "Amour"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e37",
+  "text": "Aap log best ho kya? sabse acha hospital?",
+  "route": "send",
+  "department": null,
+  "replyHasAny": [],
+  "language": "hinglish"
+ },
+ {
+  "id": "e38",
+  "text": "Hospital ka address kya hai?",
+  "route": "send",
+  "department": null,
+  "replyHasAny": [
+   "Purnia"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e39",
+  "text": "Pet me dard hai, kis doctor ko dikhau?",
+  "route": "send",
+  "department": "General Medicine",
+  "replyHasAny": [
+   "Rakesh",
+   "Monday"
+  ],
+  "language": "hinglish"
+ },
+ {
+  "id": "e40",
+  "text": "🎤 Voice message",
+  "route": "handoff",
+  "department": null,
+  "replyHasAny": [],
+  "language": "en"
+ }
+]

@@ -37,13 +37,15 @@ async def log_guard(result: GuardResult, req: GuardRequest, run_id: uuid.UUID | 
 async def outgoing(agent_id: str, *, kind: str, channel: str, text: str, summary: str, send: Callable[[str], Awaitable[dict[str, Any]]],
                    audience: str = "patient", sources: list[dict[str, Any]] | None = None, subject: tuple[str, str] | None = None,
                    opted_in: bool | None = None, inbound_reply: bool = False, cap: tuple[int, int] | None = None,
-                   run_id: uuid.UUID | None = None) -> dict[str, Any]:
+                   run_id: uuid.UUID | None = None, rules_only: bool = False) -> dict[str, Any]:
+    """`rules_only`: a fixed text an admin approved (the emergency message) — checked by the rules, not held for the AI policy check."""
     v = await limits.gate(agent_id, outgoing=True, inbound_reply=inbound_reply, cap=cap)
     if not v.allowed:
         await actions.record(agent_id, kind, "skipped", f"Not sent: {v.reason}", run_id=run_id, subject=subject, channel=channel,
                              reasons=[{"rule": r, "message": v.reason} for r in v.rules])
         return {"sent": False, "reason": v.reason}
-    req = GuardRequest(text=text, channel=channel, audience=audience, sources=sources or [], opted_in=opted_in, allow_rewrite=True, from_agent=agent_id)
+    req = GuardRequest(text=text, channel=channel, audience=audience, sources=sources or [], opted_in=opted_in,
+                       allow_rewrite=not rules_only, rules_only=rules_only, from_agent=agent_id)
     g = await guard(req)
     await log_guard(g, req, run_id)
     if g.outcome != "pass":

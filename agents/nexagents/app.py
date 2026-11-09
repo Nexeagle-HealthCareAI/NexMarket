@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import __version__, actions, blackboard, db, limits, nexmarket
 from .act import guard, log_guard
+from .agents import lead_responder
 from .agents.base import runtime
 from .agents.registry import AGENTS, BY_ID, WINGS
 from .auth import require_secret
@@ -31,7 +32,7 @@ DEFAULT_FACTS: dict[str, Any] = {
 }
 
 # Events from NexMarket and the agent that handles each (agents that are off ignore them).
-EVENT_AGENT = {"lead.new": "lead_responder", "lead.idle": "lead_follow_up", "review.new": "reputation", "referral.arrived": "partner_network"}
+EVENT_AGENT = {"lead.idle": "lead_follow_up", "review.new": "reputation", "referral.arrived": "partner_network"}
 
 
 # ─── Background jobs ──────────────────────────────────────────────────────────
@@ -68,6 +69,13 @@ async def watch_anomalies() -> None:
         log.exception("anomaly watch failed")
 
 
+async def work_leads() -> None:
+    try:
+        await lead_responder.tick()
+    except Exception:
+        log.exception("lead responder tick failed")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await db.open_pool()
@@ -76,6 +84,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     sched = AsyncIOScheduler(timezone="Asia/Kolkata")
     sched.add_job(housekeeping, "interval", minutes=5, id="housekeeping")
     sched.add_job(watch_anomalies, "interval", minutes=10, id="anomalies")
+    sched.add_job(work_leads, "interval", seconds=15, id="lead_responder", max_instances=1, coalesce=True)
     sched.start()
     log.info("NexMarket Agents %s started (Groq %s)", __version__, "ready" if config.groq_ready else "NOT configured")
     try:
@@ -122,7 +131,7 @@ async def overview() -> dict[str, Any]:
             "wokenBy": a.woken_by, "canDo": a.can_do, "limits": a.limits,
             "talksTo": [BY_ID[x].name for x in a.talks_to if x in BY_ID] or (["Every agent"] if "*" in a.talks_to else []),
             "mode": st.get("mode", a.start_mode), "paused": bool(st.get("paused")), "pausedReason": st.get("paused_reason"),
-            "pausedBy": st.get("paused_by"), "available": a.phase <= 1,
+            "pausedBy": st.get("paused_by"), "available": a.built,
             "today": {"done": c.get("done", 0), "shadow": c.get("shadow", 0), "blocked": c.get("blocked", 0) + c.get("held", 0),
                       "skipped": c.get("skipped", 0), "failed": c.get("failed", 0)},
             "tokensToday": int(usage.get(a.id, {}).get("tokens", 0) or 0),
@@ -193,7 +202,7 @@ async def set_mode(agent_id: str, body: ModeBody) -> dict[str, Any]:
     a = _agent(agent_id)
     if a.id == "compliance_guard" and body.mode != "live":
         raise HTTPException(400, "The Compliance Guard is always on.")
-    if body.mode != "off" and a.phase > 1:
+    if body.mode != "off" and not a.built:
         raise HTTPException(400, f"{a.name} arrives in phase {a.phase}; it can't be switched on yet.")
     if body.mode not in ("off", "shadow", "live"):
         raise HTTPException(400, "Mode must be off, shadow or live.")
@@ -289,6 +298,8 @@ class EventBody(BaseModel):
 @app.post("/v1/events", dependencies=secured)
 async def event(body: EventBody) -> dict[str, Any]:
     """NexMarket tells us something happened (a new lead, a review). It becomes a task for the right agent."""
+    if body.kind == "lead.message":
+        return await lead_responder.on_message(body.ref_id)
     agent_id = EVENT_AGENT.get(body.kind)
     if not agent_id:
         return {"accepted": False, "reason": "No agent handles this event."}
