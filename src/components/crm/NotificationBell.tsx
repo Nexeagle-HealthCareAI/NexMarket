@@ -37,6 +37,8 @@ export function crmHref(link?: string | null): string | null {
   const [k, id] = link.split(':');
   if (k === 'chat' && id) return `/admin/chat?t=${encodeURIComponent(id)}`;
   if (k === 'lead' && id) return `/admin/leads?id=${encodeURIComponent(id)}`;
+  if (k === 'work' && id) return `/admin/work?card=${encodeURIComponent(id)}`;
+  if (k === 'field-survey' && id) return `/admin/field-surveys?id=${encodeURIComponent(id)}`;
   if (k === 'wa' && id) return `/admin/whatsapp?c=${encodeURIComponent(id)}`;
   if (k === 'social' && id === 'forms') return '/admin/social?tab=forms';
   if (k === 'social' && id) return `/admin/social?c=${encodeURIComponent(id)}`;

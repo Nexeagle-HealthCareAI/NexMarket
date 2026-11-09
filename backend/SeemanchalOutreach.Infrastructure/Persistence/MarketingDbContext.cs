@@ -37,6 +37,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<FieldSurveyAssignee> FieldSurveyAssignees => Set<FieldSurveyAssignee>();
         public DbSet<FieldSurveyTrack> FieldSurveyTracks => Set<FieldSurveyTrack>();
         public DbSet<FieldSurveySpot> FieldSurveySpots => Set<FieldSurveySpot>();
+        public DbSet<WorkCard> WorkCards => Set<WorkCard>();
+        public DbSet<WorkNote> WorkNotes => Set<WorkNote>();
         public DbSet<AgentIncentive> AgentIncentives => Set<AgentIncentive>();
         public DbSet<Department> Departments => Set<Department>();
         public DbSet<Doctor> Doctors => Set<Doctor>();
@@ -270,6 +272,19 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.ClientId).IsUnique();
                 entity.HasIndex(e => new { e.SurveyId, e.AgentId });
+            });
+            modelBuilder.Entity<WorkCard>(entity =>
+            {
+                entity.ToTable("work_cards");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Number).IsUnique();
+                entity.HasIndex(e => new { e.Archived, e.Status });
+            });
+            modelBuilder.Entity<WorkNote>(entity =>
+            {
+                entity.ToTable("work_notes");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.CardId, e.CreatedAt });
             });
             modelBuilder.Entity<DiseaseRecord>(entity =>
             {

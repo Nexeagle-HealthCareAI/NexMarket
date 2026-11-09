@@ -807,6 +807,45 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 
+    /// <summary>A card on the team board: a piece of work the office team plans, does and finishes.</summary>
+    public class WorkCard
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public int Number { get; set; }                            // #12, easy to say out loud
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string Status { get; set; } = "todo";              // idea | todo | doing | review | done
+        public double Order { get; set; }                          // position inside its column
+        public string Priority { get; set; } = "normal";          // urgent | high | normal | low
+        public DateOnly? DueDate { get; set; }
+        public string AssigneesJson { get; set; } = "[]";          // ["agentId", …]
+        public string LabelsJson { get; set; } = "[]";             // ["camp", "social", …]
+        public string? Project { get; set; }                       // a bigger piece of work the card belongs to
+        public string ChecklistJson { get; set; } = "[]";          // [{ id, text, done }]
+        public string? Link { get; set; }
+        public string Repeat { get; set; } = "none";              // none | daily | weekdays | weekly | monthly
+        public Guid? RepeatOf { get; set; }                        // the card this one was made from
+        public int CommentCount { get; set; }
+        public bool Archived { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? StartedAt { get; set; }
+        public DateTime? DoneAt { get; set; }
+        public string? DoneBy { get; set; }
+    }
+
+    /// <summary>A comment on a team-board card, or a line of its history (moved, assigned, due date changed…).</summary>
+    public class WorkNote
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid CardId { get; set; }
+        public string Kind { get; set; } = "comment";             // comment | activity
+        public string AgentId { get; set; } = string.Empty;
+        public string Text { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
     /// <summary>A Facebook Messenger or Instagram Direct conversation with one person, on the hospital's Page or account.</summary>
     public class SocialConversation
     {

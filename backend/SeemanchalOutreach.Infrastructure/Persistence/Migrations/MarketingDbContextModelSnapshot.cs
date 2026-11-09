@@ -3378,6 +3378,127 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 
                     b.ToTable("wa_messages", "marketing");
                 });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.WorkCard", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Archived")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("AssigneesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ChecklistJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("CommentCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DoneAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DoneBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LabelsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Link")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<double>("Order")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Project")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Repeat")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("RepeatOf")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Archived", "Status");
+
+                    b.HasIndex("Number")
+                        .IsUnique();
+
+                    b.ToTable("work_cards", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.WorkNote", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("CardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CardId", "CreatedAt");
+
+                    b.ToTable("work_notes", "marketing");
+                });
 #pragma warning restore 612, 618
         }
     }
