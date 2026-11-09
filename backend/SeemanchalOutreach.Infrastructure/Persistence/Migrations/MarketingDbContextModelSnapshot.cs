@@ -898,6 +898,51 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.ToTable("camp_patients", "marketing");
                 });
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.ChannelMetric", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Account")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Dimension")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Label")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Metric")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date");
+
+                    b.HasIndex("Source", "Account", "Date", "Dimension", "Metric")
+                        .IsUnique();
+
+                    b.ToTable("channel_metrics", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.ChatMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1631,6 +1676,57 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.HasIndex("AgentId", "PanchayatId");
 
                     b.ToTable("visits", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.GoogleReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("PostedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RepliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RepliedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReplyText")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReviewName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReviewUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReviewerName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Stars")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PostedAt");
+
+                    b.HasIndex("ReviewName")
+                        .IsUnique();
+
+                    b.ToTable("google_reviews", "marketing");
                 });
 
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.HealthCamp", b =>

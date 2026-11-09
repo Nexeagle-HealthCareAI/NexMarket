@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -28,6 +28,8 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<ReferralBill> ReferralBills { get; }
         DbSet<DiseaseRecord> DiseaseRecords { get; }
         DbSet<SocialPost> SocialPosts { get; }
+        DbSet<ChannelMetric> ChannelMetrics { get; }
+        DbSet<GoogleReview> GoogleReviews { get; }
         DbSet<AgentIncentive> AgentIncentives { get; }
         DbSet<Department> Departments { get; }
         DbSet<Doctor> Doctors { get; }
