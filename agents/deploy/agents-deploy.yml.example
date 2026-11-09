@@ -1,0 +1,85 @@
+# Copy to .github/workflows/agents-deploy.yml (that folder is protected, so this is a copy for you to add).
+# Builds the agents image and runs it on the Dev VM next to the API, on the host network, bound to 127.0.0.1
+# only: nothing outside the VM can reach it; the API calls it on http://localhost:5020.
+#
+# New GitHub secrets: DEV_AGENTS_SECRET (a long random string, the SAME value as the API's Agents__Secret)
+#                     DEV_GROQ_API_KEY  (Groq Developer plan key)
+# Reuses: GHCR_TOKEN, DEV_SSH_HOST, DEV_SSH_USER, DEV_SSH_PASSWORD, DEV_PG_PASSWORD
+name: NexMarket Agents — CI/CD
+
+on:
+  push:
+    branches: [develop]
+    paths: ['agents/**']
+  workflow_dispatch:
+
+concurrency:
+  group: nexmarket-agents-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/nexmarket-agents:${{ github.sha }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      pg:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: nexmarket }
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -r agents/requirements.txt pytest
+      - run: cd agents && pytest -q
+        env: { TEST_DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/nexmarket' }
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - run: |
+          IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          docker build -t "$IMAGE_LC" -f agents/Dockerfile agents
+          docker push "$IMAGE_LC"
+      - uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          PG_PORT: ${{ vars.DEV_PG_PORT || '5433' }}
+          PG_PASSWORD: ${{ secrets.DEV_PG_PASSWORD }}
+          AGENTS_SECRET: ${{ secrets.DEV_AGENTS_SECRET }}
+          GROQ_API_KEY: ${{ secrets.DEV_GROQ_API_KEY }}
+          API_PORT: ${{ vars.DEV_API_PORT || '5010' }}
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
+          envs: IMAGE,GHCR_TOKEN,ACTOR,PG_PORT,PG_PASSWORD,AGENTS_SECRET,GROQ_API_KEY,API_PORT
+          script: |
+            set -e
+            : "${AGENTS_SECRET:?DEV_AGENTS_SECRET is empty}"
+            mkdir -p /opt/nexmarket-agents
+            ENVFILE=/opt/nexmarket-agents/dev.env
+            {
+              printf 'AGENTS_DATABASE_URL=%s\n' "postgresql://postgres:${PG_PASSWORD}@localhost:${PG_PORT}/nexmarket"
+              printf 'AGENTS_SECRET=%s\n' "$AGENTS_SECRET"
+              printf 'GROQ_API_KEY=%s\n' "$GROQ_API_KEY"
+              printf 'NEXMARKET_API_URL=%s\n' "http://localhost:${API_PORT}"
+              printf 'AGENTS_PORT=%s\n' '5020'
+            } > "$ENVFILE"
+            chmod 600 "$ENVFILE"
+            IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+            docker pull "$IMAGE_LC"
+            docker rm -f nexmarket-agents-dev 2>/dev/null || true
+            docker run -d --name nexmarket-agents-dev --restart unless-stopped --network host --env-file "$ENVFILE" "$IMAGE_LC"
+            sleep 8
+            curl -fsS http://127.0.0.1:5020/health
