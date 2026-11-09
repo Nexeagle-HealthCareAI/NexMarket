@@ -732,6 +732,81 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime SyncedAt { get; set; } = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// An occasional field survey: an area drawn on the map in the CRM, given to chosen people (agents, HR, anyone), who walk
+    /// or ride it in the app, trace the route (coloured by road type) and mark spots (chowks, crossroads, banner places…),
+    /// and answer a separate set of questions.
+    /// </summary>
+    public class FieldSurvey
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Title { get; set; } = string.Empty;
+        public string? Instructions { get; set; }
+        public string AreaJson { get; set; } = "[]";              // [[lng,lat], …] ring of the drawn area
+        public string SpotTypesJson { get; set; } = "[]";         // ["Chowk", "Crossroad", …]
+        public string RoadTypesJson { get; set; } = "[]";         // ["Village main road", …]
+        public string QuestionsJson { get; set; } = "[]";         // [{ id, text, type: text|number|yesno|choice|multi, options, required }]
+        public string Status { get; set; } = "active";            // draft | active | closed
+        public DateOnly? DueDate { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? ClosedAt { get; set; }
+    }
+
+    /// <summary>One person given a field survey, their progress, and their answers to its questions.</summary>
+    public class FieldSurveyAssignee
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid SurveyId { get; set; }
+        public string AgentId { get; set; } = string.Empty;
+        public string Status { get; set; } = "assigned";           // assigned | started | submitted
+        public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? StartedAt { get; set; }
+        public DateTime? SubmittedAt { get; set; }
+        public DateTime? LastSyncAt { get; set; }
+        public string? AnswersJson { get; set; }                   // { questionId: answer }
+        public DateTime? AnswersAt { get; set; }
+    }
+
+    /// <summary>A stretch of route traced in the app on one road type (a new stretch starts when the road type changes or after a pause).</summary>
+    public class FieldSurveyTrack
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string ClientId { get; set; } = string.Empty;
+        public Guid SurveyId { get; set; }
+        public string AgentId { get; set; } = string.Empty;
+        public string? RoadType { get; set; }
+        public string PointsJson { get; set; } = "[]";            // [[lat,lng,accuracyM,unixMs], …]
+        public int PointCount { get; set; }
+        public double DistanceM { get; set; }
+        public DateTime StartedAt { get; set; }
+        public DateTime? EndedAt { get; set; }
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>A place marked on the map during a field survey: a chowk, crossroad, banner place… with its name, road type, note and photo.</summary>
+    public class FieldSurveySpot
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string ClientId { get; set; } = string.Empty;
+        public Guid SurveyId { get; set; }
+        public string AgentId { get; set; } = string.Empty;
+        public string Type { get; set; } = "Other";
+        public string? Name { get; set; }
+        public string? RoadType { get; set; }
+        public double Lat { get; set; }
+        public double Lng { get; set; }
+        public double? AccuracyM { get; set; }
+        public string? Note { get; set; }
+        public string? PhotoKey { get; set; }
+        public string? PhotoMime { get; set; }
+        public DateTime TakenAt { get; set; }
+        public bool Removed { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
     /// <summary>A Facebook Messenger or Instagram Direct conversation with one person, on the hospital's Page or account.</summary>
     public class SocialConversation
     {

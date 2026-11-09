@@ -11,6 +11,13 @@ export interface MapData {
   /** Navigation: the road route to follow (dashed when it's only a straight line), the destination, and camera follow. */
   route?: [number, number][]; straight?: boolean; dest?: { lat: number; lng: number } | null;
   nav?: { follow: boolean; heading?: number | null } | null;
+  /** Field mapping: the survey area ([lat,lng] corners), routes coloured by road type, marked spots, and tap-to-mark mode. */
+  area?: [number, number][];
+  lines?: { color: string; points: [number, number][] }[];
+  marks?: { id: string; lat: number; lng: number; color: string }[];
+  pick?: boolean;
+  /** Field mapping: keep the view where the agent left it (only fit once). */
+  keepView?: boolean;
 }
 
 /**
@@ -29,7 +36,9 @@ const html = (simple: boolean) => `<!doctype html><html><head><meta name="viewpo
 .arrow{width:34px;height:34px;border-radius:17px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;box-sizing:border-box;border:2px solid #0a72d6}
 .arrow i{width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:16px solid #0a72d6;margin-top:-3px}
 .dest{width:34px;height:34px;border-radius:17px 17px 17px 3px;transform:rotate(-45deg);background:#d03b3b;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);box-sizing:border-box}
-.dest:after{content:'';position:absolute;left:9px;top:9px;width:10px;height:10px;border-radius:5px;background:#fff}</style></head><body><div id="m"></div>
+.dest:after{content:'';position:absolute;left:9px;top:9px;width:10px;height:10px;border-radius:5px;background:#fff}
+.mk{width:20px;height:20px;border-radius:10px;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.4);box-sizing:border-box}
+body.pick #m{cursor:crosshair}</style></head><body><div id="m"></div>
 <script>
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
 var SIMPLE=${simple ? 'true' : 'false'};
@@ -42,6 +51,10 @@ function gl2(){try{var c=document.createElement('canvas');return !!(window.WebGL
 function meEl(d){var e=document.createElement('div');if(d.nav){e.className='arrow';e.innerHTML='<i></i>';e.style.transform='rotate('+(d.nav.heading||0)+'deg)'}else e.className='me';return e}
 function meHtml(d){return d.nav?'<div class="arrow" style="transform:rotate('+(d.nav.heading||0)+'deg)"><i></i></div>':'<div class="me"></div>'}
 function destEl(){var e=document.createElement('div');e.className='dest';e.style.position='relative';return e}
+function fc(f){return{type:'FeatureCollection',features:f}}
+function areaFc(a){if(!a||a.length<3)return fc([]);var r=a.map(function(p){return[p[1],p[0]]});r.push(r[0]);return fc([{type:'Feature',properties:{},geometry:{type:'Polygon',coordinates:[r]}}])}
+function linesFc(ls){return fc((ls||[]).filter(function(l){return l.points.length>1}).map(function(l){return{type:'Feature',properties:{color:l.color},geometry:{type:'LineString',coordinates:l.points.map(function(p){return[p[1],p[0]]})}}}))}
+var PICK=false;
 function pinClass(s){return 'pin'+(s.done?' done':'')+(s.approx?' approx':'')+(s.next?' next':'')}
 
 function startLibre(){
@@ -58,8 +71,15 @@ function startLibre(){
     map.addLayer({id:'route-casing',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#ffffff','line-width':11}});
     map.addLayer({id:'route',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#0a72d6','line-width':7}});
     map.addLayer({id:'route-straight',type:'line',source:'route',filter:['==',['get','straight'],true],paint:{'line-color':'#d9822b','line-width':5,'line-dasharray':[1.5,1.5]}});
+    map.addSource('area',{type:'geojson',data:fc([])});
+    map.addLayer({id:'area-fill',type:'fill',source:'area',paint:{'fill-color':'#0a72d6','fill-opacity':.07}});
+    map.addLayer({id:'area-line',type:'line',source:'area',paint:{'line-color':'#0a72d6','line-width':2.5,'line-dasharray':[2,1.5]}});
+    map.addSource('lines',{type:'geojson',data:fc([])});
+    map.addLayer({id:'lines-casing',type:'line',source:'lines',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#fff','line-width':8}});
+    map.addLayer({id:'lines',type:'line',source:'lines',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':['get','color'],'line-width':5}});
+    map.on('click',function(e){if(PICK)post({type:'tap',lat:e.lngLat.lat,lng:e.lngLat.lng})});
     map.on('dragstart',function(){post({type:'pan'})});
-    var destMarker=null;
+    var destMarker=null,mks=[];
     ready(function(d){
      markers.forEach(function(m){m.remove()});markers=[];
      var b=new maplibregl.LngLatBounds(),any=false;
@@ -70,6 +90,13 @@ function startLibre(){
      if(d.me){meMarker=new maplibregl.Marker({element:meEl(d)}).setLngLat([d.me.lng,d.me.lat]).addTo(map);b.extend([d.me.lng,d.me.lat]);any=true}
      if(destMarker){destMarker.remove();destMarker=null}
      if(d.dest){destMarker=new maplibregl.Marker({element:destEl(),anchor:'bottom'}).setLngLat([d.dest.lng,d.dest.lat]).addTo(map);b.extend([d.dest.lng,d.dest.lat]);any=true}
+     PICK=!!d.pick;document.body.className=PICK?'pick':'';
+     map.getSource('area').setData(areaFc(d.area));map.getSource('lines').setData(linesFc(d.lines));
+     mks.forEach(function(m){m.remove()});mks=[];
+     (d.marks||[]).forEach(function(k){var el=document.createElement('div');el.className='mk';el.style.background=k.color;
+      el.onclick=function(ev){ev.stopPropagation();post({type:'select',id:k.id})};
+      mks.push(new maplibregl.Marker({element:el}).setLngLat([k.lng,k.lat]).addTo(map));if(!d.keepView){b.extend([k.lng,k.lat]);any=true}});
+     (d.area||[]).forEach(function(p){b.extend([p[1],p[0]]);any=true});
      map.getSource('path').setData({type:'Feature',geometry:{type:'LineString',coordinates:(d.path||[]).map(function(p){return[p[1],p[0]]})}});
      var rc=(d.route||[]).map(function(p){return[p[1],p[0]]});
      map.getSource('route').setData(rc.length>1?{type:'Feature',properties:{straight:!!d.straight},geometry:{type:'LineString',coordinates:rc}}:{type:'FeatureCollection',features:[]});
@@ -90,9 +117,15 @@ function startLeaflet(){
    var map=L.map('m',{zoomControl:false,preferCanvas:true,fadeAnimation:false,markerZoomAnimation:false}).setView([26.1,87.95],9);
    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap',keepBuffer:1,updateWhenIdle:true}).addTo(map);
    var layer=L.layerGroup().addTo(map),fitted=false;
+   map.on('click',function(e){if(PICK)post({type:'tap',lat:e.latlng.lat,lng:e.latlng.lng})});
    map.on('dragstart',function(){post({type:'pan'})});
    ready(function(d){
     layer.clearLayers();var pts=[];
+    PICK=!!d.pick;document.body.className=PICK?'pick':'';
+    if(d.area&&d.area.length>2){L.polygon(d.area,{color:'#0a72d6',weight:2.5,dashArray:'6 5',fillOpacity:.07,interactive:false}).addTo(layer);d.area.forEach(function(p){pts.push(p)})}
+    (d.lines||[]).forEach(function(l){if(l.points.length>1){L.polyline(l.points,{color:'#fff',weight:8,interactive:false}).addTo(layer);L.polyline(l.points,{color:l.color,weight:5,interactive:false}).addTo(layer)}});
+    (d.marks||[]).forEach(function(k){var m=L.marker([k.lat,k.lng],{icon:L.divIcon({className:'lf-icon',html:'<div class="mk" style="background:'+k.color+'"></div>',iconSize:[20,20],iconAnchor:[10,10]})}).addTo(layer);
+     m.on('click',function(){post({type:'select',id:k.id})});if(!d.keepView)pts.push([k.lat,k.lng])});
     var line=(d.path||[]).map(function(p){return[p[0],p[1]]});
     if(line.length>1)L.polyline(line,{color:'#0a72d6',weight:4,opacity:.7,interactive:false}).addTo(layer);
     var rt=(d.route||[]).map(function(p){return[p[0],p[1]]});
@@ -117,8 +150,8 @@ if(!SIMPLE&&gl2())startLibre();else startLeaflet();
 // react-native-webview's class typings don't line up with React 19's JSX types yet.
 const WV = WebView as unknown as React.ComponentType<WebViewProps & { ref?: React.Ref<WebView> }>;
 
-export function MapWeb({ data, onSelect, onPan, height = 300, offlineText, flat }: {
-  data: MapData; onSelect?: (id: string) => void; onPan?: () => void; height?: number | '100%'; offlineText: string; flat?: boolean;
+export function MapWeb({ data, onSelect, onPan, onTap, height = 300, offlineText, flat }: {
+  data: MapData; onSelect?: (id: string) => void; onPan?: () => void; onTap?: (lat: number, lng: number) => void; height?: number | '100%'; offlineText: string; flat?: boolean;
 }) {
   const ref = useRef<WebView>(null);
   const [failed, setFailed] = useState(false);
@@ -132,12 +165,13 @@ export function MapWeb({ data, onSelect, onPan, height = 300, offlineText, flat 
 
   const onMessage = (e: WebViewMessageEvent) => {
     try {
-      const m = JSON.parse(e.nativeEvent.data) as { type: string; id?: string };
+      const m = JSON.parse(e.nativeEvent.data) as { type: string; id?: string; lat?: number; lng?: number };
       if (m.type === 'ready') {
         ready.current = true;
         ref.current?.injectJavaScript(`window.setData(${json});true;`);
       } else if (m.type === 'select' && m.id) onSelect?.(m.id);
       else if (m.type === 'pan') onPan?.();
+      else if (m.type === 'tap' && m.lat != null && m.lng != null) onTap?.(m.lat, m.lng);
       else if (m.type === 'error' && !ready.current) setFailed(true);
     } catch { /* ignore */ }
   };
