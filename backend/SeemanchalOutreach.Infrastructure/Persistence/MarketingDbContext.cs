@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
 
@@ -31,6 +31,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<ReferralBill> ReferralBills => Set<ReferralBill>();
         public DbSet<DiseaseRecord> DiseaseRecords => Set<DiseaseRecord>();
         public DbSet<SocialPost> SocialPosts => Set<SocialPost>();
+        public DbSet<ChannelMetric> ChannelMetrics => Set<ChannelMetric>();
+        public DbSet<GoogleReview> GoogleReviews => Set<GoogleReview>();
         public DbSet<AgentIncentive> AgentIncentives => Set<AgentIncentive>();
         public DbSet<Department> Departments => Set<Department>();
         public DbSet<Doctor> Doctors => Set<Doctor>();
@@ -221,6 +223,21 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("social_posts");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.Channel, e.ExternalId }).IsUnique();
+                entity.HasIndex(e => e.PostedAt);
+            });
+            modelBuilder.Entity<ChannelMetric>(entity =>
+            {
+                entity.ToTable("channel_metrics");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Value).HasPrecision(18, 4);
+                entity.HasIndex(e => new { e.Source, e.Account, e.Date, e.Dimension, e.Metric }).IsUnique();
+                entity.HasIndex(e => e.Date);
+            });
+            modelBuilder.Entity<GoogleReview>(entity =>
+            {
+                entity.ToTable("google_reviews");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.ReviewName).IsUnique();
                 entity.HasIndex(e => e.PostedAt);
             });
             modelBuilder.Entity<DiseaseRecord>(entity =>

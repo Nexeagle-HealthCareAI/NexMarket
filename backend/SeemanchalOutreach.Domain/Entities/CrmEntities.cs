@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace SeemanchalOutreach.Domain.Entities
 {
@@ -696,6 +696,40 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? CreatedBy { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// One number for one day from one of the hospital's Google accounts, fetched by NexMarket itself: Business Profile
+    /// (calls, direction requests, views), Search Console, GA4, YouTube or Google Ads. Totals only, never people.
+    /// </summary>
+    public class ChannelMetric
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public DateOnly Date { get; set; }
+        public string Source { get; set; } = "gbp";              // gbp | gsc | ga4 | youtube | google_ads
+        public string Account { get; set; } = "";                // location, property, site, channel or customer id
+        public string Dimension { get; set; } = "";              // "" = the day's total; "channel:Organic Search", "campaign:123", "query:…", "keyword:…"
+        public string? Label { get; set; }                       // what to show for the dimension (campaign name, …)
+        public string Metric { get; set; } = "";                 // calls | directions | website_clicks | views | sessions | clicks | impressions | cost | …
+        public decimal Value { get; set; }
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>A review left on the hospital's Google Business Profile, with the hospital's reply (written in Google or from the CRM).</summary>
+    public class GoogleReview
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string ReviewName { get; set; } = "";             // accounts/…/locations/…/reviews/… (Google's id)
+        public string Location { get; set; } = "";               // locations/…
+        public string? ReviewerName { get; set; }
+        public int Stars { get; set; }
+        public string? Comment { get; set; }
+        public DateTime PostedAt { get; set; }
+        public DateTime? ReviewUpdatedAt { get; set; }
+        public string? ReplyText { get; set; }
+        public DateTime? RepliedAt { get; set; }
+        public string? RepliedBy { get; set; }                   // CRM user who replied from NexMarket (null = replied in Google)
+        public DateTime SyncedAt { get; set; } = DateTime.UtcNow;
     }
 
     /// <summary>A Facebook Messenger or Instagram Direct conversation with one person, on the hospital's Page or account.</summary>

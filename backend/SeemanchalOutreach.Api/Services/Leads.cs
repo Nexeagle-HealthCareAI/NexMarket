@@ -22,7 +22,7 @@ namespace SeemanchalOutreach.Api.Services
         public static readonly string[] Statuses = { "new", "contacted", "appointment", "arrived", "admitted", "lost" };
         public static readonly string[] Open = { "new", "contacted", "appointment" };
         public static readonly string[] Sources = { "whatsapp", "partner_qr", "partner", "ad", "camp", "missed_call", "walk_in", "desk", "agent", "web",
-            "fb_form", "ig_form", "facebook", "instagram" };
+            "fb_form", "ig_form", "facebook", "instagram", "google_listing", "google_ads" };
 
         public static string StatusLabel(string s) => s switch
         {
@@ -51,6 +51,8 @@ namespace SeemanchalOutreach.Api.Services
             "ig_form" => "Instagram lead form",
             "facebook" => "Facebook message",
             "instagram" => "Instagram message",
+            "google_listing" => "Google search / Maps",
+            "google_ads" => "Google ad",
             _ => s,
         };
 

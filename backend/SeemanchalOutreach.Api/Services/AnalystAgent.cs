@@ -224,6 +224,52 @@ namespace SeemanchalOutreach.Api.Services
         private readonly ILogger<AnalystAgent> _logger;
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+        /// <summary>The Google numbers added up for the analyst: totals per source, top search terms, review counts. No names, no review text.</summary>
+        private async Task<object> GooglePackAsync(int days, CancellationToken ct)
+        {
+            var to = DateOnly.FromDateTime(IstClock.NowIst);
+            var from = to.AddDays(-days + 1);
+            var prevFrom = from.AddDays(-days);
+            var rows = await _db.ChannelMetrics.AsNoTracking()
+                .Where(m => m.Dimension == "" && m.Date >= prevFrom && m.Date <= to && m.Metric != "rating" && m.Metric != "review_count")
+                .GroupBy(m => new { m.Source, m.Metric, Cur = m.Date >= from })
+                .Select(g => new { g.Key.Source, g.Key.Metric, g.Key.Cur, Value = g.Sum(x => x.Value) }).ToListAsync(ct);
+            if (rows.Count == 0) return new { days, note = "No Google numbers yet: Google isn't connected in Google → Setup, or nothing has been fetched." };
+            var totals = rows.GroupBy(r => r.Source).ToDictionary(g => GoogleSyncService.SourceLabels.GetValueOrDefault(g.Key, g.Key),
+                g => g.GroupBy(x => x.Metric).Where(m => m.Key != "position_x_impr").ToDictionary(m => m.Key,
+                    m => new { thisPeriod = Math.Round(m.Where(x => x.Cur).Sum(x => x.Value), 2), previousPeriod = Math.Round(m.Where(x => !x.Cur).Sum(x => x.Value), 2) }));
+            var queries = await _db.ChannelMetrics.AsNoTracking()
+                .Where(m => m.Source == "gsc" && m.Dimension.StartsWith("query:") && m.Metric == "clicks" && m.Date >= from)
+                .GroupBy(m => m.Dimension).Select(g => new { term = g.Key.Substring(6), clicks = g.Sum(x => x.Value) })
+                .OrderByDescending(x => x.clicks).Take(15).ToListAsync(ct);
+            var keywords = await _db.ChannelMetrics.AsNoTracking()
+                .Where(m => m.Source == "gbp" && m.Metric == "keyword_views" && m.Date >= new DateOnly(from.Year, from.Month, 1))
+                .GroupBy(m => m.Dimension).Select(g => new { term = g.Key.Substring(8), views = g.Sum(x => x.Value) })
+                .OrderByDescending(x => x.views).Take(15).ToListAsync(ct);
+            var reviews = await _db.GoogleReviews.AsNoTracking().Select(x => new { x.Stars, x.PostedAt, Answered = x.ReplyText != null }).ToListAsync(ct);
+            var fromUtc = IstClock.StartOfIstDayUtc(from);
+            var leads = await _db.Leads.AsNoTracking()
+                .Where(l => (l.Source == "google_listing" || l.Source == "google_ads" || l.Source == "web") && l.CreatedAt >= fromUtc)
+                .GroupBy(l => l.Source).Select(g => new { source = g.Key, leads = g.Count(), arrived = g.Count(x => x.Status == "arrived" || x.Status == "admitted") })
+                .ToListAsync(ct);
+            return new
+            {
+                days, totals,
+                note = "Business Profile, Search Console and YouTube numbers arrive 2-5 days late, so the last few days look low. views_search and views_maps = times the listing was shown.",
+                topSearchTermsToWebsite = queries,
+                topSearchTermsShowingListing = keywords,
+                reviews = new
+                {
+                    total = reviews.Count,
+                    newThisPeriod = reviews.Count(x => x.PostedAt >= fromUtc),
+                    averageStars = reviews.Any(x => x.Stars > 0) ? Math.Round(reviews.Where(x => x.Stars > 0).Average(x => x.Stars), 1) : (double?)null,
+                    unanswered = reviews.Count(x => !x.Answered),
+                    lowRatedUnanswered = reviews.Count(x => !x.Answered && x.Stars is > 0 and <= 3),
+                },
+                leadsFromGoogle = leads,
+            };
+        }
+
         /// <summary>The disease register added up for the analyst. Counts only; the register holds no names.</summary>
         private async Task<object> DiseasePackAsync(int days, string? district, string? block, CancellationToken ct, bool small = false)
         {
@@ -268,7 +314,7 @@ namespace SeemanchalOutreach.Api.Services
             "or 'lost' if the patient never came. The hospital pays some partners (payouts). Agents also ask every new partner six survey " +
             "questions about local illnesses, missing specialists, where patients go today, who decides, how families pay and transport. " +
             "People also contact the hospital directly as leads (WhatsApp, Facebook and Instagram forms and messages, partner QR codes, missed calls, health camps); " +
-            "the get_leads tool covers them. " +
+            "the get_leads tool covers them. The hospital's Google listing, website, YouTube and Google Ads are covered by get_google_numbers. " +
             "Admissions are what the business cares about most, then arrival rate, then active partners, then field coverage. " +
             "Rules: use only numbers you were given or looked up with the tools; never invent figures; quote the numbers behind every point; " +
             "say plainly when the data is too thin to judge; write short, plain sentences a hospital marketing manager in India can act on; " +
@@ -289,6 +335,7 @@ namespace SeemanchalOutreach.Api.Services
           {"type":"function","function":{"name":"get_disease_patterns","description":"The disease register (health camps and field, counts only, no names): cases by disease, age group, gender, block and month for the last N days, optionally for one district or block.","parameters":{"type":"object","properties":{"days":{"type":"integer"},"district":{"type":"string","description":"District name, or empty for all"},"block":{"type":"string","description":"Block name, or empty for all"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_money_summary","description":"Money paid to partners in the last N days against the admissions it brought: total, cost per admission, waiting approval, approved but unpaid, overdue, by purpose and partner type, top paid partners, partners paid with no admissions.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_leads","description":"People who contacted the hospital directly (WhatsApp, Facebook/Instagram forms and messages, partner QR codes, missed calls, health camps, walk-ins) in the last N days: count, appointment and arrival rate and first-reply time by source and by department, plus unanswered WhatsApp and Facebook/Instagram conversations right now.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
+          {"type":"function","function":{"name":"get_google_numbers","description":"The hospital's Google presence for the last N days against the previous N days, read from Google by NexMarket: Google listing (calls, direction requests, website clicks, times shown), Google Search clicks to the website and top search terms, website visits, YouTube views, Google Ads spend and calls, Google reviews (rating, unanswered, low ratings; no reviewer names), and leads from Google with how many arrived.","parameters":{"type":"object","properties":{"days":{"type":"integer"}},"required":["days"]}}},
           {"type":"function","function":{"name":"get_tracked_items","description":"Issues, opportunities and planned actions already being tracked, with owner, due date and status.","parameters":{"type":"object","properties":{"status":{"type":"string","enum":["open","in_progress","done","dismissed","all"]}},"required":[]}}}
         ]
         """)!.AsArray();
@@ -341,6 +388,9 @@ namespace SeemanchalOutreach.Api.Services
                     break;
                 case "get_leads":
                     result = await LeadsSummaryAsync(from, to, ct);
+                    break;
+                case "get_google_numbers":
+                    result = await GooglePackAsync(Math.Clamp((int?)Int(args["days"]) ?? 30, 7, 365), ct);
                     break;
                 case "get_tracked_items":
                     var st = Str(args["status"]) ?? "open";

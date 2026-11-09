@@ -60,6 +60,7 @@ const SOURCES: { key: string; label: string }[] = [
   { key: 'ad', label: 'Ad' }, { key: 'camp', label: 'Camp' }, { key: 'missed_call', label: 'Missed call' },
   { key: 'desk', label: 'Call to desk' }, { key: 'walk_in', label: 'Walk-in' }, { key: 'agent', label: 'Field agent' }, { key: 'web', label: 'Website' },
   { key: 'fb_form', label: 'Facebook form' }, { key: 'ig_form', label: 'Instagram form' }, { key: 'facebook', label: 'Facebook message' }, { key: 'instagram', label: 'Instagram message' },
+  { key: 'google_listing', label: 'Google search / Maps' }, { key: 'google_ads', label: 'Google ad' },
 ];
 const LOST_REASONS = ['Went elsewhere', 'Too far / travel', 'Cost', 'Not reachable', 'Only an enquiry', 'Wrong number'];
 
@@ -617,8 +618,8 @@ function AddLead({ onClose, onAdded }: { onClose: () => void; onAdded: (id: stri
           ))}
         </div>
       </div>
-      {(source === 'camp' || source === 'ad' || source === 'web') && (
-        <label className="crm-field">{source === 'camp' ? 'Which camp?' : source === 'ad' ? 'Which ad?' : 'Which page?'}
+      {(source === 'camp' || source === 'ad' || source === 'web' || source === 'google_ads') && (
+        <label className="crm-field">{source === 'camp' ? 'Which camp?' : source === 'ad' || source === 'google_ads' ? 'Which ad?' : 'Which page or campaign?'}
           <input className="crm-input" value={sourceRef} onChange={(e) => setSourceRef(e.target.value)} maxLength={80} placeholder={source === 'camp' ? 'e.g. Kasba, 12 Nov' : ''} />
         </label>
       )}
