@@ -24,7 +24,7 @@ namespace SeemanchalOutreach.Api.Controllers
     [Route("api/v1/access")]
     public class AccessController : ControllerBase
     {
-        private static readonly string[] EditableRoles = { RoleChecks.MarketingManager, RoleChecks.HospitalRep };
+        private static readonly string[] EditableRoles = { RoleChecks.MarketingManager, RoleChecks.HospitalRep, RoleChecks.DigitalMarketing };
 
         private readonly IMarketingDbContext _db;
         private readonly IPermissionService _perms;
@@ -98,6 +98,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 new { role = RoleChecks.Admin, label = "Admin", users = CountOf(RoleChecks.Admin), editable = false, pages = await _perms.GetLevelsAsync(RoleChecks.Admin) },
                 new { role = RoleChecks.MarketingManager, label = "Marketing manager", users = CountOf(RoleChecks.MarketingManager), editable = true, pages = await _perms.GetLevelsAsync(RoleChecks.MarketingManager) },
                 new { role = RoleChecks.HospitalRep, label = "Hospital representative", users = CountOf(RoleChecks.HospitalRep), editable = true, pages = await _perms.GetLevelsAsync(RoleChecks.HospitalRep) },
+                new { role = RoleChecks.DigitalMarketing, label = "Digital marketing specialist", users = CountOf(RoleChecks.DigitalMarketing), editable = true, pages = await _perms.GetLevelsAsync(RoleChecks.DigitalMarketing) },
             };
             return Ok(new { pages = Pages.All, roles, fieldAgents = fieldCount, fieldRoles = await FieldRoleListAsync(counts.Select(c => (c.Role, c.Count))) });
         }

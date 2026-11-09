@@ -825,6 +825,7 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? Link { get; set; }
         public string Repeat { get; set; } = "none";              // none | daily | weekdays | weekly | monthly
         public Guid? RepeatOf { get; set; }                        // the card this one was made from
+        public Guid? ParentId { get; set; }                        // a sub-task's parent card (one level only)
         public int CommentCount { get; set; }
         public bool Archived { get; set; }
         public string CreatedBy { get; set; } = string.Empty;
@@ -836,6 +837,37 @@ namespace SeemanchalOutreach.Domain.Entities
     }
 
     /// <summary>A comment on a team-board card, or a line of its history (moved, assigned, due date changed…).</summary>
+    /// <summary>A plan or document written on the Team board (rich text, saved as the editor's JSON).</summary>
+    public class WorkDoc
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Title { get; set; } = string.Empty;
+        public string Kind { get; set; } = "plan";                // plan | doc | notes
+        public string ContentJson { get; set; } = "{}";           // the editor's document (Tiptap / ProseMirror JSON)
+        public string PlainText { get; set; } = string.Empty;     // for search and previews
+        public string? Project { get; set; }
+        public Guid? CardId { get; set; }                          // the card it plans, if any
+        public bool Pinned { get; set; }
+        public bool Archived { get; set; }
+        public int Version { get; set; } = 1;                      // goes up on every save; stops two people overwriting each other
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string UpdatedBy { get; set; } = string.Empty;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>An earlier version of a plan, kept when it is saved again, so nothing written is ever lost.</summary>
+    public class WorkDocRevision
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid DocId { get; set; }
+        public int Version { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string ContentJson { get; set; } = "{}";
+        public string SavedBy { get; set; } = string.Empty;
+        public DateTime SavedAt { get; set; }
+    }
+
     public class WorkNote
     {
         public Guid Id { get; set; } = Guid.NewGuid();

@@ -1,12 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, CalendarDays, Check, ExternalLink, Link2, Plus, Repeat as RepeatIcon, Send, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, CalendarDays, Check, CheckCircle2, CornerDownRight, ExternalLink, FileText, Link2, Plus, Repeat as RepeatIcon, Send, Trash2, X } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { friendlyError, Skeleton } from '@/components/crm/ui';
-import { avatarColor, dueLabel, initials, istToday, labelColors, PRIORITY, REPEAT_LABEL, type BoardRes, type Card, type CheckItem, type Person, type Priority, type Repeat, type Status } from './shared';
+import { avatarColor, DOC_KIND, dueLabel, initials, istToday, labelColors, parseQuick, PRIORITY, REPEAT_LABEL, type BoardRes, type Card, type CheckItem, type DocRow, type Person, type Priority, type Repeat, type Status } from './shared';
 
 interface Note { id: string; kind: 'comment' | 'activity'; agentId: string; text: string; at: string }
+type LinkedDoc = Pick<DocRow, 'id' | 'title' | 'kind' | 'updatedAt' | 'updatedBy'>;
+interface CardRes { card: Card; notes: Note[]; subtasks: Card[]; docs: LinkedDoc[] }
 
 const when = (iso: string) => new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }).format(new Date(iso));
 const rid = () => Math.random().toString(36).slice(2, 10);
@@ -18,11 +20,16 @@ export function Avatar({ p, id, size = 26 }: { p?: Person; id: string; size?: nu
 }
 
 /** One card in full: everything about it can be changed here, and the team talks about it in the comments. */
-export function CardDrawer({ id, board, onClose, onSaved, toast }: {
+export function CardDrawer({ id, board, onClose, onSaved, toast, onOpen, onOpenDoc }: {
   id: string; board: BoardRes; onClose: () => void; onSaved: (c: Card, extra?: Card | null) => void; toast: (m: string) => void;
+  onOpen: (id: string) => void; onOpenDoc: (id: string) => void;
 }) {
   const [card, setCard] = useState<Card | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [subs, setSubs] = useState<Card[]>([]);
+  const [docs, setDocs] = useState<LinkedDoc[]>([]);
+  const [newSub, setNewSub] = useState('');
+  const [addingSub, setAddingSub] = useState(false);
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [comment, setComment] = useState('');
@@ -36,8 +43,8 @@ export function CardDrawer({ id, board, onClose, onSaved, toast }: {
 
   const load = useCallback(async () => {
     try {
-      const r = await crm.get<{ card: Card; notes: Note[] }>(`/api/v1/work/cards/${id}`);
-      setCard(r.card); setNotes(r.notes); setTitle(r.card.title); setDesc(r.card.description ?? '');
+      const r = await crm.get<CardRes>(`/api/v1/work/cards/${id}`);
+      setCard(r.card); setNotes(r.notes); setTitle(r.card.title); setDesc(r.card.description ?? ''); setSubs(r.subtasks ?? []); setDocs(r.docs ?? []);
     } catch (e) { toast(friendlyError(e)); onClose(); }
   }, [id, onClose, toast]);
   useEffect(() => { const t = setTimeout(() => void load(), 0); return () => clearTimeout(t); }, [load]);
@@ -48,8 +55,8 @@ export function CardDrawer({ id, board, onClose, onSaved, toast }: {
     try {
       const c = await crm.put<Card>(`/api/v1/work/cards/${card.id}`, patch);
       setCard(c); onSaved(c);
-      const r = await crm.get<{ card: Card; notes: Note[] }>(`/api/v1/work/cards/${card.id}`);
-      setNotes(r.notes);
+      const r = await crm.get<CardRes>(`/api/v1/work/cards/${card.id}`);
+      setNotes(r.notes); setSubs(r.subtasks ?? []);
     } catch (e) { toast(friendlyError(e)); }
   };
   const move = async (status: Status) => {
@@ -77,6 +84,40 @@ export function CardDrawer({ id, board, onClose, onSaved, toast }: {
   };
   const setChecks = (list: CheckItem[]) => void save({ checklist: list });
 
+  /** A sub-task in one line, like quick add: "Book the tent @imran fri". */
+  const addSub = async () => {
+    if (!card || !newSub.trim()) return;
+    const p = parseQuick(newSub, people);
+    if (!p.title.trim()) return;
+    setAddingSub(true);
+    try {
+      const s = await crm.post<Card>('/api/v1/work/cards', {
+        title: p.title, parentId: card.id, status: p.status ?? 'todo', assignees: p.assignees, dueDate: p.dueDate ?? '',
+        priority: p.priority ?? 'normal', ...(p.labels.length ? { labels: p.labels } : {}),
+      });
+      setSubs((x) => [...x, s]); setNewSub('');
+      onSaved(s);
+      const c = { ...card, subTotal: card.subTotal + 1 }; setCard(c); onSaved(c);
+    } catch (e) { toast(friendlyError(e)); } finally { setAddingSub(false); }
+  };
+  const toggleSub = async (s: Card) => {
+    if (!card) return;
+    const to: Status = s.status === 'done' ? 'todo' : 'done';
+    try {
+      const r = await crm.post<{ card: Card; repeated?: Card | null }>(`/api/v1/work/cards/${s.id}/move`, { status: to });
+      setSubs((x) => x.map((y) => (y.id === s.id ? r.card : y)));
+      onSaved(r.card);
+      const c = { ...card, subDone: card.subDone + (to === 'done' ? 1 : -1) }; setCard(c); onSaved(c);
+    } catch (e) { toast(friendlyError(e)); }
+  };
+  const newPlan = async () => {
+    if (!card) return;
+    try {
+      const d = await crm.post<DocRow>('/api/v1/work/docs', { title: `Plan: ${card.title}`, kind: 'plan', cardId: card.id, project: card.project ?? undefined });
+      onOpenDoc(d.id);
+    } catch (e) { toast(friendlyError(e)); }
+  };
+
   if (!card) return <><div className="wk-scrim" onClick={onClose} /><aside className="wk-drawer" ref={panel}><Skeleton h={400} /></aside></>;
   const pr = PRIORITY[card.priority];
 
@@ -95,6 +136,11 @@ export function CardDrawer({ id, board, onClose, onSaved, toast }: {
         </header>
 
         <div className="wk-dr-body">
+          {card.parent && (
+            <button type="button" className="wk-parent-link" onClick={() => onOpen(card.parent!.id)}>
+              <CornerDownRight size={14} aria-hidden /> Sub-task of <strong>#{card.parent.number} {card.parent.title}</strong>
+            </button>
+          )}
           <textarea className="wk-title-in" rows={2} value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)}
             onBlur={() => { if (title.trim() && title.trim() !== card.title) void save({ title }); }} aria-label="Title" />
 
@@ -178,6 +224,41 @@ export function CardDrawer({ id, board, onClose, onSaved, toast }: {
             <h3>Notes</h3>
             <textarea className="crm-input" rows={4} value={desc} maxLength={8000} placeholder="What exactly needs doing, who to talk to, where…" onChange={(e) => setDesc(e.target.value)}
               onBlur={() => { if (desc !== (card.description ?? '')) void save({ description: desc }); }} />
+          </section>
+
+          {!card.parentId && (
+            <section className="wk-sec">
+              <h3>Sub-tasks {subs.length > 0 && <span className="crm-sub">{subs.filter((s) => s.status === 'done').length}/{subs.length}</span>}</h3>
+              <p className="crm-sub wk-sec-hint">Each sub-task is its own card: give it to someone, set a date, move it on the board.</p>
+              {subs.length > 0 && <div className="wk-bar"><span style={{ width: `${(subs.filter((s) => s.status === 'done').length / subs.length) * 100}%` }} /></div>}
+              <ul className="wk-subs">
+                {subs.map((s) => (
+                  <li key={s.id} className={s.status === 'done' ? 'is-done' : undefined}>
+                    <button type="button" className={`wk-tick${s.status === 'done' ? ' is-on' : ''}`} aria-label={s.status === 'done' ? 'Mark not done' : 'Mark done'} onClick={() => void toggleSub(s)}><CheckCircle2 size={18} aria-hidden /></button>
+                    <button type="button" className="wk-sub-title" onClick={() => onOpen(s.id)}><span className="crm-sub">#{s.number}</span> {s.title}</button>
+                    {s.status !== 'done' && s.status !== 'todo' && <span className="wk-sub-st">{board.columns.find((c) => c.key === s.status)?.label}</span>}
+                    {s.dueDate && <span className={`wk-due${s.overdue ? ' is-late' : s.dueDate === istToday() ? ' is-today' : ''}`}><CalendarDays size={12} aria-hidden />{dueLabel(s.dueDate)}</span>}
+                    <span className="wk-avs">{s.assignees.slice(0, 3).map((a) => <Avatar key={a} id={a} p={byId(a)} size={20} />)}</span>
+                  </li>
+                ))}
+              </ul>
+              <form className="wk-sub-add" onSubmit={(e) => { e.preventDefault(); void addSub(); }}>
+                <input className="crm-input" value={newSub} placeholder="Add a sub-task: Book the tent @name fri" maxLength={200} onChange={(e) => setNewSub(e.target.value)} aria-label="New sub-task" />
+                <button type="submit" className="crm-btn is-sm" disabled={addingSub || !newSub.trim()}><Plus size={14} aria-hidden /> Add</button>
+              </form>
+            </section>
+          )}
+
+          <section className="wk-sec">
+            <h3>Plans</h3>
+            {docs.length > 0 && (
+              <ul className="wk-docs-mini">
+                {docs.map((d) => (
+                  <li key={d.id}><button type="button" onClick={() => onOpenDoc(d.id)}><FileText size={15} aria-hidden /> <strong>{d.title}</strong> <span className="crm-sub">{DOC_KIND[d.kind]} · {byId(d.updatedBy)?.name ?? d.updatedBy} · {when(d.updatedAt)}</span></button></li>
+                ))}
+              </ul>
+            )}
+            <button type="button" className="wk-add-mini" onClick={() => void newPlan()}><Plus size={13} aria-hidden /> Write a plan for this card</button>
           </section>
 
           <section className="wk-sec">

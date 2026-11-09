@@ -39,6 +39,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<FieldSurveySpot> FieldSurveySpots => Set<FieldSurveySpot>();
         public DbSet<WorkCard> WorkCards => Set<WorkCard>();
         public DbSet<WorkNote> WorkNotes => Set<WorkNote>();
+        public DbSet<WorkDoc> WorkDocs => Set<WorkDoc>();
+        public DbSet<WorkDocRevision> WorkDocRevisions => Set<WorkDocRevision>();
         public DbSet<AgentIncentive> AgentIncentives => Set<AgentIncentive>();
         public DbSet<Department> Departments => Set<Department>();
         public DbSet<Doctor> Doctors => Set<Doctor>();
@@ -279,12 +281,27 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.Number).IsUnique();
                 entity.HasIndex(e => new { e.Archived, e.Status });
+                entity.HasIndex(e => e.ParentId);
             });
             modelBuilder.Entity<WorkNote>(entity =>
             {
                 entity.ToTable("work_notes");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.CardId, e.CreatedAt });
+            });
+            modelBuilder.Entity<WorkDoc>(entity =>
+            {
+                entity.ToTable("work_docs");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.Archived, e.UpdatedAt });
+                entity.HasIndex(e => e.CardId);
+                entity.Property(e => e.Version).IsConcurrencyToken();
+            });
+            modelBuilder.Entity<WorkDocRevision>(entity =>
+            {
+                entity.ToTable("work_doc_revisions");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.DocId, e.Version });
             });
             modelBuilder.Entity<DiseaseRecord>(entity =>
             {

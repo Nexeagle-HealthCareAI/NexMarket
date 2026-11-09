@@ -36,6 +36,8 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<FieldSurveySpot> FieldSurveySpots { get; }
         DbSet<WorkCard> WorkCards { get; }
         DbSet<WorkNote> WorkNotes { get; }
+        DbSet<WorkDoc> WorkDocs { get; }
+        DbSet<WorkDocRevision> WorkDocRevisions { get; }
         DbSet<AgentIncentive> AgentIncentives { get; }
         DbSet<Department> Departments { get; }
         DbSet<Doctor> Doctors { get; }

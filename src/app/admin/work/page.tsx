@@ -2,17 +2,18 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Archive, CalendarDays, CheckCircle2, CheckSquare, Columns3, LayoutList, MessageSquare, Plus, Repeat as RepeatIcon, Search, Sun, X } from 'lucide-react';
+import { Archive, CalendarDays, CheckCircle2, CheckSquare, Columns3, CornerDownRight, FileText, LayoutList, ListTree, MessageSquare, Plus, Repeat as RepeatIcon, Search, Sun, X } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
 import { ErrorBox, friendlyError, PageHead, Skeleton, useToast } from '@/components/crm/ui';
 import { Avatar, CardDrawer } from '@/components/crm/work/CardDrawer';
+import { Docs } from '@/components/crm/work/Docs';
 import {
   COLUMN_COLOR, COLUMN_HINT, dueLabel, istToday, labelColors, parseQuick, PRIORITY,
   type BoardRes, type Card, type Status,
 } from '@/components/crm/work/shared';
 
-type View = 'board' | 'day' | 'list';
+type View = 'board' | 'day' | 'list' | 'docs';
 type Due = '' | 'late' | 'today' | 'week' | 'none';
 
 export default function WorkWrap() {
@@ -42,6 +43,7 @@ function Tile({ c, board, onOpen, onDone, draggable, onDragStart }: {
         </button>
         <span className="wk-tile-title">{c.title}</span>
       </div>
+      {c.parent && <div className="wk-parent" title={`Sub-task of #${c.parent.number} ${c.parent.title}`}><CornerDownRight size={12} aria-hidden /><span>#{c.parent.number} {c.parent.title}</span></div>}
       {(c.labels.length > 0 || c.project) && (
         <div className="wk-tile-labels">
           {c.project && <span className="wk-proj">{c.project}</span>}
@@ -52,6 +54,7 @@ function Tile({ c, board, onOpen, onDone, draggable, onDragStart }: {
         {(c.priority === 'urgent' || c.priority === 'high') && <span className="wk-pri" style={{ color: p.color }}>{p.label}</span>}
         {c.dueDate && <span className={`wk-due${c.overdue ? ' is-late' : c.dueDate === istToday() ? ' is-today' : ''}`}><CalendarDays size={12} aria-hidden />{dueLabel(c.dueDate)}</span>}
         {c.checkTotal > 0 && <span className={`wk-meta${c.checkDone === c.checkTotal ? ' is-ok' : ''}`}><CheckSquare size={12} aria-hidden />{c.checkDone}/{c.checkTotal}</span>}
+        {c.subTotal > 0 && <span className={`wk-meta${c.subDone === c.subTotal ? ' is-ok' : ''}`} title={`${c.subDone} of ${c.subTotal} sub-tasks done`}><ListTree size={12} aria-hidden />{c.subDone}/{c.subTotal}</span>}
         {c.comments > 0 && <span className="wk-meta"><MessageSquare size={12} aria-hidden />{c.comments}</span>}
         {c.repeat !== 'none' && <span className="wk-meta" title="Repeats"><RepeatIcon size={12} aria-hidden /></span>}
         <span className="wk-avs">{c.assignees.slice(0, 3).map((a) => <Avatar key={a} id={a} p={byId(a)} size={22} />)}{c.assignees.length > 3 && <span className="crm-sub">+{c.assignees.length - 3}</span>}</span>
@@ -76,6 +79,7 @@ function WorkBoard() {
   const [label, setLabel] = useState('');
   const [project, setProject] = useState('');
   const [due, setDue] = useState<Due>('');
+  const [subs, setSubs] = useState(true);
   const [quick, setQuick] = useState('');
   const [adding, setAdding] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -95,7 +99,7 @@ function WorkBoard() {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (e.key.toLowerCase() === 'n' && !e.ctrlKey && !e.metaKey && !['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) { e.preventDefault(); quickRef.current?.focus(); }
+      if (e.key.toLowerCase() === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey && !t.isContentEditable && !t.closest('[contenteditable]') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) { e.preventDefault(); quickRef.current?.focus(); }
     };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
@@ -108,6 +112,13 @@ function WorkBoard() {
   };
   const openCard = (id: string | null) => setParam('card', id);
   const pickView = (v: View) => { setView(v); setParam('v', v === 'board' ? null : v); };
+  /** Opens a plan in Plans & docs (closing any open card). */
+  const openDoc = (id: string) => {
+    const sp = new URLSearchParams(params.toString());
+    sp.set('v', 'docs'); sp.set('doc', id); sp.delete('card');
+    setView('docs');
+    router.replace(`/admin/work?${sp}`, { scroll: false });
+  };
 
   const parsed = useMemo(() => (board && quick.trim() ? parseQuick(quick, board.people) : null), [quick, board]);
 
@@ -153,10 +164,10 @@ function WorkBoard() {
     const s = q.trim().toLowerCase();
     const t = istToday(), w = istToday(7);
     return board.cards.filter((c) => (!person || (person === '-' ? c.assignees.length === 0 : c.assignees.includes(person)))
-      && (!label || c.labels.includes(label)) && (!project || c.project === project)
+      && (subs || !c.parentId) && (!label || c.labels.includes(label)) && (!project || c.project === project)
       && (!s || c.title.toLowerCase().includes(s) || `#${c.number}` === s || (c.description ?? '').toLowerCase().includes(s))
       && (due === '' || (due === 'late' ? c.overdue : due === 'today' ? c.dueDate === t : due === 'week' ? !!c.dueDate && c.dueDate <= w && c.status !== 'done' : !c.dueDate)));
-  }, [board, q, person, label, project, due]);
+  }, [board, q, person, label, project, due, subs]);
 
   if (error && !board) return <main className="crm-page"><ErrorBox message={error} onRetry={load} /></main>;
   if (!board) return <main className="crm-page"><Skeleton h={600} /></main>;
@@ -230,7 +241,9 @@ function WorkBoard() {
           <button type="button" className="crm-chip" aria-pressed={view === 'board'} onClick={() => pickView('board')}><Columns3 size={14} aria-hidden /> Board</button>
           <button type="button" className="crm-chip" aria-pressed={view === 'day'} onClick={() => pickView('day')}><Sun size={14} aria-hidden /> My day</button>
           <button type="button" className="crm-chip" aria-pressed={view === 'list'} onClick={() => pickView('list')}><LayoutList size={14} aria-hidden /> List</button>
+          <button type="button" className="crm-chip" aria-pressed={view === 'docs'} onClick={() => pickView('docs')}><FileText size={14} aria-hidden /> Plans &amp; docs</button>
         </div>
+        {view !== 'docs' && <>
         <label className="crm-search wk-search"><Search size={15} aria-hidden /><span className="crm-sr">Search cards</span>
           <input className="crm-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search or #12" /></label>
         <select className="crm-input wk-sel" value={person} onChange={(e) => setPerson(e.target.value)} aria-label="Person">
@@ -251,9 +264,11 @@ function WorkBoard() {
           </select>
         )}
         {anyFilter && <button type="button" className="wa-link" onClick={() => { setQ(''); setPerson(''); setLabel(''); setProject(''); setDue(''); }}><X size={13} aria-hidden /> Clear</button>}
+        <button type="button" className="crm-chip" aria-pressed={!subs} onClick={() => setSubs((v) => !v)} title="Show or hide sub-tasks as their own cards"><ListTree size={14} aria-hidden /> {subs ? 'Hide sub-tasks' : 'Show sub-tasks'}</button>
         <button type="button" className={`crm-chip wk-arch`} aria-pressed={archived} onClick={() => setArchived((a) => !a)}><Archive size={14} aria-hidden /> Archive</button>
+        </>}
       </div>
-      {archived && <div className="ld-banner"><span><strong>Showing the archive.</strong> Open a card and press &ldquo;Bring back&rdquo; to put it on the board again.</span></div>}
+      {archived && view !== 'docs' && <div className="ld-banner"><span><strong>Showing the archive.</strong> Open a card and press &ldquo;Bring back&rdquo; to put it on the board again.</span></div>}
 
       {view === 'board' && (
         <div className="wk-board" onDragEnd={() => { setDragId(null); setDropAt(null); }}>
@@ -329,13 +344,14 @@ function WorkBoard() {
                   {[...filtered].sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done') || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || PRI_RANK[a.priority] - PRI_RANK[b.priority]).map((c) => (
                     <tr key={c.id} className="fs-row" onClick={() => openCard(c.id)}>
                       <td><button type="button" className={`wk-tick${c.status === 'done' ? ' is-on' : ''}`} aria-label="Mark done" onClick={(e) => { e.stopPropagation(); if (c.status !== 'done') void move(c.id, 'done'); }}><CheckCircle2 size={18} aria-hidden /></button></td>
-                      <td><span className="crm-sub">#{c.number}</span> <span className={c.status === 'done' ? 'wk-strike' : undefined}>{c.title}</span>
+                      <td>{c.parent && <CornerDownRight size={12} aria-hidden className="wk-sub-ic" />}<span className="crm-sub">#{c.number}</span> <span className={c.status === 'done' ? 'wk-strike' : undefined}>{c.title}</span>
+                        {c.parent && <span className="crm-sub"> · in #{c.parent.number}</span>}
                         {c.labels.length > 0 && <span style={{ marginLeft: 6 }}>{c.labels.map((l) => <span key={l} className="wk-label" style={{ background: labelColors(l).bg, color: labelColors(l).fg, marginRight: 4 }}>#{l}</span>)}</span>}</td>
                       <td><span className="wk-col-dot" style={{ background: COLUMN_COLOR[c.status] }} aria-hidden /> {board.columns.find((x) => x.key === c.status)?.label}</td>
                       <td><span className="wk-avs">{c.assignees.map((a) => <Avatar key={a} id={a} p={board.people.find((p) => p.agentId === a)} size={22} />)}</span></td>
                       <td>{c.dueDate ? <span className={`wk-due${c.overdue ? ' is-late' : c.dueDate === istToday() ? ' is-today' : ''}`}>{dueLabel(c.dueDate)}</span> : '—'}</td>
                       <td style={{ color: PRIORITY[c.priority].color }}>{PRIORITY[c.priority].label}</td>
-                      <td>{c.checkTotal ? `${c.checkDone}/${c.checkTotal}` : '—'}</td>
+                      <td>{c.subTotal ? `${c.subDone}/${c.subTotal} sub-tasks` : c.checkTotal ? `${c.checkDone}/${c.checkTotal}` : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -345,7 +361,10 @@ function WorkBoard() {
         </section>
       )}
 
-      {open && <CardDrawer key={open} id={open} board={board} onClose={() => openCard(null)} onSaved={merge} toast={showToast} />}
+      {view === 'docs' && <Docs board={board} toast={showToast} openCard={openCard} docId={params.get('doc')} setDoc={(id) => setParam('doc', id)} />}
+
+      {open && <CardDrawer key={open} id={open} board={board} onClose={() => openCard(null)} onSaved={merge} toast={showToast}
+        onOpen={(id) => openCard(id)} onOpenDoc={openDoc} />}
       {toast}
     </main>
   );

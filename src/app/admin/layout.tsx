@@ -12,7 +12,7 @@ import {
   LayoutDashboard, PhoneCall, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
   PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus, Tent,
-  AtSign, Search, Route, KanbanSquare, Bot,
+  AtSign, Search, Route, KanbanSquare,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
@@ -33,13 +33,19 @@ interface NavItem {
   phone?: boolean; // shown in the phone bottom bar when allowed
 }
 
+/** Vita, the NexEagle mascot, as the sidebar icon for the autonomous agents. */
+function VitaIcon({ size = 18 }: { size?: number; strokeWidth?: number; 'aria-hidden'?: boolean }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src="/brand/vita/ai.webp" alt="" aria-hidden width={size + 4} height={size + 4} style={{ objectFit: 'contain', margin: -2 }} />;
+}
+
 const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'Overview',
     items: [
       { href: '/admin/dashboard', label: 'Command centre', page: 'dashboard', icon: LayoutDashboard, phone: true },
       { href: '/admin/work', label: 'Team board', page: 'everyone', icon: KanbanSquare },
-      { href: '/admin/ai-agents', label: 'AI agents', page: 'ai', icon: Bot },
+      { href: '/admin/ai-agents', label: 'Vita marketing agents', page: 'ai', icon: VitaIcon },
       { href: '/admin/leads', label: 'Leads inbox', page: 'leads', icon: UserPlus, phone: true },
       { href: '/admin/calls', label: 'Daily calls', page: 'calls', icon: PhoneCall, phone: true },
       { href: '/admin/referrals', label: 'Referrals', page: 'referrals', icon: Columns3, match: ['/admin/hospital-crm', '/admin/desk'], phone: true },
@@ -183,7 +189,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     group: g.group,
     // Chat: admins, marketing managers and anyone who can see the field pages (same rule as the API).
     // Team board: everyone who signs in to the CRM.
-    // AI agents: admins and marketing managers (same rule as the API).
+    // Vita marketing autonomous agents: admins and marketing managers (same rule as the API).
     items: g.items.filter((i) => (i.page === 'everyone' ? !!access : i.page === 'admin' ? !!access?.isAdmin
       : i.page === 'ai' ? !!access && (access.isAdmin || access.role === 'MarketingManager')
       : i.page === 'chat' ? !!access && (access.isAdmin || access.role === 'MarketingManager' || canView(access, 'field'))

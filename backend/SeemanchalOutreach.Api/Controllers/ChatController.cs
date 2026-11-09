@@ -149,6 +149,7 @@ namespace SeemanchalOutreach.Api.Controllers
             RoleChecks.Admin => "Admin",
             RoleChecks.MarketingManager => "Marketing manager",
             RoleChecks.HospitalRep => "Hospital representative",
+            RoleChecks.DigitalMarketing => "Digital marketing specialist",
             _ => string.IsNullOrWhiteSpace(role) ? "Field agent" : role.Trim(),
         };
 

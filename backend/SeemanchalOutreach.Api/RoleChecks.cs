@@ -19,6 +19,8 @@ namespace SeemanchalOutreach.Api
         public const string Admin = "Admin";
         public const string MarketingManager = "MarketingManager";
         public const string HospitalRep = "HospitalRep";
+        /// <summary>Digital marketing specialist: the Network pages (partners, camps, WhatsApp, Facebook &amp; Instagram, Google) and the Team board.</summary>
+        public const string DigitalMarketing = "DigitalMarketing";
 
         public static string Normalize(string? role) =>
             (role ?? string.Empty).Replace(" ", string.Empty).Replace("_", string.Empty).ToLowerInvariant();
@@ -34,6 +36,8 @@ namespace SeemanchalOutreach.Api
                 case "marketingmanager": return MarketingManager;
                 case "hospitalrep":
                 case "hospitalrepresentative": return HospitalRep;
+                case "digitalmarketing":
+                case "digitalmarketingspecialist": return DigitalMarketing;
                 default: return null;
             }
         }
