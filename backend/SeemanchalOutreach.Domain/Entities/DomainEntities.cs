@@ -40,6 +40,11 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? EmergencyContactPhone { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // When this person last had the CRM or the app open, and on what ("web" or "android") —
+        // for "last seen" in chat. Written at most once a minute by the presence heartbeat.
+        public DateTime? LastActiveAt { get; set; }
+        public string? LastActiveOn { get; set; }
     }
 
     // One row per (AgentId, DeviceId) — lets an agent stay logged in on more than

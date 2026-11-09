@@ -10,6 +10,7 @@ import {
 import { crm } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
 import { EMOJI } from '@/lib/crm/emoji';
+import { lastSeenText, liveText, type Live } from '@/lib/crm/presence';
 import { canAssignBlocks, useAccess } from '@/lib/crm/access';
 import { contactTypeLabel, ErrorBox, friendlyError, initials, Modal, PageHead, Skeleton, useToast } from '@/components/crm/ui';
 
@@ -19,6 +20,8 @@ export interface Presence { state: 'visit' | 'shift' | 'off'; place?: string | n
 export interface ChatThread {
   id: string; kind: 'agent' | 'team' | 'direct'; agentId?: string | null; title: string; sub?: string | null; lastMessageAt?: string | null;
   lastPreview?: string | null; unread: number; photoUrl?: string | null; presence?: Presence | null;
+  /** Online now, or last seen (the other person, the office, or how many are online in Team). */
+  live?: Live | null;
 }
 interface ChatPerson { agentId: string; name: string; role: string; kind: 'dashboard' | 'field'; block?: string | null; photoUrl?: string | null }
 interface Reaction { emoji: string; count: number; mine: boolean; names: string[] }
@@ -33,7 +36,7 @@ export interface ChatMsg {
   pending?: boolean; failed?: boolean;
 }
 interface Pinned { message: ChatMsg; pinnedBy: string; pinnedAt: string }
-interface MsgRes { messages: ChatMsg[]; otherReadAt?: string | null; otherSeenAt?: string | null; hasMore: boolean; pinned?: Pinned | null }
+interface MsgRes { messages: ChatMsg[]; otherReadAt?: string | null; otherSeenAt?: string | null; hasMore: boolean; pinned?: Pinned | null; live?: Live | null }
 interface PartnerHit { clientId: string; name: string; type: string; panchayat?: string | null; agentName?: string }
 interface SearchHit { id: string; createdAt: string; senderName: string; text?: string | null; fileName?: string | null; contactName?: string | null }
 interface Shared { media: ChatMsg[]; files: ChatMsg[]; places: ChatMsg[]; partners: { id: string; name: string; count: number; lastAt: string }[] }
@@ -164,6 +167,7 @@ function ChatPage() {
   }, [all, search, filter]);
   const current = all.find((t) => t.id === selected) ?? null;
   const onShift = all.filter((t) => t.kind === 'agent' && t.presence && t.presence.state !== 'off').length;
+  const onlineNow = all.filter((t) => t.kind !== 'team' && t.live?.online && (office ? t.kind === 'agent' || t.kind === 'direct' : t.kind === 'direct')).length;
 
   const chips: { k: ListFilter; l: string; n?: number }[] = [
     { k: 'all', l: 'All' }, { k: 'unread', l: 'Unread', n: counts.unread },
@@ -173,7 +177,7 @@ function ChatPage() {
 
   return (
     <main className="crm-page">
-      <PageHead title="Chat" sub={office && counts.field ? `${onShift} of ${counts.field} field agents on shift now · Ctrl+K to find a chat` : 'Talk with the office, the whole team, or anyone one to one.'}>
+      <PageHead title="Chat" sub={office && counts.field ? `${onShift} of ${counts.field} field agents on shift now${onlineNow ? ` · ${onlineNow} online` : ''} · Ctrl+K to find a chat` : 'Talk with the office, the whole team, or anyone one to one.'}>
         <button type="button" className="crm-btn" onClick={() => setNewOpen(true)}><MessageSquarePlus size={16} aria-hidden /> New chat</button>
       </PageHead>
       {error && <ErrorBox message={error} onRetry={loadThreads} />}
@@ -238,7 +242,11 @@ function ChatPage() {
 }
 
 function ThreadAvatar({ t, small }: { t: ChatThread; small?: boolean }) {
-  const dot = t.presence ? <span className={`ch-pres is-${t.presence.state}`} aria-label={PRESENCE_LABEL[t.presence.state]} title={presenceText(t.presence) ?? undefined} /> : null;
+  // Green dot = online now (CRM or app open). Shift and visits show as a tag next to the message preview.
+  const seen = t.live && !t.live.online ? lastSeenText(t.live.lastSeenAt) : null;
+  const dot = t.kind !== 'team' && t.live?.online
+    ? <span className="ch-pres is-online" aria-label="Online now" title={['Online now', presenceText(t.presence)].filter(Boolean).join(' · ')} />
+    : t.presence ? <span className={`ch-pres is-${t.presence.state} is-dim`} aria-label={PRESENCE_LABEL[t.presence.state]} title={[presenceText(t.presence), seen].filter(Boolean).join(' · ') || undefined} /> : null;
   if (t.kind === 'team') return <span className="ch-avatar is-team" aria-hidden><Users size={small ? 16 : 18} /></span>;
   return (
     <span className="ch-avatar-wrap">
@@ -354,7 +362,8 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
 
   const canPin = thread.kind === 'direct' || office;
   const taskAgent = thread.kind === 'agent' ? thread.agentId : thread.kind === 'direct' && thread.presence ? thread.agentId : null;
-  const presence = presenceText(thread.presence);
+  const [live, setLive] = useState<Live | null>(thread.live ?? null);
+  const presence = [liveText(live, thread.kind, office), presenceText(thread.presence)].filter(Boolean).join(' · ') || null;
 
   useEffect(() => { msgsRef.current = msgs; }, [msgs]);
 
@@ -384,6 +393,7 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
       setReadAt(r.otherReadAt ?? null);
       setSeenAt(r.otherSeenAt ?? null);
       setPinned(r.pinned ?? null);
+      if (r.live !== undefined) setLive(r.live ?? null);
       setLoaded(true);
       if (r.messages.some((m) => !m.mine) || first) void crm.post(`/api/v1/chat/threads/${thread.id}/read`).then(onSent).catch(() => undefined);
     } catch { setLoaded(true); }
@@ -641,10 +651,11 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
       <div className="ch-main">
         <header className="ch-head">
           <button type="button" className="ch-icon ch-back" onClick={onBack} aria-label="Back to conversations"><ArrowLeft size={18} /></button>
-          <ThreadAvatar t={thread} />
+          <ThreadAvatar t={{ ...thread, live }} />
           <button type="button" className="ch-head-who" onClick={() => setInfoOpen((o) => !o)} aria-label="Chat details">
             <strong>{thread.title}</strong>
             <span className="crm-cell-sub">
+              {live?.online && thread.kind !== 'team' && <span className="ch-online-word">●</span>}
               {presence ?? (thread.kind === 'team' ? 'Everyone in the field team and the office' : thread.kind === 'direct' ? [thread.sub, 'one-to-one'].filter(Boolean).join(' · ') : [thread.agentId, thread.sub].filter(Boolean).join(' · '))}
             </span>
           </button>

@@ -3,6 +3,7 @@ import { api, ApiError, OfflineError } from './api';
 import { kvGet, kvJson, kvSet } from './db';
 import { lastKnown } from './location';
 import { uuid } from './util';
+import type { Live } from './presence';
 
 /**
  * Chat with the office, the Field team group, and one-to-one ("direct") chats with anyone — an admin,
@@ -15,6 +16,8 @@ export interface ChatThread {
   id: string; kind: 'agent' | 'team' | 'direct'; title: string; sub?: string | null; lastMessageAt?: string | null; lastPreview?: string | null; unread: number;
   /** Direct chats: the other person, and their photo. */
   agentId?: string | null; photoUrl?: string | null;
+  /** Online now, or last seen: the other person, the office, or how many are online in Team. */
+  live?: Live | null;
 }
 /** Someone this person can message directly. */
 export interface ChatPerson { agentId: string; name: string; role: string; kind: 'dashboard' | 'field'; block?: string | null; photoUrl?: string | null }
@@ -58,6 +61,8 @@ export function cachedMessages(threadId: string): ChatMsg[] {
   const have = new Set(server.map((m) => m.clientId));
   return [...server, ...pend.filter((p) => !have.has(p.clientId))].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
+/** Online / last seen for an open chat (fresher than the chat list). */
+export const cachedLive = (threadId: string): Live | null => kvJson<Live | null>(`chatLive:${threadId}`, cachedThreads().find((x) => x.id === threadId)?.live ?? null);
 export const otherMarks = (threadId: string) => kvJson<{ readAt: string | null; seenAt: string | null }>(`chatMarks:${threadId}`, { readAt: null, seenAt: null });
 
 function storeMessages(threadId: string, incoming: ChatMsg[]) {
@@ -111,12 +116,15 @@ export async function refreshUnread(): Promise<void> {
 export async function refreshMessages(threadId: string): Promise<void> {
   const have = kvJson<ChatMsg[]>(`chat:${threadId}`, []);
   const last = have[have.length - 1]?.createdAt;
-  const r = await api<{ messages: ChatMsg[]; otherReadAt?: string | null; otherSeenAt?: string | null }>(
+  const r = await api<{ messages: ChatMsg[]; otherReadAt?: string | null; otherSeenAt?: string | null; live?: Live | null }>(
     `/api/v1/chat/threads/${threadId}/messages${last ? `?after=${encodeURIComponent(last)}` : ''}`, { timeoutMs: 15000 });
   if (r.messages.length) storeMessages(threadId, r.messages);
   const marks = { readAt: r.otherReadAt ?? null, seenAt: r.otherSeenAt ?? null };
   const old = otherMarks(threadId);
-  if (r.messages.length || marks.readAt !== old.readAt || marks.seenAt !== old.seenAt) {
+  const live = JSON.stringify(r.live ?? null);
+  const liveChanged = live !== (kvGet(`chatLive:${threadId}`) ?? 'null');
+  if (liveChanged) kvSet(`chatLive:${threadId}`, live);
+  if (r.messages.length || liveChanged || marks.readAt !== old.readAt || marks.seenAt !== old.seenAt) {
     kvSet(`chatMarks:${threadId}`, JSON.stringify(marks));
     changed();
   }

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
+import { usePresenceBeat } from '@/lib/crm/presence';
 import { useAgentStore } from '@/store/agent-store';
 import { canView, clearAccess, isDashboardRole, ROLE_LABELS, useAccess, type PageKey } from '@/lib/crm/access';
 import { initials } from '@/components/crm/ui';
@@ -127,6 +128,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const hasHydrated = useAgentStore((s) => s.hasHydrated);
   const clearAuth = useAgentStore((s) => s.clearAuth);
   const { access, error: accessError } = useAccess();
+  // Online / last seen in chat: a heartbeat while this tab is open.
+  usePresenceBeat(hasHydrated && !!agentId);
 
   const handleLogout = () => {
     void apiLogout().catch(() => {});

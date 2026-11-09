@@ -18,6 +18,7 @@ import { C } from '../theme';
 import { LockScreen } from '../components/LockScreen';
 import { lockNow, lockState, useLock } from '../lib/lock';
 import { useLite } from '../lib/perf';
+import { startPresence } from '../lib/presence';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 // Screens the agent can't see (behind the one on top, or other tabs) stop re-rendering until shown again.
@@ -72,6 +73,12 @@ function Gate() {
       if (r) { handleResponse(r); void Notifications.clearLastNotificationResponseAsync().catch(() => undefined); }
     }).catch(() => undefined);
     return () => { sub.remove(); received.remove(); };
+  }, [ready, agent]);
+
+  // Online / last seen in chat: a heartbeat while the app is on screen.
+  useEffect(() => {
+    if (!ready || !agent) return;
+    return startPresence();
   }, [ready, agent]);
 
   if (!ready) {
