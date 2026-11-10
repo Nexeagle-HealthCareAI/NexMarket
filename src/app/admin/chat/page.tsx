@@ -5,13 +5,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowDown, ArrowLeft, Check, CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Copy, CornerUpLeft, Download, FileText, Image as ImageIcon,
-  Info, Lock, MapPin, MessageSquarePlus, Paperclip, Pin, PinOff, Plus, Search, Send, SmilePlus, Smile, Tag, Trash2, Upload, Users, X, Zap,
+  Info, Lock, MapPin, MessageSquarePlus, Paperclip, Phone, PhoneIncoming, PhoneMissed, Pin, PinOff, Plus, Search, Send, SmilePlus, Smile, Tag, Trash2, Upload, Users, Video, X, Zap,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
 import { EMOJI } from '@/lib/crm/emoji';
 import { lastSeenText, liveText, type Live } from '@/lib/crm/presence';
 import { canAssignBlocks, useAccess } from '@/lib/crm/access';
+import { callNoteText, inCallCount, joinCall, live as callLive, startCall, useCalls, type Call, type CallNote } from '@/lib/crm/calls';
 import { contactTypeLabel, ErrorBox, friendlyError, initials, Modal, PageHead, Skeleton, useToast } from '@/components/crm/ui';
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -32,6 +33,8 @@ export interface ChatMsg {
   lat?: number | null; lng?: number | null;
   replyTo?: { id: string; senderName: string; text?: string | null; fileName?: string | null } | null;
   reactions?: Reaction[];
+  /** A system message written when a call in this chat ended. */
+  call?: CallNote | null;
   createdAt: string;
   pending?: boolean; failed?: boolean;
   /** The file being sent from this browser, kept so a failed upload can be retried. */
@@ -85,6 +88,8 @@ function presenceText(p?: Presence | null): string | null {
   if (p.state === 'shift') return `On shift${p.since ? ` since ${at(p.since)}` : ''}${p.lastSeenAt ? ` · last update ${at(p.lastSeenAt)}` : ''}`;
   return p.lastSeenAt ? `Off shift · last seen ${at(p.lastSeenAt)}` : 'Off shift today';
 }
+/** The server's reason (e.g. 409 "already answered"), my own "already in a call", or a plain fallback. */
+const callError = (e: unknown, fallback: string) => friendlyError(e, '') || (e instanceof Error && e.message.startsWith('You are already') ? e.message : fallback);
 const PRESENCE_LABEL: Record<Presence['state'], string> = { visit: 'On a visit', shift: 'On shift', off: 'Off shift' };
 
 /** Text with web links made clickable (opens in a new tab). */
@@ -144,6 +149,14 @@ function ChatPage() {
   const [ping, setPing] = useState(0);
   const [newOpen, setNewOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const calls = useCalls();
+  // The call or huddle going on in each chat (mine first, then what /calls/active says).
+  const liveCalls = useMemo(() => {
+    const m = new Map<string, Call>();
+    for (const c of calls.active) if (callLive(c) && !m.has(c.threadId)) m.set(c.threadId, c);
+    if (calls.session) m.set(calls.session.call.threadId, calls.session.call);
+    return m;
+  }, [calls.active, calls.session]);
 
   const loadThreads = useCallback(async () => {
     try {
@@ -236,6 +249,7 @@ function ChatPage() {
                     <span className="ch-thread-main">
                       <span className="ch-thread-top">
                         <strong>{t.title}{t.kind === 'direct' && <span className="ch-direct-dot" title="One-to-one: only the two of you can read it"><Lock size={11} aria-hidden /></span>}</strong>
+                        {calls.on && liveCalls.has(t.id) && <CallMarker c={liveCalls.get(t.id)!} />}
                         <span className={t.unread ? 'is-unread' : undefined}>{listTime(t.lastMessageAt)}</span>
                       </span>
                       <span className="ch-thread-bottom">
@@ -256,6 +270,7 @@ function ChatPage() {
         <section className="ch-pane" aria-label="Conversation">
           {current ? (
             <Conversation key={current.id} thread={current} office={office} ping={ping} canTask={canAssignBlocks(access)}
+              callsOn={calls.on} liveCall={liveCalls.get(current.id) ?? null} inCall={calls.session?.call.threadId === current.id}
               onBack={() => open(null)} onSent={loadThreadsSoon}
               onRead={() => { setThreads((ts) => ts && ts.map((t) => (t.id === current.id ? { ...t, unread: 0 } : t))); loadThreadsSoon(); }} />
           ) : (
@@ -271,6 +286,14 @@ function ChatPage() {
       {newOpen && <NewChat onClose={() => setNewOpen(false)} onOpened={(id) => { setNewOpen(false); void loadThreads().then(() => open(id)); }} />}
     </main>
   );
+}
+
+/** "Huddle · 3" / "In call" next to a chat in the list while a call is going on there. */
+function CallMarker({ c }: { c: Call }) {
+  const n = inCallCount(c);
+  const text = c.kind === 'huddle' ? `Huddle${n ? ` · ${n}` : ''}` : c.status === 'ringing' ? 'Calling…' : 'In call';
+  return <span className={`ch-call-mark${c.status === 'ringing' ? ' is-ringing' : ''}`} title={c.kind === 'huddle' ? `Huddle going on · ${n} ${n === 1 ? 'person' : 'people'}` : text}>
+    {c.video ? <Video size={11} aria-hidden /> : <Phone size={11} aria-hidden />}{text}</span>;
 }
 
 function ThreadAvatar({ t, small }: { t: ChatThread; small?: boolean }) {
@@ -352,8 +375,9 @@ function NewChat({ onClose, onOpened }: { onClose: () => void; onOpened: (id: st
 
 type Row = { kind: 'day'; at: string } | { kind: 'unread'; n: number } | { kind: 'msg'; m: ChatMsg; cont: boolean };
 
-function Conversation({ thread, office, ping, canTask, onBack, onSent, onRead }: {
-  thread: ChatThread; office: boolean; ping: number; canTask: boolean; onBack: () => void; onSent: () => void; onRead: () => void;
+function Conversation({ thread, office, ping, canTask, callsOn, liveCall, inCall, onBack, onSent, onRead }: {
+  thread: ChatThread; office: boolean; ping: number; canTask: boolean; callsOn: boolean; liveCall: Call | null; inCall: boolean;
+  onBack: () => void; onSent: () => void; onRead: () => void;
 }) {
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -725,6 +749,24 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent, onRead }:
     try { await navigator.clipboard.writeText(m.text ?? m.file?.name ?? ''); showToast('Copied.'); } catch { showToast('Copying is blocked in this browser.'); }
   };
 
+  // ─── Calls ───
+  const [calling, setCalling] = useState(false);
+  const call = async (video: boolean) => {
+    if (calling) return;
+    setCalling(true);
+    try { await startCall(thread.id, video, thread.title); }
+    catch (e) { showToast(callError(e, "Couldn't start the call.")); }
+    finally { setCalling(false); }
+  };
+  const joinLive = async () => {
+    if (!liveCall || calling) return;
+    setCalling(true);
+    try { await joinCall(liveCall, thread.title); }
+    catch (e) { showToast(callError(e, 'This call is no longer available.')); }
+    finally { setCalling(false); }
+  };
+  const huddleOn = !!liveCall && liveCall.kind === 'huddle';
+
   const insertEmoji = (e: string) => {
     const el = inputRef.current;
     if (!el) { setText((t) => t + e); return; }
@@ -784,11 +826,24 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent, onRead }:
               {presence ?? (thread.kind === 'team' ? 'Everyone in the field team and the office' : thread.kind === 'direct' ? [thread.sub, 'one-to-one'].filter(Boolean).join(' · ') : [thread.agentId, thread.sub].filter(Boolean).join(' · '))}
             </span>
           </button>
+          {callsOn && (thread.kind === 'team' ? (
+            <button type="button" className="ch-huddle-btn" disabled={calling || inCall} onClick={() => void (huddleOn ? joinLive() : call(true))}
+              aria-label={inCall ? 'You are in the huddle' : huddleOn ? 'Join the huddle' : 'Start a video huddle with the field team'}>
+              <Video size={16} aria-hidden /> <span>{inCall ? 'In huddle' : huddleOn ? 'Join huddle' : 'Start huddle'}</span>
+            </button>
+          ) : (
+            <>
+              <button type="button" className="ch-icon" disabled={calling || inCall} onClick={() => void call(false)} aria-label={`Voice call ${thread.title}`} title="Voice call"><Phone size={18} /></button>
+              <button type="button" className="ch-icon" disabled={calling || inCall} onClick={() => void call(true)} aria-label={`Video call ${thread.title}`} title="Video call"><Video size={19} /></button>
+            </>
+          ))}
           <button type="button" className="ch-icon" aria-label="Search this chat" aria-pressed={searchOpen} onClick={() => setSearchOpen((o) => !o)}><Search size={18} /></button>
           <button type="button" className="ch-icon" aria-label="Chat details and shared files" aria-pressed={infoOpen} onClick={() => setInfoOpen((o) => !o)}><Info size={18} /></button>
         </header>
 
         {searchOpen && <ThreadSearch threadId={thread.id} onClose={() => setSearchOpen(false)} onPick={(id) => void jumpTo(id)} />}
+
+        {callsOn && liveCall && <CallBanner c={liveCall} inCall={inCall} busy={calling} onJoin={() => void joinLive()} />}
 
         {pinned && (
           <div className="ch-pinned">
@@ -816,6 +871,8 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent, onRead }:
           ) : null}
           {rows.map((r, i) => r.kind === 'day' ? <div key={`d${i}`} className="ch-day"><span>{dayLabel(r.at)}</span></div>
             : r.kind === 'unread' ? <div key="unread" className="ch-unread-line"><span>{r.n} new {r.n === 1 ? 'message' : 'messages'}</span></div>
+              : r.m.call ? <CallPill key={r.m.clientId} m={r.m} note={r.m.call} canCall={callsOn && !inCall && !calling}
+                onCallBack={() => void call(thread.kind === 'team' ? true : r.m.call!.video)} team={thread.kind === 'team'} />
               : (
                 <Bubble key={r.m.clientId} m={r.m} cont={r.cont} showName={!r.m.mine && thread.kind !== 'direct' && (thread.kind === 'team' || r.m.fromOffice)}
                   readAt={readAt} seenAt={seenAt} flash={flash === r.m.id} active={active === r.m.id} pinned={pinned?.message.id === r.m.id}
@@ -955,6 +1012,45 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent, onRead }:
           }} />
       )}
       {toast}
+    </div>
+  );
+}
+
+// ─── Calls in the conversation ───────────────────────────────────────────
+
+/** "Huddle going on · 3 people · Join" above the messages while a call is going on in this chat. */
+function CallBanner({ c, inCall, busy, onJoin }: { c: Call; inCall: boolean; busy: boolean; onJoin: () => void }) {
+  const n = inCallCount(c);
+  const people = `${n} ${n === 1 ? 'person' : 'people'}`;
+  let text: string; let action: string | null = null;
+  if (c.kind === 'huddle') { text = inCall ? `You're in the huddle · ${people}` : `Huddle going on · ${people}`; action = inCall ? null : 'Join'; }
+  else if (inCall) text = c.status === 'ringing' ? `Calling… · ${c.video ? 'video' : 'voice'} call` : `You're in a ${c.video ? 'video' : 'voice'} call`;
+  else if (c.status === 'ringing' && !c.mine) { text = `${c.startedByName} is calling${c.threadKind === 'agent' ? ' the office' : ''}`; action = 'Answer'; }
+  else text = `${c.video ? 'Video' : 'Voice'} call going on · ${people}`;
+  return (
+    <div className={`ch-call-banner${c.status === 'ringing' ? ' is-ringing' : ''}`} role="status">
+      {c.status === 'ringing' && !c.mine ? <PhoneIncoming size={16} aria-hidden /> : c.video ? <Video size={16} aria-hidden /> : <Phone size={16} aria-hidden />}
+      <span>{text}</span>
+      {c.kind === 'huddle' && c.people.some((p) => p.inCall) && (
+        <span className="ch-call-faces" aria-hidden>{c.people.filter((p) => p.inCall).slice(0, 4).map((p) => <span key={p.userId} title={p.name}>{initials(p.name)}</span>)}</span>
+      )}
+      {action && <button type="button" className="crm-btn is-sm is-ok" disabled={busy} onClick={onJoin}>{action}</button>}
+    </div>
+  );
+}
+
+/** A finished call, as a centered pill: "Missed video call", "Voice call · 3 min", "Huddle · 12 min", "Call declined". */
+function CallPill({ m, note, canCall, team, onCallBack }: { m: ChatMsg; note: CallNote; canCall: boolean; team: boolean; onCallBack: () => void }) {
+  const missed = note.status === 'missed' || note.status === 'declined';
+  const label = callNoteText(note, m.mine);
+  return (
+    <div data-mid={m.id} className={`ch-call-pill${missed && !m.mine ? ' is-missed' : ''}`}>
+      <span className="ch-call-pill-body">
+        {missed && !m.mine ? <PhoneMissed size={14} aria-hidden /> : note.video || note.kind === 'huddle' ? <Video size={14} aria-hidden /> : <Phone size={14} aria-hidden />}
+        <strong>{label}</strong>
+        <span className="ch-call-pill-time">{note.kind !== 'huddle' && !m.mine && m.senderName ? `${m.senderName} · ` : ''}{timeFmt.format(new Date(m.createdAt))}</span>
+      </span>
+      {canCall && <button type="button" className="ch-call-back" onClick={onCallBack}>{team ? 'Start huddle' : 'Call back'}</button>}
     </div>
   );
 }

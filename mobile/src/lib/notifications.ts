@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { api } from './api';
 import { kvGet, kvJson, kvSet, q } from './db';
+import { incomingShowing, openIncoming } from './calls';
 
 /**
  * Notifications on the phone.
@@ -20,11 +21,12 @@ export interface NotifySettings { kinds: { kind: string; label: string; on: bool
 
 /** Android channels: people can tune each one in the phone's own settings too. */
 const CHANNELS: { id: string; name: string; importance: Notifications.AndroidImportance; description: string }[] = [
+  { id: 'calls', name: 'Calls', importance: Notifications.AndroidImportance.MAX, description: 'Voice and video calls ringing for you, and missed calls' },
   { id: 'chat', name: 'Chat messages', importance: Notifications.AndroidImportance.HIGH, description: 'Messages from the office, the field team and one-to-one chats' },
   { id: 'alerts', name: 'Escalations', importance: Notifications.AndroidImportance.MAX, description: 'Escalations raised and resolved' },
   { id: 'updates', name: 'Work updates', importance: Notifications.AndroidImportance.DEFAULT, description: 'New blocks, tasks, leave, patients and notes from the office' },
 ];
-const channelOf = (kind: string) => (kind === 'chat' || kind === 'team_chat' ? 'chat' : kind === 'escalation' ? 'alerts' : 'updates');
+const channelOf = (kind: string) => (kind === 'call' ? 'calls' : kind === 'chat' || kind === 'team_chat' || kind === 'huddle' ? 'chat' : kind === 'escalation' ? 'alerts' : 'updates');
 
 // ─── Change notifications for screens ───
 const listeners = new Set<() => void>();
@@ -59,16 +61,26 @@ export async function setupNotifications(): Promise<void> {
   Notifications.setNotificationHandler({
     handleNotification: async (n) => {
       const link = String(n.request.content.data?.link ?? '');
-      const reading = !!openChat && chatActive && link === `chat:${openChat}`;
+      // The incoming-call screen is already up for this call: it rings by itself, no banner on top of it.
+      const ringingHere = link.startsWith('call:') && incomingShowing() === link.slice(5);
+      const reading = ringingHere || (!!openChat && chatActive && link === `chat:${openChat}`);
       // Every chat message makes a sound; the chat you're reading just doesn't pop up a banner too.
       return { shouldShowBanner: !reading, shouldShowList: !reading, shouldPlaySound: true, shouldSetBadge: true };
     },
   });
   if (Platform.OS === 'android') {
     for (const c of CHANNELS) {
+      // Calls: the loudest channel, shown on the lock screen, with a long ring-like buzz. Android can't point a channel at the
+      // phone's ringtone without bundling a sound, so it uses the default sound played on the ringtone stream.
+      const call = c.id === 'calls';
       await Notifications.setNotificationChannelAsync(c.id, {
         name: c.name, importance: c.importance, description: c.description,
-        vibrationPattern: c.id === 'updates' ? [0, 150] : [0, 250, 120, 250], lightColor: '#38f6a9', showBadge: true,
+        vibrationPattern: call ? [0, 800, 400, 800, 400, 800] : c.id === 'updates' ? [0, 150] : [0, 250, 120, 250], lightColor: '#38f6a9', showBadge: true,
+        ...(call ? {
+          sound: 'default', enableVibrate: true, bypassDnd: false,
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+          audioAttributes: { usage: Notifications.AndroidAudioUsage.NOTIFICATION_RINGTONE, contentType: Notifications.AndroidAudioContentType.SONIFICATION },
+        } : {}),
       }).catch(() => undefined);
     }
   }
@@ -186,6 +198,7 @@ export async function pollNotifications(): Promise<void> {
 /** Where a notification takes the agent in the app. */
 export function openLink(link?: string | null) {
   const [k, id] = (link ?? '').split(':');
+  if (k === 'call' && id) { openIncoming(id, true); return; }
   if (k === 'chat' && id) {
     if (openChat === id) return; // already on screen
     // From another chat, swap it rather than stacking chat on chat.

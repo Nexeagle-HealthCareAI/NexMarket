@@ -415,6 +415,37 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime PinnedAt { get; set; } = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// A voice or video call started from a chat (one-to-one, an agent's office chat, or a Field team huddle). The audio and
+    /// video go through the hospital's own LiveKit server; only who, when and how long is kept here. Never recorded.
+    /// </summary>
+    public class CallSession
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid ThreadId { get; set; }
+        public string Kind { get; set; } = "call";            // call (rings people) | huddle (Field team, people join)
+        public bool Video { get; set; }
+        public string Status { get; set; } = "ringing";       // ringing | active | ended | missed | declined
+        public string StartedBy { get; set; } = string.Empty;
+        public string StartedByName { get; set; } = string.Empty;
+        public DateTime StartedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? AnsweredAt { get; set; }
+        public DateTime? EndedAt { get; set; }
+    }
+
+    /// <summary>Someone invited to, or in, a call: when they were rung, joined and left.</summary>
+    public class CallParticipant
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid CallId { get; set; }
+        public string UserId { get; set; } = string.Empty;
+        public string UserName { get; set; } = string.Empty;
+        public DateTime InvitedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? JoinedAt { get; set; }
+        public DateTime? LeftAt { get; set; }
+        public bool Declined { get; set; }
+    }
+
     /// <summary>How far each person has read a chat (for unread counts and the blue ticks).</summary>
     public class ChatRead
     {

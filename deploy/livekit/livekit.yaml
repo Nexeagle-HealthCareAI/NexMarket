@@ -1,0 +1,19 @@
+# LiveKit server for NexEagle calls (voice, video and Field team huddles).
+# The API key and secret are NOT in this file: they come from the LIVEKIT_KEYS environment
+# variable ("<key>: <secret>"), set by the deploy job from GitHub secrets.
+port: 7880                 # signalling (WebSocket); put it behind HTTPS as wss://calls.<your-domain>
+bind_addresses: ['']
+rtc:
+  tcp_port: 7881           # media over TCP, for networks that block UDP
+  port_range_start: 50000  # media over UDP (best quality); open this range in the firewall
+  port_range_end: 50100
+  use_external_ip: true    # the VM's public IP is discovered and announced to phones
+turn:
+  enabled: true            # relays media for phones behind strict mobile-carrier NAT
+  udp_port: 3478
+  # For networks that only allow HTTPS, also set tls_port: 5349 with a certificate (see README).
+room:
+  empty_timeout: 120       # a room with nobody in it closes after 2 minutes
+  max_participants: 30     # a huddle can't grow beyond this
+logging:
+  level: info

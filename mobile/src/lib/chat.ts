@@ -5,6 +5,7 @@ import { lastKnown } from './location';
 import { uuid } from './util';
 import type { Live } from './presence';
 import { fileSize, localFileExists } from './chatFiles';
+import type { CallNote } from './calls';
 
 /**
  * Chat with the office, the Field team group, and one-to-one ("direct") chats with anyone — an admin,
@@ -27,6 +28,8 @@ export interface ChatMsg {
   id: string; clientId: string; threadId: string; senderId: string; senderName: string; fromOffice: boolean; mine: boolean;
   text?: string | null; contact?: { id: string; name: string } | null; file?: ChatFile | null;
   replyTo?: { id: string; senderName: string; text?: string | null; fileName?: string | null } | null;
+  /** A call that ended in this chat (a message the server writes: missed, declined, or how long it was). */
+  call?: CallNote | null;
   createdAt: string; state?: 'pending' | 'failed';
 }
 interface Pending {

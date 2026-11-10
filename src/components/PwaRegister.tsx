@@ -27,13 +27,23 @@ export default function PwaRegister() {
     // happens to check for a SW update next — an instant, unexplained reload
     // was easily mistaken for the app crashing. Showing this banner first
     // makes it obvious it's an intentional update, not a bug.
+    // A first visit has no controller yet: the new worker claiming the page then is not an update, so no reload.
+    let hadController = !!navigator.serviceWorker.controller;
     let reloaded = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (reloaded) return;
-      reloaded = true;
+    let waitTimer: ReturnType<typeof setTimeout> | null = null;
+    // Never reload in the middle of a call (the call window is open): wait until it is closed.
+    const reloadWhenFree = () => {
+      if (document.querySelector('.cl-win')) { waitTimer = setTimeout(reloadWhenFree, 3000); return; }
       setUpdating(true);
       setTimeout(() => window.location.reload(), 900);
-    });
+    };
+    const onChange = () => {
+      if (!hadController) { hadController = true; return; }
+      if (reloaded) return;
+      reloaded = true;
+      reloadWhenFree();
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', onChange);
 
     if (window.workbox !== undefined) {
       window.workbox.register();
@@ -42,6 +52,10 @@ export default function PwaRegister() {
         console.error('Service Worker registration failed:', err);
       });
     }
+    return () => {
+      navigator.serviceWorker.removeEventListener('controllerchange', onChange);
+      if (waitTimer) clearTimeout(waitTimer);
+    };
   }, []);
 
   if (!updating) return null;

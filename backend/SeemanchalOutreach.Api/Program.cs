@@ -55,6 +55,8 @@ builder.Services.Configure<SeemanchalOutreach.Api.Services.AnalystSettings>(buil
 builder.Services.AddHttpClient("groq", c => c.Timeout = TimeSpan.FromSeconds(90));
 builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.GroqClient>();
 builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.SpeechService>();
+builder.Services.Configure<SeemanchalOutreach.Api.Services.LiveKitSettings>(builder.Configuration.GetSection("LiveKit"));
+builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.CallSweeper>();
 builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.PresenceTracker>();
 // NexMarket Agents (Python service next to this API): its URL and the shared secret, from the environment.
 builder.Services.Configure<SeemanchalOutreach.Api.Controllers.AgentsSettings>(builder.Configuration.GetSection("Agents"));

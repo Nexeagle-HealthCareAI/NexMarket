@@ -8,7 +8,8 @@ export type IconName =
   | 'chat' | 'attach' | 'smile' | 'tag' | 'doc' | 'image' | 'reply' | 'checks' | 'lock' | 'download' | 'pencil' | 'newChat' | 'bell' | 'bellOff' | 'settings'
   | 'fingerprint' | 'eye' | 'eyeOff' | 'backspace' | 'bolt'
   | 'turnLeft' | 'turnRight' | 'slightLeft' | 'slightRight' | 'straight' | 'uturn' | 'roundabout' | 'arrive' | 'volume' | 'volumeOff'
-  | 'locate' | 'bike' | 'walk' | 'userPlus' | 'ambulance' | 'repeat' | 'route' | 'mic' | 'stop';
+  | 'locate' | 'bike' | 'walk' | 'userPlus' | 'ambulance' | 'repeat' | 'route' | 'mic' | 'stop'
+  | 'video' | 'videoOff' | 'micOff' | 'cameraFlip' | 'speaker' | 'phoneOff';
 
 /** Line icons drawn on a 24×24 grid, 2 px stroke, matching the design canvas. */
 export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { name: IconName; size?: number; color?: string; strokeWidth?: number }) {
@@ -87,6 +88,12 @@ export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { 
     case 'ambulance': body = <><Path {...p} d="M2 17V8a1 1 0 0 1 1-1h11v10" /><Path {...p} d="M14 10h4l4 4v3h-2" /><Circle {...p} cx={7} cy={18} r={2} /><Circle {...p} cx={17} cy={18} r={2} /><Path {...p} d="M9 18h6M2 17h3M8 9v4M6 11h4" /></>; break;
     case 'repeat': body = <><Path {...p} d="M17 2l4 4-4 4" /><Path {...p} d="M3 12v-1a5 5 0 0 1 5-5h13" /><Path {...p} d="M7 22l-4-4 4-4" /><Path {...p} d="M21 12v1a5 5 0 0 1-5 5H3" /></>; break;
     case 'route': body = <><Circle {...p} cx={6} cy={19} r={2.5} /><Circle {...p} cx={18} cy={5} r={2.5} /><Path {...p} d="M8.5 19H17a3.5 3.5 0 0 0 0-7H7a3.5 3.5 0 0 1 0-7h8.5" /></>; break;
+    case 'video': body = <><Rect {...p} x={2.5} y={6} width={13} height={12} rx={2.5} /><Path {...p} d="M15.5 10.5l6-3.5v10l-6-3.5" /></>; break;
+    case 'videoOff': body = <><Path {...p} d="M10 6h3a2.5 2.5 0 012.5 2.5V12M15.5 15.5A2.5 2.5 0 0113 18H5a2.5 2.5 0 01-2.5-2.5v-7A2.5 2.5 0 015 6" /><Path {...p} d="M15.5 10.5l6-3.5v10l-3.5-2M2 2l20 20" /></>; break;
+    case 'micOff': body = <><Path {...p} d="M15 10V6a3 3 0 00-5.7-1.3M9 9v2a3 3 0 004.6 2.5" /><Path {...p} d="M5 11a7 7 0 0011.3 5.5M19 11a7 7 0 01-.6 2.8M12 18v3M3 3l18 18" /></>; break;
+    case 'cameraFlip': body = <><Path {...p} d="M4 8h3l2-3h6l2 3h3v11H4z" /><Path {...p} d="M9.5 12.5a2.7 2.7 0 014.8-1.2M14.5 14a2.7 2.7 0 01-4.8 1.2" /><Path {...p} d="M14.6 9.6v1.9h-1.9M9.4 17.1v-1.9h1.9" /></>; break;
+    case 'speaker': body = <><Rect {...p} x={5} y={2.5} width={14} height={19} rx={3} /><Circle {...p} cx={12} cy={14} r={3.5} /><Path {...p} d="M12 6.5h.01" /></>; break;
+    case 'phoneOff': body = <><Path {...p} d="M3.6 13.4a2 2 0 01-.5-2.2C5 7.7 8.3 6 12 6s7 1.7 8.9 5.2a2 2 0 01-.5 2.2l-1.7 1.4a1 1 0 01-1.3 0l-2.1-1.9a1 1 0 01-.3-.9l.3-1.6a10 10 0 00-6.6 0l.3 1.6a1 1 0 01-.3.9l-2.1 1.9a1 1 0 01-1.3 0z" /></>; break;
   }
   return <Svg width={size} height={size} viewBox="0 0 24 24">{body}</Svg>;
 }

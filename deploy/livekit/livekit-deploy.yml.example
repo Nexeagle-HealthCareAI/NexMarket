@@ -1,0 +1,50 @@
+# Copy to .github/workflows/livekit-deploy.yml (workflows are protected, so this is an example).
+# Starts or updates the calls server on the Dev VM. Needs repository secrets:
+#   LIVEKIT_API_KEY      e.g. "nexcalls"   (letters/digits)
+#   LIVEKIT_API_SECRET   at least 32 random characters (e.g. `openssl rand -base64 33`)
+# and the same two values in the API's env (see README.md, "Connect the API").
+name: Calls server (LiveKit) — deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - 'deploy/livekit/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy config to the VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
+          source: 'deploy/livekit/livekit.yaml,deploy/livekit/docker-compose.livekit.yml'
+          target: /opt/nexmarket-livekit
+          strip_components: 2
+      - name: Start LiveKit
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          LK_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LK_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
+          envs: LK_KEY,LK_SECRET
+          script: |
+            set -e
+            : "${LK_KEY:?LIVEKIT_API_KEY is empty}"
+            : "${LK_SECRET:?LIVEKIT_API_SECRET is empty}"
+            cd /opt/nexmarket-livekit
+            printf 'LIVEKIT_KEYS=%s: %s\n' "$LK_KEY" "$LK_SECRET" > .env
+            chmod 600 .env
+            docker compose -f docker-compose.livekit.yml pull
+            docker compose -f docker-compose.livekit.yml up -d
+            sleep 3
+            curl -fsS http://127.0.0.1:7880 >/dev/null && echo "✅ LiveKit is up" || (docker logs --tail 60 nexmarket-livekit; exit 1)

@@ -25,6 +25,8 @@ import { EMOJI } from '../../lib/emoji';
 import { setOpenChat } from '../../lib/notifications';
 import { dayLong, timeOf } from '../../lib/format';
 import { C } from '../../theme';
+import { CallButtons, CallPill, ChatCallBanner } from '../../components/CallParts';
+import { useCallsStatus } from '../../lib/calls';
 
 // NexEagle look (not WhatsApp's): navy header, blue bubbles for me, white for others, mint read ticks.
 const WA = { bg: '#eef1f6', mine: NX.mine, theirs: NX.theirs, head: NX.head, send: C.blue, meta: NX.meta, blueTick: NX.read, name: NX.name };
@@ -66,6 +68,7 @@ export default function Conversation() {
   const isTeam = thread?.kind === 'team';
   const isDirect = thread?.kind === 'direct';
   const visit = q.activeVisit();
+  const callsOn = useCallsStatus().on;
 
   // While open and the app is in front: fetch new messages every few seconds, send what's waiting, and mark
   // read on opening, on coming back to the app, and when something new from others arrives. Paused in the background.
@@ -180,7 +183,10 @@ export default function Conversation() {
           style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="back" color="#fff" size={24} />
         </Pressable>
-        <ChatAvatar kind={thread?.kind ?? 'agent'} name={title} photoUrl={thread?.photoUrl} size={44} online={!!live?.online && !isTeam} dark />
+        {/* The office chat with calls on has three buttons on the right: its (always the same) avatar makes room for them. */}
+        {callsOn && (thread?.kind ?? 'agent') === 'agent' && !isOfficeUser() && OFFICE_PHONE ? null : (
+          <ChatAvatar kind={thread?.kind ?? 'agent'} name={title} photoUrl={thread?.photoUrl} size={44} online={!!live?.online && !isTeam} dark />
+        )}
         <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
           <T style={{ color: '#fff', fontSize: 18, fontWeight: '800' }} numberOfLines={1}>{title}</T>
           <T style={{ color: onlineNow ? '#7ff5c2' : NX.headSub, fontSize: 14, fontWeight: onlineNow ? '600' : '400' }} numberOfLines={1}>{sub}</T>
@@ -191,7 +197,11 @@ export default function Conversation() {
             <Icon name="phone" color="#fff" size={20} />
           </Pressable>
         ) : null}
+        {/* App calls through the hospital's server: voice + video, or the Field team huddle. Hidden while calls are off. */}
+        {thread ? <CallButtons threadId={id} kind={thread.kind} name={title} /> : null}
       </View>
+      {/* A huddle or call going on in this chat: Join */}
+      <ChatCallBanner threadId={id} />
 
       {/* Android draws edge-to-edge (the window no longer shrinks for the keyboard), so pad on both platforms. */}
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: WA.bg }} behavior="padding">
@@ -221,6 +231,8 @@ export default function Conversation() {
               <T style={{ fontSize: 13, fontWeight: '800', color: C.blueInk }}>{t('chNewCount', { n: item.n }).toUpperCase()}</T>
               <View style={{ flex: 1, height: 2, backgroundColor: C.blue, opacity: 0.4 }} />
             </View>
+          ) : item.m.call ? (
+            <CallPill note={item.m.call} mine={item.m.mine} threadId={id} canCall={!isTeam} />
           ) : (
             <Bubble m={item.m} showName={!item.m.mine && !isDirect && (isTeam || item.m.fromOffice)} readAt={marks.readAt} seenAt={marks.seenAt}
               lang={lang} t={t} onReply={() => { setReply(item.m); inputRef.current?.focus(); }} onOpenFile={() => void openFile(item.m)}

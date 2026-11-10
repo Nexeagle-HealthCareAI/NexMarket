@@ -57,6 +57,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<ChatThread> ChatThreads => Set<ChatThread>();
         public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
         public DbSet<ChatRead> ChatReads => Set<ChatRead>();
+        public DbSet<CallSession> CallSessions => Set<CallSession>();
+        public DbSet<CallParticipant> CallParticipants => Set<CallParticipant>();
         public DbSet<ChatReaction> ChatReactions => Set<ChatReaction>();
         public DbSet<ChatPin> ChatPins => Set<ChatPin>();
         public DbSet<FieldRole> FieldRoles => Set<FieldRole>();
@@ -546,6 +548,20 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.MessageId, e.UserId, e.Emoji }).IsUnique();
                 entity.HasIndex(e => e.ThreadId);
+            });
+            modelBuilder.Entity<CallSession>(entity =>
+            {
+                entity.ToTable("call_sessions");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.ThreadId, e.StartedAt });
+                entity.HasIndex(e => e.Status);
+            });
+            modelBuilder.Entity<CallParticipant>(entity =>
+            {
+                entity.ToTable("call_participants");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.CallId, e.UserId }).IsUnique();
+                entity.HasIndex(e => e.UserId);
             });
             modelBuilder.Entity<ChatPin>(entity =>
             {

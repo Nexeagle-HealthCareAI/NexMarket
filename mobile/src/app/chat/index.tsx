@@ -12,6 +12,8 @@ import { liveLine } from '../../lib/presence';
 import { explainOnce } from '../../lib/speak';
 import { relDay, timeOf } from '../../lib/format';
 import { C } from '../../theme';
+import { CallBanner, callPreview } from '../../components/CallParts';
+import { liveCallIn, localCallPreview, useActiveCalls } from '../../lib/calls';
 
 type Filter = 'all' | 'unread' | 'people';
 type TFn = ReturnType<typeof useSession>['t'];
@@ -30,6 +32,9 @@ export default function ChatList() {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
+  // Huddles and calls going on in my chats (polled every 5 s while the list is open).
+  const calls = useActiveCalls(true);
+  const live = threads.map((th) => ({ th, c: liveCallIn(calls, th.id) })).filter((x): x is { th: ChatThread; c: NonNullable<typeof x.c> } => !!x.c);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -104,6 +109,7 @@ export default function ChatList() {
       <View style={{ flex: 1, backgroundColor: C.bg }}>
         <ScrollView refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />} keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, gap: 10, paddingBottom: 110 + insets.bottom }}>
+          {live.map(({ th, c }) => <CallBanner key={c.id} call={c} where={titleOf(th, t, office)} />)}
           {shown.length === 0 ? (
             <View style={{ padding: 28, alignItems: 'center', gap: 10 }}>
               <Icon name={s ? 'search' : 'chat'} size={30} color={C.muted} />
@@ -146,6 +152,8 @@ function ThreadCard({ th, highlight, office, t, lang }: { th: ChatThread; highli
   // A message of ours still on the phone (newer than what the server last told us) shows instead of the server's preview.
   const last = cachedMessages(th.id).at(-1);
   const local = last && last.mine && last.state && msTime(last.createdAt) >= msTime(th.lastMessageAt) ? last : null;
+  // A call message as the last one: said in the agent's language ("📹 Missed video call").
+  const preview = last?.call && msTime(last.createdAt) >= msTime(th.lastMessageAt) - 2000 ? callPreview(t, last.call, last.mine) : localCallPreview(t, th.lastPreview ?? '');
 
   const when = (iso?: string | null) => {
     if (!iso) return '';
@@ -181,7 +189,7 @@ function ThreadCard({ th, highlight, office, t, lang }: { th: ChatThread; highli
               </T>
             </>
           ) : (
-            <T style={{ flex: 1, fontSize: big ? 16 : 15, color: unread ? C.text : C.text3, fontWeight: unread ? '600' : '400' }} numberOfLines={1}>{th.lastPreview ?? ''}</T>
+            <T style={{ flex: 1, fontSize: big ? 16 : 15, color: unread ? C.text : C.text3, fontWeight: unread ? '600' : '400' }} numberOfLines={1}>{preview}</T>
           )}
           {unread ? (
             <View style={{ minWidth: 26, height: 26, borderRadius: 13, backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 7 }}>

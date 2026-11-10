@@ -338,6 +338,8 @@ export function NotificationPopups() {
     const on = (ev: Event) => {
       const n = (ev as CustomEvent<LiveNotification>).detail;
       if (n.muted) return;
+      // Calls ring in their own pop-up (CallLayer).
+      if (n.kind === 'call') return;
       const href = crmHref(n.link);
       const isChat = n.kind === 'chat' || n.kind === 'team_chat' || n.kind === 'lead';
       // Every chat message pings, even in the chat that's open (a softer, single note there).
