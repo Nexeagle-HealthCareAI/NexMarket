@@ -5,7 +5,7 @@ import { Alert, AppState, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import { Sheet, T, toast } from '../../components/ui';
+import { Btn, Sheet, T, toast } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 import { PartnerPicker } from '../../components/PartnerPicker';
 import { ChatAvatar, NX } from '../../components/ChatAvatar';
@@ -27,6 +27,8 @@ import { dayLong, timeOf } from '../../lib/format';
 import { C } from '../../theme';
 import { CallButtons, CallPill, ChatCallBanner } from '../../components/CallParts';
 import { useCallsStatus } from '../../lib/calls';
+import { cachedTranslations, chatAiStatus, doneTask, looksDone, refreshChatAi, suggestReplies, translate } from '../../lib/chatAi';
+import { cachedTasks, setTaskDone } from '../../lib/tasks';
 
 // NexEagle look (not WhatsApp's): navy header, blue bubbles for me, white for others, mint read ticks.
 const WA = { bg: '#eef1f6', mine: NX.mine, theirs: NX.theirs, head: NX.head, send: C.blue, meta: NX.meta, blueTick: NX.read, name: NX.name };
@@ -69,6 +71,58 @@ export default function Conversation() {
   const isDirect = thread?.kind === 'direct';
   const visit = q.activeVisit();
   const callsOn = useCallsStatus().on;
+
+  // ─── Smart chat: messages in my language, suggested replies, "is this task done?" ───
+  const [ai, setAi] = useState(chatAiStatus);
+  useEffect(() => { void refreshChatAi().then(setAi); }, []);
+  const [, setTrVersion] = useState(0);
+  const tr = ai.translate ? cachedTranslations(lang) : {};
+  const lastKey = msgs.length ? `${msgs.length}:${msgs[msgs.length - 1].clientId}:${msgs[msgs.length - 1].state ?? ''}` : '';
+  useEffect(() => {
+    if (!ai.translate) return;
+    const items = cachedMessages(id).filter((m) => !m.mine && !m.state && !m.call && m.text?.trim()).map((m) => ({ id: m.id, text: m.text! }));
+    if (!items.length) return;
+    let alive = true;
+    void translate(id, items, lang).then((n) => { if (alive && n > 0) setTrVersion((v) => v + 1); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [ai.translate, id, lang, lastKey]);
+
+  // Suggested replies for the latest message, when it is someone else's (an office user in an agent's chat answers as the office).
+  const lastReal = [...msgs].reverse().find((m) => !m.call && !m.state) ?? null;
+  const theirs = !!lastReal && !lastReal.mine && !(isOfficeUser() && thread?.kind === 'agent' && lastReal.fromOffice);
+  const [sugg, setSugg] = useState<{ id: string; list: string[] } | null>(null);
+  const suggAsked = useRef<string | null>(null);
+  const lastRealId = lastReal?.id ?? null;
+  useEffect(() => {
+    if (!ai.replies || !theirs || !lastRealId || suggAsked.current === lastRealId) return;
+    const timer = setTimeout(() => {
+      suggAsked.current = lastRealId;
+      void suggestReplies(id, lang).then((r) => setSugg({ id: r.forMessage ?? lastRealId, list: r.replies ?? [] })).catch(() => undefined);
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [ai.replies, theirs, lastRealId, id, lang]);
+  const aiReplies = ai.replies && theirs && sugg && sugg.id === lastRealId ? sugg.list : [];
+
+  // After I write "done" (or send a photo) in my office chat: once it reaches the office, ask whether it finishes a task.
+  const doneWatch = useRef<string | null>(null);
+  const [doneAsk, setDoneAsk] = useState<{ id: string; title: string; note: string | null } | null>(null);
+  const watchDone = (clientId: string, body: string | null, photo: boolean) => {
+    if (!ai.tasks || isOfficeUser() || (thread?.kind ?? 'agent') !== 'agent') return;
+    // The server knows the open tasks (the phone may not have fetched a new one yet), and asks the AI only when there are some.
+    if (!looksDone(body, photo)) return;
+    doneWatch.current = clientId;
+  };
+  useEffect(() => {
+    const cid = doneWatch.current;
+    if (!cid) return;
+    const m = cachedMessages(id).find((x) => x.clientId === cid);
+    if (!m || m.state) return; // still on its way
+    doneWatch.current = null;
+    void doneTask(id, cid).then((task) => {
+      // Not if it was already ticked off on this phone.
+      if (task && !cachedTasks().some((x) => x.id === task.id && x.status !== 'open')) setDoneAsk({ ...task, note: m.text?.trim() || null });
+    }).catch(() => undefined);
+  }, [id, lastKey]);
 
   // While open and the app is in front: fetch new messages every few seconds, send what's waiting, and mark
   // read on opening, on coming back to the app, and when something new from others arrives. Paused in the background.
@@ -128,7 +182,7 @@ export default function Conversation() {
   const sendText = (body: string) => {
     const b = body.trim();
     if (!b) return;
-    void send(id, { text: b, contact: tag, replyTo: reply });
+    void send(id, { text: b, contact: tag, replyTo: reply }).then((cid) => watchDone(cid, b, false));
     clearNext();
   };
   const doSend = () => sendText(text);
@@ -137,7 +191,8 @@ export default function Conversation() {
     if (f === 'unsupported') { Alert.alert(t('chatTitle'), t('chatBadType')); return; }
     if (!f) return;
     if (f.size != null && f.size > MAX_FILE_BYTES) { Alert.alert(t('chatTitle'), t('chatTooBig')); return; }
-    void send(id, { text: text.trim() || undefined, contact: tag, replyTo: reply, file: f });
+    const caption = text.trim() || undefined;
+    void send(id, { text: caption, contact: tag, replyTo: reply, file: f }).then((cid) => watchDone(cid, caption ?? null, f.mime.startsWith('image/')));
     clearNext();
   };
   const attach = async (k: 'camera' | 'gallery' | 'doc') => {
@@ -235,7 +290,7 @@ export default function Conversation() {
             <CallPill note={item.m.call} mine={item.m.mine} threadId={id} canCall={!isTeam} />
           ) : (
             <Bubble m={item.m} showName={!item.m.mine && !isDirect && (isTeam || item.m.fromOffice)} readAt={marks.readAt} seenAt={marks.seenAt}
-              lang={lang} t={t} onReply={() => { setReply(item.m); inputRef.current?.focus(); }} onOpenFile={() => void openFile(item.m)}
+              lang={lang} t={t} translation={item.m.mine ? null : tr[item.m.id] ?? null} onReply={() => { setReply(item.m); inputRef.current?.focus(); }} onOpenFile={() => void openFile(item.m)}
               onOpenTag={(cid) => { if (q.contact(cid)) router.push({ pathname: '/partner/[id]', params: { id: cid } }); }} />
           )}
         />
@@ -270,6 +325,14 @@ export default function Conversation() {
           {!typing && !emoji ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" accessibilityLabel={t('chQuickLabel')}
               contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+              {/* Suggested by smart chat: tapping puts it in the message box to change or send. */}
+              {aiReplies.map((r) => (
+                <Pressable key={`ai:${r}`} onPress={() => { setText(r); setSugg(null); inputRef.current?.focus(); }} accessibilityRole="button" accessibilityLabel={`${t('aiSuggested')}: ${r}`}
+                  style={({ pressed }) => [{ minHeight: 44, maxWidth: 280, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: '#d9c8fd', backgroundColor: '#f6f1ff', flexDirection: 'row', alignItems: 'center', gap: 6 }, pressed && { opacity: 0.7 }]}>
+                  <Icon name="sparkle" size={16} color="#6d28d9" />
+                  <T style={{ color: '#4c1d95', fontSize: 15, fontWeight: '700', flexShrink: 1 }} numberOfLines={2}>{r}</T>
+                </Pressable>
+              ))}
               {QUICK.map((k) => (
                 <Pressable key={k} onPress={() => sendText(t(k))} accessibilityRole="button" accessibilityLabel={`${t('chatSend')}: ${t(k)}`}
                   style={({ pressed }) => [{ minHeight: 44, paddingHorizontal: 16, borderRadius: 22, borderWidth: 1, borderColor: '#b9d7f5', backgroundColor: C.blueSoft, justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
@@ -347,6 +410,17 @@ export default function Conversation() {
         <T style={{ color: C.text2, fontSize: 14, textAlign: 'center' }}>{t('chatAttachHint')}</T>
       </Sheet>
 
+      <Sheet visible={!!doneAsk} onClose={() => setDoneAsk(null)} title={t('aiDoneTitle')}>
+        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+          <Icon name="sparkle" size={22} color="#6d28d9" />
+          <T style={{ flex: 1, fontSize: 17, lineHeight: 24, color: C.text }}>{doneAsk ? t('aiDoneBody', { task: doneAsk.title }) : ''}</T>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <Btn label={t('aiNotYet')} kind="secondary" flex onPress={() => setDoneAsk(null)} />
+          <Btn label={t('aiMarkDone')} icon="check" flex onPress={() => { if (doneAsk) { setTaskDone(doneAsk.id, doneAsk.note); toast(t('aiMarkedDone')); } setDoneAsk(null); }} />
+        </View>
+      </Sheet>
+
       <PartnerPicker visible={picking} onClose={() => setPicking(false)} onPick={(c) => setTag({ id: c.clientId, name: c.name })} panchayatFirst={visit?.panchayatId} />
 
       <Modal visible={!!viewer} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
@@ -392,9 +466,9 @@ function spoken(m: ChatMsg, t: TFn) {
   return [m.senderName, body, m.file ? m.file.name : '', m.contact ? `${t('chAPartner')}: ${m.contact.name}` : ''].filter(Boolean).join('. ');
 }
 
-function Bubble({ m, showName, readAt, seenAt, lang, t, onReply, onOpenFile, onOpenTag }: {
+function Bubble({ m, showName, readAt, seenAt, lang, t, translation, onReply, onOpenFile, onOpenTag }: {
   m: ChatMsg; showName: boolean; readAt: string | null; seenAt: string | null;
-  lang: Lang; t: TFn;
+  lang: Lang; t: TFn; translation?: string | null;
   onReply: () => void; onOpenFile: () => void; onOpenTag: (id: string) => void;
 }) {
   const failed = m.state === 'failed';
@@ -404,7 +478,11 @@ function Bubble({ m, showName, readAt, seenAt, lang, t, onReply, onOpenFile, onO
   const seen = m.mine && !m.state && seenAt != null && msTime(seenAt) >= at;
   const isImage = !!m.file && m.file.mime.startsWith('image/');
   const map = m.text ? MAP_RE.exec(m.text) : null;
-  const shownText = map ? m.text!.replace(MAP_RE, '').trim() : m.text;
+  const original = map ? m.text!.replace(MAP_RE, '').trim() : m.text;
+  // Smart chat: shown in my language, with the original one tap away.
+  const [showOriginal, setShowOriginal] = useState(false);
+  const translated = translation ? translation.replace(MAP_RE, '').trim() : null;
+  const shownText = translated && !showOriginal ? translated : original;
   const pad = isImage ? 8 : 0;
   const askRetry = () => Alert.alert(t('chatNotSent'), reasonText(failedReason(m.clientId), t), [{ text: t('cancel'), style: 'cancel' }, { text: t('chatRetry'), onPress: () => retry(m.clientId) }]);
   return (
@@ -419,7 +497,7 @@ function Bubble({ m, showName, readAt, seenAt, lang, t, onReply, onOpenFile, onO
             <T style={{ flex: 1, color: WA.name, fontWeight: '800', fontSize: 14 }} numberOfLines={1}>
               {showName ? `${m.senderName}${m.fromOffice ? ` · ${t('chatOfficeShort')}` : ''}` : ''}
             </T>
-            <Pressable onPress={() => speak(spoken(m, t), lang)} accessibilityRole="button" accessibilityLabel={t('chReadAloud')} hitSlop={6}
+            <Pressable onPress={() => speak(spoken({ ...m, text: shownText }, t), lang)} accessibilityRole="button" accessibilityLabel={t('chReadAloud')} hitSlop={6}
               style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 18, backgroundColor: C.blueSoft, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
               <Icon name="volume" size={18} color={C.blue} />
             </Pressable>
@@ -449,6 +527,13 @@ function Bubble({ m, showName, readAt, seenAt, lang, t, onReply, onOpenFile, onO
           </Pressable>
         )) : null}
         {shownText ? <T style={{ fontSize: 17, lineHeight: 24, color: m.mine ? NX.mineText : NX.theirsText, paddingHorizontal: pad }}>{shownText}</T> : null}
+        {translated ? (
+          <Pressable onPress={() => setShowOriginal((o) => !o)} accessibilityRole="button" accessibilityLabel={showOriginal ? t('aiShowTranslation') : t('aiShowOriginal')} hitSlop={6}
+            style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 32, paddingHorizontal: pad }}>
+            <Icon name="sparkle" size={14} color="#6d28d9" />
+            <T style={{ fontSize: 13, color: '#6d28d9', fontWeight: '700' }}>{showOriginal ? t('aiShowTranslation') : `${t('aiTranslated')} · ${t('aiShowOriginal')}`}</T>
+          </Pressable>
+        ) : null}
         {map ? (
           <Pressable onPress={() => openDirections(Number(map[1]), Number(map[2]))} accessibilityRole="button" accessibilityLabel={t('chOpenMap')}
             style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, paddingHorizontal: 12, borderRadius: 20, marginHorizontal: pad,

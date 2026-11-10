@@ -209,7 +209,7 @@ function toMsg(p: Pending): ChatMsg {
 export async function send(threadId: string, input: {
   text?: string; contact?: { id: string; name: string } | null; replyTo?: ChatMsg | null;
   file?: { uri: string; name: string; mime: string; size?: number | null } | null;
-}): Promise<void> {
+}): Promise<string> {
   const here = await lastKnown();
   const p: Pending = {
     clientId: uuid(), threadId, createdAt: new Date().toISOString(),
@@ -222,6 +222,7 @@ export async function send(threadId: string, input: {
   saveQueue([...queue(), p]);
   changed();
   void flushChat();
+  return p.clientId;
 }
 
 export function retry(clientId: string) {

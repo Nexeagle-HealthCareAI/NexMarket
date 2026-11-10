@@ -37,6 +37,10 @@ namespace SeemanchalOutreach.Api.Services
         public string SpeechModel { get; set; } = "whisper-large-v3";
         /// <summary>Minutes of speech each person can have written out per day (keeps the Groq bill predictable).</summary>
         public int SpeechDailyMinutes { get; set; } = 20;
+        /// <summary>Groq's quick model for chat helpers (translation, suggested replies, spotting tasks): fast and cheap.</summary>
+        public string FastModel { get; set; } = "openai/gpt-oss-20b";
+        /// <summary>Smart-chat requests each person can make per day (translations, suggested replies, summaries…).</summary>
+        public int ChatAiDailyCalls { get; set; } = 300;
     }
 
     public class AnalystUnavailableException : Exception
@@ -61,16 +65,20 @@ namespace SeemanchalOutreach.Api.Services
         public bool Configured => !string.IsNullOrWhiteSpace(_settings.ApiKey);
         public string Model => _settings.Model;
 
-        public async Task<(JsonObject Message, int Tokens)> ChatAsync(JsonArray messages, JsonArray? tools, JsonObject? responseFormat, CancellationToken ct, bool patient = false)
+        public async Task<(JsonObject Message, int Tokens)> ChatAsync(JsonArray messages, JsonArray? tools, JsonObject? responseFormat, CancellationToken ct, bool patient = false,
+            string? model = null, double? temperature = null, string? reasoningEffort = null, int? maxPromptChars = null)
         {
             if (!Configured) throw new AnalystUnavailableException("The AI analyst isn't switched on yet. Add the Groq API key on the server (Groq__ApiKey).");
-            var sendMessages = Fit(messages.DeepClone().AsArray(), _settings.MaxPromptChars);
+            var sendMessages = Fit(messages.DeepClone().AsArray(), maxPromptChars ?? _settings.MaxPromptChars);
+            var useModel = string.IsNullOrWhiteSpace(model) ? _settings.Model : model;
             var body = new JsonObject
             {
-                ["model"] = _settings.Model,
+                ["model"] = useModel,
                 ["messages"] = sendMessages,
-                ["temperature"] = 0.2,
+                ["temperature"] = temperature ?? 0.2,
             };
+            // gpt-oss models think before answering; "low" keeps quick helpers quick.
+            if (reasoningEffort != null && useModel.Contains("gpt-oss", StringComparison.OrdinalIgnoreCase)) body["reasoning_effort"] = reasoningEffort;
             if (tools != null) { body["tools"] = tools.DeepClone(); body["tool_choice"] = "auto"; }
             if (responseFormat != null) body["response_format"] = responseFormat.DeepClone();
 

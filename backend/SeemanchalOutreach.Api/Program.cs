@@ -54,6 +54,7 @@ builder.Services.AddScoped<SeemanchalOutreach.Api.Services.AttendanceService>();
 builder.Services.Configure<SeemanchalOutreach.Api.Services.AnalystSettings>(builder.Configuration.GetSection("Groq"));
 builder.Services.AddHttpClient("groq", c => c.Timeout = TimeSpan.FromSeconds(90));
 builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.GroqClient>();
+builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.ChatAiService>();
 builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.SpeechService>();
 builder.Services.Configure<SeemanchalOutreach.Api.Services.LiveKitSettings>(builder.Configuration.GetSection("LiveKit"));
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.CallSweeper>();
