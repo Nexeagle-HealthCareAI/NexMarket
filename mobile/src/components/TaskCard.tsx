@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { VoiceField } from './MicButton';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { Btn, Field, Pill, Sheet, T } from './ui';
@@ -119,7 +120,7 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose: () => void }
         {firstPlace ? (
           <Btn kind="secondary" icon="nav" label={t('route')} onPress={() => { onClose(); navigateTo({ lat: firstPlace.lat!, lng: firstPlace.lng!, name: firstPlace.name, panchayatId: firstPlace.id }); }} />
         ) : null}
-        <Field label={t('taskNote')} value={note} onChangeText={setNote} placeholder={t('taskNoteHint')} multiline maxLength={1000} />
+        <VoiceField voice="note" label={t('taskNote')} value={note} onChangeText={setNote} placeholder={t('taskNoteHint')} multiline maxLength={1000} />
         <Btn kind="ok" icon="check" label={t('taskMarkDone')} onPress={done} />
       </View>
     </Sheet>

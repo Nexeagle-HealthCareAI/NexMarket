@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { VoiceField } from './MicButton';
 import { Pressable, View } from 'react-native';
 import { Btn, Field, Sheet, T, toast } from './ui';
 import { Icon } from './Icon';
@@ -54,7 +55,7 @@ export function NoteList({ notes, limit, title, bare }: { notes: Note[]; limit?:
 
       <Sheet visible={!!editing} onClose={() => setEditing(null)} title={t('editComment')}>
         {editing ? <T style={{ color: C.text2, fontSize: 13 }}>{relDay(t, lang, editing.createdAt)} {timeOf(lang, editing.createdAt)} · {t(`source_${editing.source}` as never)}</T> : null}
-        <Field value={text} onChangeText={setText} multiline autoFocus maxLength={2000} />
+        <VoiceField voice="note" value={text} onChangeText={setText} multiline autoFocus maxLength={2000} />
         <T style={{ color: C.text2, fontSize: 12 }}>{t('editKeepsOriginal')}</T>
         <Btn label={t('saveChanges')} icon="check" onPress={save} disabled={!text.trim() || text.trim() === editing?.text} />
       </Sheet>

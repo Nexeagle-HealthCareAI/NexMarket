@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { MicButton } from '../../components/MicButton';
 import { useIsFocused } from 'expo-router';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, TextInput, View } from 'react-native';
 import { Screen, T } from '../../components/ui';
@@ -107,6 +108,7 @@ export default function Assistant() {
             <TextInput value={text} onChangeText={setText} placeholder={t('aiAskPlaceholder')} placeholderTextColor={C.muted}
               multiline maxLength={1000} editable={!asking} onSubmitEditing={() => void ask(text)}
               style={{ flex: 1, minHeight: 46, maxHeight: 120, borderWidth: 1, borderColor: C.borderStrong, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, fontSize: 16, color: C.text, backgroundColor: C.bg }} />
+            {!asking && !text.trim() ? <MicButton field="question" size={46} onText={(spoken) => setText(spoken)} /> : null}
             <Pressable accessibilityRole="button" accessibilityLabel={t('aiAskPlaceholder')} disabled={asking || !text.trim()} onPress={() => void ask(text)}
               style={({ pressed }) => [{ width: 46, height: 46, borderRadius: 23, backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center' },
                 (asking || !text.trim()) && { opacity: 0.4 }, pressed && { opacity: 0.8 }]}>

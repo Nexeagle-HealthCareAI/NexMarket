@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { VoiceField } from '../components/MicButton';
 import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Btn, Card, Empty, Field, Pill, Screen, Sheet, T, TopBar, toast } from '../components/ui';
@@ -352,7 +353,7 @@ function QuickVisit({ c, isNew, onSaved }: { c: ReturnType<typeof q.contactsIn>[
           </Pressable>
         ))}
       </ScrollView>
-      <Field placeholder={t('qCommentOptional')} value={comment} onChangeText={setComment} multiline maxLength={2000} />
+      <VoiceField voice="note" placeholder={t('qCommentOptional')} value={comment} onChangeText={setComment} multiline maxLength={2000} />
 
       <T style={{ color: C.text2, fontWeight: '700', fontSize: 13 }}>{t('nextFollowUp')}</T>
       <View style={{ flexDirection: 'row', gap: 6 }}>

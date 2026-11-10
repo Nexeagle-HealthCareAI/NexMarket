@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { VoiceField } from '../components/MicButton';
 import { Pressable, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Avatar, Btn, Card, Chip, Field, Pill, Screen, T, Toggle, TopBar, toast } from '../components/ui';
@@ -73,7 +74,7 @@ export default function Refer() {
       </Card>
       {errors.partner ? <T style={{ color: C.bad }}>{errors.partner}</T> : null}
 
-      <Field label={t('patientName')} value={name} onChangeText={setName} error={errors.name} autoCapitalize="words" />
+      <VoiceField voice="name" label={t('patientName')} value={name} onChangeText={setName} error={errors.name} autoCapitalize="words" />
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <View style={{ flex: 2 }}><Field label={t('phone')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={14} /></View>
         <View style={{ flex: 1 }}><Field label={t('age')} value={age} onChangeText={(v) => setAge(v.replace(/\D/g, ''))} keyboardType="number-pad" maxLength={3} /></View>
@@ -98,7 +99,7 @@ export default function Refer() {
         </View>
       </Card>
 
-      <Field label={t('notesOptional')} value={notes} onChangeText={setNotes} multiline />
+      <VoiceField voice="note" label={t('notesOptional')} value={notes} onChangeText={setNotes} multiline />
 
       <Pressable onPress={() => setConsent(!consent)} accessibilityRole="checkbox" accessibilityState={{ checked: consent }}
         style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start', padding: 14, borderRadius: 14, borderWidth: 1,

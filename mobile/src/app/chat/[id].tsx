@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MicButton } from '../../components/MicButton';
+import { joinSpoken } from '../../lib/speech';
 import { Alert, AppState, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -203,6 +205,7 @@ export default function Conversation() {
             <RoundIcon icon="tag" onPress={() => setPicking(true)} label={t('chatTagPartner')} active={!!tag} />
             <RoundIcon icon="attach" onPress={() => setAttachOpen(true)} label={t('chatAttach')} />
           </View>
+          {!text.trim() ? <MicButton field="chat" size={48} onText={(spoken) => setText((cur) => joinSpoken(cur, spoken, 'chat'))} /> : null}
           <Pressable onPress={text.trim() ? doSend : () => setAttachOpen(true)} accessibilityRole="button" accessibilityLabel={text.trim() ? t('chatSend') : t('chatAttach')}
             style={({ pressed }) => [{ width: 48, height: 48, borderRadius: 16, backgroundColor: WA.send, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.85 }]}>
             <Icon name={text.trim() ? 'send' : 'camera'} color="#fff" size={22} />

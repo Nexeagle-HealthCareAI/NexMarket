@@ -53,9 +53,8 @@ const config: ExpoConfig = {
       'android.permission.ACCESS_NETWORK_STATE',
       'android.permission.POST_NOTIFICATIONS',
     ],
-    // The app never records audio or reads the photo gallery (photos must be taken live).
+    // The app records audio only while the agent taps Speak (expo-audio adds that permission), and never reads the photo gallery (photos must be taken live).
     blockedPermissions: [
-      'android.permission.RECORD_AUDIO',
       'android.permission.READ_MEDIA_IMAGES',
       'android.permission.READ_MEDIA_VIDEO',
       'android.permission.READ_EXTERNAL_STORAGE',
@@ -73,6 +72,8 @@ const config: ExpoConfig = {
     'expo-secure-store',
     'expo-localization',
     'expo-font',
+    // The microphone: only while the agent taps "Speak" to fill a note, a name or a chat message.
+    ['expo-audio', { microphonePermission: 'NexEagle uses the microphone only when you tap Speak, to write your note for you.', recordAudioAndroid: true }],
     ['expo-local-authentication', { faceIDPermission: 'NexEagle uses Face ID to unlock the app instead of your PIN.' }],
     [
       'expo-splash-screen',

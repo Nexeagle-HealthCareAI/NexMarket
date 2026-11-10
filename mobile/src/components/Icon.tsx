@@ -8,7 +8,7 @@ export type IconName =
   | 'chat' | 'attach' | 'smile' | 'tag' | 'doc' | 'image' | 'reply' | 'checks' | 'lock' | 'download' | 'pencil' | 'newChat' | 'bell' | 'bellOff' | 'settings'
   | 'fingerprint' | 'eye' | 'eyeOff' | 'backspace' | 'bolt'
   | 'turnLeft' | 'turnRight' | 'slightLeft' | 'slightRight' | 'straight' | 'uturn' | 'roundabout' | 'arrive' | 'volume' | 'volumeOff'
-  | 'locate' | 'bike' | 'walk' | 'userPlus' | 'ambulance' | 'repeat' | 'route';
+  | 'locate' | 'bike' | 'walk' | 'userPlus' | 'ambulance' | 'repeat' | 'route' | 'mic' | 'stop';
 
 /** Line icons drawn on a 24×24 grid, 2 px stroke, matching the design canvas. */
 export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { name: IconName; size?: number; color?: string; strokeWidth?: number }) {
@@ -18,6 +18,8 @@ export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { 
     case 'home': body = <><Path {...p} d="M3 11l9-7 9 7" /><Path {...p} d="M5 10v10h14V10" /><Path {...p} d="M10 20v-6h4v6" /></>; break;
     case 'users': body = <><Circle {...p} cx={9} cy={8} r={3.5} /><Path {...p} d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5" /><Path {...p} d="M16 4.6a3.5 3.5 0 010 6.8M18 14.8c1.9.7 3.1 2.5 3.5 5.2" /></>; break;
     case 'plus': body = <><Path {...p} d="M12 5v14M5 12h14" /></>; break;
+    case 'mic': body = <><Rect {...p} x={9} y={3} width={6} height={11} rx={3} /><Path {...p} d="M5 11a7 7 0 0014 0M12 18v3" /></>; break;
+    case 'stop': body = <><Rect {...p} x={6} y={6} width={12} height={12} rx={2} /></>; break;
     case 'patients': body = <><Path {...p} d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z" /><Path {...p} d="M9 11h6M12 8v6" /></>; break;
     case 'user': body = <><Circle {...p} cx={12} cy={8} r={4} /><Path {...p} d="M4 21c1-4 4.2-6 8-6s7 2 8 6" /></>; break;
     case 'globe': body = <><Circle {...p} cx={12} cy={12} r={9} /><Path {...p} d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z" /></>; break;

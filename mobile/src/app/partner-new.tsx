@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { VoiceField } from '../components/MicButton';
 import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Btn, Card, Chip, Field, Screen, T, Toggle, TopBar } from '../components/ui';
@@ -106,7 +107,7 @@ export default function NewPartner() {
             {shownTypes.map((ty) => <Chip key={ty} label={t(`type_${ty}`)} selected={role === ty} onPress={() => setRole(ty)} />)}
             {!moreTypes ? <Chip label={t('more')} onPress={() => setMoreTypes(true)} /> : null}
           </View>
-          <Field label={t('name')} value={name} onChangeText={setName} error={errors.name} autoCapitalize="words" />
+          <VoiceField voice="name" label={t('name')} value={name} onChangeText={setName} error={errors.name} autoCapitalize="words" />
           <Field label={t('phone')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={14} />
           {dup ? (
             <Card onPress={() => router.push({ pathname: '/partner/[id]', params: { id: dup.id } })} style={{ backgroundColor: C.warnSoft, borderColor: '#f5d9a8', flexDirection: 'row', gap: 10, alignItems: 'center' }}>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { VoiceField } from '../../components/MicButton';
 import { Alert, Pressable, Share, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Avatar, Btn, Card, Empty, Field, Pill, Screen, Sheet, T, TopBar, toast } from '../../components/ui';
@@ -195,7 +196,7 @@ export default function PartnerProfile() {
       ))}
 
       <T style={{ fontSize: 17, fontWeight: '700', marginTop: 4 }}>{t('notes')} · {d.notes.length}</T>
-      <Field placeholder={t('writeNote')} value={noteText} onChangeText={setNoteText} multiline />
+      <VoiceField voice="note" placeholder={t('writeNote')} value={noteText} onChangeText={setNoteText} multiline />
       <Btn kind="ghost" icon="note" label={t('addNote')} onPress={saveNote} disabled={!noteText.trim()} />
       <Card><NoteList notes={d.notes} bare /></Card>
 

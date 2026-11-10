@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { VoiceField } from './MicButton';
 import { View } from 'react-native';
 import { Btn, Chip, Field, Sheet, T, toast } from './ui';
 import { Icon } from './Icon';
@@ -41,7 +42,7 @@ export function EscalateSheet({ visible, onClose, contactId, name, onDone }: { v
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {ESCALATION_KINDS.map((k) => <Chip key={k} label={t(k)} selected={kind === k} color={C.bad} onPress={() => setKind(k)} />)}
       </View>
-      <Field placeholder={t('escDetails')} value={note} onChangeText={setNote} multiline maxLength={1000} />
+      <VoiceField voice="note" placeholder={t('escDetails')} value={note} onChangeText={setNote} multiline maxLength={1000} />
       <Btn label={t('escSend')} kind="danger" icon="flag" onPress={() => void send()} loading={busy} disabled={!kind || (kind === 'escOther' && !note.trim())} />
     </Sheet>
   );

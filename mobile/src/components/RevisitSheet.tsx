@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { VoiceField } from './MicButton';
 import { View } from 'react-native';
 import { Btn, Chip, Field, Sheet, T, toast } from './ui';
 import { NoteList } from './NoteList';
@@ -65,7 +66,7 @@ export function RevisitSheet({ visible, onClose, contactId, name }: { visible: b
             ))}
           </View>
         ) : null}
-        <Field placeholder={t('revisitComment')} value={comment} onChangeText={setComment} multiline />
+        <VoiceField voice="note" placeholder={t('revisitComment')} value={comment} onChangeText={setComment} multiline />
         {ready ? (
           <>
             {saving ? (
