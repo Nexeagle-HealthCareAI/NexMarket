@@ -1,498 +1,34 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Easing, Image, Pressable, ScrollView, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useFocusEffect, useIsFocused } from 'expo-router';
-import Svg, { Circle, Defs, Line, Path, RadialGradient, Rect, Stop, Text as SvgText } from 'react-native-svg';
+import { router, useIsFocused } from 'expo-router';
 import { Vita, type VitaMood } from '../../components/Vita';
-import { Empty, Pill, T } from '../../components/ui';
+import { SpeakButton, T, toast } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
-import { LanguageButton, LanguageSheet } from '../../components/LanguageSheet';
-import { TasksSection } from '../../components/TaskCard';
-import { useDb, useSession, useSync } from '../../lib/session';
-import { db, q } from '../../lib/db';
-import { buildPlan, formatDist, type PlanItem } from '../../lib/plan';
+import { LanguageSheet } from '../../components/LanguageSheet';
+import { SyncStrip } from '../../components/SyncStrip';
+import { NextStepCard, type StepAction, type StepTone } from '../../components/NextStepCard';
+import { TaskSheet, TasksSection, dueLabel } from '../../components/TaskCard';
+import { useDb, useSession } from '../../lib/session';
 import { useHere } from '../../lib/useHere';
 import { assignment } from '../../lib/sync';
-import { finishShift, resumeTrackingIfNeeded } from '../../lib/shift';
-import { openDirections } from '../../lib/links';
-import { dayShort, km, timeOf, weekday } from '../../lib/format';
-import { routeKm, startOfDay, ymd } from '../../lib/util';
-import { cachedTasks } from '../../lib/tasks';
-import { cachedTips, ensureTips } from '../../lib/aiTips';
+import { resumeTrackingIfNeeded } from '../../lib/shift';
+import { callNumber } from '../../lib/links';
+import { formatDist } from '../../lib/plan';
+import { duration, dayShort, weekday } from '../../lib/format';
+import { refreshTasks, setTaskDone, type Task } from '../../lib/tasks';
 import { cachedNotifyUnread, useNotifyVersion } from '../../lib/notifications';
-import { C, PRIORITY_COLOR } from '../../theme';
-import type { Lang, TFn } from '../../i18n';
-import { lite, useLite } from '../../lib/perf';
-
-function weekStart(): string {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday
-  return d.toISOString();
-}
+import { cachedThreads, cachedUnread, useChatVersion } from '../../lib/chat';
+import { savedFeedback } from '../../lib/prefs';
+import { explainOnce } from '../../lib/speak';
+import { PHASES, phaseOf, readToday, type NextStep, type TodayData } from '../../lib/nextStep';
+import { C } from '../../theme';
+import { LANGS, type Lang, type TFn } from '../../i18n';
 
 const greetingKey = () => {
   const h = new Date().getHours();
   return h < 12 ? 'goodMorning' : h < 17 ? 'goodAfternoon' : 'goodEvening';
 };
-
-export default function Today() {
-  const focused = useIsFocused(); // Vita only floats while Today is on screen
-  const { t, agent, lang } = useSession();
-  const sync = useSync();
-  useNotifyVersion();
-  const notifyUnread = cachedNotifyUnread();
-  const here = useHere();
-  const [langOpen, setLangOpen] = useState(false);
-  const [showAll, setShowAll] = useState(false);
-  const [, tick] = useState(0);
-
-  useEffect(() => {
-    void resumeTrackingIfNeeded(t);
-    const id = setInterval(() => tick((n) => n + 1), 60_000);
-    return () => clearInterval(id);
-  }, [t]);
-  useEffect(() => { if (sync.online) void ensureTips(lang); }, [lang, sync.online]);
-
-  const data = useDb(() => {
-    const shift = q.activeShift();
-    const pts = shift ? q.trajectorySince(shift.startTime) : [];
-    const ws = weekStart();
-    const today = startOfDay().toISOString();
-    const two = new Date(startOfDay().getTime() - 14 * 864e5).toISOString();
-    const week = db().getFirstSync<{ sent: number; arrived: number }>(
-      `SELECT COUNT(*) AS sent,
-              SUM(CASE WHEN status IN ('arrived','opd','admitted','procedure','discharged') THEN 1 ELSE 0 END) AS arrived
-         FROM referrals WHERE createdAt >= ?`, ws) ?? { sent: 0, arrived: 0 };
-    const visitsToday = db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM visits WHERE checkInAt >= ?', today)?.n ?? 0;
-    const partnersToday = db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM contacts WHERE createdAt >= ?', today)?.n ?? 0;
-    const partners14 = db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM contacts WHERE createdAt >= ? AND createdAt < ?', two, today)?.n ?? 0;
-    return {
-      shift, kmToday: routeKm(pts), week, unsent: q.outboxCount(), visit: q.activeVisit(), visitsToday, partnersToday, partners14,
-      here: (() => {
-        const v = q.activeVisit();
-        if (!v) return null;
-        return { name: q.assignedOne(v.panchayatId)?.name ?? q.panchayat(v.panchayatId)?.name ?? '', since: v.checkInAt, people: q.contactsIn(v.panchayatId).length, id: v.panchayatId };
-      })(),
-      openTasks: cachedTasks().filter((x) => x.status === 'open').length, tip: cachedTips(lang)?.tips[0] ?? null,
-      lateTasks: cachedTasks().filter((x) => x.status === 'open' && x.dueDate != null && x.dueDate < ymd()).length,
-      dueFollowUps: db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM contacts WHERE followUpDate IS NOT NULL AND followUpDate <= ?', ymd())?.n ?? 0,
-      shiftDoneToday: (db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM shifts WHERE endTime IS NOT NULL AND endTime >= ?', today)?.n ?? 0) > 0,
-    };
-  }, [lang]);
-  const plan = useDb(() => buildPlan(here), [here?.lat, here?.lng]);
-  const block = assignment().block ?? agent?.block ?? '';
-
-  const end = () => {
-    Alert.alert(t('endShift'), t('endShiftConfirm'), [
-      { text: t('cancel'), style: 'cancel' },
-      { text: t('endShift'), style: 'destructive', onPress: () => { void finishShift(); } },
-    ]);
-  };
-
-  const [next, ...rest] = plan;
-  const visible = showAll ? rest : rest.slice(0, 3);
-  const firstName = agent?.name?.split(' ')[0] ?? '';
-  const initials = (agent?.name ?? '?').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('');
-  // Rings: visits against today's plan, new partners against the agent's own 14-day daily average, patients arrived of those sent.
-  const avgPartners = Math.max(1, Math.round(data.partners14 / 14));
-  const rings = [
-    { n: data.visitsToday, of: data.visitsToday + plan.length, color: C.mint, label: t('ringVisits') },
-    { n: data.partnersToday, of: avgPartners, color: '#6cb6ff', label: t('ringPartners') },
-    { n: data.week.sent ?? 0, of: data.week.sent ?? 0, fill: data.week.sent ? (data.week.arrived ?? 0) / data.week.sent : 0, color: '#ffcf7a', label: t('ringPatients') },
-  ];
-
-  // What Vita says and how it looks, from the agent's day.
-  const hour = new Date().getHours();
-  const late = data.lateTasks + plan.filter((p) => p.kind === 'contact' && p.overdueDays > 0).length;
-  const nextName = next ? (next.kind === 'contact' ? next.contact.name : next.panchayat.name) : '';
-  const mood: { pose: VitaMood; say: string } =
-    !data.shift
-      ? (hour >= 21 || hour < 5) ? { pose: 'sleep', say: t('vitaNight') }
-        : data.shiftDoneToday ? { pose: 'relax', say: t('vitaDone', { n: data.visitsToday }) }
-          : hour < 12 ? { pose: 'coffee', say: t('vitaMorning', { n: plan.length }) }
-            : { pose: 'wave', say: t('vitaReady', { n: plan.length }) }
-      : late > 0 ? { pose: 'stern', say: t('vitaLate', { n: late }) }
-        : plan.length === 0 && data.visitsToday > 0 ? { pose: 'cheer', say: t('vitaCheer') }
-          : hour === 13 ? { pose: 'snack', say: t('vitaLunch') }
-            : { pose: 'fly', say: nextName ? t('vitaFly', { name: nextName }) : t('vitaFlyNone') };
-
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: C.ink }} edges={['top']}>
-      <View style={{ flex: 1, backgroundColor: C.bg }}>
-        <ScrollView contentContainerStyle={{ paddingBottom: 28 }}>
-          {/* Hero: brand bar, Vita with today's message, the shift, live rings */}
-          <View style={{ backgroundColor: C.ink, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 34, gap: 14, overflow: 'hidden' }}>
-            <Aurora />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Image source={require('../../../assets/brand/logo.png')} style={{ width: 30, height: 22 }} resizeMode="contain" />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <T style={{ color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 }} numberOfLines={1}>NexEagle</T>
-              </View>
-              <LiveDot online={sync.online} running={sync.running} t={t} compact={data.unsent > 0} />
-              {data.unsent > 0 ? (
-                <Pressable onPress={() => router.navigate('/me')} accessibilityLabel={t('nOnPhone', { n: data.unsent })} hitSlop={6}
-                  style={{ height: 36, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,207,122,0.12)', borderWidth: 1, borderColor: 'rgba(255,207,122,0.3)', borderRadius: 999, paddingHorizontal: 10 }}>
-                  <Icon name={sync.online ? 'upload' : 'cloudOff'} size={14} color="#ffcf7a" />
-                  <T style={{ color: '#ffcf7a', fontSize: 13, fontWeight: '800' }}>{data.unsent}</T>
-                </Pressable>
-              ) : null}
-              {/* Vita, the AI analyst, always in the top bar */}
-              <Pressable onPress={() => router.navigate('/assistant')} accessibilityRole="button" accessibilityLabel={t('vitaTop')} hitSlop={6}
-                style={({ pressed }) => [{ height: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 3, paddingRight: 11, borderRadius: 18,
-                  backgroundColor: 'rgba(167,139,250,0.18)', borderWidth: 1, borderColor: 'rgba(167,139,250,0.45)' }, pressed && { opacity: 0.8 }]}>
-                <View style={{ width: 28, height: 28, borderRadius: 14, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end', backgroundColor: 'rgba(255,255,255,0.9)' }}>
-                  <Image source={require('../../../assets/mascot/think.webp')} style={{ width: 24, height: 30 }} resizeMode="contain" />
-                </View>
-                <T style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>{t('tabVita')}</T>
-              </Pressable>
-              <Pressable onPress={() => router.push('/notifications')} accessibilityRole="button" accessibilityLabel={t('ntTitle')} hitSlop={6}
-                style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>
-                <Icon name="bell" size={18} color="#fff" />
-                {notifyUnread > 0 ? (
-                  <View style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#e5484d', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: C.ink }}>
-                    <T style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{notifyUnread > 99 ? '99+' : notifyUnread}</T>
-                  </View>
-                ) : null}
-              </Pressable>
-              <LanguageButton onPress={() => setLangOpen(true)} />
-            </View>
-
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, minHeight: 128 }}>
-              <View style={{ flex: 1, minWidth: 0, gap: 10, paddingBottom: 6 }}>
-                <View>
-                  <T style={{ color: '#fff', fontSize: 22, fontWeight: '800' }} numberOfLines={2}>{t(greetingKey(), { name: firstName })}</T>
-                  <T style={{ color: C.sideText, fontSize: 12 }} numberOfLines={1}>{[`${weekday(lang, new Date())}, ${dayShort(lang, new Date())}`, block].filter(Boolean).join(' · ')}</T>
-                </View>
-                <View style={{ alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', borderRadius: 16, borderBottomRightRadius: 4, paddingHorizontal: 12, paddingVertical: 9, maxWidth: '100%' }}>
-                  <T style={{ color: '#fff', fontSize: 13, lineHeight: 18, fontWeight: '600' }} numberOfLines={3}>{mood.say}</T>
-                </View>
-              </View>
-              <Vita mood={mood.pose} height={mood.pose === 'fly' ? 96 : 128} bob={focused} />
-            </View>
-
-            {data.shift ? (
-              <View style={glass}>
-                <Pulse />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <ShiftTimer since={data.shift.startTime} />
-                  <T style={{ color: C.sideText, fontSize: 12 }} numberOfLines={2}>{t('shiftLive', { km: km(t, data.kmToday) })}</T>
-                </View>
-                <Pressable onPress={end} hitSlop={6} style={({ pressed }) => [{ borderWidth: 1, borderColor: C.inkLine, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9 }, pressed && { opacity: 0.7 }]}>
-                  <T style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{t('endShift')}</T>
-                </Pressable>
-              </View>
-            ) : null}
-            {data.shift ? <WhereNow here={data.here} t={t} lang={lang} /> : (
-              <Pressable onPress={() => router.push('/shift')} style={({ pressed }) => [glass, pressed && { opacity: 0.9 }]} accessibilityRole="button" accessibilityLabel={t('startShift')}>
-                <StartOrb />
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  <T style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>{t('startShift')}</T>
-                  <T style={{ color: C.sideText, fontSize: 12 }} numberOfLines={2}>{t('startShiftSub', { n: plan.length, m: data.openTasks })}</T>
-                </View>
-                <Icon name="chevron" color={C.sideText} />
-              </Pressable>
-            )}
-
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {rings.map((r) => <Ring key={r.label} {...r} />)}
-            </View>
-          </View>
-
-          {/* Front row: the four things an agent does most, with what's waiting on each */}
-          <View style={{ paddingHorizontal: 14, marginTop: -20, gap: 10 }}>
-            <View style={{ flexDirection: 'row', gap: 8, backgroundColor: C.card, borderRadius: 20, padding: 8, borderWidth: 1, borderColor: C.border,
-              elevation: 4, shadowColor: C.ink, shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } }}>
-              {data.shift
-                ? <Quick icon="pin" bg={C.infoSoft} fg={C.infoInk} label={data.here ? t('changePanchayat') : t('checkIn')} onPress={() => router.push('/checkin')} hot={!data.here} />
-                : <Quick icon="map" bg={C.infoSoft} fg={C.infoInk} label={t('map')} onPress={() => router.push('/route')} />}
-              <Quick icon="users" bg={C.blueSoft} fg={C.blueInk} label={t('addNewPerson')}
-                onPress={() => router.push({ pathname: '/partner-new', params: data.here ? { panchayatId: data.here.id } : {} })} />
-              <Quick icon="hospital" bg={C.okSoft} fg={C.okInk} label={t('referPatient')} onPress={() => router.push('/refer')} />
-              <Quick icon="calendar" bg={C.warnSoft} fg={C.warnInk} label={t('followUps')} onPress={() => router.navigate('/followups')} badge={data.dueFollowUps} />
-            </View>
-          </View>
-
-          {/* Today's plan */}
-          <View style={{ paddingHorizontal: 14, paddingTop: 20, gap: 10 }}>
-            <SectionHead icon="pin" color={C.blue} title={t('todaysPlan')} sub={t('planSub', { n: plan.length })}
-              right={<Pressable onPress={() => router.push('/route')} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.blueSoft, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 }}>
-                <Icon name="map" size={15} color={C.blueInk} /><T style={{ color: C.blueInk, fontWeight: '700', fontSize: 13 }}>{t('map')}</T>
-              </Pressable>} />
-
-            {!next ? <Empty text={t('planEmpty')} icon="map" /> : <NextStop item={next} t={t} />}
-            {rest.length > 0 ? (
-              <View style={{ paddingLeft: 22 }}>
-                <View style={{ position: 'absolute', left: 9, top: 14, bottom: 14, width: 2, backgroundColor: C.borderStrong, borderRadius: 1 }} />
-                {visible.map((item) => <TimelineRow key={item.kind + item.id} item={item} t={t} />)}
-                {!showAll && rest.length > 3 ? (
-                  <Pressable onPress={() => setShowAll(true)} style={{ padding: 12, alignItems: 'center', backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border }}>
-                    <T style={{ color: C.blueInk, fontWeight: '700' }}>{t('seeMoreStops', { n: rest.length - 3 })}</T>
-                  </Pressable>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-          {/* Tasks from the manager */}
-          <TasksSection />
-
-          {/* Ask the AI helper: useful, but not what the day depends on, so it sits last */}
-          <View style={{ paddingHorizontal: 14, paddingTop: 22, gap: 8 }}>
-            <Pressable onPress={() => router.navigate('/assistant')} accessibilityRole="button" accessibilityLabel={t('aiHelper')}
-              style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.card, borderRadius: 18, paddingVertical: 11, paddingHorizontal: 12,
-                borderWidth: 1, borderColor: C.border, elevation: 4, shadowColor: C.ink, shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } }, pressed && { opacity: 0.9 }]}>
-              <View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: C.purpleSoft, alignItems: 'center', justifyContent: 'flex-end', overflow: 'hidden' }}>
-                <Vita mood="think" height={40} bob={false} />
-              </View>
-              <T style={{ flex: 1, color: C.muted, fontSize: 15 }} numberOfLines={1}>{t('aiAskHome')}</T>
-              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: C.blueSoft, alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name="send" size={16} color={C.blueInk} />
-              </View>
-            </Pressable>
-            {data.tip ? (
-              <Pressable onPress={() => router.navigate('/assistant')} style={{ flexDirection: 'row', gap: 10, backgroundColor: C.purpleSoft, borderRadius: 16, padding: 12 }}>
-                <Icon name="sparkle" size={16} color={C.purple} />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <T style={{ color: C.purple, fontWeight: '800', fontSize: 13 }}>{t('aiTipToday')} · {data.tip.title}</T>
-                  <T style={{ color: C.text3, fontSize: 13, lineHeight: 19 }} numberOfLines={3}>{data.tip.detail}</T>
-                </View>
-              </Pressable>
-            ) : null}
-          </View>
-
-        </ScrollView>
-      </View>
-      <LanguageSheet visible={langOpen} onClose={() => setLangOpen(false)} />
-    </SafeAreaView>
-  );
-}
-
-/** On shift: the panchayat the agent is working in, with the next things to do there; or a nudge to check in. */
-function WhereNow({ here, t, lang }: { here: { name: string; since: string; people: number; id: string } | null; t: TFn; lang: Lang }) {
-  if (!here) {
-    return (
-      <Pressable onPress={() => router.push('/checkin')} accessibilityRole="button"
-        style={({ pressed }) => [glass, { borderColor: 'rgba(255,207,122,0.45)', backgroundColor: 'rgba(255,207,122,0.1)' }, pressed && { opacity: 0.85 }]}>
-        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,207,122,0.18)', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name="pin" color="#ffcf7a" />
-        </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <T style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{t('notCheckedIn')}</T>
-          <T style={{ color: C.sideText, fontSize: 12 }} numberOfLines={2}>{t('notCheckedInSub')}</T>
-        </View>
-        <View style={{ backgroundColor: '#ffcf7a', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9 }}>
-          <T style={{ color: C.ink, fontWeight: '800', fontSize: 13 }}>{t('checkIn')}</T>
-        </View>
-      </Pressable>
-    );
-  }
-  const open = () => router.push({ pathname: '/checkin', params: { panchayatId: here.id } });
-  return (
-    <View style={[glass, { flexDirection: 'column', alignItems: 'stretch', gap: 12, borderColor: 'rgba(56,246,169,0.35)' }]}>
-      <Pressable onPress={open} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(56,246,169,0.15)', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name="pin" color={C.mint} />
-        </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <T style={{ color: C.sideText, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>{t('workingIn').toUpperCase()}</T>
-          <T style={{ color: '#fff', fontWeight: '800', fontSize: 18 }} numberOfLines={1}>{here.name}</T>
-          <T style={{ color: C.sideText, fontSize: 12 }} numberOfLines={1}>{t('sinceAndPeople', { time: timeOf(lang, here.since), n: here.people })}</T>
-        </View>
-        <Icon name="chevron" color={C.sideText} />
-      </Pressable>
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <HeroBtn icon="plus" label={t('addShort')} primary onPress={() => router.push({ pathname: '/partner-new', params: { panchayatId: here.id } })} />
-        <HeroBtn icon="check" label={t('revisit')} onPress={open} />
-        <HeroBtn icon="nav" label={t('nextPanchayat')} onPress={() => router.push('/checkin')} />
-      </View>
-    </View>
-  );
-}
-
-function HeroBtn({ icon, label, onPress, primary }: { icon: IconName; label: string; onPress: () => void; primary?: boolean }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}
-      style={({ pressed }) => [{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, paddingHorizontal: 6,
-        backgroundColor: primary ? C.mint : 'rgba(255,255,255,0.08)', borderWidth: primary ? 0 : 1, borderColor: 'rgba(255,255,255,0.16)' }, pressed && { opacity: 0.8 }]}>
-      <Icon name={icon} size={16} color={primary ? C.ink : '#fff'} />
-      <T style={{ color: primary ? C.ink : '#fff', fontWeight: '800', fontSize: 13 }} numberOfLines={1}>{label}</T>
-    </Pressable>
-  );
-}
-
-const glass = {
-  flexDirection: 'row' as const, alignItems: 'center' as const, gap: 14, padding: 14, borderRadius: 20,
-  backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
-};
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-
-/** Runs a looping animation only while Today is on screen, so other tabs aren't slowed by it. */
-function useLoopWhileShown(make: () => Animated.CompositeAnimation | null, deps: React.DependencyList = []) {
-  useFocusEffect(
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useCallback(() => {
-      if (lite()) return undefined; // older phones: everything stays still
-      const loop = make();
-      loop?.start();
-      return () => loop?.stop();
-    }, deps),
-  );
-}
-
-/** Slowly drifting blue and green light behind the dark header. */
-function Aurora() {
-  const v = useRef(new Animated.Value(0)).current;
-  useLoopWhileShown(() => Animated.loop(Animated.sequence([
-    Animated.timing(v, { toValue: 1, duration: 9000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-    Animated.timing(v, { toValue: 0, duration: 9000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-  ])));
-  const still = useLite();
-  const blob = (id: string, color: string, o: number) => (
-    <Svg width={420} height={420}>
-      <Defs>
-        <RadialGradient id={id} cx="50%" cy="50%" r="50%">
-          <Stop offset="0" stopColor={color} stopOpacity={o} />
-          <Stop offset="1" stopColor={color} stopOpacity="0" />
-        </RadialGradient>
-      </Defs>
-      <Rect x="0" y="0" width="420" height="420" fill={`url(#${id})`} />
-    </Svg>
-  );
-  if (still) {
-    // Same colours, drawn once: no moving layers for the phone to keep repainting.
-    return (
-      <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
-        <View style={{ position: 'absolute', right: -170, top: -190 }}>{blob('a1', '#2a5bd7', 0.75)}</View>
-        <View style={{ position: 'absolute', left: -190, bottom: -220 }}>{blob('a2', '#13a37a', 0.6)}</View>
-      </View>
-    );
-  }
-  return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
-      <Animated.View renderToHardwareTextureAndroid style={{ position: 'absolute', right: -170, top: -190, transform: [{ translateX: v.interpolate({ inputRange: [0, 1], outputRange: [0, -60] }) }, { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, 30] }) }] }}>
-        {blob('a1', '#2a5bd7', 0.75)}
-      </Animated.View>
-      <Animated.View renderToHardwareTextureAndroid style={{ position: 'absolute', left: -190, bottom: -220, transform: [{ translateX: v.interpolate({ inputRange: [0, 1], outputRange: [0, 70] }) }] }}>
-        {blob('a2', '#13a37a', 0.6)}
-      </Animated.View>
-    </View>
-  );
-}
-
-/** "Live" when connected (pulsing), "Syncing" while sending, "Offline" otherwise. */
-function LiveDot({ online, running, t, compact }: { online: boolean; running: boolean; t: TFn; compact?: boolean }) {
-  const v = useRef(new Animated.Value(0)).current;
-  useLoopWhileShown(() => (online ? Animated.loop(Animated.timing(v, { toValue: 1, duration: 1600, useNativeDriver: true })) : null), [online]);
-  const color = !online ? C.muted : running ? '#ffcf7a' : C.mint;
-  return (
-    <View accessibilityLabel={!online ? t('liveOffline') : running ? t('liveSyncing') : t('liveOn')} style={{ height: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: compact ? 13 : 10, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>
-      <View style={{ width: 8, height: 8, alignItems: 'center', justifyContent: 'center' }}>
-        {online ? <Animated.View style={{ position: 'absolute', width: 16, height: 16, borderRadius: 8, backgroundColor: color,
-          opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] }), transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1.4] }) }] }} /> : null}
-        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-      </View>
-      {compact ? null : <T style={{ color, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>{(!online ? t('liveOffline') : running ? t('liveSyncing') : t('liveOn')).toUpperCase()}</T>}
-    </View>
-  );
-}
-
-/** The big green start button, breathing softly so it invites a tap. */
-function StartOrb() {
-  const v = useRef(new Animated.Value(0)).current;
-  useLoopWhileShown(() => Animated.loop(Animated.sequence([
-    Animated.timing(v, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-    Animated.timing(v, { toValue: 0, duration: 1200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-  ])));
-  return (
-    <View style={{ width: 66, height: 66, alignItems: 'center', justifyContent: 'center' }}>
-      <Animated.View style={{ position: 'absolute', width: 66, height: 66, borderRadius: 33, backgroundColor: 'rgba(56,246,169,0.18)', transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.08] }) }] }} />
-      <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: '#1fd38e', alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name="nav" size={24} color={C.ink} strokeWidth={2.4} />
-      </View>
-    </View>
-  );
-}
-
-/** A live "on shift" dot with a soft ring that keeps pulsing. */
-function Pulse() {
-  const v = useRef(new Animated.Value(0)).current;
-  useLoopWhileShown(() => Animated.loop(Animated.timing(v, { toValue: 1, duration: 1800, easing: Easing.out(Easing.quad), useNativeDriver: true })));
-  return (
-    <View style={{ width: 46, height: 46, alignItems: 'center', justifyContent: 'center' }}>
-      <Animated.View style={{ position: 'absolute', width: 46, height: 46, borderRadius: 23, borderWidth: 2, borderColor: C.mint,
-        opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }), transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.3] }) }] }} />
-      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(56,246,169,0.15)', alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: C.mint }} />
-      </View>
-    </View>
-  );
-}
-
-/** h:mm:ss since the shift started; only this ticks every second. */
-function ShiftTimer({ since }: { since: string }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const s = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000));
-  const txt = `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-  return <T style={{ color: '#fff', fontSize: 24, fontWeight: '800', fontVariant: ['tabular-nums'], letterSpacing: 0.5 }}>{txt}</T>;
-}
-
-function Ring({ n, of, fill, color, label }: { n: number; of: number; fill?: number; color: string; label: string }) {
-  const r = 21, c = 2 * Math.PI * r;
-  const p = Math.max(0, Math.min(1, fill ?? (of > 0 ? n / of : 0)));
-  const v = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    // The ring fill can't run on the native side, so on older phones it just jumps to the value.
-    if (lite()) { v.setValue(p); return; }
-    Animated.timing(v, { toValue: p, duration: 900, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
-  }, [v, p]);
-  return (
-    <View style={{ flex: 1, alignItems: 'center', gap: 4, paddingVertical: 10, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
-      <Svg width={54} height={54} viewBox="0 0 54 54">
-        <Circle cx={27} cy={27} r={r} stroke="rgba(255,255,255,0.12)" strokeWidth={6} fill="none" />
-        <AnimatedCircle cx={27} cy={27} r={r} stroke={color} strokeWidth={6} fill="none" strokeLinecap="round"
-          strokeDasharray={`${c} ${c}`} strokeDashoffset={v.interpolate({ inputRange: [0, 1], outputRange: [c, 0] })} transform="rotate(-90 27 27)" opacity={p > 0 ? 1 : 0} />
-        <SvgText x={27} y={32} textAnchor="middle" fill="#fff" fontSize={16} fontWeight="800">{String(n)}</SvgText>
-      </Svg>
-      <T style={{ color: C.sideText, fontSize: 11, fontWeight: '600', textAlign: 'center' }} numberOfLines={1}>{label}</T>
-    </View>
-  );
-}
-
-function SectionHead({ icon, color, title, sub, right }: { icon: IconName; color: string; title: string; sub?: string; right?: React.ReactNode }) {
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 }}>
-      <Icon name={icon} size={18} color={color} />
-      <View style={{ flex: 1 }}>
-        <T style={{ fontSize: 18, fontWeight: '800' }}>{title}</T>
-        {sub ? <T style={{ fontSize: 12, color: C.text2 }}>{sub}</T> : null}
-      </View>
-      {right}
-    </View>
-  );
-}
-
-function Quick({ icon, bg, fg, label, onPress, badge, hot }: { icon: IconName; bg: string; fg: string; label: string; onPress: () => void; badge?: number; hot?: boolean }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={badge ? `${label}, ${badge}` : label}
-      style={({ pressed }) => [{ flex: 1, alignItems: 'center', gap: 6, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 2, minHeight: 84 },
-        hot && { backgroundColor: bg }, pressed && { opacity: 0.75 }]}>
-      <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: hot ? C.card : bg, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name={icon} size={21} color={fg} />
-        {badge ? (
-          <View style={{ position: 'absolute', top: -6, right: -8, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: C.bad, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.card }}>
-            <T style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>{badge > 99 ? '99+' : String(badge)}</T>
-          </View>
-        ) : null}
-      </View>
-      <T style={{ fontSize: 11, fontWeight: '700', color: C.text3, textAlign: 'center' }} numberOfLines={2}>{label}</T>
-    </Pressable>
-  );
-}
 
 const typeLabel = (t: TFn, role: string) => {
   const key = `type_${role}`;
@@ -500,92 +36,289 @@ const typeLabel = (t: TFn, role: string) => {
   return v && v !== key ? v : role.replace(/_/g, ' ');
 };
 
-function describe(item: PlanItem, t: TFn) {
-  const title = item.kind === 'contact' ? item.contact.name : item.panchayat.name;
-  const dist = formatDist(item.distM, t);
-  const sub = item.kind === 'contact'
-    ? [typeLabel(t, item.contact.role), item.panchayatName].filter(Boolean).join(' · ')
-    : item.panchayat.source === 'block' ? t('pinApprox') : '';
-  const reason = item.kind === 'contact'
-    ? (item.overdueDays > 0 ? t('reasonOverdue', { n: item.overdueDays }) : t('reasonDueToday'))
-    : (item.partners === 0 ? t('reasonNewPanchayat') : t('reasonNotVisited'));
-  const tone: 'warn' | 'blue' | 'ok' = item.kind === 'contact' ? (item.overdueDays > 0 ? 'warn' : 'blue') : item.partners === 0 ? 'ok' : 'blue';
-  const panchayatId = item.kind === 'contact' ? item.contact.panchayatId : item.panchayat.panchayatId;
-  const prio = item.kind === 'contact' ? item.contact.priority : null;
-  const open = () => {
-    if (item.kind === 'contact') router.push({ pathname: '/partner/[id]', params: { id: item.id } });
-    else router.push({ pathname: '/checkin', params: { panchayatId: item.id } });
-  };
-  return { title, dist, sub, reason, tone, panchayatId, prio, open };
+const dueText = (t: TFn, overdueDays: number) => (overdueDays > 0 ? t('tdOverdueBy', { n: overdueDays }) : t('tdDueToday'));
+const openPartner = (id: string) => router.push({ pathname: '/partner/[id]', params: { id } });
+const endShiftScreen = () => router.push({ pathname: '/shift', params: { end: '1' } });
+
+/** Mark a task done from Today; the dark bar offers Undo (the "done" tap is only queued, so undoing is cheap). */
+function markTaskDone(t: TFn, task: Task) {
+  setTaskDone(task.id, null);
+  savedFeedback();
+  toast(t('tdTaskDone'), { undo: () => setTaskDone(task.id, null, true) });
 }
 
-/** The first stop, big: a small map-like band with the distance, then route and check-in. */
-function NextStop({ item, t }: { item: PlanItem; t: TFn }) {
-  const d = describe(item, t);
+export default function Today() {
+  const focused = useIsFocused(); // Vita only floats while Today is on screen
+  const { t, agent, lang } = useSession();
+  useNotifyVersion();
+  useChatVersion();
+  const notifyUnread = cachedNotifyUnread();
+  const chatUnread = cachedUnread();
+  const here = useHere();
+  const [langOpen, setLangOpen] = useState(false);
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [allTasks, setAllTasks] = useState(false);
+  const [, tick] = useState(0);
+
+  useEffect(() => {
+    void resumeTrackingIfNeeded(t);
+    const id = setInterval(() => tick((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, [t]);
+  useEffect(() => { void refreshTasks().catch(() => undefined); }, []);
+  const explain = t('tdExplain');
+  useEffect(() => { explainOnce('/today', explain, lang); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const data = useDb(() => readToday(here), [here?.lat, here?.lng]);
+  const block = assignment().block ?? agent?.block ?? '';
+  const firstName = agent?.name?.split(' ')[0] ?? '';
+  const card = stepCard(data.step, data, t, lang);
+  const phase = phaseOf(data.step);
+  const currentTask = taskId ? [...data.tasks, ...(data.step.kind === 'task' ? [data.step.task] : [])].find((x) => x.id === taskId) ?? null : null;
+
+  // Vita's pose follows the day.
+  const hour = new Date().getHours();
+  const late = data.followUps.filter((f) => f.overdueDays > 0).length;
+  const pose: VitaMood = !data.onShift
+    ? (hour >= 21 || hour < 5) ? 'sleep' : data.step.kind === 'start' && data.step.doneToday ? 'relax' : hour < 12 ? 'coffee' : 'wave'
+    : data.step.kind === 'finish' ? 'cheer' : late > 0 ? 'stern' : hour === 13 ? 'snack' : 'fly';
+
+  const shiftLabel = data.shiftStart
+    ? t('tdOnShift', { time: duration(t, Date.now() - new Date(data.shiftStart).getTime()) })
+    : data.step.kind === 'start' && data.step.doneToday ? t('tdShiftOver') : t('tdNoShift');
+  const langInfo = LANGS.find((l) => l.code === lang) ?? LANGS[3];
+
   return (
-    <Pressable onPress={d.open} style={({ pressed }) => [{ backgroundColor: C.card, borderRadius: 22, overflow: 'hidden', borderWidth: 2, borderColor: C.blue,
-      elevation: 3, shadowColor: C.blue, shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } }, pressed && { opacity: 0.92 }]}>
-      <View style={{ height: 92, backgroundColor: '#f3f6fb' }}>
-        <Svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 0 360 92">
-          {Array.from({ length: 17 }, (_, i) => <Line key={`v${i}`} x1={i * 22} y1={0} x2={i * 22} y2={92} stroke="#e3e9f2" strokeWidth={1} />)}
-          {Array.from({ length: 5 }, (_, i) => <Line key={`h${i}`} x1={0} y1={i * 22} x2={360} y2={i * 22} stroke="#e3e9f2" strokeWidth={1} />)}
-          <Path d="M -10 80 C 80 70, 120 20, 200 46 S 280 30, 282 34" stroke={C.blue} strokeOpacity={0.6} strokeWidth={4} fill="none" strokeDasharray="10 7" strokeLinecap="round" />
-          <Circle cx={282} cy={34} r={18} fill={C.blue} fillOpacity={0.15} />
-          <Circle cx={282} cy={34} r={9} fill="#fff" />
-          <Circle cx={282} cy={34} r={6} fill={C.blue} />
-        </Svg>
-        {d.dist ? (
-          <View style={{ position: 'absolute', left: 12, bottom: 10, backgroundColor: C.ink, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 }}>
-            <T style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{d.dist}</T>
+    <SafeAreaView style={{ flex: 1, backgroundColor: C.ink }} edges={['top']}>
+      {/* Header: the full brand name has the row to itself apart from three round buttons (read aloud, alerts, language). */}
+      <View style={{ backgroundColor: C.ink, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 18, gap: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Image source={require('../../../assets/brand/logo.png')} style={{ width: 30, height: 30 }} resizeMode="contain" accessibilityIgnoresInvertColors />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <T style={{ color: '#fff', fontSize: 19, fontWeight: '800' }}>NexEagle</T>
           </View>
-        ) : null}
-      </View>
-      <View style={{ padding: 14, gap: 4 }}>
-        <T style={{ fontSize: 11, fontWeight: '800', color: C.blueInk, letterSpacing: 0.6 }}>{t('nextStopLabel').toUpperCase()}</T>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          {d.prio === 'very_high' ? <Icon name="star" size={16} color={C.star} /> : null}
-          <T style={{ fontSize: 19, fontWeight: '800', flexShrink: 1 }} numberOfLines={1}>{d.title}</T>
+          <SpeakButton text={explain} dark />
+          <HeadBtn label={notifyUnread > 0 ? t('tdNotifNew', { n: notifyUnread }) : t('ntTitle')} onPress={() => router.push('/notifications')}>
+            <Icon name="bell" size={20} color="#fff" />
+            {notifyUnread > 0 ? <View style={{ position: 'absolute', top: 7, right: 8, width: 11, height: 11, borderRadius: 6, backgroundColor: '#ff5a4f', borderWidth: 2, borderColor: C.ink2 }} /> : null}
+          </HeadBtn>
+          <HeadBtn label={t('tdLangA11y', { name: langInfo.label })} onPress={() => setLangOpen(true)} wide>
+            <T style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{langInfo.short}</T>
+          </HeadBtn>
         </View>
-        {d.sub ? <T style={{ fontSize: 13, color: C.text2 }} numberOfLines={1}>{d.sub}</T> : null}
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-          <Pill label={d.reason} tone={d.tone} icon={item.kind === 'contact' ? 'clock' : 'flag'} />
-          {d.prio && d.prio !== 'normal' ? (
-            <View style={{ backgroundColor: PRIORITY_COLOR[d.prio].bg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 }}>
-              <T style={{ color: PRIORITY_COLOR[d.prio].fg, fontSize: 12, fontWeight: '700' }}>{t(`priority_${d.prio}`)}</T>
+
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+            <T style={{ fontSize: 24, fontWeight: '800', color: '#fff', lineHeight: 30 }}>{t(greetingKey(), { name: firstName })}</T>
+            <T style={{ fontSize: 15, color: '#c3cbdc' }}>{[`${weekday(lang, new Date())}, ${dayShort(lang, new Date())}`, block].filter(Boolean).join(' · ')}</T>
+            <Pressable disabled={!data.onShift} onPress={endShiftScreen} accessibilityRole={data.onShift ? 'button' : 'text'}
+              accessibilityLabel={data.onShift ? `${shiftLabel}. ${t('endShift')}` : shiftLabel}
+              style={({ pressed }) => [{ alignSelf: 'flex-start', marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6,
+                minHeight: 32, borderRadius: 999, backgroundColor: data.onShift ? '#123a2c' : 'rgba(255,255,255,0.08)' }, pressed && { opacity: 0.8 }]}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: data.onShift ? C.mint : C.sideText }} />
+              <T style={{ fontSize: 14, fontWeight: '700', color: data.onShift ? '#7ff5c2' : '#c3cbdc' }}>{shiftLabel}</T>
+            </Pressable>
+          </View>
+          {/* Vita, the AI helper: tap to ask. */}
+          <Pressable onPress={() => router.navigate('/assistant')} accessibilityRole="button" accessibilityLabel={t('vitaTop')}
+            style={({ pressed }) => [{ alignItems: 'center', gap: 2 }, pressed && { opacity: 0.85 }]}>
+            <Vita mood={pose} height={pose === 'fly' ? 60 : 72} bob={focused} />
+            <View style={{ paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: 'rgba(167,139,250,0.22)', borderWidth: 1, borderColor: 'rgba(167,139,250,0.5)' }}>
+              <T style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{t('tabVita')}</T>
             </View>
-          ) : null}
-        </View>
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-          <Pressable disabled={item.lat == null || item.lng == null} onPress={() => item.lat != null && item.lng != null && openDirections(item.lat, item.lng)}
-            style={({ pressed }) => [actionBtn, { backgroundColor: C.card, borderWidth: 1, borderColor: C.borderStrong }, (item.lat == null || item.lng == null) && { opacity: 0.45 }, pressed && { opacity: 0.8 }]}>
-            <Icon name="nav" size={18} color={C.text} /><T style={{ fontWeight: '700', fontSize: 15 }}>{t('route')}</T>
-          </Pressable>
-          <Pressable disabled={!d.panchayatId} onPress={() => router.push({ pathname: '/checkin', params: { panchayatId: d.panchayatId ?? '', contactId: item.kind === 'contact' ? item.id : '' } })}
-            style={({ pressed }) => [actionBtn, { backgroundColor: C.blue }, !d.panchayatId && { opacity: 0.45 }, pressed && { opacity: 0.85 }]}>
-            <Icon name="pin" size={18} color="#fff" /><T style={{ fontWeight: '700', fontSize: 15, color: '#fff' }}>{t('checkIn')}</T>
           </Pressable>
         </View>
       </View>
+
+      <View style={{ flex: 1, backgroundColor: C.bg }}>
+        <SyncStrip />
+        <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 28 }}>
+          <NextStepCard label={phase >= PHASES && data.step.kind === 'start' ? t('tdDayDone') : t('tdStepOf', { i: phase, n: PHASES })}
+            filled={phase} total={PHASES} {...card}
+            secondary={card.secondary ?? (data.step.kind === 'task' ? { label: t('tdOpenTask'), onPress: () => setTaskId((data.step as { task: Task }).task.id) } : null)} />
+
+          <AlsoToday data={data} chatUnread={chatUnread} t={t} lang={lang} onOpenTask={setTaskId} />
+
+          {/* Three numbers instead of the old rings. */}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Stat n={data.visitsToday} label={t('tdStatVisits', { n: data.visitsToday })} />
+            <Stat n={data.partnersToday} label={t('tdStatPartners', { n: data.partnersToday })} />
+            <Stat n={data.patientsWeek} label={t('tdStatPatients', { n: data.patientsWeek })} />
+          </View>
+
+          <View style={{ backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.border, overflow: 'hidden' }}>
+            <LinkRow icon="map" color={C.blue} label={t('tdPlanRow', { n: data.planStops })} onPress={() => router.push('/route')} />
+            {data.openTasks > 0 ? (
+              <LinkRow icon="flag" color={C.purple} label={allTasks ? t('tdHide') : t('tdTasksRow', { n: data.openTasks })} onPress={() => setAllTasks((x) => !x)}
+                expanded={allTasks} top />
+            ) : null}
+            {data.onShift ? <LinkRow icon="stop" color={C.bad} label={t('endShift')} onPress={endShiftScreen} top /> : null}
+          </View>
+          {allTasks ? <View style={{ marginHorizontal: -14, marginTop: -20 }}><TasksSection /></View> : null}
+        </ScrollView>
+      </View>
+      <TaskSheet task={currentTask} onClose={() => setTaskId(null)} />
+      <LanguageSheet visible={langOpen} onClose={() => setLangOpen(false)} />
+    </SafeAreaView>
+  );
+}
+
+type CardProps = { tone: StepTone; icon: IconName; title: string; reason?: string; primary: StepAction; secondary?: StepAction | null };
+
+/** Words and actions for the next-step card. Every button goes to the same screen or action the app already uses. */
+function stepCard(s: NextStep, d: TodayData, t: TFn, lang: Lang): CardProps {
+  switch (s.kind) {
+    case 'start':
+      return s.doneToday
+        ? { tone: 'purple', icon: 'check', title: t('tdRestTitle'), reason: t('tdRestSub', { n: d.visitsToday }),
+          primary: { label: t('startShift'), icon: 'nav', onPress: () => router.push('/shift') } }
+        : { tone: 'blue', icon: 'nav', title: t('tdStartTitle'), reason: t('tdStartSub'),
+          primary: { label: t('startShift'), icon: 'nav', onPress: () => router.push('/shift') } };
+    case 'checkin': {
+      if (!s.place) {
+        return { tone: 'ok', icon: 'pin', title: t('tdCheckInAny'), reason: t('tdCheckInAnySub'),
+          primary: { label: t('checkIn'), icon: 'pin', onPress: () => router.push('/checkin') } };
+      }
+      const id = s.place.id;
+      const dist = formatDist(s.place.distM, t);
+      const who = s.dueHere > 0 ? t('tdToMeet', { n: s.dueHere }) : s.partnersHere > 0 ? t('tdPartnersHere', { n: s.partnersHere }) : t('tdNewPlace');
+      return { tone: 'ok', icon: 'pin', title: t('tdCheckInTitle', { name: s.place.name }), reason: [dist ? t('tdAway', { dist }) : '', who].filter(Boolean).join(' · '),
+        primary: { label: t('checkIn'), icon: 'pin', onPress: () => router.push({ pathname: '/checkin', params: { panchayatId: id } }) },
+        secondary: { label: t('tdChooseOther'), onPress: () => router.push('/checkin') } };
+    }
+    case 'here': {
+      const id = s.place.id;
+      return { tone: 'ok', icon: 'users', title: t('tdHereTitle', { name: s.place.name }), reason: t('tdHereSub'),
+        primary: { label: t('tdMeetSomeone'), icon: 'users', onPress: () => router.push({ pathname: '/checkin', params: { panchayatId: id } }) },
+        secondary: { label: t('uxAddPartner'), onPress: () => router.push({ pathname: '/partner-new', params: { panchayatId: id } }) } };
+    }
+    case 'meet': {
+      const c = s.item.contact;
+      const reason = [typeLabel(t, c.role), dueText(t, s.item.overdueDays), s.lastNote ? t('tdLastTalk', { text: s.lastNote }) : ''].filter(Boolean).join(' · ');
+      return { tone: 'ok', icon: 'check', title: t('tdMeetTitle', { name: c.name }), reason,
+        // Opens this partner's quick "how did it go" right in the panchayat list, as the check-in screen does.
+        primary: { label: t('tdVisitDone'), icon: 'check', onPress: () => router.push({ pathname: '/checkin', params: { panchayatId: c.panchayatId ?? '', contactId: c.clientId } }) },
+        secondary: { label: t('tdOpenPartner'), onPress: () => openPartner(c.clientId) } };
+    }
+    case 'call': {
+      const c = s.item.contact;
+      const reason = [dueText(t, s.item.overdueDays), typeLabel(t, c.role), s.item.panchayatName].filter(Boolean).join(' · ');
+      return c.phone
+        ? { tone: 'warn', icon: 'phone', title: t('tdCallTitle', { name: c.name }), reason,
+          primary: { label: t('call'), icon: 'phone', a11y: t('tdCallTitle', { name: c.name }), onPress: () => callNumber(c.phone) },
+          secondary: { label: t('tdOpenPartner'), onPress: () => openPartner(c.clientId) } }
+        : { tone: 'warn', icon: 'user', title: t('tdFollowTitle', { name: c.name }), reason,
+          primary: { label: t('tdOpenPartner'), icon: 'user', onPress: () => openPartner(c.clientId) } };
+    }
+    case 'task': {
+      const task = s.task;
+      return { tone: 'warn', icon: 'flag', title: task.title, reason: taskSub(t, task, lang),
+        primary: { label: t('taskMarkDone'), icon: 'check', a11y: t('tdMarkDoneA11y', { title: task.title }), onPress: () => markTaskDone(t, task) } };
+    }
+    case 'finish':
+      return { tone: 'purple', icon: 'stop', title: t('tdFinishTitle'), reason: t('tdFinishSub', { v: d.visitsToday, p: d.referralsToday }),
+        primary: { label: t('endShift'), icon: 'stop', onPress: endShiftScreen },
+        secondary: s.next ? { label: t('tdNextPlace', { name: s.next.name }), onPress: () => router.push({ pathname: '/checkin', params: { panchayatId: s.next!.id } }) } : null };
+  }
+}
+
+function taskSub(t: TFn, task: Task, lang: Lang): string {
+  const due = dueLabel(t, lang, task)?.text;
+  return due ? t('tdTaskFrom', { name: task.createdBy, due }) : t('tdTaskFromNoDue', { name: task.createdBy });
+}
+
+/** Up to three more jobs for today, each with one big action button. */
+function AlsoToday({ data, chatUnread, t, lang, onOpenTask }: { data: TodayData; chatUnread: number; t: TFn; lang: Lang; onOpenTask: (id: string) => void }) {
+  type Row = { key: string; dot: string; title: string; sub: string; subColor?: string; onPress: () => void; action: { icon: IconName; label: string; onPress: () => void; bg: string; fg: string } };
+  const fu: Row[] = data.followUps.map((f) => {
+    const c = f.contact;
+    const late = f.overdueDays > 0;
+    return {
+      key: `f${f.id}`, dot: late ? C.bad : C.warn, title: c.phone ? t('tdCallTitle', { name: c.name }) : t('tdFollowTitle', { name: c.name }),
+      sub: [dueText(t, f.overdueDays), f.panchayatName].filter(Boolean).join(' · '), subColor: late ? C.bad : undefined,
+      onPress: () => openPartner(c.clientId),
+      action: c.phone
+        ? { icon: 'phone', label: t('tdCallTitle', { name: c.name }), onPress: () => callNumber(c.phone), bg: C.blueSoft, fg: C.blue }
+        : { icon: 'chevron', label: t('tdOpenPartner'), onPress: () => openPartner(c.clientId), bg: C.bg, fg: C.text3 },
+    };
+  });
+  const tasks: Row[] = data.tasks.map((task) => ({
+    key: `t${task.id}`, dot: C.warn, title: task.title, sub: taskSub(t, task, lang), onPress: () => onOpenTask(task.id),
+    action: { icon: 'check', label: t('tdMarkDoneA11y', { title: task.title }), onPress: () => markTaskDone(t, task), bg: C.okSoft, fg: C.ok },
+  }));
+  const thread = cachedThreads().filter((x) => x.unread > 0).sort((a, b) => (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? ''))[0];
+  const chat: Row[] = chatUnread > 0 ? [{
+    key: 'chat', dot: C.blue, title: t('tdMsgs', { n: chatUnread }), sub: thread ? (thread.lastPreview ? `${thread.title}: ${thread.lastPreview}` : thread.title) : '',
+    onPress: () => router.push('/chat'),
+    action: { icon: 'chevron', label: t('tdOpenChat'), onPress: () => router.push('/chat'), bg: C.bg, fg: C.text3 },
+  }] : [];
+  // One of each kind first, then fill up with more follow-ups and tasks.
+  const rows: Row[] = [];
+  for (const r of [fu[0], tasks[0], chat[0], ...fu.slice(1), ...tasks.slice(1)]) {
+    if (r && rows.length < 3) rows.push(r);
+  }
+
+  return (
+    <View style={{ gap: 10 }}>
+      <T style={{ fontSize: 17, fontWeight: '800', marginTop: 4 }}>{t('tdAlsoToday')}</T>
+      {rows.length === 0 ? (
+        <View style={{ backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.border, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Icon name="check" size={20} color={C.ok} />
+          <T style={{ flex: 1, fontSize: 15, color: C.text2 }}>{t('tdNothingElse')}</T>
+        </View>
+      ) : (
+        <View style={{ backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.border, overflow: 'hidden' }}>
+          {rows.map((r, i) => (
+            <View key={r.key} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingLeft: 14, paddingRight: 10, borderTopWidth: i ? 1 : 0, borderTopColor: C.line }}>
+              <Pressable onPress={r.onPress} accessibilityRole="button" accessibilityLabel={r.sub ? `${r.title}. ${r.sub}` : r.title}
+                style={({ pressed }) => [{ flex: 1, minWidth: 0, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12 }, pressed && { opacity: 0.7 }]}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: r.dot }} />
+                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <T style={{ fontSize: 16, fontWeight: '700' }} numberOfLines={2}>{r.title}</T>
+                  {r.sub ? <T style={{ fontSize: 14, color: r.subColor ?? C.text2, fontWeight: r.subColor ? '600' : '400' }} numberOfLines={1}>{r.sub}</T> : null}
+                </View>
+              </Pressable>
+              <Pressable onPress={r.action.onPress} accessibilityRole="button" accessibilityLabel={r.action.label} hitSlop={4}
+                style={({ pressed }) => [{ width: 48, height: 48, borderRadius: 14, backgroundColor: r.action.bg, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
+                <Icon name={r.action.icon} size={22} color={r.action.fg} />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function Stat({ n, label }: { n: number; label: string }) {
+  return (
+    <View accessible accessibilityLabel={`${n} ${label}`}
+      style={{ flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 10, alignItems: 'center', gap: 2 }}>
+      <T style={{ fontSize: 22, fontWeight: '800' }}>{n}</T>
+      <T style={{ fontSize: 13, color: C.text2, textAlign: 'center' }}>{label}</T>
+    </View>
+  );
+}
+
+function LinkRow({ icon, color, label, onPress, top, expanded }: { icon: IconName; color: string; label: string; onPress: () => void; top?: boolean; expanded?: boolean }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityState={expanded != null ? { expanded } : undefined}
+      style={({ pressed }) => [{ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 8,
+        borderTopWidth: top ? 1 : 0, borderTopColor: C.line }, pressed && { backgroundColor: C.line }]}>
+      <Icon name={icon} size={20} color={color} />
+      <T style={{ flex: 1, fontSize: 16, fontWeight: '700' }}>{label}</T>
+      <Icon name="chevron" size={18} color={C.muted} />
     </Pressable>
   );
 }
-const actionBtn = { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6, borderRadius: 14, paddingVertical: 12 };
 
-function TimelineRow({ item, t }: { item: PlanItem; t: TFn }) {
-  const d = describe(item, t);
+/** 44 px round button on the dark header. */
+function HeadBtn({ label, onPress, children, wide }: { label: string; onPress: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
-    <View style={{ marginBottom: 8 }}>
-      <View style={{ position: 'absolute', left: -18, top: '50%', marginTop: -6, width: 12, height: 12, borderRadius: 6, backgroundColor: C.card, borderWidth: 2, borderColor: d.tone === 'warn' ? C.warn : C.blue }} />
-      <Pressable onPress={d.open} style={({ pressed }) => [{ backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }, pressed && { opacity: 0.85 }]}>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-            {d.prio === 'very_high' ? <Icon name="star" size={14} color={C.star} /> : null}
-            <T style={{ fontSize: 15, fontWeight: '700', flexShrink: 1 }} numberOfLines={1}>{d.title}</T>
-          </View>
-          <T style={{ fontSize: 12, color: C.text2 }} numberOfLines={1}>{[d.sub, d.dist].filter(Boolean).join(' · ')}</T>
-        </View>
-        <Pill label={d.reason} tone={d.tone} />
-      </Pressable>
-    </View>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={4}
+      style={({ pressed }) => [{ height: 44, minWidth: 44, paddingHorizontal: wide ? 12 : 0, borderRadius: 22, borderWidth: 1, borderColor: C.inkLine, backgroundColor: C.ink2,
+        alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
+      {children}
+    </Pressable>
   );
 }

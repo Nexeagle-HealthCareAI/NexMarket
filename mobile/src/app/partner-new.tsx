@@ -97,18 +97,18 @@ export default function NewPartner() {
             <Card>
               <T style={{ fontWeight: '700' }}>{t('choosePanchayat')}</T>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {assigned.map((p) => <Chip key={p.panchayatId} label={p.name} selected={panchayatId === p.panchayatId} onPress={() => setPanchayatId(p.panchayatId)} />)}
+                {assigned.map((p) => <Chip big key={p.panchayatId} label={p.name} selected={panchayatId === p.panchayatId} onPress={() => setPanchayatId(p.panchayatId)} />)}
               </View>
               {errors.panchayat ? <T style={{ color: C.bad }}>{errors.panchayat}</T> : null}
             </Card>
           ) : null}
           <T style={{ fontSize: 17, fontWeight: '700' }}>{t('whoAreThey')}</T>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {shownTypes.map((ty) => <Chip key={ty} label={t(`type_${ty}`)} selected={role === ty} onPress={() => setRole(ty)} />)}
-            {!moreTypes ? <Chip label={t('more')} onPress={() => setMoreTypes(true)} /> : null}
+            {shownTypes.map((ty) => <Chip big key={ty} label={t(`type_${ty}`)} selected={role === ty} onPress={() => setRole(ty)} />)}
+            {!moreTypes ? <Chip big label={t('more')} onPress={() => setMoreTypes(true)} /> : null}
           </View>
           <VoiceField voice="name" label={t('name')} value={name} onChangeText={setName} error={errors.name} autoCapitalize="words" />
-          <Field label={t('phone')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={14} />
+          <Field label={t('phone')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={14} accessibilityLabel={t('phone')} />
           {dup ? (
             <Card onPress={() => router.push({ pathname: '/partner/[id]', params: { id: dup.id } })} style={{ backgroundColor: C.warnSoft, borderColor: '#f5d9a8', flexDirection: 'row', gap: 10, alignItems: 'center' }}>
               <Icon name="alert" color={C.warnInk} />

@@ -9,6 +9,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableFreeze } from 'react-native-screens';
 import { SessionProvider, useSession } from '../lib/session';
+import { PrefsProvider, persistPrefs } from '../lib/prefs';
+import { kvGet, kvSet } from '../lib/db';
 import { pendingPasswordChange } from '../lib/api';
 import { syncNow } from '../lib/sync';
 import { handleResponse, registerPush, setupNotifications } from '../lib/notifications';
@@ -44,6 +46,18 @@ function Gate() {
     return () => sub.remove();
   }, []);
   const onLogin = segments[0] === 'login';
+  const inTabs = segments[0] === '(tabs)';
+
+  // Signing in or out clears the kv table: keep this phone's Easy to use settings.
+  useEffect(() => { if (ready) persistPrefs(); }, [ready, agent?.agentId]);
+
+  // Vita's tour, once after sign-in, when the agent first reaches the main tabs (replay from Me).
+  useEffect(() => {
+    if (!ready || !agent || !inTabs || lock.locked) return;
+    if (kvGet('uxTourSeen') === '1') return;
+    kvSet('uxTourSeen', '1');
+    router.push('/tour');
+  }, [ready, agent, inTabs, lock.locked]);
 
   useEffect(() => {
     if (!ready) return;
@@ -92,6 +106,7 @@ function Gate() {
         <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
         <Stack.Screen name="set-password" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="add" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
+        <Stack.Screen name="tour" options={{ animation: 'fade', contentStyle: { backgroundColor: '#20283a' } }} />
       </Stack>
       <ToastHost />
       <CelebrateHost />
@@ -104,8 +119,10 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <SessionProvider>
-        <StatusBar style="auto" />
-        <Gate />
+        <PrefsProvider>
+          <StatusBar style="auto" />
+          <Gate />
+        </PrefsProvider>
       </SessionProvider>
     </SafeAreaProvider>
   );

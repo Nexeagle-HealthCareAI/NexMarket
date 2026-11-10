@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { VoiceField } from '../../components/MicButton';
 import { Alert, Pressable, Share, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Avatar, Btn, Card, Empty, Field, Pill, Screen, Sheet, T, TopBar, toast } from '../../components/ui';
+import { Avatar, Btn, Card, Empty, Pill, Screen, Sheet, T, TopBar, toast } from '../../components/ui';
+import { ActionTile } from '../../components/ActionTile';
+import { savedFeedback } from '../../lib/prefs';
 import { Icon } from '../../components/Icon';
 import { useDb, useSession } from '../../lib/session';
 import { q } from '../../lib/db';
@@ -10,8 +12,8 @@ import { addNote, addPhoto, setFollowUp, setPriority } from '../../lib/repo';
 import { takePhoto } from '../../lib/photo';
 import { callNumber, navigateTo } from '../../lib/links';
 import { api } from '../../lib/api';
-import { dayShort, relDay, timeOf } from '../../lib/format';
-import { daysFromToday } from '../../lib/util';
+import { dayShort, relDay, timeOf, weekday } from '../../lib/format';
+import { daysFromToday, parseYmd } from '../../lib/util';
 import { C, PRIORITY_COLOR, type Priority } from '../../theme';
 import { stageTone } from '../../components/stage';
 import { MoveSheet } from '../../components/MoveSheet';
@@ -32,6 +34,7 @@ export default function PartnerProfile() {
   const [revisitOpen, setRevisitOpen] = useState(false);
   const [escOpen, setEscOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [composing, setComposing] = useState(false);
   const [sharing, setSharing] = useState(false);
 
   const d = useDb(() => {
@@ -67,6 +70,8 @@ export default function PartnerProfile() {
     if (!noteText.trim()) return;
     addNote(c.clientId, noteText, 'note');
     setNoteText('');
+    setComposing(false);
+    savedFeedback();
     toast(t('savedOnPhone'));
   };
 
@@ -76,38 +81,99 @@ export default function PartnerProfile() {
     else if (p) { addPhoto(c.clientId, p); toast(t('savedOnPhone')); }
   };
 
+  const overdue = fu != null && fu < 0;
+  const lastVisit = d.visits[0];
+  const metN = d.visits.length;
+  const lastNote = d.notes[0];
+
   return (
-    <Screen header={<TopBar title={c.name} right={
-      <Pressable onPress={photo} hitSlop={8} accessibilityLabel={t('photo')} style={{ padding: 8 }}><Icon name="camera" color={C.text} /></Pressable>
+    <Screen header={<TopBar title={t('ptPartner')} sub={c.name} explain={t('ptPartnerExplain')} right={
+      <Pressable onPress={photo} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('photo')}
+        style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><Icon name="camera" color={C.text} /></Pressable>
     } />}>
-      <Card>
-        <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-          <Avatar name={c.name} size={56} bg={champion ? C.star : C.blue} />
-          <View style={{ flex: 1, gap: 4 }}>
-            {champion ? <Pill label={t('champion')} tone="star" icon="star" /> : null}
-            <T style={{ fontSize: 20, fontWeight: '800' }}>{c.name}</T>
-            <T style={{ color: C.text2, fontSize: 13 }}>{[t(`type_${c.role}` as never), d.place].filter(Boolean).join(' · ')}</T>
+      <Card style={{ borderRadius: 20, padding: 16, gap: 14 }}>
+        <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+          <Avatar name={c.name} size={60} bg={champion ? C.star : C.blue} />
+          <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+            <T style={{ fontSize: 21, fontWeight: '800' }}>{c.name}</T>
+            <T style={{ color: C.text2, fontSize: 15 }}>{[t(`type_${c.role}` as never), d.place].filter(Boolean).join(' · ')}</T>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
+              <Pressable onPress={() => setPrioOpen(true)} accessibilityRole="button" accessibilityLabel={t('ptChangePriority', { p: t(`priority_${c.priority}`) })} hitSlop={8}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: pc.bg, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: pc.dot }} />
+                <T style={{ color: pc.fg, fontWeight: '700', fontSize: 13 }}>{t(`priority_${c.priority}`)}</T>
+                <Icon name="chevron" size={13} color={pc.fg} />
+              </Pressable>
+              {champion ? <Pill label={t('champion')} tone="star" icon="star" /> : null}
+            </View>
           </View>
         </View>
-        <Pressable onPress={() => setPrioOpen(true)} accessibilityRole="button" accessibilityLabel={t('changePriority')}
-          style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: pc.bg, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: pc.dot }} />
-          <T style={{ color: pc.fg, fontWeight: '700' }}>{t(`priority_${c.priority}`)}</T>
-          <Icon name="chevron" size={14} color={pc.fg} />
-        </Pressable>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Btn flex small kind="secondary" icon="phone" label={t('call')} disabled={!c.phone} onPress={() => { callNumber(c.phone); }} />
-          <Btn flex small kind="secondary" icon="whatsapp" label={t('whatsapp')} disabled={!c.phone} onPress={() => setWaOpen(true)} />
-          <Btn flex small icon="hospital" label={t('referPatient')} onPress={() => router.push({ pathname: '/refer', params: { contactId: c.clientId } })} />
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <ActionTile height={76} tone="primary" icon="phone" label={t('call')} disabled={!c.phone} onPress={() => callNumber(c.phone)} />
+            <ActionTile height={76} tone="wa" icon="whatsapp" label={t('whatsapp')} disabled={!c.phone} onPress={() => setWaOpen(true)} />
+            <ActionTile height={76} tone="soft" icon="hospital" label={t('referPatient')} onPress={() => router.push({ pathname: '/refer', params: { contactId: c.clientId } })} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <ActionTile height={76} tone="okOutline" icon="check" label={t('ptVisitDone')} onPress={() => setRevisitOpen(true)} />
+            <ActionTile height={76} icon="calendar" label={t('ptMeetLater')} onPress={() => setMoveOpen(true)} />
+            <ActionTile height={76} tone="danger" icon="flag" label={t('ptGetHelp')} onPress={() => setEscOpen(true)} />
+          </View>
         </View>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {c.lat != null && c.lng != null ? <Btn kind="secondary" icon="nav" label={t('navGo')} onPress={() => navigateTo({ lat: c.lat!, lng: c.lng!, name: c.name, panchayatId: c.panchayatId, contactId: c.clientId })} /> : null}
-          <Btn flex kind="ok" icon="check" label={t('revisitPerson')} onPress={() => setRevisitOpen(true)} />
-          <Btn kind="danger" icon="flag" label={t('escalate')} onPress={() => setEscOpen(true)} />
-        </View>
+        {c.lat != null && c.lng != null ? (
+          <Btn small kind="secondary" icon="nav" label={t('navGo')} onPress={() => navigateTo({ lat: c.lat!, lng: c.lng!, name: c.name, panchayatId: c.panchayatId, contactId: c.clientId })} />
+        ) : null}
       </Card>
 
       <EscalationStatus c={c} />
+
+      <Pressable onPress={() => setMoveOpen(true)} accessibilityRole="button" accessibilityHint={t('ptFuTap')}
+        style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16, borderWidth: 1,
+          backgroundColor: overdue ? C.warnSoft : fu === 0 ? C.warnSoft : C.card, borderColor: overdue || fu === 0 ? '#f6d9a8' : C.border }, pressed && { opacity: 0.85 }]}>
+        <Icon name={overdue ? 'alert' : 'calendar'} size={24} color={overdue || fu === 0 ? C.warnInk : C.blue} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <T style={{ fontSize: 16, fontWeight: '800', color: overdue || fu === 0 ? C.warnInk : C.text }}>
+            {fu == null ? t('ptFuNone') : overdue ? t('ptFuOverdue', { n: -fu }) : fu === 0 ? t('ptFuToday')
+              : t('ptFuNext', { date: fu === 1 ? t('tomorrow') : `${weekday(lang, parseYmd(c.followUpDate!))}, ${dayShort(lang, c.followUpDate!)}` })}
+          </T>
+          <T style={{ fontSize: 14, color: overdue || fu === 0 ? C.warnInk : C.text2 }}>
+            {overdue ? t('ptWasDue', { date: `${weekday(lang, parseYmd(c.followUpDate!))}, ${dayShort(lang, c.followUpDate!)}` }) : t('ptFuTap')}
+          </T>
+        </View>
+        <Icon name="chevron" color={overdue || fu === 0 ? C.warnInk : C.text2} />
+      </Pressable>
+
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <MiniStat value={String(d.refs.length)} label={t('ptStatSent', { n: d.refs.length })} sub={d.month ? t('ptStatMonth', { n: d.month }) : undefined} color={C.text} />
+        <MiniStat value={String(d.admitted)} label={t('ptStatAdmitted')} color={C.okInk} />
+        <MiniStat value={metN === 1 ? t('ptOnce') : t('ptTimes', { n: metN })} label={t('ptStatMet', { date: dayShort(lang, new Date(lastVisit.createdAt)) })} color={C.blue} />
+      </View>
+
+      <Card style={{ borderRadius: 16, gap: 10 }}>
+        <T style={{ fontSize: 16, fontWeight: '800' }}>{t('ptLastNote')}</T>
+        {lastNote ? (
+          <>
+            <T style={{ fontSize: 15, color: C.text3, lineHeight: 22 }} numberOfLines={6}>{lastNote.text}</T>
+            <T style={{ fontSize: 13, color: C.text2 }}>{dayShort(lang, new Date(lastNote.createdAt))} · {t(`source_${lastNote.source}` as never)}</T>
+          </>
+        ) : <T style={{ color: C.text2 }}>{t('ptNoNoteYet')}</T>}
+        {composing ? (
+          <>
+            <VoiceField voice="note" placeholder={t('writeNote')} value={noteText} onChangeText={setNoteText} multiline accessibilityLabel={t('ptSpeakNote')} />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Btn flex small kind="secondary" label={t('cancel')} onPress={() => { setComposing(false); setNoteText(''); }} />
+              <Btn flex small kind="ok" icon="check" label={t('ptSaveNote')} onPress={saveNote} disabled={!noteText.trim()} />
+            </View>
+          </>
+        ) : (
+          <Pressable onPress={() => setComposing(true)} accessibilityRole="button"
+            style={({ pressed }) => [{ alignSelf: 'flex-start', minHeight: 48, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: C.borderStrong,
+              backgroundColor: C.card, flexDirection: 'row', alignItems: 'center', gap: 8 }, pressed && { opacity: 0.8 }]}>
+            <Icon name="mic" size={20} color={C.blue} />
+            <T style={{ color: C.blue, fontWeight: '700', fontSize: 15 }}>{t('ptSpeakNote')}</T>
+          </Pressable>
+        )}
+      </Card>
 
       <Card style={{ gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -125,25 +191,6 @@ export default function PartnerProfile() {
             .catch(() => toast(t('qrNeedsNet')))
             .finally(() => setSharing(false));
         }} />
-      </Card>
-
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <MiniStat n={d.refs.length} label={t('patientsSent')} color={C.text} />
-        <MiniStat n={d.admitted} label={t('admittedLabel')} color={C.okInk} />
-        <MiniStat n={d.month} label={t('thisMonth')} color={C.blue} />
-      </View>
-
-      <Card style={fu != null && fu < 0 ? { backgroundColor: C.warnSoft, borderColor: '#f5d9a8' } : undefined}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Icon name="calendar" color={fu != null && fu < 0 ? C.warnInk : C.blue} />
-          <View style={{ flex: 1 }}>
-            <T style={{ fontWeight: '700', color: fu != null && fu < 0 ? C.warnInk : C.text }}>
-              {fu == null ? t('noFollowUps') : fu < 0 ? t('followUpOverdue', { n: -fu }) : t('followUpOn', { date: fu === 0 ? t('today') : dayShort(lang, c.followUpDate!) })}
-            </T>
-            {d.notes[0] ? <T style={{ color: C.text2, fontSize: 13 }}>{dayShort(lang, new Date(d.notes[0].createdAt))} · {t(`source_${d.notes[0].source}` as never)}</T> : null}
-          </View>
-          <Btn small kind="ghost" label={t('moveFollowUp')} onPress={() => setMoveOpen(true)} />
-        </View>
       </Card>
 
       <Card>
@@ -196,14 +243,12 @@ export default function PartnerProfile() {
       ))}
 
       <T style={{ fontSize: 17, fontWeight: '700', marginTop: 4 }}>{t('notes')} · {d.notes.length}</T>
-      <VoiceField voice="note" placeholder={t('writeNote')} value={noteText} onChangeText={setNoteText} multiline />
-      <Btn kind="ghost" icon="note" label={t('addNote')} onPress={saveNote} disabled={!noteText.trim()} />
-      <Card><NoteList notes={d.notes} bare /></Card>
+      {d.notes.length ? <Card><NoteList notes={d.notes} bare /></Card> : null}
 
       <Sheet visible={prioOpen} onClose={() => setPrioOpen(false)} title={t('changePriority')}>
         {PRIOS.map((p) => (
-          <Pressable key={p} onPress={() => { setPriority(c.clientId, p); setPrioOpen(false); toast(t('savedOnPhone')); }}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, height: 52, paddingHorizontal: 14, borderRadius: 12,
+          <Pressable key={p} onPress={() => { setPriority(c.clientId, p); setPrioOpen(false); savedFeedback(); toast(t('savedOnPhone')); }} accessibilityRole="radio" accessibilityState={{ selected: c.priority === p }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, paddingHorizontal: 14, borderRadius: 12,
               backgroundColor: c.priority === p ? PRIORITY_COLOR[p].bg : C.card, borderWidth: 1, borderColor: c.priority === p ? PRIORITY_COLOR[p].dot : C.border }}>
             <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: PRIORITY_COLOR[p].dot }} />
             <T style={{ flex: 1, fontWeight: '700', color: PRIORITY_COLOR[p].fg }}>{t(`priority_${p}`)}</T>
@@ -211,7 +256,11 @@ export default function PartnerProfile() {
           </Pressable>
         ))}
       </Sheet>
-      <MoveSheet visible={moveOpen} onClose={() => setMoveOpen(false)} onPick={(date) => { setFollowUp(c.clientId, date); setMoveOpen(false); toast(t('savedOnPhone')); }} />
+      <MoveSheet visible={moveOpen} onClose={() => setMoveOpen(false)} onPick={(date) => {
+        const before = c.followUpDate;
+        setFollowUp(c.clientId, date); setMoveOpen(false); savedFeedback();
+        toast(t('ptMovedTo', { date: dayShort(lang, date) }), { undo: () => setFollowUp(c.clientId, before) });
+      }} />
       <EscalateSheet visible={escOpen} onClose={() => setEscOpen(false)} contactId={c.clientId} name={c.name} />
       <RevisitSheet visible={revisitOpen} onClose={() => setRevisitOpen(false)} contactId={c.clientId} name={c.name} />
       <WhatsAppSheet visible={waOpen} onClose={() => setWaOpen(false)} name={c.name} phone={c.phone} />
@@ -219,11 +268,12 @@ export default function PartnerProfile() {
   );
 }
 
-function MiniStat({ n, label, color }: { n: number; label: string; color: string }) {
+function MiniStat({ value, label, sub, color }: { value: string; label: string; sub?: string; color: string }) {
   return (
-    <View style={{ flex: 1, backgroundColor: C.card, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: C.border }}>
-      <T style={{ fontSize: 24, fontWeight: '800', color }}>{n}</T>
-      <T style={{ fontSize: 12, color: C.text2 }}>{label}</T>
+    <View accessible style={{ flex: 1, minWidth: 0, backgroundColor: C.card, borderRadius: 14, padding: 12, gap: 2, borderWidth: 1, borderColor: C.border }}>
+      <T style={{ fontSize: 22, fontWeight: '800', color }}>{value}</T>
+      <T style={{ fontSize: 14, color: C.text2 }}>{label}</T>
+      {sub ? <T style={{ fontSize: 12, color: C.muted }}>{sub}</T> : null}
     </View>
   );
 }

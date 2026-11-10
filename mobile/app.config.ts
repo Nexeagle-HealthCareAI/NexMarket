@@ -52,6 +52,7 @@ const config: ExpoConfig = {
       'android.permission.INTERNET',
       'android.permission.ACCESS_NETWORK_STATE',
       'android.permission.POST_NOTIFICATIONS',
+      'android.permission.VIBRATE', // the short buzz after a save (Me → Vibrate when saved)
     ],
     // The app records audio only while the agent taps Speak (expo-audio adds that permission), and never reads the photo gallery (photos must be taken live).
     blockedPermissions: [
@@ -118,6 +119,8 @@ const config: ExpoConfig = {
     apiUrl: process.env.EXPO_PUBLIC_API_URL ?? 'https://nexmarket-api.nexeagle.com',
     // Optional: the hospital's duty-doctor line, shown on urgent referrals.
     dutyDoctorPhone: process.env.EXPO_PUBLIC_DUTY_DOCTOR_PHONE ?? '',
+    // The marketing office, for the call button in the agent's office chat.
+    officePhone: process.env.EXPO_PUBLIC_OFFICE_PHONE ?? '+919162321859',
   },
 };
 

@@ -13,7 +13,7 @@ import { daysFromToday } from '../lib/util';
 import type { TFn } from '../i18n';
 import { C } from '../theme';
 
-function dueLabel(t: TFn, lang: Parameters<typeof dayShort>[0], task: Task): { text: string; tone: 'bad' | 'warn' | 'muted' } | null {
+export function dueLabel(t: TFn, lang: Parameters<typeof dayShort>[0], task: Task): { text: string; tone: 'bad' | 'warn' | 'muted' } | null {
   if (!task.dueDate) return null;
   const d = daysFromToday(task.dueDate);
   if (d < 0) return { text: t('taskOverdue', { n: -d }), tone: 'bad' };
@@ -73,7 +73,8 @@ export function TasksSection() {
   );
 }
 
-function TaskSheet({ task, onClose }: { task: Task | null; onClose: () => void }) {
+/** One task: what, where, for whom, and "Mark done" with an optional note. */
+export function TaskSheet({ task, onClose }: { task: Task | null; onClose: () => void }) {
   const { t, lang } = useSession();
   const [note, setNote] = useState('');
   if (!task) return <Sheet visible={false} onClose={onClose}><View /></Sheet>;

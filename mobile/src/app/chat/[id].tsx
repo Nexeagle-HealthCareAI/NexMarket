@@ -4,7 +4,8 @@ import { joinSpoken } from '../../lib/speech';
 import { Alert, AppState, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Sheet, T } from '../../components/ui';
+import * as Location from 'expo-location';
+import { Sheet, T, toast } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 import { PartnerPicker } from '../../components/PartnerPicker';
 import { ChatAvatar, NX } from '../../components/ChatAvatar';
@@ -16,14 +17,23 @@ import {
 } from '../../lib/chat';
 import { liveLine } from '../../lib/presence';
 import { imageSource, MAX_FILE_BYTES, openChatFile, pickCamera, pickDocument, pickGallery, type Picked } from '../../lib/chatFiles';
+import { quickPosition } from '../../lib/location';
+import { callNumber, openDirections } from '../../lib/links';
+import { OFFICE_PHONE } from '../../lib/config';
+import { speak } from '../../lib/speak';
 import { EMOJI } from '../../lib/emoji';
 import { setOpenChat } from '../../lib/notifications';
 import { dayLong, timeOf } from '../../lib/format';
 import { C } from '../../theme';
 
-// NexEagle look (not WhatsApp's): navy header with a mint line, blue bubbles for me, mint read ticks.
-const WA = { bg: NX.bg, mine: NX.mine, theirs: NX.theirs, head: NX.head, send: C.blue, meta: NX.meta, blueTick: NX.read, name: NX.name };
-type Row = { kind: 'day'; key: string; at: string } | { kind: 'msg'; key: string; m: ChatMsg };
+// NexEagle look (not WhatsApp's): navy header, blue bubbles for me, white for others, mint read ticks.
+const WA = { bg: '#eef1f6', mine: NX.mine, theirs: NX.theirs, head: NX.head, send: C.blue, meta: NX.meta, blueTick: NX.read, name: NX.name };
+type Row = { kind: 'day'; key: string; at: string } | { kind: 'new'; key: string; n: number } | { kind: 'msg'; key: string; m: ChatMsg };
+type TFn = ReturnType<typeof useSession>['t'];
+type Lang = ReturnType<typeof useSession>['lang'];
+const QUICK = ['chQuickDone', 'chQuickWay', 'chQuickCall', 'chQuickPhoto'] as const;
+/** A "Where I am" message carries a Google Maps link; the bubble offers "Open map" for it. */
+const MAP_RE = /https:\/\/maps\.google\.com\/\?q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/;
 
 export default function Conversation() {
   const { t, lang } = useSession();
@@ -43,6 +53,8 @@ export default function Conversation() {
   const [reply, setReply] = useState<ChatMsg | null>(null);
   const [viewer, setViewer] = useState<ChatMsg | null>(null);
   const [more, setMore] = useState(true);
+  // "N new": how many were unread when the chat opened (it is marked read straight after), and when it opened.
+  const [opened] = useState(() => ({ unread: thread?.unread ?? 0, at: Date.now() }));
   const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   // While the keyboard is up it covers the gesture bar, so the composer drops its bottom inset.
   const [kb, setKb] = useState(false);
@@ -85,36 +97,65 @@ export default function Conversation() {
   }, [id]));
 
   const rows = useMemo<Row[]>(() => {
+    // The first of the messages that were unread on opening (the newest N from others, not counting ones that came in since).
+    let anchor: string | null = null;
+    if (opened.unread > 0) {
+      let n = 0;
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const m = msgs[i];
+        if (m.mine || msTime(m.createdAt) > opened.at + 60_000) continue;
+        n++;
+        anchor = m.clientId;
+        if (n >= opened.unread) break;
+      }
+    }
     const out: Row[] = [];
     let last = '';
     for (const m of msgs) {
       const d = m.createdAt.slice(0, 10);
       const local = new Date(m.createdAt).toDateString();
       if (local !== last) { out.push({ kind: 'day', key: `d${d}${local}`, at: m.createdAt }); last = local; }
+      if (m.clientId === anchor) out.push({ kind: 'new', key: 'new', n: opened.unread });
       out.push({ kind: 'msg', key: m.clientId, m });
     }
     return out.reverse(); // newest first for the inverted list
-  }, [msgs]);
+  }, [msgs, opened]);
 
-  const doSend = () => {
-    const body = text.trim();
-    if (!body) return;
-    void send(id, { text: body, contact: tag, replyTo: reply });
-    setText(''); setTag(null); setReply(null);
+  const clearNext = () => { setText(''); setTag(null); setReply(null); };
+  const sendText = (body: string) => {
+    const b = body.trim();
+    if (!b) return;
+    void send(id, { text: b, contact: tag, replyTo: reply });
+    clearNext();
   };
+  const doSend = () => sendText(text);
   const sendFile = (f: Picked | 'denied' | 'unsupported' | null) => {
     if (f === 'denied') { Alert.alert(t('photo'), t('cameraDenied')); return; }
     if (f === 'unsupported') { Alert.alert(t('chatTitle'), t('chatBadType')); return; }
     if (!f) return;
     if (f.size != null && f.size > MAX_FILE_BYTES) { Alert.alert(t('chatTitle'), t('chatTooBig')); return; }
     void send(id, { text: text.trim() || undefined, contact: tag, replyTo: reply, file: f });
-    setText(''); setTag(null); setReply(null);
+    clearNext();
   };
   const attach = async (k: 'camera' | 'gallery' | 'doc') => {
     setAttachOpen(false);
     const f = k === 'camera' ? await pickCamera() : k === 'gallery' ? await pickGallery() : await pickDocument();
     sendFile(f);
   };
+  /** "Where I am": a fresh fix sent as a normal message with a map link (it goes through the same send queue). */
+  const shareHere = async () => {
+    setAttachOpen(false);
+    const perm = await Location.requestForegroundPermissionsAsync().catch(() => null);
+    if (perm?.status !== 'granted') { Alert.alert(t('chWhereIAm'), t('chLocNone')); return; }
+    toast(t('chLocFinding'));
+    const p = await quickPosition();
+    if (!p) { Alert.alert(t('chWhereIAm'), t('chLocNone')); return; }
+    const link = `https://maps.google.com/?q=${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
+    const note = text.trim();
+    void send(id, { text: `${note ? `${note}\n` : ''}📍 ${t('chHereMsg')}\n${link}`, contact: tag, replyTo: reply });
+    clearNext();
+  };
+  const tagPartner = () => { setAttachOpen(false); setPicking(true); };
   const toggleEmoji = () => {
     if (emoji) { setEmoji(false); inputRef.current?.focus(); }
     else { Keyboard.dismiss(); setEmoji(true); }
@@ -128,20 +169,28 @@ export default function Conversation() {
   const title = isTeam ? t('chatTeam') : isDirect ? thread?.title ?? '' : isOfficeUser() ? thread?.title ?? t('chatOffice') : t('chatOffice');
   const now = liveLine(t, lang, live, thread?.kind ?? 'agent', isOfficeUser());
   const sub = now ?? (isTeam ? t('chatTeamSub') : isDirect ? thread?.sub ?? t('chatDirectSub') : t('chatOfficeSub'));
-  const onlineNow = !!live?.online && !isTeam;
+  const onlineNow = isTeam ? (live?.count ?? 0) > 0 : !!live?.online;
+  const typing = !!text.trim();
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: WA.head }} edges={['top', 'left', 'right']}>
-      {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, paddingVertical: 8, backgroundColor: WA.head, borderBottomWidth: 3, borderBottomColor: NX.accent }}>
-        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/chat'))} hitSlop={10} accessibilityLabel={t('back')} style={{ padding: 6 }}>
-          <Icon name="back" color="#fff" size={22} />
+      {/* Header, with a call button in the office chat. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingTop: 10, paddingBottom: 12, backgroundColor: WA.head }}>
+        <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/chat'))} hitSlop={6} accessibilityRole="button" accessibilityLabel={t('back')}
+          style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="back" color="#fff" size={24} />
         </Pressable>
-        <ChatAvatar kind={thread?.kind ?? 'agent'} name={title} photoUrl={thread?.photoUrl} size={40} online={onlineNow} />
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <T style={{ color: '#fff', fontSize: 17, fontWeight: '800' }} numberOfLines={1}>{title}</T>
-          <T style={{ color: onlineNow ? NX.accent : NX.headSub, fontSize: 12, fontWeight: onlineNow ? '700' : '400' }} numberOfLines={1}>{sub}</T>
+        <ChatAvatar kind={thread?.kind ?? 'agent'} name={title} photoUrl={thread?.photoUrl} size={44} online={!!live?.online && !isTeam} dark />
+        <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+          <T style={{ color: '#fff', fontSize: 18, fontWeight: '800' }} numberOfLines={1}>{title}</T>
+          <T style={{ color: onlineNow ? '#7ff5c2' : NX.headSub, fontSize: 14, fontWeight: onlineNow ? '600' : '400' }} numberOfLines={1}>{sub}</T>
         </View>
+        {(thread?.kind ?? 'agent') === 'agent' && !isOfficeUser() && OFFICE_PHONE ? (
+          <Pressable onPress={() => callNumber(OFFICE_PHONE)} hitSlop={6} accessibilityRole="button" accessibilityLabel={t('chCallOffice')}
+            style={({ pressed }) => [{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: '#3a4560', backgroundColor: '#1a2236', alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.8 }]}>
+            <Icon name="phone" color="#fff" size={20} />
+          </Pressable>
+        ) : null}
       </View>
 
       {/* Android draws edge-to-edge (the window no longer shrinks for the keyboard), so pad on both platforms. */}
@@ -153,18 +202,24 @@ export default function Conversation() {
           maxToRenderPerBatch={10}
           windowSize={9}
           keyExtractor={(r) => r.key}
-          contentContainerStyle={{ paddingHorizontal: 10, paddingVertical: 10, gap: 3 }}
+          contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, gap: 6 }}
           onEndReachedThreshold={0.3}
           onEndReached={() => { if (more) void olderMessages(id).then((m) => { if (m !== null) setMore(m); }).catch(() => undefined); }}
           ListFooterComponent={
-            <View style={{ alignSelf: 'center', flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: C.blueSoft, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, marginBottom: 8, maxWidth: '92%' }}>
-              <Icon name="lock" size={12} color={C.blueInk} />
-              <T style={{ color: C.blueInk, fontSize: 12, textAlign: 'center' }}>{isDirect ? t('chatDirectSecure', { name: title }) : t('chatSecureNote')}</T>
+            <View style={{ alignSelf: 'center', flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: C.blueSoft, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 8, maxWidth: '92%' }}>
+              <Icon name="lock" size={13} color={C.blueInk} />
+              <T style={{ color: C.blueInk, fontSize: 13, textAlign: 'center', flexShrink: 1 }}>{isDirect ? t('chatDirectSecure', { name: title }) : t('chatSecureNote')}</T>
             </View>
           }
           renderItem={({ item }) => item.kind === 'day' ? (
-            <View style={{ alignSelf: 'center', backgroundColor: NX.chip, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, marginVertical: 10 }}>
-              <T style={{ fontSize: 12, color: '#fff', fontWeight: '700' }}>{dayLabel(item.at, t, lang)}</T>
+            <View style={{ alignSelf: 'center', backgroundColor: '#d9dfe9', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, marginVertical: 8 }}>
+              <T style={{ fontSize: 13, color: C.text3, fontWeight: '700' }}>{dayLabel(item.at, t, lang)}</T>
+            </View>
+          ) : item.kind === 'new' ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 6 }} accessibilityRole="text">
+              <View style={{ flex: 1, height: 2, backgroundColor: C.blue, opacity: 0.4 }} />
+              <T style={{ fontSize: 13, fontWeight: '800', color: C.blueInk }}>{t('chNewCount', { n: item.n }).toUpperCase()}</T>
+              <View style={{ flex: 1, height: 2, backgroundColor: C.blue, opacity: 0.4 }} />
             </View>
           ) : (
             <Bubble m={item.m} showName={!item.m.mine && !isDirect && (isTeam || item.m.fromOffice)} readAt={marks.readAt} seenAt={marks.seenAt}
@@ -175,41 +230,75 @@ export default function Conversation() {
 
         {/* What's attached to the next message */}
         {reply || tag ? (
-          <View style={{ backgroundColor: NX.bar, paddingHorizontal: 10, paddingTop: 8, gap: 6 }}>
+          <View style={{ backgroundColor: '#fff', paddingHorizontal: 10, paddingTop: 8, gap: 6, borderTopWidth: 1, borderTopColor: C.border }}>
             {reply ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderLeftWidth: 4, borderLeftColor: C.blue, borderRadius: 10, padding: 8, gap: 8 }}>
-                <View style={{ flex: 1 }}>
-                  <T style={{ color: C.blueInk, fontWeight: '700', fontSize: 13 }}>{reply.mine ? t('chatYou') : reply.senderName}</T>
-                  <T style={{ color: C.text2, fontSize: 13 }} numberOfLines={1}>{reply.text ?? (reply.file ? `📎 ${reply.file.name}` : '')}</T>
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: C.bg, borderLeftWidth: 4, borderLeftColor: C.blue, borderRadius: 10, paddingLeft: 10, gap: 8 }}>
+                <View style={{ flex: 1, paddingVertical: 8 }}>
+                  <T style={{ color: C.blueInk, fontWeight: '800', fontSize: 14 }}>{reply.mine ? t('chatYou') : reply.senderName}</T>
+                  <T style={{ color: C.text2, fontSize: 15 }} numberOfLines={1}>{reply.text ?? (reply.file ? `📎 ${reply.file.name}` : '')}</T>
                 </View>
-                <Pressable onPress={() => setReply(null)} hitSlop={8}><Icon name="close" size={18} color="#54656f" /></Pressable>
+                <Pressable onPress={() => setReply(null)} accessibilityRole="button" accessibilityLabel={t('chRemoveReply')}
+                  style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={20} color={C.text2} /></Pressable>
               </View>
             ) : null}
             {tag ? (
-              <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.purpleSoft, borderRadius: 999, paddingLeft: 10, paddingRight: 6, paddingVertical: 5 }}>
-                <Icon name="tag" size={14} color={C.purple} />
-                <T style={{ color: C.purple, fontWeight: '700', fontSize: 13 }}>{tag.name}</T>
-                <Pressable onPress={() => setTag(null)} hitSlop={8}><Icon name="close" size={16} color={C.purple} /></Pressable>
+              <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.purpleSoft, borderRadius: 999, paddingLeft: 12 }}>
+                <Icon name="tag" size={16} color={C.purple} />
+                <T style={{ color: C.purple, fontWeight: '700', fontSize: 15 }}>{tag.name}</T>
+                <Pressable onPress={() => setTag(null)} accessibilityRole="button" accessibilityLabel={t('chRemoveTag')}
+                  style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={18} color={C.purple} /></Pressable>
               </View>
             ) : null}
           </View>
         ) : null}
 
-        {/* Composer */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, paddingHorizontal: 6, paddingTop: 6, paddingBottom: emoji || kb ? 6 : Math.max(insets.bottom, 6), backgroundColor: NX.bar, borderTopWidth: 1, borderTopColor: C.border }}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: C.borderStrong, paddingHorizontal: 4, minHeight: 48 }}>
-            <RoundIcon icon={emoji ? 'note' : 'smile'} onPress={toggleEmoji} label={t('chatEmoji')} />
-            <TextInput ref={inputRef} value={text} onChangeText={setText} placeholder={t('chatType')} placeholderTextColor={C.muted} multiline maxLength={4000}
-              onFocus={() => setEmoji(false)}
-              style={{ flex: 1, fontSize: 16, color: C.text, paddingVertical: 12, paddingHorizontal: 4, maxHeight: 130 }} />
-            <RoundIcon icon="tag" onPress={() => setPicking(true)} label={t('chatTagPartner')} active={!!tag} />
-            <RoundIcon icon="attach" onPress={() => setAttachOpen(true)} label={t('chatAttach')} />
+        <View style={{ backgroundColor: '#fff', borderTopWidth: reply || tag ? 0 : 1, borderTopColor: C.border, paddingHorizontal: 10, paddingTop: 10, gap: 10,
+          paddingBottom: emoji || kb ? 10 : Math.max(insets.bottom, 10) }}>
+          {/* One-tap replies: sent straight away, like typing them and pressing Send. Hidden while typing. */}
+          {!typing && !emoji ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" accessibilityLabel={t('chQuickLabel')}
+              contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+              {QUICK.map((k) => (
+                <Pressable key={k} onPress={() => sendText(t(k))} accessibilityRole="button" accessibilityLabel={`${t('chatSend')}: ${t(k)}`}
+                  style={({ pressed }) => [{ minHeight: 44, paddingHorizontal: 16, borderRadius: 22, borderWidth: 1, borderColor: '#b9d7f5', backgroundColor: C.blueSoft, justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
+                  <T style={{ color: C.blueInk, fontSize: 15, fontWeight: '700' }}>{t(k)}</T>
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : null}
+
+          {/* Composer */}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+            <Pressable onPress={() => setAttachOpen(true)} accessibilityRole="button" accessibilityLabel={t('chShare')}
+              style={({ pressed }) => [{ width: 48, height: 52, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}>
+              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="plus" size={24} color={tag ? C.purple : C.text3} strokeWidth={2.4} />
+              </View>
+            </Pressable>
+            <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'flex-end', backgroundColor: '#fff', borderRadius: 26, borderWidth: 1, borderColor: C.borderStrong, paddingLeft: 2, paddingRight: 10, minHeight: 52 }}>
+              <Pressable onPress={toggleEmoji} accessibilityRole="button" accessibilityLabel={t('chatEmoji')} hitSlop={4}
+                style={({ pressed }) => [{ width: 44, height: 50, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}>
+                <Icon name={emoji ? 'note' : 'smile'} size={22} color={C.text2} />
+              </Pressable>
+              <TextInput ref={inputRef} value={text} onChangeText={setText} placeholder={t('chatType')} placeholderTextColor={C.muted} multiline maxLength={4000}
+                accessibilityLabel={t('chatType')} onFocus={() => setEmoji(false)}
+                style={{ flex: 1, fontSize: 17, color: C.text, paddingTop: 14, paddingBottom: 14, paddingHorizontal: 2, maxHeight: 140 }} />
+            </View>
+            {typing ? (
+              <Pressable onPress={doSend} accessibilityRole="button" accessibilityLabel={t('chatSend')}
+                style={({ pressed }) => [{ width: 52, height: 52, borderRadius: 26, backgroundColor: WA.send, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.85 }]}>
+                <Icon name="send" color="#fff" size={24} />
+              </Pressable>
+            ) : (
+              <>
+                <Pressable onPress={() => void attach('camera')} accessibilityRole="button" accessibilityLabel={t('chTakePhoto')}
+                  style={({ pressed }) => [{ width: 52, height: 52, borderRadius: 26, backgroundColor: C.blueSoft, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
+                  <Icon name="camera" color={C.blue} size={24} />
+                </Pressable>
+                <MicButton field="chat" size={52} onText={(spoken) => setText((cur) => joinSpoken(cur, spoken, 'chat'))} />
+              </>
+            )}
           </View>
-          {!text.trim() ? <MicButton field="chat" size={48} onText={(spoken) => setText((cur) => joinSpoken(cur, spoken, 'chat'))} /> : null}
-          <Pressable onPress={text.trim() ? doSend : () => setAttachOpen(true)} accessibilityRole="button" accessibilityLabel={text.trim() ? t('chatSend') : t('chatAttach')}
-            style={({ pressed }) => [{ width: 48, height: 48, borderRadius: 16, backgroundColor: WA.send, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.85 }]}>
-            <Icon name={text.trim() ? 'send' : 'camera'} color="#fff" size={22} />
-          </Pressable>
         </View>
 
         {/* Built-in emoji, in place of the keyboard */}
@@ -217,15 +306,16 @@ export default function Conversation() {
           <View style={{ height: 270 + insets.bottom, backgroundColor: '#fff', paddingBottom: insets.bottom }}>
             <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f0f2f5' }}>
               {EMOJI.map((g, i) => (
-                <Pressable key={g.group} onPress={() => setGroup(i)} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, borderBottomWidth: 3, borderBottomColor: i === group ? C.blue : 'transparent' }}>
-                  <T style={{ fontSize: 20 }}>{g.icon}</T>
+                <Pressable key={g.group} onPress={() => setGroup(i)} accessibilityRole="tab" accessibilityState={{ selected: i === group }} accessibilityLabel={g.group}
+                  style={{ flex: 1, alignItems: 'center', paddingVertical: 10, borderBottomWidth: 3, borderBottomColor: i === group ? C.blue : 'transparent' }}>
+                  <T style={{ fontSize: 22 }}>{g.icon}</T>
                 </Pressable>
               ))}
             </View>
             <ScrollView contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', padding: 6 }} keyboardShouldPersistTaps="always">
               {EMOJI[group].list.map((e) => (
-                <Pressable key={e} onPress={() => setText((x) => x + e)} style={{ width: '12.5%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center' }}>
-                  <T style={{ fontSize: 26 }}>{e}</T>
+                <Pressable key={e} onPress={() => setText((x) => x + e)} accessibilityLabel={e} style={{ width: '12.5%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center' }}>
+                  <T style={{ fontSize: 28 }}>{e}</T>
                 </Pressable>
               ))}
             </ScrollView>
@@ -233,13 +323,16 @@ export default function Conversation() {
         ) : null}
       </KeyboardAvoidingView>
 
-      <Sheet visible={attachOpen} onClose={() => setAttachOpen(false)} title={t('chatAttach')}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 8 }}>
-          <AttachBtn icon="camera" color="#d3396d" label={t('chatCamera')} onPress={() => void attach('camera')} />
-          <AttachBtn icon="image" color="#7c3aed" label={t('chatGallery')} onPress={() => void attach('gallery')} />
-          <AttachBtn icon="doc" color="#5157ae" label={t('chatDocument')} onPress={() => void attach('doc')} />
+      {/* Share sheet: big tiles */}
+      <Sheet visible={attachOpen} onClose={() => setAttachOpen(false)} title={t('chShareWith', { name: title })}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          <ShareTile icon="camera" bg={C.blueSoft} fg={C.blueInk} label={t('chatCamera')} onPress={() => void attach('camera')} />
+          <ShareTile icon="image" bg={C.purpleSoft} fg={C.purple} label={t('chPhotos')} onPress={() => void attach('gallery')} />
+          <ShareTile icon="pin" bg={C.okSoft} fg={C.okInk} label={t('chWhereIAm')} onPress={() => void shareHere()} />
+          <ShareTile icon="user" bg={C.warnSoft} fg={C.warnInk} label={t('chAPartner')} onPress={tagPartner} active={!!tag} />
+          <ShareTile icon="doc" bg={C.bg} fg={C.text3} label={t('chatDocument')} onPress={() => void attach('doc')} />
         </View>
-        <T style={{ color: C.text2, fontSize: 13, textAlign: 'center' }}>{t('chatAttachHint')}</T>
+        <T style={{ color: C.text2, fontSize: 14, textAlign: 'center' }}>{t('chatAttachHint')}</T>
       </Sheet>
 
       <PartnerPicker visible={picking} onClose={() => setPicking(false)} onPick={(c) => setTag({ id: c.clientId, name: c.name })} panchayatFirst={visit?.panchayatId} />
@@ -247,9 +340,13 @@ export default function Conversation() {
       <Modal visible={!!viewer} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
         <View style={{ flex: 1, backgroundColor: '#000' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: insets.top + 8, paddingHorizontal: 12, paddingBottom: 8 }}>
-            <Pressable onPress={() => setViewer(null)} hitSlop={10}><Icon name="back" color="#fff" size={22} /></Pressable>
+            <Pressable onPress={() => setViewer(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('back')}><Icon name="back" color="#fff" size={24} /></Pressable>
             <T style={{ color: '#fff', flex: 1, fontWeight: '700' }} numberOfLines={1}>{viewer?.mine ? t('chatYou') : viewer?.senderName}</T>
-            {viewer ? <Pressable onPress={() => void openChatFile(viewer).catch(() => undefined)} hitSlop={10}><Icon name="download" color="#fff" size={22} /></Pressable> : null}
+            {viewer ? (
+              <Pressable onPress={() => void openChatFile(viewer).catch(() => undefined)} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('chOpenFile')}>
+                <Icon name="download" color="#fff" size={24} />
+              </Pressable>
+            ) : null}
           </View>
           {viewer ? <Image source={imageSource(viewer)} style={{ flex: 1 }} resizeMode="contain" /> : null}
           {viewer?.text ? <T style={{ color: '#fff', padding: 16, paddingBottom: insets.bottom + 16 }}>{viewer.text}</T> : null}
@@ -259,36 +356,33 @@ export default function Conversation() {
   );
 }
 
-function dayLabel(iso: string, t: ReturnType<typeof useSession>['t'], lang: ReturnType<typeof useSession>['lang']) {
+function dayLabel(iso: string, t: TFn, lang: Lang) {
   const d = new Date(iso).toDateString();
   if (d === new Date().toDateString()) return t('today');
   if (d === new Date(Date.now() - 864e5).toDateString()) return t('yesterday');
   return dayLong(lang, new Date(iso));
 }
 
-function RoundIcon({ icon, onPress, label, active }: { icon: IconName; onPress: () => void; label: string; active?: boolean }) {
+function ShareTile({ icon, bg, fg, label, onPress, active }: { icon: IconName; bg: string; fg: string; label: string; onPress: () => void; active?: boolean }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={4}
-      style={({ pressed }) => [{ width: 42, height: 48, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.6 }]}>
-      <Icon name={icon} size={22} color={active ? C.purple : C.text2} />
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: !!active }}
+      style={({ pressed }) => [{ width: '31.5%', flexGrow: 1, height: 108, borderRadius: 18, backgroundColor: bg, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 6,
+        borderWidth: active ? 2 : 0, borderColor: fg }, pressed && { opacity: 0.75 }]}>
+      <Icon name={icon} size={32} color={fg} />
+      <T style={{ fontSize: 15, fontWeight: '800', color: fg, textAlign: 'center' }} numberOfLines={2}>{label}</T>
     </Pressable>
   );
 }
 
-function AttachBtn({ icon, color, label, onPress }: { icon: IconName; color: string; label: string; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={{ alignItems: 'center', gap: 8, width: 90 }} accessibilityRole="button" accessibilityLabel={label}>
-      <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: color, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name={icon} size={24} color="#fff" />
-      </View>
-      <T style={{ fontSize: 13, color: C.text3, fontWeight: '600' }}>{label}</T>
-    </Pressable>
-  );
+/** What a message says, for reading aloud. */
+function spoken(m: ChatMsg, t: TFn) {
+  const body = (m.text ?? '').replace(MAP_RE, '').trim();
+  return [m.senderName, body, m.file ? m.file.name : '', m.contact ? `${t('chAPartner')}: ${m.contact.name}` : ''].filter(Boolean).join('. ');
 }
 
 function Bubble({ m, showName, readAt, seenAt, lang, t, onReply, onOpenFile, onOpenTag }: {
   m: ChatMsg; showName: boolean; readAt: string | null; seenAt: string | null;
-  lang: ReturnType<typeof useSession>['lang']; t: ReturnType<typeof useSession>['t'];
+  lang: Lang; t: TFn;
   onReply: () => void; onOpenFile: () => void; onOpenTag: (id: string) => void;
 }) {
   const failed = m.state === 'failed';
@@ -297,58 +391,89 @@ function Bubble({ m, showName, readAt, seenAt, lang, t, onReply, onOpenFile, onO
   const read = m.mine && !m.state && readAt != null && msTime(readAt) >= at;
   const seen = m.mine && !m.state && seenAt != null && msTime(seenAt) >= at;
   const isImage = !!m.file && m.file.mime.startsWith('image/');
+  const map = m.text ? MAP_RE.exec(m.text) : null;
+  const shownText = map ? m.text!.replace(MAP_RE, '').trim() : m.text;
+  const pad = isImage ? 8 : 0;
+  const askRetry = () => Alert.alert(t('chatNotSent'), reasonText(failedReason(m.clientId), t), [{ text: t('cancel'), style: 'cancel' }, { text: t('chatRetry'), onPress: () => retry(m.clientId) }]);
   return (
-    <Pressable onLongPress={m.state ? undefined : onReply} delayLongPress={300}
-      onPress={failed ? () => Alert.alert(t('chatNotSent'), reasonText(failedReason(m.clientId), t), [{ text: t('cancel'), style: 'cancel' }, { text: t('chatRetry'), onPress: () => retry(m.clientId) }]) : undefined}
-      style={{ alignSelf: m.mine ? 'flex-end' : 'flex-start', maxWidth: '84%', marginVertical: 1 }}>
+    <Pressable onLongPress={m.state ? undefined : onReply} delayLongPress={300} onPress={failed ? askRetry : undefined}
+      accessibilityHint={failed ? t('chNotSentTap') : undefined}
+      style={{ alignSelf: m.mine ? 'flex-end' : 'flex-start', maxWidth: '86%', marginVertical: 1, opacity: pending ? 0.85 : 1 }}>
       <View style={{ backgroundColor: m.mine ? WA.mine : WA.theirs, borderRadius: 18, borderBottomRightRadius: m.mine ? 6 : 18, borderBottomLeftRadius: m.mine ? 18 : 6,
-        padding: isImage ? 4 : 10, paddingBottom: 6, gap: 4, borderWidth: failed ? 1 : m.mine ? 0 : 1, borderColor: failed ? C.bad : C.border,
+        paddingHorizontal: isImage ? 4 : 14, paddingTop: isImage ? 4 : 10, paddingBottom: 8, gap: 6, borderWidth: failed ? 2 : m.mine ? 0 : 1, borderColor: failed ? C.bad : C.border,
         elevation: m.mine ? 2 : 0, shadowColor: C.blue, shadowOpacity: m.mine ? 0.18 : 0, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } }}>
-        {showName ? <T style={{ color: WA.name, fontWeight: '800', fontSize: 13, paddingHorizontal: isImage ? 6 : 0 }}>{m.senderName}{m.fromOffice ? ` · ${t('chatOfficeShort')}` : ''}</T> : null}
+        {!m.mine ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: pad, minHeight: 36 }}>
+            <T style={{ flex: 1, color: WA.name, fontWeight: '800', fontSize: 14 }} numberOfLines={1}>
+              {showName ? `${m.senderName}${m.fromOffice ? ` · ${t('chatOfficeShort')}` : ''}` : ''}
+            </T>
+            <Pressable onPress={() => speak(spoken(m, t), lang)} accessibilityRole="button" accessibilityLabel={t('chReadAloud')} hitSlop={6}
+              style={({ pressed }) => [{ width: 36, height: 36, borderRadius: 18, backgroundColor: C.blueSoft, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
+              <Icon name="volume" size={18} color={C.blue} />
+            </Pressable>
+          </View>
+        ) : null}
         {m.replyTo ? (
-          <View style={{ backgroundColor: m.mine ? 'rgba(255,255,255,0.16)' : C.blueSoft, borderLeftWidth: 3, borderLeftColor: m.mine ? NX.accent : C.blue, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 }}>
-            <T style={{ color: m.mine ? NX.accent : C.blueInk, fontWeight: '800', fontSize: 12 }}>{m.replyTo.senderName}</T>
-            <T style={{ color: m.mine ? NX.mineMeta : C.text2, fontSize: 13 }} numberOfLines={2}>{m.replyTo.text ?? (m.replyTo.fileName ? `📎 ${m.replyTo.fileName}` : '')}</T>
+          <View style={{ backgroundColor: m.mine ? 'rgba(255,255,255,0.16)' : C.blueSoft, borderLeftWidth: 3, borderLeftColor: m.mine ? NX.accent : C.blue, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+            <T style={{ color: m.mine ? NX.accent : C.blueInk, fontWeight: '800', fontSize: 13 }}>{m.replyTo.senderName}</T>
+            <T style={{ color: m.mine ? NX.mineMeta : C.text2, fontSize: 15 }} numberOfLines={2}>{m.replyTo.text ?? (m.replyTo.fileName ? `📎 ${m.replyTo.fileName}` : '')}</T>
           </View>
         ) : null}
         {m.file ? (isImage ? (
-          <Pressable onPress={onOpenFile}>
-            <Image source={imageSource(m)} style={{ width: 240, height: 240, borderRadius: 14, backgroundColor: C.line }} resizeMode="cover" />
+          <Pressable onPress={onOpenFile} accessibilityRole="imagebutton" accessibilityLabel={m.file.name}>
+            <Image source={imageSource(m)} style={{ width: 250, height: 250, borderRadius: 14, backgroundColor: C.line }} resizeMode="cover" />
           </Pressable>
         ) : (
-          <Pressable onPress={onOpenFile} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: m.mine ? 'rgba(255,255,255,0.14)' : C.bg, borderRadius: 12, padding: 10, minWidth: 220 }}>
-            <View style={{ width: 38, height: 44, borderRadius: 8, backgroundColor: fileColor(m.file.name), alignItems: 'center', justifyContent: 'center' }}>
-              <T style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{(m.file.name.split('.').pop() ?? '').toUpperCase().slice(0, 4)}</T>
+          <Pressable onPress={onOpenFile} accessibilityRole="button" accessibilityLabel={m.file.name}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: m.mine ? 'rgba(255,255,255,0.14)' : C.bg, borderRadius: 12, padding: 10, minWidth: 220 }}>
+            <View style={{ width: 40, height: 46, borderRadius: 8, backgroundColor: fileColor(m.file.name), alignItems: 'center', justifyContent: 'center' }}>
+              <T style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>{(m.file.name.split('.').pop() ?? '').toUpperCase().slice(0, 4)}</T>
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <T style={{ fontWeight: '700', fontSize: 14, color: m.mine ? '#fff' : C.text }} numberOfLines={2}>{m.file.name}</T>
-              {m.file.size ? <T style={{ color: m.mine ? NX.mineMeta : WA.meta, fontSize: 12 }}>{fmtSize(m.file.size)}</T> : null}
+              <T style={{ fontWeight: '700', fontSize: 15, color: m.mine ? '#fff' : C.text }} numberOfLines={2}>{m.file.name}</T>
+              {m.file.size ? <T style={{ color: m.mine ? NX.mineMeta : WA.meta, fontSize: 13 }}>{fmtSize(m.file.size)}</T> : null}
             </View>
-            <Icon name="download" size={18} color={m.mine ? '#fff' : WA.meta} />
+            <Icon name="download" size={20} color={m.mine ? '#fff' : WA.meta} />
           </Pressable>
         )) : null}
-        {m.text ? <T style={{ fontSize: 15.5, lineHeight: 21, color: m.mine ? NX.mineText : NX.theirsText, paddingHorizontal: isImage ? 6 : 0 }}>{m.text}</T> : null}
-        {m.contact ? (
-          <Pressable onPress={() => onOpenTag(m.contact!.id)} style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: m.mine ? 'rgba(255,255,255,0.18)' : C.purpleSoft, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, marginHorizontal: isImage ? 6 : 0 }}>
-            <Icon name="tag" size={12} color={m.mine ? '#fff' : C.purple} />
-            <T style={{ color: m.mine ? '#fff' : C.purple, fontWeight: '700', fontSize: 12 }}>{m.contact.name}</T>
+        {shownText ? <T style={{ fontSize: 17, lineHeight: 24, color: m.mine ? NX.mineText : NX.theirsText, paddingHorizontal: pad }}>{shownText}</T> : null}
+        {map ? (
+          <Pressable onPress={() => openDirections(Number(map[1]), Number(map[2]))} accessibilityRole="button" accessibilityLabel={t('chOpenMap')}
+            style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, paddingHorizontal: 12, borderRadius: 20, marginHorizontal: pad,
+              backgroundColor: m.mine ? 'rgba(255,255,255,0.2)' : C.okSoft }}>
+            <Icon name="map" size={18} color={m.mine ? '#fff' : C.okInk} />
+            <T style={{ color: m.mine ? '#fff' : C.okInk, fontWeight: '800', fontSize: 15 }}>{t('chOpenMap')}</T>
           </Pressable>
         ) : null}
-        <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: 3, paddingHorizontal: isImage ? 6 : 0 }}>
-          <T style={{ fontSize: 11, color: m.mine ? NX.mineMeta : WA.meta }}>{timeOf(lang, m.createdAt)}</T>
-          {m.mine ? (failed ? <Icon name="alert" size={14} color="#ffd1cc" />
-            : pending ? <Icon name="clock" size={13} color={NX.mineMeta} />
-              : read ? <Icon name="checks" size={16} color={WA.blueTick} strokeWidth={2.4} />
-                : seen ? <Icon name="checks" size={16} color={NX.mineMeta} /> : <Icon name="check" size={14} color={NX.mineMeta} />) : null}
+        {m.contact ? (
+          <Pressable onPress={() => onOpenTag(m.contact!.id)} accessibilityRole="button" accessibilityLabel={`${t('chAPartner')}: ${m.contact.name}`}
+            style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: m.mine ? 'rgba(255,255,255,0.2)' : C.purpleSoft, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, marginHorizontal: pad }}>
+            <Icon name="tag" size={14} color={m.mine ? '#fff' : C.purple} />
+            <T style={{ color: m.mine ? '#fff' : C.purple, fontWeight: '700', fontSize: 13 }}>{m.contact.name}</T>
+          </Pressable>
+        ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: 4, paddingHorizontal: pad }}>
+          {m.mine && pending ? <Icon name="clock" size={14} color={NX.mineMeta} strokeWidth={2.2} /> : null}
+          <T style={{ fontSize: 13, color: m.mine ? '#d6e9ff' : WA.meta }}>
+            {pending ? t('chWaitingSignal') : `${timeOf(lang, m.createdAt)}${read ? ` · ${t('chRead')}` : ''}`}
+          </T>
+          {m.mine && !pending ? (failed ? <Icon name="alert" size={15} color="#ffd1cc" />
+            : read ? <Icon name="checks" size={17} color={WA.blueTick} strokeWidth={2.4} />
+              : seen ? <Icon name="checks" size={17} color={NX.mineMeta} /> : <Icon name="check" size={15} color={NX.mineMeta} />) : null}
         </View>
       </View>
-      {failed ? <T style={{ color: C.bad, fontSize: 12, textAlign: 'right', marginTop: 2 }}>{t('chatTapRetry')}</T> : null}
+      {failed ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: 5, marginTop: 4, minHeight: 28 }}>
+          <Icon name="refresh" size={15} color={C.bad} />
+          <T style={{ color: C.bad, fontSize: 14, fontWeight: '700' }}>{t('chNotSentTap')}</T>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
 
 const FAIL_KEYS: Record<FailCode, 'chatNotSent' | 'chatFailTimeout' | 'chatFailMissing'> = { notSent: 'chatNotSent', timeout: 'chatFailTimeout', missing: 'chatFailMissing' };
-function reasonText(r: { code: FailCode | null; text: string | null }, t: ReturnType<typeof useSession>['t']) {
+function reasonText(r: { code: FailCode | null; text: string | null }, t: TFn) {
   return r.code ? t(FAIL_KEYS[r.code]) : r.text ?? t('chatNotSent');
 }
 

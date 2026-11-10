@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import { Btn, Card, Pill, Screen, T, TopBar, toast } from '../components/ui';
 import { PanchayatList, sortPanchayats } from '../components/PanchayatList';
@@ -16,8 +16,19 @@ import { beginShift, openAppSettings } from '../lib/shift';
 import { dayLong, duration, km, relDay } from '../lib/format';
 import { routeKm } from '../lib/util';
 import { C } from '../theme';
+import { EndShiftView } from '../components/EndShiftView';
 
-export default function StartShift() {
+/**
+ * /shift starts the day; /shift?end=1 (from Today, while on shift) is the end of the day: the day's summary and
+ * a hold-to-end button. Other links to /shift (notifications, check-in) keep opening the start screen.
+ */
+export default function ShiftScreen() {
+  const { end } = useLocalSearchParams<{ end?: string }>();
+  const [mode] = useState<'start' | 'end'>(() => (end === '1' && q.activeShift() ? 'end' : 'start'));
+  return mode === 'end' ? <EndShiftView /> : <StartShift />;
+}
+
+function StartShift() {
   const { t, lang, agent } = useSession();
   const [busy, setBusy] = useState(false);
   const [gps, setGps] = useState<{ on: boolean; accuracy: number | null } | null>(null);
@@ -35,7 +46,7 @@ export default function StartShift() {
         'SELECT lat, lng, recordedAt FROM trajectory WHERE shiftId = ? ORDER BY recordedAt', last.clientId);
       const visits = db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM visits WHERE shiftId = ?', last.clientId)?.n ?? 0;
       const hours = duration(t, new Date(last.endTime).getTime() - new Date(last.startTime).getTime());
-      lastLine = `${t('lastShift', { when: relDay(t, lang, last.startTime), hours })}${pts.length > 1 ? ` · ${km(t, routeKm(pts))}` : ''}${visits ? ` · ${visits} ${t('visits')}` : ''}`;
+      lastLine = `${t('lastShift', { when: relDay(t, lang, last.startTime), hours })}${pts.length > 1 ? ` · ${km(t, routeKm(pts))}` : ''}${visits ? ` · ${t('uxNVisits', { n: visits })}` : ''}`;
     }
     return { total: a.length, done: a.filter((x) => x.visited).length, lastLine, active: !!q.activeShift(), assigned: a };
   }, [t, lang]);

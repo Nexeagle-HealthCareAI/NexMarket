@@ -8,6 +8,7 @@ import { onSyncState, startAutoSync, stopAutoSync, syncNow, syncState, type Sync
 import { stopTracking } from './location';
 import { unregisterPush } from './notifications';
 import { clearQuickUnlock, loadLock } from './lock';
+import { keepPhoneKv, restorePhoneKv } from './prefs';
 
 /**
  * App-wide state: who is signed in and which language they read. The language lives in
@@ -59,8 +60,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     await stopTracking();
     await clearTokens();
     const keep = langRef.current;
+    const phone = keepPhoneKv();
     wipeAll();
     kvSet('lang', keep); // the language choice outlives the session
+    restorePhoneKv(phone); // so do Easy to use settings and the tour flag
     setAgent(null);
   }, []);
 
@@ -99,8 +102,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     if (prev && prev !== r.agentId) {
       // A different person on this phone: start clean.
       const keep = langRef.current;
+      const phone = keepPhoneKv();
       wipeAll();
       kvSet('lang', keep);
+      restorePhoneKv(phone);
       await clearQuickUnlock(); // the PIN belonged to the other person
     }
     const a: Agent = { agentId: r.agentId, name: r.name, district: r.district ?? '', block: r.block ?? '' };
