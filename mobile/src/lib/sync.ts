@@ -6,7 +6,7 @@ import { SYNC_INTERVAL_MS } from './config';
 import { errorMessage, nowIso, uuid } from './util';
 import { me } from './repo';
 import { refreshTasks } from './tasks';
-import { flushChat, refreshUnread } from './chat';
+import { flushChat, pendingCount, refreshUnread } from './chat';
 import { pollNotifications } from './notifications';
 import { refreshMoney } from './money';
 import { refreshFieldSurveys, syncFieldSurveys } from './fieldSurvey';
@@ -59,6 +59,8 @@ async function run() {
   setState({ running: true });
   try {
     queueTrajectory();
+    // Chat first: a failure in the work sync below must not leave messages waiting (it never throws).
+    await flushChat().catch(() => undefined);
     await push();
     await pull();
     // Tasks from the manager: never let them fail the main sync.
@@ -68,8 +70,8 @@ async function run() {
     // Field mapping: send routes, spots and answers waiting on the phone, and get my surveys.
     await syncFieldSurveys().catch(() => undefined);
     await refreshFieldSurveys().catch(() => undefined);
-    // Chat: send what waited for signal, and update the unread badge.
-    await flushChat().catch(() => undefined);
+    // Chat: anything typed during the sync, and the unread badge.
+    if (pendingCount() > 0) await flushChat().catch(() => undefined);
     await refreshUnread().catch(() => undefined);
     // Notifications: unread count, and local alerts when the server can't push to this phone.
     await pollNotifications().catch(() => undefined);
@@ -353,7 +355,7 @@ export function startAutoSync() {
   // Coming back to the app counts as "opening" it.
   appSub = AppState.addEventListener('change', (st) => { if (st === 'active') void syncNow(); });
   timer = setInterval(() => {
-    if (q.activeShift() || q.outboxCount() > 0) void syncNow();
+    if (q.activeShift() || q.outboxCount() > 0 || pendingCount() > 0) void syncNow();
   }, SYNC_INTERVAL_MS);
 }
 

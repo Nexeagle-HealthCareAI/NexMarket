@@ -521,6 +521,10 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.AgentId);
                 entity.HasIndex(e => e.PeerId);
                 entity.HasIndex(e => e.LastMessageAt);
+                // One chat per agent, one Team chat, one chat per pair of people.
+                entity.HasIndex(e => e.AgentId, "UX_chat_threads_agent").IsUnique().HasFilter("\"Kind\" = 'agent'");
+                entity.HasIndex(e => new { e.AgentId, e.PeerId }, "UX_chat_threads_direct").IsUnique().HasFilter("\"Kind\" = 'direct'");
+                entity.HasIndex(e => e.Kind, "UX_chat_threads_team").IsUnique().HasFilter("\"Kind\" = 'team'");
             });
             modelBuilder.Entity<ChatMessage>(entity =>
             {

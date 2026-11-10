@@ -43,9 +43,13 @@ export function useNotifyVersion(): number {
 export const cachedInbox = (): InboxItem[] => kvJson<InboxItem[]>('notifInbox', []);
 export const cachedNotifyUnread = (): number => Number(kvGet('notifUnread') ?? '0') || 0;
 
-/** The chat on screen right now: its messages don't pop up while the agent is reading it. */
+/**
+ * The chat on screen (top of the stack), and whether the app is in the foreground with it.
+ * Its messages don't pop up while the agent is reading it, and tapping one of its alerts doesn't open it twice.
+ */
 let openChat: string | null = null;
-export function setOpenChat(id: string | null) { openChat = id; }
+let chatActive = false;
+export function setOpenChat(id: string | null, active = id != null) { openChat = id; chatActive = active; }
 
 // ─── Setup (once, at app start) ───
 let setUp = false;
@@ -55,7 +59,7 @@ export async function setupNotifications(): Promise<void> {
   Notifications.setNotificationHandler({
     handleNotification: async (n) => {
       const link = String(n.request.content.data?.link ?? '');
-      const reading = !!openChat && link === `chat:${openChat}`;
+      const reading = !!openChat && chatActive && link === `chat:${openChat}`;
       // Every chat message makes a sound; the chat you're reading just doesn't pop up a banner too.
       return { shouldShowBanner: !reading, shouldShowList: !reading, shouldPlaySound: true, shouldSetBadge: true };
     },
@@ -182,7 +186,12 @@ export async function pollNotifications(): Promise<void> {
 /** Where a notification takes the agent in the app. */
 export function openLink(link?: string | null) {
   const [k, id] = (link ?? '').split(':');
-  if (k === 'chat' && id) router.push({ pathname: '/chat/[id]', params: { id } });
+  if (k === 'chat' && id) {
+    if (openChat === id) return; // already on screen
+    // From another chat, swap it rather than stacking chat on chat.
+    if (openChat) router.replace({ pathname: '/chat/[id]', params: { id } });
+    else router.push({ pathname: '/chat/[id]', params: { id } });
+  }
   else if (k === 'partner' && id && q.contact(id)) router.push({ pathname: '/partner/[id]', params: { id } });
   else if (k === 'referral') router.push('/patients');
   else if (k === 'money') router.push('/money');

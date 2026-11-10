@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, AppState, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Sheet, T } from '../../components/ui';
@@ -9,7 +9,8 @@ import { ChatAvatar, NX } from '../../components/ChatAvatar';
 import { useSession } from '../../lib/session';
 import { q } from '../../lib/db';
 import {
-  cachedLive, cachedMessages, cachedThreads, failedReason, isOfficeUser, markRead, olderMessages, otherMarks, refreshMessages, retry, send, useChatVersion, type ChatMsg,
+  cachedLive, cachedMessages, cachedThreads, collapse, failedReason, flushChat, isOfficeUser, markRead, msTime, olderMessages, otherMarks, pendingCount, refreshMessages, retry, send,
+  useChatVersion, type ChatMsg, type FailCode,
 } from '../../lib/chat';
 import { liveLine } from '../../lib/presence';
 import { imageSource, MAX_FILE_BYTES, openChatFile, pickCamera, pickDocument, pickGallery, type Picked } from '../../lib/chatFiles';
@@ -41,20 +42,44 @@ export default function Conversation() {
   const [viewer, setViewer] = useState<ChatMsg | null>(null);
   const [more, setMore] = useState(true);
   const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
+  // While the keyboard is up it covers the gesture bar, so the composer drops its bottom inset.
+  const [kb, setKb] = useState(false);
+  useEffect(() => {
+    const a = Keyboard.addListener('keyboardDidShow', () => setKb(true));
+    const b = Keyboard.addListener('keyboardDidHide', () => setKb(false));
+    return () => { a.remove(); b.remove(); };
+  }, []);
   const isTeam = thread?.kind === 'team';
   const isDirect = thread?.kind === 'direct';
   const visit = q.activeVisit();
 
-  // While open: fetch new messages every few seconds and mark them read.
+  // While open and the app is in front: fetch new messages every few seconds, send what's waiting, and mark
+  // read on opening, on coming back to the app, and when something new from others arrives. Paused in the background.
   useFocusEffect(useCallback(() => {
     let alive = true;
-    setOpenChat(id); // its messages don't pop up while it's open
+    let busy = false;
+    let active = AppState.currentState === 'active';
+    let needRead = true; // opening the chat reads it
+    setOpenChat(id, active); // its messages don't pop up while it's on screen
     const tick = async () => {
-      try { await refreshMessages(id); if (alive) void markRead(id); } catch { /* offline */ }
+      if (!alive || !active || busy) return;
+      busy = true;
+      try {
+        if (pendingCount() > 0) void flushChat();
+        const fresh = await refreshMessages(id);
+        if (alive && active && (fresh || needRead)) { needRead = false; void markRead(id); }
+      } catch { /* offline */ } finally { busy = false; }
     };
     void tick();
-    const iv = setInterval(tick, 4000);
-    return () => { alive = false; clearInterval(iv); setOpenChat(null); };
+    const iv = setInterval(() => void tick(), 4000);
+    const sub = AppState.addEventListener('change', (st) => {
+      const now = st === 'active';
+      if (now === active) return;
+      active = now;
+      setOpenChat(id, active);
+      if (active) { needRead = true; void tick(); }
+    });
+    return () => { alive = false; clearInterval(iv); sub.remove(); setOpenChat(null); collapse(id); };
   }, [id]));
 
   const rows = useMemo<Row[]>(() => {
@@ -75,8 +100,9 @@ export default function Conversation() {
     void send(id, { text: body, contact: tag, replyTo: reply });
     setText(''); setTag(null); setReply(null);
   };
-  const sendFile = (f: Picked | 'denied' | null) => {
+  const sendFile = (f: Picked | 'denied' | 'unsupported' | null) => {
     if (f === 'denied') { Alert.alert(t('photo'), t('cameraDenied')); return; }
+    if (f === 'unsupported') { Alert.alert(t('chatTitle'), t('chatBadType')); return; }
     if (!f) return;
     if (f.size != null && f.size > MAX_FILE_BYTES) { Alert.alert(t('chatTitle'), t('chatTooBig')); return; }
     void send(id, { text: text.trim() || undefined, contact: tag, replyTo: reply, file: f });
@@ -116,7 +142,8 @@ export default function Conversation() {
         </View>
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1, backgroundColor: WA.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Android draws edge-to-edge (the window no longer shrinks for the keyboard), so pad on both platforms. */}
+      <KeyboardAvoidingView style={{ flex: 1, backgroundColor: WA.bg }} behavior="padding">
         <FlatList
           inverted
           data={rows}
@@ -126,7 +153,7 @@ export default function Conversation() {
           keyExtractor={(r) => r.key}
           contentContainerStyle={{ paddingHorizontal: 10, paddingVertical: 10, gap: 3 }}
           onEndReachedThreshold={0.3}
-          onEndReached={() => { if (more && msgs.length >= 30) void olderMessages(id).then(setMore).catch(() => undefined); }}
+          onEndReached={() => { if (more) void olderMessages(id).then((m) => { if (m !== null) setMore(m); }).catch(() => undefined); }}
           ListFooterComponent={
             <View style={{ alignSelf: 'center', flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: C.blueSoft, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, marginBottom: 8, maxWidth: '92%' }}>
               <Icon name="lock" size={12} color={C.blueInk} />
@@ -167,7 +194,7 @@ export default function Conversation() {
         ) : null}
 
         {/* Composer */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, paddingHorizontal: 6, paddingTop: 6, paddingBottom: emoji ? 6 : Math.max(insets.bottom, 6), backgroundColor: NX.bar, borderTopWidth: 1, borderTopColor: C.border }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, paddingHorizontal: 6, paddingTop: 6, paddingBottom: emoji || kb ? 6 : Math.max(insets.bottom, 6), backgroundColor: NX.bar, borderTopWidth: 1, borderTopColor: C.border }}>
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: C.borderStrong, paddingHorizontal: 4, minHeight: 48 }}>
             <RoundIcon icon={emoji ? 'note' : 'smile'} onPress={toggleEmoji} label={t('chatEmoji')} />
             <TextInput ref={inputRef} value={text} onChangeText={setText} placeholder={t('chatType')} placeholderTextColor={C.muted} multiline maxLength={4000}
@@ -263,12 +290,13 @@ function Bubble({ m, showName, readAt, seenAt, lang, t, onReply, onOpenFile, onO
 }) {
   const failed = m.state === 'failed';
   const pending = m.state === 'pending';
-  const read = m.mine && !m.state && readAt != null && readAt >= m.createdAt;
-  const seen = m.mine && !m.state && seenAt != null && seenAt >= m.createdAt;
+  const at = msTime(m.createdAt);
+  const read = m.mine && !m.state && readAt != null && msTime(readAt) >= at;
+  const seen = m.mine && !m.state && seenAt != null && msTime(seenAt) >= at;
   const isImage = !!m.file && m.file.mime.startsWith('image/');
   return (
     <Pressable onLongPress={m.state ? undefined : onReply} delayLongPress={300}
-      onPress={failed ? () => Alert.alert(t('chatNotSent'), failedReason(m.clientId) ?? '', [{ text: t('cancel'), style: 'cancel' }, { text: t('chatRetry'), onPress: () => retry(m.clientId) }]) : undefined}
+      onPress={failed ? () => Alert.alert(t('chatNotSent'), reasonText(failedReason(m.clientId), t), [{ text: t('cancel'), style: 'cancel' }, { text: t('chatRetry'), onPress: () => retry(m.clientId) }]) : undefined}
       style={{ alignSelf: m.mine ? 'flex-end' : 'flex-start', maxWidth: '84%', marginVertical: 1 }}>
       <View style={{ backgroundColor: m.mine ? WA.mine : WA.theirs, borderRadius: 18, borderBottomRightRadius: m.mine ? 6 : 18, borderBottomLeftRadius: m.mine ? 18 : 6,
         padding: isImage ? 4 : 10, paddingBottom: 6, gap: 4, borderWidth: failed ? 1 : m.mine ? 0 : 1, borderColor: failed ? C.bad : C.border,
@@ -314,6 +342,11 @@ function Bubble({ m, showName, readAt, seenAt, lang, t, onReply, onOpenFile, onO
       {failed ? <T style={{ color: C.bad, fontSize: 12, textAlign: 'right', marginTop: 2 }}>{t('chatTapRetry')}</T> : null}
     </Pressable>
   );
+}
+
+const FAIL_KEYS: Record<FailCode, 'chatNotSent' | 'chatFailTimeout' | 'chatFailMissing'> = { notSent: 'chatNotSent', timeout: 'chatFailTimeout', missing: 'chatFailMissing' };
+function reasonText(r: { code: FailCode | null; text: string | null }, t: ReturnType<typeof useSession>['t']) {
+  return r.code ? t(FAIL_KEYS[r.code]) : r.text ?? t('chatNotSent');
 }
 
 const fmtSize = (n: number) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);

@@ -1135,6 +1135,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("PeerId")
                         .HasColumnType("text");
 
+                    b.Property<string>("StartedBy")
+                        .HasColumnType("text");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1146,6 +1149,18 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.HasIndex("LastMessageAt");
 
                     b.HasIndex("PeerId");
+
+                    b.HasIndex(new[] { "AgentId" }, "UX_chat_threads_agent")
+                        .IsUnique()
+                        .HasFilter("\"Kind\" = 'agent'");
+
+                    b.HasIndex(new[] { "AgentId", "PeerId" }, "UX_chat_threads_direct")
+                        .IsUnique()
+                        .HasFilter("\"Kind\" = 'direct'");
+
+                    b.HasIndex(new[] { "Kind" }, "UX_chat_threads_team")
+                        .IsUnique()
+                        .HasFilter("\"Kind\" = 'team'");
 
                     b.ToTable("chat_threads", "marketing");
                 });

@@ -360,9 +360,10 @@ namespace SeemanchalOutreach.Domain.Entities
     public class ChatThread
     {
         public Guid Id { get; set; } = Guid.NewGuid();
-        public string Kind { get; set; } = "agent";          // agent | team | direct
+        public string Kind { get; set; } = "agent";          // agent | team | direct | merged (an old duplicate, kept but unused)
         public string? AgentId { get; set; }                 // Kind = agent: the agent; Kind = direct: one of the two people
         public string? PeerId { get; set; }                  // Kind = direct: the other person (AgentId < PeerId)
+        public string? StartedBy { get; set; }               // Kind = direct: who opened it (an empty chat shows only to them)
         public string Title { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime LastMessageAt { get; set; } = DateTime.UtcNow;
