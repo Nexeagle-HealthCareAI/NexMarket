@@ -392,8 +392,20 @@ namespace SeemanchalOutreach.Api.Controllers
                 ? new { id = r.Id, senderName = r.SenderName, text = r.Text, fileName = r.FileName }
                 : null,
             reactions = reactions != null && reactions.TryGetValue(m.Id, out var rx) ? rx : new List<object>(),
+            // A call summary written by the calls service ("Missed video call"…): the apps show it in their own words.
+            call = m.ClientId.StartsWith("call:") && _calls != null && Guid.TryParse(m.ClientId[5..], out var cid) && _calls.TryGetValue(cid, out var cs)
+                ? new { id = cs.Id, kind = cs.Kind, video = cs.Video, status = cs.Status, seconds = cs.AnsweredAt != null && cs.EndedAt != null ? (int)(cs.EndedAt.Value - cs.AnsweredAt.Value).TotalSeconds : 0 }
+                : null,
             createdAt = m.CreatedAt,
         };
+
+        private Dictionary<Guid, CallSession>? _calls;
+
+        private async Task LoadCallsAsync(IEnumerable<ChatMessage> list, CancellationToken ct)
+        {
+            var ids = list.Where(m => m.ClientId.StartsWith("call:")).Select(m => Guid.TryParse(m.ClientId[5..], out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty).ToList();
+            _calls = ids.Count == 0 ? new() : await _db.CallSessions.AsNoTracking().Where(c => ids.Contains(c.Id)).ToDictionaryAsync(c => c.Id, ct);
+        }
 
         /// <summary>
         /// Messages oldest first. <c>after</c> = only newer than this (polling); <c>before</c> = older page.
@@ -434,6 +446,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var otherSeenAt = await others.MaxAsync(r => r.LastSeenAt, ct);
 
             var reactions = await ReactionsForAsync(list.Select(m => m.Id).ToList(), ct);
+            await LoadCallsAsync(list, ct);
             return Ok(new
             {
                 messages = list.Select(m => Shape(m, replies, reactions)),

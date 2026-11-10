@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Alert, Pressable, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Btn, Card, Empty, Field, Pill, Screen, Sheet, T, TopBar, toast } from '../components/ui';
+import { Btn, Card, Empty, Pill, Screen, Sheet, T, TopBar, toast } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { useDb, useSession } from '../lib/session';
 import { lastVisited, q, timesVisited } from '../lib/db';
@@ -9,20 +9,19 @@ import { PanchayatList, sortPanchayats } from '../components/PanchayatList';
 import { NoteList } from '../components/NoteList';
 import { EscalateSheet } from '../components/EscalateSheet';
 import { EscalationStatus } from '../components/EscalationStatus';
+import { VisitOutcomeForm } from '../components/VisitOutcomeForm';
 import { tryCheckIn } from '../lib/visit';
 import { relDay } from '../lib/format';
-import { addNote, addPhoto, checkOut, setFollowUp } from '../lib/repo';
-import { currentPosition, quickPosition } from '../lib/location';
+import { addPhoto, checkOut } from '../lib/repo';
+import { currentPosition } from '../lib/location';
 import { takePhoto } from '../lib/photo';
 import { useHere } from '../lib/useHere';
 import { CHECK_IN_RADIUS_M } from '../lib/config';
 import { formatDist } from '../lib/plan';
 import { timeOf } from '../lib/format';
-import { addDays, haversineM, ymd } from '../lib/util';
+import { haversineM, ymd } from '../lib/util';
 import { C } from '../theme';
 
-type Met = 'met' | 'notMet';
-type Interest = 'interestHigh' | 'interestSome' | 'interestNone';
 
 export default function CheckIn() {
   const { t, lang } = useSession();
@@ -132,16 +131,6 @@ export default function CheckIn() {
     </Screen>
   );
 }
-
-type Outcome = 'good' | 'maybe' | 'no' | 'notMet';
-const OUTCOMES: { key: Outcome; met: Met; interest: Interest | null; icon: 'check' | 'star' | 'close' | 'clock'; color: string; soft: string }[] = [
-  { key: 'good', met: 'met', interest: 'interestHigh', icon: 'star', color: C.ok, soft: C.okSoft },
-  { key: 'maybe', met: 'met', interest: 'interestSome', icon: 'check', color: C.blue, soft: C.blueSoft },
-  { key: 'no', met: 'met', interest: 'interestNone', icon: 'close', color: C.warn, soft: C.warnSoft },
-  { key: 'notMet', met: 'notMet', interest: null, icon: 'clock', color: C.muted, soft: C.line },
-];
-const PHRASES = ['qpWillRefer', 'qpOpdTimings', 'qpCallBack', 'qpWantsCamp', 'qpBusy', 'qpPayment'] as const;
-const FOLLOW = [{ k: 'tomorrow', d: 1 }, { k: 'in3Days', d: 3 }, { k: 'in1Week', d: 7 }, { k: 'noFollowUpNeeded', d: null }] as const;
 
 /**
  * One screen for the whole panchayat: find someone or add someone from the same box, and record a
@@ -291,34 +280,14 @@ function PersonRow({ c, stat, visitAt, open, done, onToggle, onSaved, today }: {
 }
 
 /**
- * Record a meeting in three taps: how it went (one tap: met + interest together), when to go back
- * (a week is already picked), Save. A comment is optional; quick phrases fill it in one tap.
+ * Record a meeting right in the list: tap how it went (one or more), when to meet again, an optional spoken
+ * note, Save (the same form as "Visit done" on the partner page). Refer, photo and help stay one tap away.
  */
 function QuickVisit({ c, isNew, onSaved }: { c: ReturnType<typeof q.contactsIn>[number]; isNew: boolean; onSaved: () => void }) {
   const { t } = useSession();
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [comment, setComment] = useState('');
-  const [follow, setFollow] = useState<number | null>(7);
-  const [saving, setSaving] = useState(false);
   const [escOpen, setEscOpen] = useState(false);
   const history = useDb(() => q.notesFor(c.clientId), [c.clientId]);
 
-  const addPhrase = (k: (typeof PHRASES)[number]) => {
-    const p = t(k);
-    setComment((x) => (x.includes(p) ? x : x.trim() ? `${x.trim()}. ${p}` : p));
-  };
-  const save = async () => {
-    const o = OUTCOMES.find((x) => x.key === outcome);
-    if (!o || saving) return;
-    setSaving(true);
-    const pos = await quickPosition();
-    const text = [t('visitNoteText', { met: t(o.met), interest: o.interest ? t(o.interest) : '–' }), comment.trim()].filter(Boolean).join('\n');
-    addNote(c.clientId, text, isNew ? 'visit' : 'revisit', pos);
-    setFollowUp(c.clientId, follow == null ? null : ymd(addDays(new Date(), follow)));
-    setSaving(false);
-    toast(pos ? t('revisitSaved') : t('revisitSavedNoGps'));
-    onSaved();
-  };
   const photo = async () => {
     const p = await takePhoto();
     if (p === 'denied') { Alert.alert(t('photo'), t('cameraDenied')); return; }
@@ -330,50 +299,12 @@ function QuickVisit({ c, isNew, onSaved }: { c: ReturnType<typeof q.contactsIn>[
       <EscalationStatus c={c} />
       {history.length ? <NoteList notes={history} limit={1} title={t('qLastTime')} /> : null}
 
-      <T style={{ fontWeight: '800' }}>{isNew ? t('howWasIt') : t('howWasRevisit')}</T>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {OUTCOMES.map((o) => {
-          const on = outcome === o.key;
-          return (
-            <Pressable key={o.key} onPress={() => setOutcome(o.key)} accessibilityRole="radio" accessibilityState={{ selected: on }}
-              style={{ width: '48.5%', flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 52, paddingHorizontal: 12, borderRadius: 14,
-                borderWidth: on ? 2 : 1, borderColor: on ? o.color : C.borderStrong, backgroundColor: on ? o.soft : C.card }}>
-              <Icon name={o.icon} size={18} color={on ? o.color : C.text2} />
-              <T style={{ flex: 1, fontWeight: on ? '800' : '600', color: on ? C.text : C.text3, fontSize: 14 }} numberOfLines={2}>{t(`qo_${o.key}` as never)}</T>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled">
-        {PHRASES.map((k) => (
-          <Pressable key={k} onPress={() => addPhrase(k)} style={({ pressed }) => [{ paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: C.bg, borderWidth: 1, borderColor: C.border }, pressed && { opacity: 0.7 }]}>
-            <T style={{ fontSize: 13, color: C.text3 }}>+ {t(k)}</T>
-          </Pressable>
-        ))}
-      </ScrollView>
-      <Field placeholder={t('qCommentOptional')} value={comment} onChangeText={setComment} multiline maxLength={2000} />
-
-      <T style={{ color: C.text2, fontWeight: '700', fontSize: 13 }}>{t('nextFollowUp')}</T>
-      <View style={{ flexDirection: 'row', gap: 6 }}>
-        {FOLLOW.map((f) => {
-          const on = follow === f.d;
-          return (
-            <Pressable key={f.k} onPress={() => setFollow(f.d)} accessibilityRole="radio" accessibilityState={{ selected: on }}
-              style={{ flex: 1, minHeight: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
-                backgroundColor: on ? C.ink : C.bg, borderWidth: 1, borderColor: on ? C.ink : C.border }}>
-              <T style={{ fontSize: 12.5, fontWeight: '700', color: on ? '#fff' : C.text3, textAlign: 'center' }} numberOfLines={2}>{t(f.k)}</T>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <Btn kind="ok" icon="check" label={outcome ? t('qSave') : t('qPickOutcome')} onPress={() => void save()} loading={saving} disabled={!outcome} />
+      <VisitOutcomeForm contactId={c.clientId} name={c.name} source={isNew ? 'visit' : 'revisit'} onSaved={onSaved} />
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Action icon="hospital" label={t('referPatient')} onPress={() => router.push({ pathname: '/refer', params: { contactId: c.clientId } })} />
         <Action icon="camera" label={t('photoOptional')} onPress={() => void photo()} />
-        <Action icon="flag" label={t('escalate')} onPress={() => setEscOpen(true)} danger />
+        <Action icon="flag" label={t('ptGetHelp')} onPress={() => setEscOpen(true)} danger />
         <Action icon="note" label={t('qMore')} onPress={() => router.push({ pathname: '/partner/[id]', params: { id: c.clientId } })} />
       </View>
       <EscalateSheet visible={escOpen} onClose={() => setEscOpen(false)} contactId={c.clientId} name={c.name} />

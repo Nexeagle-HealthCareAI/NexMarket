@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
-import { Btn, Card, Chip, Empty, Field, Screen, Sheet, T, TopBar, toast } from '../../components/ui';
+import { Avatar, Btn, Card, Chip, Empty, Field, Screen, Sheet, T, TopBar, toast } from '../../components/ui';
+import { ActionTile } from '../../components/ActionTile';
+import { savedFeedback } from '../../lib/prefs';
 import { Icon } from '../../components/Icon';
 import { MoveSheet } from '../../components/MoveSheet';
 import { WhatsAppSheet } from '../../components/WhatsAppSheet';
@@ -36,12 +38,16 @@ export default function FollowUps() {
        FROM contacts c LEFT JOIN assigned a ON a.panchayatId = c.panchayatId LEFT JOIN panchayats p ON p.id = c.panchayatId`));
 
   const today = ymd();
-  const strip = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(new Date(), i + 1)), []);
-  const countFor = (key: string) => rows.filter((r) => r.followUpDate && (key === 'due' ? r.followUpDate <= today : r.followUpDate === key)).length;
+  // Late + today, the next three days, then everything after as "Later".
+  const strip = useMemo(() => Array.from({ length: 3 }, (_, i) => addDays(new Date(), i + 1)), []);
+  const lastStrip = ymd(strip[strip.length - 1]);
+  const onDay = (date: string | null, key: string) => !!date && (key === 'due' ? date <= today : key === 'later' ? date > lastStrip : date === key);
+  const countFor = (key: string) => rows.filter((r) => onDay(r.followUpDate, key)).length;
+  const dueCount = countFor('due');
 
   const list = useMemo(() => {
     let l = rows;
-    if (mode === 'followUps') l = l.filter((r) => r.followUpDate && (day === 'due' ? r.followUpDate <= today : r.followUpDate === day));
+    if (mode === 'followUps') l = l.filter((r) => onDay(r.followUpDate, day));
     if (prio) l = l.filter((r) => r.priority === prio);
     if (f.types.length) l = l.filter((r) => f.types.includes(r.role));
     if (f.places.length) l = l.filter((r) => r.place != null && f.places.includes(r.place));
@@ -61,24 +67,25 @@ export default function FollowUps() {
       patients: (a, b) => b.refs - a.refs || byPriority(a, b),
     };
     return [...l].sort(sorters[f.sort]);
-  }, [rows, mode, day, prio, term, today, f, t]);
+    }, [rows, mode, day, prio, term, today, lastStrip, f, t]);
   const activeFilters = f.types.length + f.places.length + (f.whatsapp ? 1 : 0) + (f.card ? 1 : 0) + (f.sent ? 1 : 0) + (f.noFollowUp ? 1 : 0) + (f.sort !== 'priority' ? 1 : 0);
 
   const header = (
     <View style={{ gap: 12, paddingBottom: 12 }}>
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <View style={{ flex: 1 }}><Chip big label={t('followUps')} selected={mode === 'followUps'} onPress={() => setMode('followUps')} /></View>
-        <View style={{ flex: 1 }}><Chip big label={t('allPartners')} selected={mode === 'all'} onPress={() => setMode('all')} /></View>
+      <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: 6, backgroundColor: C.line, padding: 4, borderRadius: 14 }}>
+        <Segment label={dueCount ? t('ptFollowUpsN', { n: dueCount }) : t('followUps')} on={mode === 'followUps'} onPress={() => setMode('followUps')} />
+        <Segment label={t('allPartners')} on={mode === 'all'} onPress={() => setMode('all')} />
       </View>
 
       {mode === 'followUps' ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          <DayCell top={t('overdue')} bottom={t('today')} n={countFor('due')} on={day === 'due'} warn onPress={() => setDay('due')} />
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <DayCell top={t('ptLateToday')} n={dueCount} on={day === 'due'} warn onPress={() => setDay('due')} />
           {strip.map((d) => {
             const k = ymd(d);
-            return <DayCell key={k} top={weekday(lang, d)} bottom={String(d.getDate())} n={countFor(k)} on={day === k} onPress={() => setDay(k)} />;
+            return <DayCell key={k} top={`${weekday(lang, d)} ${d.getDate()}`} n={countFor(k)} on={day === k} onPress={() => setDay(k)} />;
           })}
-        </ScrollView>
+          <DayCell top={t('ptLater')} n={countFor('later')} on={day === 'later'} onPress={() => setDay('later')} />
+        </View>
       ) : null}
 
       {/* Search and filters, in both views */}
@@ -116,7 +123,7 @@ export default function FollowUps() {
   );
 
   return (
-    <Screen scroll={false} padded={false} header={<TopBar title={mode === 'followUps' ? t('followUps') : t('myPartners', { n: rows.length })} onBack={false} />}>
+    <Screen scroll={false} padded={false} header={<TopBar title={mode === 'followUps' ? t('ptPartners') : t('myPartners', { n: rows.length })} onBack={false} explain={t('ptListExplain')} />}>
       {/* A virtualised list: only the cards on screen are built, so hundreds of partners scroll smoothly. */}
       <FlatList
         data={list}
@@ -124,6 +131,9 @@ export default function FollowUps() {
         renderItem={({ item }) => <PartnerCard c={item} t={t} lang={lang} onWhatsApp={setWa} onMove={setMoving} />}
         ListHeaderComponent={header}
         ListEmptyComponent={<Empty text={t('noFollowUps')} icon="calendar" />}
+        ListFooterComponent={mode === 'followUps' && list.length > 0 ? <EndLine text={day === 'due'
+          ? (countFor(ymd(strip[0])) ? t('ptEndToday', { n: countFor(ymd(strip[0])) }) : t('ptEndTodayNone'))
+          : t('ptEndDay')} /> : undefined}
         ItemSeparatorComponent={Gap}
         contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
         keyboardShouldPersistTaps="handled"
@@ -134,7 +144,16 @@ export default function FollowUps() {
       />
       <WhatsAppSheet visible={!!wa} onClose={() => setWa(null)} name={wa?.name ?? ''} phone={wa?.phone ?? null} />
       <FilterSheet visible={filterOpen} onClose={() => setFilterOpen(false)} value={f} onChange={setF} rows={rows} t={t} />
-      <MoveSheet visible={!!moving} onClose={() => setMoving(null)} onPick={(d) => { if (moving) setFollowUp(moving, d); setMoving(null); toast(t('savedOnPhone')); }} />
+      <MoveSheet visible={!!moving} onClose={() => setMoving(null)} onPick={(d) => {
+        if (moving) {
+          const id = moving;
+          const before = rows.find((r) => r.clientId === id)?.followUpDate ?? null;
+          setFollowUp(id, d);
+          savedFeedback();
+          toast(t('ptMovedTo', { date: dayShort(lang, d) }), { undo: () => setFollowUp(id, before) });
+        }
+        setMoving(null);
+      }} />
     </Screen>
   );
 }
@@ -203,58 +222,85 @@ function Gap() {
   return <View style={{ height: 12 }} />;
 }
 
+/** Avatar and pill colours by priority (very important is purple, so it never looks like "overdue" red). */
+const PRIO_TONE: Record<string, { bg: string; fg: string }> = {
+  very_high: { bg: C.purpleSoft, fg: C.purple },
+  high: { bg: C.warnSoft, fg: C.warnInk },
+  normal: { bg: C.blueSoft, fg: C.blueInk },
+  low: { bg: C.line, fg: C.text2 },
+};
+
+function SmallPill({ label, bg, fg, big }: { label: string; bg: string; fg: string; big?: boolean }) {
+  return (
+    <View style={{ alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: bg }}>
+      <T style={{ color: fg, fontSize: big ? 14 : 13, fontWeight: '700' }}>{label}</T>
+    </View>
+  );
+}
+
 const PartnerCard = React.memo(function PartnerCard({ c, t, lang, onWhatsApp, onMove }: {
   c: Row; t: TFn; lang: Lang; onWhatsApp: (x: { name: string; phone: string | null }) => void; onMove: (id: string) => void;
 }) {
-  const pc = PRIORITY_COLOR[c.priority] ?? PRIORITY_COLOR.normal;
+  const tone = PRIO_TONE[c.priority] ?? PRIO_TONE.normal;
   const fu = c.followUpDate ? daysFromToday(c.followUpDate) : null;
   const lat = c.lat ?? c.pLat;
   const lng = c.lng ?? c.pLng;
+  const status = fu == null ? null
+    : fu < 0 ? { label: t('ptOverdueBy', { n: -fu }), bg: C.badSoft, fg: C.bad }
+      : fu === 0 ? { label: t('ptDueToday'), bg: C.warnSoft, fg: C.warnInk }
+        : fu === 1 ? { label: t('ptDueTomorrow'), bg: C.blueSoft, fg: C.blueInk }
+          : { label: t('ptDueOn', { date: dayShort(lang, c.followUpDate!) }), bg: C.blueSoft, fg: C.blueInk };
   return (
-    <Card onPress={() => router.push({ pathname: '/partner/[id]', params: { id: c.clientId } })}>
-      <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: pc.dot, marginTop: 6 }} />
-        <View style={{ flex: 1, minWidth: 0 }}>
+    <Card onPress={() => router.push({ pathname: '/partner/[id]', params: { id: c.clientId } })} style={{ gap: 12, borderRadius: 18 }}>
+      <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+        <Avatar name={c.name} size={48} bg={tone.bg} color={tone.fg} />
+        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             {c.refs >= 5 || c.priority === 'very_high' ? <Icon name="star" size={15} color={C.star} /> : null}
-            <T style={{ fontSize: 16, fontWeight: '700', flexShrink: 1 }} numberOfLines={1}>{c.name}</T>
+            <T style={{ fontSize: 18, fontWeight: '800', flexShrink: 1 }} numberOfLines={2}>{c.name}</T>
           </View>
-          <T style={{ color: C.text2, fontSize: 13 }} numberOfLines={1}>{[t(`type_${c.role}` as never), c.place].filter(Boolean).join(' · ')}</T>
-          {fu != null ? (
-            <T style={{ fontSize: 13, fontWeight: '600', color: fu < 0 ? C.warnInk : C.blueInk }}>
-              {fu < 0 ? t('followUpOverdue', { n: -fu }) : t('followUpOn', { date: fu === 0 ? t('today') : fu === 1 ? t('tomorrow') : dayShort(lang, c.followUpDate!) })}
-            </T>
-          ) : null}
+          <T style={{ color: C.text2, fontSize: 15 }} numberOfLines={2}>{[typeLabel(t, c.role), c.place].filter(Boolean).join(' · ')}</T>
+          {status ? <View style={{ marginTop: 4 }}><SmallPill big label={status.label} bg={status.bg} fg={status.fg} /></View> : null}
         </View>
-        <View style={{ alignItems: 'flex-end', gap: 8 }}>
-          <T style={{ color: pc.fg, fontSize: 12, fontWeight: '700' }}>{t(`priority_${c.priority}`)}</T>
-          {c.phone ? (
-            <Pressable onPress={() => onWhatsApp({ name: c.name, phone: c.phone })} accessibilityRole="button" accessibilityLabel={t('whatsapp')} hitSlop={8}
-              style={({ pressed }) => [{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#e7f8ee', alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
-              <Icon name="whatsapp" size={20} color="#1fa855" />
-            </Pressable>
-          ) : null}
-        </View>
+        <SmallPill label={t(`priority_${c.priority}` as never)} bg={tone.bg} fg={tone.fg} />
       </View>
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Btn flex small kind="secondary" icon="phone" label={t('call')} disabled={!c.phone} onPress={() => callNumber(c.phone)} />
-        <Btn flex small kind="secondary" icon="nav" label={t('goMeet')} disabled={lat == null || lng == null} onPress={() => lat != null && lng != null && openDirections(lat, lng)} />
-        <Btn flex small kind="ghost" icon="calendar" label={t('moveFollowUp')} onPress={() => onMove(c.clientId)} />
+        <ActionTile tone="primary" icon="phone" label={t('call')} a11y={t('ptA11yCall', { name: c.name })} disabled={!c.phone} onPress={() => callNumber(c.phone)} />
+        <ActionTile tone="wa" icon="whatsapp" label={t('whatsapp')} a11y={t('ptA11yWa', { name: c.name })} disabled={!c.phone} onPress={() => onWhatsApp({ name: c.name, phone: c.phone })} />
+        <ActionTile icon="nav" label={t('ptRoute')} a11y={t('ptA11yRoute', { name: c.name })} disabled={lat == null || lng == null} onPress={() => lat != null && lng != null && openDirections(lat, lng)} />
+        <ActionTile icon="calendar" label={t('ptLater')} a11y={t('ptA11yLater', { name: c.name })} onPress={() => onMove(c.clientId)} />
       </View>
     </Card>
   );
 });
 
-function DayCell({ top, bottom, n, on, warn, onPress }: { top: string; bottom: string; n: number; on: boolean; warn?: boolean; onPress: () => void }) {
-  const bg = on ? (warn ? C.warn : C.blue) : C.card;
+function Segment({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: on }}
-      style={{ minWidth: 60, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 14, alignItems: 'center', gap: 2, backgroundColor: bg, borderWidth: 1, borderColor: on ? bg : C.border }}>
-      <T style={{ fontSize: 12, color: on ? '#fff' : C.text2 }}>{top}</T>
-      <T style={{ fontSize: 16, fontWeight: '800', color: on ? '#fff' : C.text }}>{bottom}</T>
-      <View style={{ minWidth: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: on ? 'rgba(255,255,255,0.25)' : n ? (warn ? C.warnSoft : C.blueSoft) : C.line }}>
-        <T style={{ fontSize: 11, fontWeight: '700', textAlign: 'center', color: on ? '#fff' : warn ? C.warnInk : C.blueInk }}>{n}</T>
-      </View>
+      style={({ pressed }) => [{ flex: 1, minHeight: 48, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6,
+        backgroundColor: on ? C.blue : 'transparent' }, pressed && { opacity: 0.85 }]}>
+      <T style={{ fontSize: 16, fontWeight: on ? '800' : '700', color: on ? '#fff' : C.text3, textAlign: 'center' }}>{label}</T>
     </Pressable>
+  );
+}
+
+function DayCell({ top, n, on, warn, onPress }: { top: string; n: number; on: boolean; warn?: boolean; onPress: () => void }) {
+  const bg = on ? (warn ? C.warn : C.blue) : C.card;
+  return (
+    <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={`${top}, ${n}`}
+      style={({ pressed }) => [{ flex: 1, minWidth: 0, minHeight: 64, paddingHorizontal: 2, paddingVertical: 6, borderRadius: 14, alignItems: 'center', justifyContent: 'center', gap: 2,
+        backgroundColor: bg, borderWidth: 1, borderColor: on ? bg : C.border }, pressed && { opacity: 0.85 }]}>
+      <T style={{ fontSize: 12, fontWeight: '700', color: on ? '#fff' : C.text2, textAlign: 'center' }} numberOfLines={2}>{top}</T>
+      <T style={{ fontSize: on ? 20 : 18, fontWeight: '800', color: on ? '#fff' : n ? C.text : C.muted }}>{n}</T>
+    </Pressable>
+  );
+}
+
+function EndLine({ text }: { text: string }) {
+  return (
+    <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, backgroundColor: C.blueSoft }}>
+      <Icon name="check" size={20} color={C.blueInk} />
+      <T style={{ flex: 1, color: C.blueInk, fontSize: 15, fontWeight: '600' }}>{text}</T>
+    </View>
   );
 }

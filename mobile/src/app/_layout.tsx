@@ -1,5 +1,6 @@
 import '../lib/location'; // registers the background location task before anything else runs
 import '../lib/fieldSurvey'; // and the field-mapping route task
+import { registerGlobals } from '@livekit/react-native';
 import React, { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import { ActivityIndicator, AppState, View } from 'react-native';
@@ -9,6 +10,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableFreeze } from 'react-native-screens';
 import { SessionProvider, useSession } from '../lib/session';
+import { PrefsProvider, persistPrefs } from '../lib/prefs';
+import { kvGet, kvSet } from '../lib/db';
 import { pendingPasswordChange } from '../lib/api';
 import { syncNow } from '../lib/sync';
 import { handleResponse, registerPush, setupNotifications } from '../lib/notifications';
@@ -19,6 +22,11 @@ import { LockScreen } from '../components/LockScreen';
 import { lockNow, lockState, useLock } from '../lib/lock';
 import { useLite } from '../lib/perf';
 import { startPresence } from '../lib/presence';
+import { openIncoming } from '../lib/calls';
+import { CallWatcher } from '../components/CallParts';
+
+// WebRTC for LiveKit calls (voice and video through the hospital's own server): once, before any call starts.
+registerGlobals();
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 // Screens the agent can't see (behind the one on top, or other tabs) stop re-rendering until shown again.
@@ -44,6 +52,18 @@ function Gate() {
     return () => sub.remove();
   }, []);
   const onLogin = segments[0] === 'login';
+  const inTabs = segments[0] === '(tabs)';
+
+  // Signing in or out clears the kv table: keep this phone's Easy to use settings.
+  useEffect(() => { if (ready) persistPrefs(); }, [ready, agent?.agentId]);
+
+  // Vita's tour, once after sign-in, when the agent first reaches the main tabs (replay from Me).
+  useEffect(() => {
+    if (!ready || !agent || !inTabs || lock.locked) return;
+    if (kvGet('uxTourSeen') === '1') return;
+    kvSet('uxTourSeen', '1');
+    router.push('/tour');
+  }, [ready, agent, inTabs, lock.locked]);
 
   useEffect(() => {
     if (!ready) return;
@@ -67,6 +87,9 @@ function Gate() {
     const received = Notifications.addNotificationReceivedListener((n) => {
       const link = String(n.request.content.data?.link ?? (n.request.trigger as { remoteMessage?: { data?: Record<string, string> } } | null)?.remoteMessage?.data?.link ?? '');
       if (link.startsWith('referral:') || link.startsWith('money:')) void syncNow(true).catch(() => undefined);
+      // Someone is calling while the app is open: straight to the incoming-call screen (huddles just notify).
+      const kind = String(n.request.content.data?.kind ?? (n.request.trigger as { remoteMessage?: { data?: Record<string, string> } } | null)?.remoteMessage?.data?.kind ?? '');
+      if (link.startsWith('call:') && kind !== 'huddle') openIncoming(link.slice(5));
     });
     // The tap that opened the app from the tray.
     Notifications.getLastNotificationResponseAsync().then((r) => {
@@ -92,7 +115,11 @@ function Gate() {
         <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
         <Stack.Screen name="set-password" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="add" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
+        <Stack.Screen name="tour" options={{ animation: 'fade', contentStyle: { backgroundColor: '#20283a' } }} />
+        <Stack.Screen name="call/incoming" options={{ animation: 'fade', gestureEnabled: false, contentStyle: { backgroundColor: C.ink } }} />
+        <Stack.Screen name="call/[id]" options={{ animation: 'fade', gestureEnabled: false, contentStyle: { backgroundColor: C.ink } }} />
       </Stack>
+      {agent ? <CallWatcher key={agent.agentId} /> : null}
       <ToastHost />
       <CelebrateHost />
       {agent && lock.pinSet && lock.locked ? <LockScreen /> : null}
@@ -104,8 +131,10 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <SessionProvider>
-        <StatusBar style="auto" />
-        <Gate />
+        <PrefsProvider>
+          <StatusBar style="auto" />
+          <Gate />
+        </PrefsProvider>
       </SessionProvider>
     </SafeAreaProvider>
   );

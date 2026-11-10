@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { VoiceField } from './MicButton';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { Btn, Field, Pill, Sheet, T } from './ui';
@@ -12,7 +13,7 @@ import { daysFromToday } from '../lib/util';
 import type { TFn } from '../i18n';
 import { C } from '../theme';
 
-function dueLabel(t: TFn, lang: Parameters<typeof dayShort>[0], task: Task): { text: string; tone: 'bad' | 'warn' | 'muted' } | null {
+export function dueLabel(t: TFn, lang: Parameters<typeof dayShort>[0], task: Task): { text: string; tone: 'bad' | 'warn' | 'muted' } | null {
   if (!task.dueDate) return null;
   const d = daysFromToday(task.dueDate);
   if (d < 0) return { text: t('taskOverdue', { n: -d }), tone: 'bad' };
@@ -72,7 +73,8 @@ export function TasksSection() {
   );
 }
 
-function TaskSheet({ task, onClose }: { task: Task | null; onClose: () => void }) {
+/** One task: what, where, for whom, and "Mark done" with an optional note. */
+export function TaskSheet({ task, onClose }: { task: Task | null; onClose: () => void }) {
   const { t, lang } = useSession();
   const [note, setNote] = useState('');
   if (!task) return <Sheet visible={false} onClose={onClose}><View /></Sheet>;
@@ -119,7 +121,7 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose: () => void }
         {firstPlace ? (
           <Btn kind="secondary" icon="nav" label={t('route')} onPress={() => { onClose(); navigateTo({ lat: firstPlace.lat!, lng: firstPlace.lng!, name: firstPlace.name, panchayatId: firstPlace.id }); }} />
         ) : null}
-        <Field label={t('taskNote')} value={note} onChangeText={setNote} placeholder={t('taskNoteHint')} multiline maxLength={1000} />
+        <VoiceField voice="note" label={t('taskNote')} value={note} onChangeText={setNote} placeholder={t('taskNoteHint')} multiline maxLength={1000} />
         <Btn kind="ok" icon="check" label={t('taskMarkDone')} onPress={done} />
       </View>
     </Sheet>

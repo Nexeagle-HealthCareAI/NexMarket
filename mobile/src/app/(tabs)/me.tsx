@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { Avatar, Btn, Card, Chip, Screen, Sheet, T, TopBar } from '../../components/ui';
+import Svg, { Circle, Path } from 'react-native-svg';
+import { Avatar, Btn, Card, Chip, Screen, Sheet, SpeakButton, Switch, T, TopBar } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 import { LanguageSheet } from '../../components/LanguageSheet';
 import { useDb, useSession, useSync } from '../../lib/session';
@@ -15,6 +16,7 @@ import { LANGS } from '../../i18n';
 import { myPhotoUrl } from '../../lib/profile';
 import { C } from '../../theme';
 import { oldPhone, setPerfMode, useLite, usePerfMode, type PerfMode } from '../../lib/perf';
+import { savedFeedback, setPrefs, usePrefs, type TextSize } from '../../lib/prefs';
 
 export default function Me() {
   const lock = useLock();
@@ -58,7 +60,7 @@ export default function Me() {
   const photo = useDb(() => myPhotoUrl());
 
   return (
-    <Screen header={<TopBar title={t('me')} onBack={false} />}>
+    <Screen header={<TopBar title={t('me')} onBack={false} explain={t('uxEasyExplain')} />}>
       <Card onPress={() => router.push('/profile')} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <Avatar name={agent?.name ?? '?'} size={52} uri={photo} />
         <View style={{ flex: 1 }}>
@@ -94,6 +96,8 @@ export default function Me() {
         )) : null}
       </Card>
 
+      <EasyToUse />
+
       <T style={{ fontSize: 17, fontWeight: '700', marginTop: 4 }}>{t('monthNumbers')} · {monthName(lang, new Date())}</T>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         <Num n={d.days} label={t('workedDays')} />
@@ -123,6 +127,106 @@ export default function Me() {
         <Btn label={t('fltDone')} onPress={() => setPerfOpen(false)} />
       </Sheet>
     </Screen>
+  );
+}
+
+/** Me → Easy to use: language, text size, sunlight mode, read aloud, vibrate, and the Vita tour. */
+function EasyToUse() {
+  const { t, lang, setLang } = useSession();
+  const p = usePrefs();
+  const sizes: { code: TextSize; label: string; aa: number }[] = [
+    { code: 'normal', label: t('uxSizeNormal'), aa: 16 },
+    { code: 'large', label: t('uxSizeLarge'), aa: 20 },
+    { code: 'xl', label: t('uxSizeXl'), aa: 24 },
+  ];
+  return (
+    <>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
+        <T style={{ flex: 1, fontSize: 20, fontWeight: '800' }}>{t('uxEasy')}</T>
+        <SpeakButton text={`${t('uxEasy')}. ${t('uxEasyExplain')}`} />
+      </View>
+      <Card style={{ padding: 16, gap: 12 }}>
+        <T style={{ fontSize: 17, fontWeight: '800' }}>{t('language')}</T>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {LANGS.map((l) => {
+            const on = l.code === lang;
+            return (
+              <Pressable key={l.code} accessibilityRole="radio" accessibilityState={{ selected: on }} onPress={() => setLang(l.code)}
+                style={{ width: '48.5%', minHeight: 54, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8,
+                  borderWidth: on ? 0 : 1, borderColor: C.borderStrong, backgroundColor: on ? C.blue : C.card }}>
+                <T style={{ fontSize: 18, fontWeight: '700', color: on ? '#fff' : C.text }}>{l.label}</T>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Card>
+      <Card style={{ padding: 16, gap: 12 }}>
+        <T style={{ fontSize: 17, fontWeight: '800' }}>{t('uxTextSize')}</T>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {sizes.map((z) => {
+            const on = p.textSize === z.code;
+            return (
+              <Pressable key={z.code} accessibilityRole="radio" accessibilityLabel={z.label} accessibilityState={{ selected: on }}
+                onPress={() => setPrefs({ textSize: z.code })}
+                style={{ flex: 1, minHeight: 64, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingVertical: 6,
+                  borderWidth: on ? 2 : 1, borderColor: on ? C.blue : C.borderStrong, backgroundColor: on ? C.blueSoft : C.card }}>
+                {/* The "Aa" preview keeps its own size so the three stay comparable. */}
+                <Text allowFontScaling={false} style={{ fontSize: z.aa, fontWeight: '800', color: on ? C.blueInk : C.text }}>Aa</Text>
+                <T style={{ fontSize: 13, fontWeight: on ? '700' : '400', color: on ? C.blueInk : C.text2, textAlign: 'center' }} numberOfLines={2}>{z.label}</T>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Card>
+      <Card style={{ padding: 0, gap: 0 }}>
+        <SettingRow icon={<SunIcon />} tint={C.warnSoft} title={t('uxSun')} sub={t('uxSunSub')}
+          right={<Switch label={t('uxSun')} value={p.sunlight} onChange={(v) => setPrefs({ sunlight: v })} />} />
+        <SettingRow icon={<Icon name="volume" color={C.blue} />} tint={C.blueSoft} title={t('uxRead')} sub={t('uxReadSub')}
+          right={<Switch label={t('uxRead')} value={p.readAloud} onChange={(v) => setPrefs({ readAloud: v })} />} />
+        <SettingRow icon={<BuzzIcon />} tint={C.okSoft} title={t('uxVibrate')} sub={t('uxVibrateSub')}
+          right={<Switch label={t('uxVibrate')} value={p.vibrate} onChange={(v) => { setPrefs({ vibrate: v }); if (v) savedFeedback(); }} />} />
+        <SettingRow icon={<Icon name="sparkle" color={C.purple} />} tint={C.purpleSoft} title={t('uxTour')} sub={t('uxTourSub')} last
+          onPress={() => router.push('/tour')} right={<Icon name="chevron" color={C.muted} />} />
+      </Card>
+    </>
+  );
+}
+
+function SettingRow({ icon, tint, title, sub, right, onPress, last }: { icon: React.ReactNode; tint: string; title: string; sub: string; right: React.ReactNode; onPress?: () => void; last?: boolean }) {
+  const body = (
+    <>
+      <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: tint, alignItems: 'center', justifyContent: 'center' }}>{icon}</View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <T style={{ fontSize: 16, fontWeight: '700' }}>{title}</T>
+        <T style={{ fontSize: 14, color: C.text2 }}>{sub}</T>
+      </View>
+      {right}
+    </>
+  );
+  const style = { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, paddingHorizontal: 16, paddingVertical: 14, minHeight: 64,
+    borderBottomWidth: last ? 0 : 1, borderBottomColor: C.line };
+  return onPress
+    ? <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [style, pressed && { opacity: 0.7 }]}>{body}</Pressable>
+    : <View style={style}>{body}</View>;
+}
+
+function SunIcon() {
+  const p = { stroke: C.warnInk, strokeWidth: 2, fill: 'none', strokeLinecap: 'round' as const };
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24">
+      <Circle {...p} cx={12} cy={12} r={4} />
+      <Path {...p} d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </Svg>
+  );
+}
+
+function BuzzIcon() {
+  const p = { stroke: C.ok, strokeWidth: 2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24">
+      <Path {...p} d="M8 4h8v16H8z" />
+      <Path {...p} d="M4 8v8M20 8v8M2 10v4M22 10v4" />
+    </Svg>
   );
 }
 

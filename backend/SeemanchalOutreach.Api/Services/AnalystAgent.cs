@@ -33,6 +33,10 @@ namespace SeemanchalOutreach.Api.Services
         /// for gpt-oss-120b, so keep this well under that (~4 characters a token). Raise it on a paid plan.
         /// </summary>
         public int MaxPromptChars { get; set; } = 18000;
+        /// <summary>Groq's speech-to-text model for the app's microphone (whisper-large-v3: best for Hindi and Bangla; whisper-large-v3-turbo: cheaper).</summary>
+        public string SpeechModel { get; set; } = "whisper-large-v3";
+        /// <summary>Minutes of speech each person can have written out per day (keeps the Groq bill predictable).</summary>
+        public int SpeechDailyMinutes { get; set; } = 20;
     }
 
     public class AnalystUnavailableException : Exception

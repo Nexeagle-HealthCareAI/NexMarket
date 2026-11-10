@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { VoiceField } from '../components/MicButton';
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { Btn, Card, Field, Screen, T, Toggle, TopBar, toast } from '../components/ui';
@@ -91,7 +92,7 @@ export default function ApplyLeave() {
       <DateStepper label={t('fromDate')} value={from} min={minFrom} max={maxFrom} onChange={setFrom} lang={lang} />
       <DateStepper label={t('toDate')} value={to} min={from} max={ymd(addDays(parseYmd(from), 60))} onChange={setTo} lang={lang} />
       {from === to ? <Toggle label={t('halfDay')} value={halfDay} onChange={setHalfDay} /> : null}
-      <Field label={t('reason')} value={reason} onChangeText={(v) => { setReason(v); setError(null); }} multiline maxLength={500} />
+      <VoiceField voice="note" label={t('reason')} value={reason} onChangeText={(v) => { setReason(v); setError(null); }} multiline maxLength={500} />
 
       {preview ? (
         <Card style={{ backgroundColor: C.blueSoft, borderColor: C.blueSoft }}>

@@ -1,0 +1,14 @@
+# The calls server. Runs next to the API on the same VM:
+#   LIVEKIT_KEYS="<key>: <secret>" docker compose -f deploy/livekit/docker-compose.livekit.yml up -d
+# Host networking because WebRTC needs a whole range of UDP ports.
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.3
+    container_name: nexmarket-livekit
+    restart: unless-stopped
+    network_mode: host
+    command: --config /etc/livekit.yaml
+    environment:
+      LIVEKIT_KEYS: ${LIVEKIT_KEYS:?set LIVEKIT_KEYS to "<key>: <secret>"}
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro

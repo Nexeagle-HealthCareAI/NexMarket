@@ -7,6 +7,9 @@ import type { ExpoConfig } from 'expo/config';
 const VERSION: string = require('./package.json').version;
 const versionCode = Number(process.env.ANDROID_VERSION_CODE ?? '1');
 
+const CALL_MIC = 'NexEagle uses the microphone when you tap Speak, to write your note for you, and during voice and video calls with the office and your team.';
+const CALL_CAMERA = 'NexEagle uses the camera to photograph partners, clinics and documents (each photo is stamped with the time and place), and for video calls.';
+
 const LOCATION_PURPOSE =
   'NexEagle records your location only while your shift is on, including when the screen is off, so the hospital can see your visits and distance. Tracking stops when you end the shift.';
 
@@ -52,10 +55,17 @@ const config: ExpoConfig = {
       'android.permission.INTERNET',
       'android.permission.ACCESS_NETWORK_STATE',
       'android.permission.POST_NOTIFICATIONS',
-    ],
-    // The app never records audio or reads the photo gallery (photos must be taken live).
-    blockedPermissions: [
+      'android.permission.VIBRATE', // the short buzz after a save (Me → Vibrate when saved), and an incoming call
+      // Voice and video calls (LiveKit / WebRTC): the microphone, switching earpiece ↔ loudspeaker, Bluetooth headsets
+      // (Android 12+ asks for "Nearby devices"), and keeping the CPU awake during a call.
       'android.permission.RECORD_AUDIO',
+      'android.permission.MODIFY_AUDIO_SETTINGS',
+      'android.permission.BLUETOOTH_CONNECT',
+      'android.permission.WAKE_LOCK',
+    ],
+    // The app records audio only while the agent taps Speak or is in a call, and never reads the photo gallery (photos must be taken live).
+    // SYSTEM_ALERT_WINDOW (added by the WebRTC plugin) stays blocked: calls don't draw over other apps.
+    blockedPermissions: [
       'android.permission.READ_MEDIA_IMAGES',
       'android.permission.READ_MEDIA_VIDEO',
       'android.permission.READ_EXTERNAL_STORAGE',
@@ -73,6 +83,8 @@ const config: ExpoConfig = {
     'expo-secure-store',
     'expo-localization',
     'expo-font',
+    // The microphone: only while the agent taps "Speak" to fill a note, a name or a chat message.
+    ['expo-audio', { microphonePermission: CALL_MIC, recordAudioAndroid: true }],
     ['expo-local-authentication', { faceIDPermission: 'NexEagle uses Face ID to unlock the app instead of your PIN.' }],
     [
       'expo-splash-screen',
@@ -106,17 +118,23 @@ const config: ExpoConfig = {
     [
       'expo-image-picker',
       {
-        cameraPermission: 'NexEagle uses the camera to photograph partners, clinics and documents. Each photo is stamped with the time and place.',
+        cameraPermission: CALL_CAMERA,
         photosPermission: false,
         microphonePermission: false,
       },
     ],
+    // Voice and video calls through the hospital's own LiveKit server. "communication" = phone-call audio (echo
+    // cancellation, earpiece by default); no screen sharing, so no media-projection foreground service.
+    ['@livekit/react-native-expo-plugin', { android: { audioType: 'communication' } }],
+    ['@config-plugins/react-native-webrtc', { cameraPermission: CALL_CAMERA, microphonePermission: CALL_MIC }],
   ],
   extra: {
     // Where the NexMarket API lives. CI sets EXPO_PUBLIC_API_URL from the repo variable.
     apiUrl: process.env.EXPO_PUBLIC_API_URL ?? 'https://nexmarket-api.nexeagle.com',
     // Optional: the hospital's duty-doctor line, shown on urgent referrals.
     dutyDoctorPhone: process.env.EXPO_PUBLIC_DUTY_DOCTOR_PHONE ?? '',
+    // The marketing office, for the call button in the agent's office chat.
+    officePhone: process.env.EXPO_PUBLIC_OFFICE_PHONE ?? '+919162321859',
   },
 };
 
