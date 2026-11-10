@@ -771,7 +771,7 @@
 .ch-emoji { background: #fff; border-top: 1px solid var(--line); padding: 6px 10px; }
 .ch-emoji-tabs { display: flex; gap: 4px; border-bottom: 1px solid #f0f2f5; padding-bottom: 6px; }
 .ch-emoji-tabs button { border: 0; background: transparent; font-size: 20px; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
-.ch-emoji-tabs button[aria-selected='true'] { background: #e9edef; }
+.ch-emoji-tabs button[aria-pressed='true'] { background: #e9edef; }
 .ch-emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); max-height: 190px; overflow-y: auto; padding-top: 6px; }
 .ch-emoji-grid button { border: 0; background: transparent; font-size: 24px; height: 40px; border-radius: 8px; cursor: pointer; }
 .ch-emoji-grid button:hover { background: #f0f2f5; }
@@ -866,7 +866,7 @@
 .ch-compose textarea { border: 1px solid var(--border-strong, #d5dbe6); border-radius: 14px; }
 .ch-compose textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,114,214,.15); }
 .ch-send { background: var(--accent); border-radius: 14px; }
-.ch-emoji-tabs button[aria-selected='true'] { background: var(--accent-soft); }
+.ch-emoji-tabs button[aria-pressed='true'] { background: var(--accent-soft); }
 .ch-people { display: flex; flex-direction: column; gap: 12px; max-height: 420px; overflow-y: auto; }
 .ch-people-title { font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2); }
 .ch-people ul { list-style: none; margin: 6px 0 0; padding: 0; }
@@ -1545,8 +1545,8 @@ button.ld-head-btn { border: 0; cursor: pointer; font: inherit; font-size: 13px;
 .ch-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 8px; flex-shrink: 0; }
 .ch-filters button { border: 1px solid var(--border); background: var(--card); color: var(--text-2); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; display: inline-flex; gap: 5px; align-items: center; }
 .ch-filters button span { background: var(--line); color: var(--text-2); border-radius: 999px; padding: 0 6px; font-size: 11px; }
-.ch-filters button[aria-selected='true'] { background: var(--ink, #0e1525); color: #fff; border-color: var(--ink, #0e1525); }
-.ch-filters button[aria-selected='true'] span { background: rgba(255,255,255,.18); color: #fff; }
+.ch-filters button[aria-pressed='true'] { background: var(--ink, #0e1525); color: #fff; border-color: var(--ink, #0e1525); }
+.ch-filters button[aria-pressed='true'] span { background: rgba(255,255,255,.18); color: #fff; }
 .ch-avatar-wrap { position: relative; display: inline-flex; flex-shrink: 0; }
 .ch-pres { position: absolute; right: 0; bottom: 0; width: 13px; height: 13px; border-radius: 50%; border: 2px solid #fff; background: #a0aab8; }
 .ch-pres.is-visit { background: #12b76a; }
@@ -1603,6 +1603,7 @@ button.ch-quote { border: 0; border-left: 3px solid var(--accent); text-align: l
 .ch-place span { display: flex; flex-direction: column; font-size: 12px; opacity: .85; }
 .ch-place strong { font-size: 13.5px; opacity: 1; }
 .ch-msg.is-mine .ch-place { background: rgba(255,255,255,.16); }
+button.ch-fail + button.ch-fail { margin-left: 4px; }
 button.ch-fail { border: 0; background: #fff; color: #b42318; border-radius: 999px; padding: 1px 8px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
 .ch-reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: -6px; padding: 0 8px; position: relative; z-index: 1; }
 .ch-reactions button { border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 1px 7px; font: inherit; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; box-shadow: 0 1px 2px rgba(14,21,37,.08); }

@@ -48,6 +48,7 @@ namespace SeemanchalOutreach.Api.Controllers
         private static readonly Dictionary<string, string> Allowed = new(StringComparer.OrdinalIgnoreCase)
         {
             [".jpg"] = "image/jpeg", [".jpeg"] = "image/jpeg", [".png"] = "image/png", [".webp"] = "image/webp", [".heic"] = "image/heic",
+            [".gif"] = "image/gif",
             [".pdf"] = "application/pdf",
             [".doc"] = "application/msword", [".docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             [".xls"] = "application/vnd.ms-excel", [".xlsx"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -87,7 +88,7 @@ namespace SeemanchalOutreach.Api.Controllers
             else if (t.Kind == "agent")
             {
                 if (office) job.To.Add(t.AgentId!);
-                else { job.ToOffice = true; job.Title = $"{MyName} · field agent"; }
+                else { job.ToOffice = true; job.Title = User.IsDashboardUser() ? MyName : $"{MyName} · field agent"; }
                 if (office) job.Title = $"{MyName} · Office";
             }
             else
@@ -110,31 +111,120 @@ namespace SeemanchalOutreach.Api.Controllers
             return await _perms.GetLevelAsync(User, Pages.Field) >= Pages.View;
         }
 
+        /// <summary>
+        /// Saves a new chat, unless someone else created the same one a moment ago (the database allows only one Team chat,
+        /// one chat per agent and one per pair of people): then that one is used.
+        /// </summary>
+        private async Task<ChatThread?> CreateOnceAsync(ChatThread t, System.Linq.Expressions.Expression<Func<ChatThread, bool>> same, CancellationToken ct)
+        {
+            _db.ChatThreads.Add(t);
+            try { await _db.SaveChangesAsync(ct); return t; }
+            catch (DbUpdateException)
+            {
+                _db.ChatThreads.Remove(t); // never saved: this only forgets it
+                return await _db.ChatThreads.Where(same).OrderBy(x => x.CreatedAt).FirstOrDefaultAsync(ct);
+            }
+        }
+
         private async Task<ChatThread> TeamAsync(CancellationToken ct)
         {
-            var t = await _db.ChatThreads.FirstOrDefaultAsync(x => x.Kind == "team", ct);
+            var t = await _db.ChatThreads.Where(x => x.Kind == "team").OrderBy(x => x.CreatedAt).FirstOrDefaultAsync(ct);
             if (t != null) return t;
-            t = new ChatThread { Kind = "team", Title = "Field team" };
-            _db.ChatThreads.Add(t);
-            await _db.SaveChangesAsync(ct);
-            return t;
+            return await CreateOnceAsync(new ChatThread { Kind = "team", Title = "Field team" }, x => x.Kind == "team", ct)
+                ?? throw new InvalidOperationException("Team chat could not be created.");
         }
 
         private async Task<ChatThread> AgentThreadAsync(string agentId, string name, CancellationToken ct)
         {
-            var t = await _db.ChatThreads.FirstOrDefaultAsync(x => x.Kind == "agent" && x.AgentId == agentId, ct);
+            var t = await _db.ChatThreads.Where(x => x.Kind == "agent" && x.AgentId == agentId).OrderBy(x => x.CreatedAt).FirstOrDefaultAsync(ct);
             if (t != null) return t;
-            t = new ChatThread { Kind = "agent", AgentId = agentId, Title = name, LastMessageAt = DateTime.UtcNow.AddYears(-1) };
-            _db.ChatThreads.Add(t);
-            await _db.SaveChangesAsync(ct);
-            return t;
+            return await CreateOnceAsync(new ChatThread { Kind = "agent", AgentId = agentId, Title = name, LastMessageAt = DateTime.UtcNow.AddYears(-1) },
+                x => x.Kind == "agent" && x.AgentId == agentId, ct) ?? throw new InvalidOperationException("Chat could not be created.");
+        }
+
+        /// <summary>
+        /// The chats this person sees in their list (and counts for the unread badge), so the two always agree.
+        /// Office: Team, every active field agent's chat, and the office chat of any other active person that already has
+        /// messages (from before office staff without field access stopped getting one). Field agent: their office chat and
+        /// Team. Office staff without field access: Team (and their old office chat if it has messages). Everyone: their own
+        /// one-to-one chats once something was said, or that they opened themselves.
+        /// </summary>
+        private async Task<(List<ChatThread> Threads, Dictionary<string, (string Name, string? Block, string? Role)> Agents)> VisibleAsync(bool office, bool create, CancellationToken ct)
+        {
+            var me = Me;
+            var agents = new Dictionary<string, (string Name, string? Block, string? Role)>();
+            List<ChatThread> threads;
+            if (office)
+            {
+                var active = await _db.Agents.AsNoTracking().Where(a => a.IsActive).Select(a => new { a.AgentId, a.Name, a.Role, a.Block }).ToListAsync(ct);
+                var field = active.Where(a => !RoleChecks.IsDashboardRole(a.Role)).ToList();
+                if (create)
+                {
+                    // Every active field agent has a chat, even before the first message.
+                    var have = await _db.ChatThreads.Where(x => x.Kind == "agent").Select(x => x.AgentId).ToListAsync(ct);
+                    foreach (var a in field.Where(a => !have.Contains(a.AgentId)))
+                    {
+                        var id = a.AgentId;
+                        await CreateOnceAsync(new ChatThread { Kind = "agent", AgentId = id, Title = a.Name, LastMessageAt = DateTime.UtcNow.AddYears(-1) },
+                            x => x.Kind == "agent" && x.AgentId == id, ct);
+                    }
+                }
+                var fieldIds = field.Select(a => a.AgentId).ToList();
+                var activeIds = active.Select(a => a.AgentId).ToList();
+                threads = await _db.ChatThreads.AsNoTracking().Where(x => x.Kind == "team"
+                    || (x.Kind == "agent" && fieldIds.Contains(x.AgentId!))
+                    || (x.Kind == "agent" && x.LastPreview != null && x.AgentId != me && activeIds.Contains(x.AgentId!))).ToListAsync(ct);
+                agents = active.ToDictionary(a => a.AgentId, a => (a.Name, RoleChecks.IsDashboardRole(a.Role) ? null : (string?)a.Block, (string?)a.Role));
+            }
+            else if (User.IsDashboardUser())
+            {
+                var team = create ? await TeamAsync(ct) : await _db.ChatThreads.AsNoTracking().Where(x => x.Kind == "team").OrderBy(x => x.CreatedAt).FirstOrDefaultAsync(ct);
+                threads = team == null ? new List<ChatThread>() : new List<ChatThread> { team };
+                threads.AddRange(await _db.ChatThreads.AsNoTracking().Where(x => x.Kind == "agent" && x.AgentId == me && x.LastPreview != null).ToListAsync(ct));
+            }
+            else if (create)
+            {
+                threads = new List<ChatThread> { await AgentThreadAsync(me, MyName, ct), await TeamAsync(ct) };
+            }
+            else
+            {
+                threads = await _db.ChatThreads.AsNoTracking().Where(x => x.Kind == "team" || (x.Kind == "agent" && x.AgentId == me)).ToListAsync(ct);
+            }
+            var tag = ";" + me + ";";
+            threads.AddRange(await _db.ChatThreads.AsNoTracking()
+                .Where(x => x.Kind == "direct" && (x.AgentId == me || x.PeerId == me) && (x.LastPreview != null || (x.StartedBy != null && x.StartedBy.Contains(tag))))
+                .ToListAsync(ct));
+            return (threads.GroupBy(t => t.Id).Select(g => g.First()).ToList(), agents);
+        }
+
+        /// <summary>
+        /// Unread messages for me in this chat after my last read. In an agent's chat the office counts only what the agent
+        /// wrote — a colleague's reply is not something I still need to read.
+        /// </summary>
+        private async Task<Dictionary<Guid, int>> UnreadAsync(List<ChatThread> threads, bool office, CancellationToken ct)
+        {
+            var me = Me;
+            var ids = threads.Select(t => t.Id).ToList();
+            var reads = await _db.ChatReads.AsNoTracking().Where(r => ids.Contains(r.ThreadId) && r.UserId == me)
+                .ToDictionaryAsync(r => r.ThreadId, r => r.LastReadAt, ct);
+            var unread = new Dictionary<Guid, int>();
+            foreach (var t in threads)
+            {
+                var since = reads.TryGetValue(t.Id, out var r) ? r : DateTime.MinValue;
+                if (t.LastMessageAt <= since) continue;
+                var q = _db.ChatMessages.Where(m => m.ThreadId == t.Id && m.CreatedAt > since && m.SenderId != me);
+                if (office && t.Kind == "agent" && t.AgentId != me) q = q.Where(m => !m.FromOffice);
+                var n = await q.CountAsync(ct);
+                if (n > 0) unread[t.Id] = n;
+            }
+            return unread;
         }
 
         /// <summary>The thread, if this person may see it. A direct chat is only ever open to its two people.</summary>
         private async Task<(ChatThread? Thread, bool Office)> AccessAsync(Guid id, CancellationToken ct)
         {
             var t = await _db.ChatThreads.FirstOrDefaultAsync(x => x.Id == id, ct);
-            if (t == null) return (null, false);
+            if (t == null || t.Kind == "merged") return (null, false);
             var office = await IsOfficeAsync();
             if (t.Kind == "direct") return t.AgentId == Me || t.PeerId == Me ? (t, office) : (null, false);
             if (office || t.Kind == "team" || t.AgentId == Me) return (t, office);
@@ -185,19 +275,17 @@ namespace SeemanchalOutreach.Api.Controllers
             var person = await _db.Agents.AsNoTracking().Where(a => a.AgentId == other && a.IsActive).Select(a => new { a.AgentId, a.Name }).FirstOrDefaultAsync(ct);
             if (person == null) return NotFound(new { message = "That person isn't active any more." });
             var (a, b) = string.CompareOrdinal(Me, other) < 0 ? (Me, other) : (other, Me);
-            var t = await _db.ChatThreads.FirstOrDefaultAsync(x => x.Kind == "direct" && x.AgentId == a && x.PeerId == b, ct);
-            if (t == null)
+            var tag = ";" + Me + ";";
+            var t = await _db.ChatThreads.Where(x => x.Kind == "direct" && x.AgentId == a && x.PeerId == b).OrderBy(x => x.CreatedAt).FirstOrDefaultAsync(ct);
+            // Both people starting the chat at the same moment get the same one (the database allows only one per pair).
+            t ??= await CreateOnceAsync(new ChatThread { Kind = "direct", AgentId = a, PeerId = b, Title = "", LastMessageAt = DateTime.UtcNow, StartedBy = tag },
+                x => x.Kind == "direct" && x.AgentId == a && x.PeerId == b, ct);
+            if (t == null) return Conflict(new { message = "Please try again." });
+            // An empty chat shows only in the lists of the people who opened it.
+            if (t.LastPreview == null && !(t.StartedBy ?? "").Contains(tag))
             {
-                t = new ChatThread { Kind = "direct", AgentId = a, PeerId = b, Title = "", LastMessageAt = DateTime.UtcNow };
-                _db.ChatThreads.Add(t);
-                try { await _db.SaveChangesAsync(ct); }
-                catch (DbUpdateException)
-                {
-                    // Both people started the chat at the same moment: use the one that was saved.
-                    _db.ChatThreads.Remove(t);
-                    t = await _db.ChatThreads.FirstOrDefaultAsync(x => x.Kind == "direct" && x.AgentId == a && x.PeerId == b, ct);
-                    if (t == null) return Conflict(new { message = "Please try again." });
-                }
+                t.StartedBy = string.IsNullOrEmpty(t.StartedBy) ? tag : t.StartedBy + Me + ";";
+                await _db.SaveChangesAsync(ct);
             }
             return Ok(new { id = t.Id });
         }
@@ -208,31 +296,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> Threads(CancellationToken ct)
         {
             var office = await IsOfficeAsync();
-            var team = await TeamAsync(ct);
-            var me = Me;
-            List<ChatThread> threads;
-            Dictionary<string, (string Name, string? Block)> agents = new();
-            if (office)
-            {
-                // Every active field agent has a chat, even before the first message.
-                var field = (await _db.Agents.AsNoTracking().Where(a => a.IsActive).Select(a => new { a.AgentId, a.Name, a.Role, a.Block }).ToListAsync(ct))
-                    .Where(a => !RoleChecks.IsDashboardRole(a.Role)).ToList();
-                var have = await _db.ChatThreads.Where(x => x.Kind == "agent").Select(x => x.AgentId).ToListAsync(ct);
-                var missing = field.Where(a => !have.Contains(a.AgentId)).ToList();
-                foreach (var a in missing)
-                    _db.ChatThreads.Add(new ChatThread { Kind = "agent", AgentId = a.AgentId, Title = a.Name, LastMessageAt = DateTime.UtcNow.AddYears(-1) });
-                if (missing.Count > 0) await _db.SaveChangesAsync(ct);
-                agents = field.ToDictionary(a => a.AgentId, a => (a.Name, (string?)a.Block));
-                var agentIds = agents.Keys.ToList();
-                threads = await _db.ChatThreads.AsNoTracking().Where(x => x.Kind == "team" || (x.Kind == "agent" && agentIds.Contains(x.AgentId!))).ToListAsync(ct);
-            }
-            else
-            {
-                var mine = await AgentThreadAsync(Me, MyName, ct);
-                threads = new List<ChatThread> { mine, team };
-            }
-            // My direct chats (only once something was said, or I opened them).
-            threads.AddRange(await _db.ChatThreads.AsNoTracking().Where(x => x.Kind == "direct" && (x.AgentId == me || x.PeerId == me)).ToListAsync(ct));
+            var (threads, agents) = await VisibleAsync(office, create: true, ct);
             var peerIds = threads.Select(PeerOf).Where(x => x != null).Cast<string>().Distinct().ToList();
             var peers = peerIds.Count == 0 ? new Dictionary<string, (string Name, string? Role, string? Block, string? Photo, bool Active)>()
                 : (await _db.Agents.AsNoTracking().Where(a => peerIds.Contains(a.AgentId)).Select(a => new { a.AgentId, a.Name, a.Role, a.Block, a.PhotoUrl, a.IsActive }).ToListAsync(ct))
@@ -246,17 +310,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var presence = await PresenceAsync(fieldIds, ct);
             var everyone = await EveryoneAsync(ct);
 
-            var ids = threads.Select(t => t.Id).ToList();
-            var reads = await _db.ChatReads.AsNoTracking().Where(r => ids.Contains(r.ThreadId) && r.UserId == Me)
-                .ToDictionaryAsync(r => r.ThreadId, r => r.LastReadAt, ct);
-            // Unread: messages from others after my last read.
-            var unread = new Dictionary<Guid, int>();
-            foreach (var t in threads)
-            {
-                var since = reads.TryGetValue(t.Id, out var r) ? r : DateTime.MinValue;
-                if (t.LastMessageAt <= since) continue;
-                unread[t.Id] = await _db.ChatMessages.CountAsync(m => m.ThreadId == t.Id && m.CreatedAt > since && m.SenderId != Me, ct);
-            }
+            var unread = await UnreadAsync(threads, office, ct);
 
             return Ok(new
             {
@@ -276,10 +330,10 @@ namespace SeemanchalOutreach.Api.Controllers
                             agentId = t.Kind == "direct" ? peerId : t.AgentId,
                             title = t.Kind == "team" ? "Field team"
                                 : t.Kind == "direct" ? (hasPeer ? peer.Name : peerId ?? "")
-                                : office ? (agents.TryGetValue(t.AgentId ?? "", out var a) ? a.Name : t.Title) : "Office",
+                                : office && t.AgentId != Me ? (agents.TryGetValue(t.AgentId ?? "", out var a) ? a.Name : t.Title) : "Office",
                             sub = t.Kind == "team" ? "Everyone in the field team and the office"
                                 : t.Kind == "direct" ? (hasPeer ? string.Join(" · ", new[] { RoleLabel(peer.Role), RoleChecks.IsDashboardRole(peer.Role) ? null : peer.Block }.Where(x => !string.IsNullOrWhiteSpace(x))) + (peer.Active ? "" : " · inactive") : null)
-                                : office ? (agents.TryGetValue(t.AgentId ?? "", out var b) ? b.Block : null) : "Marketing office",
+                                : office && t.AgentId != Me ? (agents.TryGetValue(t.AgentId ?? "", out var b) ? (RoleChecks.IsDashboardRole(b.Role) ? RoleLabel(b.Role) : b.Block) : null) : "Marketing office",
                             photoUrl = t.Kind == "direct" && hasPeer ? peer.Photo : null,
                             lastMessageAt = t.LastPreview == null ? (DateTime?)null : t.LastMessageAt,
                             lastPreview = t.LastPreview,
@@ -294,21 +348,11 @@ namespace SeemanchalOutreach.Api.Controllers
         [HttpGet("unread")]
         public async Task<IActionResult> Unread(CancellationToken ct)
         {
+            // Exactly the chats in my list, counted the same way, so the badge and the list always agree.
             var office = await IsOfficeAsync();
-            var me = Me;
-            var visible = office
-                ? _db.ChatThreads.AsNoTracking().Where(t => t.Kind != "direct" || t.AgentId == me || t.PeerId == me)
-                : _db.ChatThreads.AsNoTracking().Where(t => t.Kind == "team" || (t.Kind == "agent" && t.AgentId == me) || (t.Kind == "direct" && (t.AgentId == me || t.PeerId == me)));
-            var list = await visible.Select(t => new { t.Id, t.LastMessageAt }).ToListAsync(ct);
-            var reads = await _db.ChatReads.AsNoTracking().Where(r => r.UserId == Me).ToDictionaryAsync(r => r.ThreadId, r => r.LastReadAt, ct);
-            int total = 0;
-            foreach (var t in list)
-            {
-                var since = reads.TryGetValue(t.Id, out var r) ? r : DateTime.MinValue;
-                if (t.LastMessageAt <= since) continue;
-                total += await _db.ChatMessages.CountAsync(m => m.ThreadId == t.Id && m.CreatedAt > since && m.SenderId != Me, ct);
-            }
-            return Ok(new { total });
+            var (threads, _) = await VisibleAsync(office, create: false, ct);
+            var unread = await UnreadAsync(threads, office, ct);
+            return Ok(new { total = unread.Values.Sum() });
         }
 
         // ─── Messages ────────────────────────────────────────────────────────
@@ -364,7 +408,12 @@ namespace SeemanchalOutreach.Api.Controllers
             var q = _db.ChatMessages.AsNoTracking().Where(m => m.ThreadId == id);
             List<ChatMessage> list;
             if (after != null)
-                list = await q.Where(m => m.CreatedAt > after.Value.ToUniversalTime()).OrderBy(m => m.CreatedAt).Take(limit).ToListAsync(ct);
+            {
+                // A message gets its time just before it is saved, so one saved a moment later can carry an earlier time than
+                // the newest one a phone already has. Looking 10 seconds back catches it; apps drop what they already show.
+                var from = after.Value.ToUniversalTime().AddSeconds(-10);
+                list = await q.Where(m => m.CreatedAt > from).OrderBy(m => m.CreatedAt).Take(limit).ToListAsync(ct);
+            }
             else
             {
                 if (before != null) q = q.Where(m => m.CreatedAt < before.Value.ToUniversalTime());
@@ -426,7 +475,14 @@ namespace SeemanchalOutreach.Api.Controllers
             if (!string.IsNullOrWhiteSpace(clientId))
             {
                 var dup = await _db.ChatMessages.AsNoTracking().FirstOrDefaultAsync(m => m.ClientId == clientId, ct);
-                if (dup != null) return Ok(Shape(dup, new()));
+                if (dup != null) return Ok(await ShapeOneAsync(dup, ct));
+            }
+            // Check the tagged partner before storing the file, so a refused message leaves no file behind.
+            if (!string.IsNullOrWhiteSpace(contactClientId))
+            {
+                var c = await _db.Contacts.AsNoTracking().Where(x => x.ClientId == contactClientId && !x.IsMerged).Select(x => x.AgentId).FirstOrDefaultAsync(ct);
+                if (c == null) return BadRequest(new { message = "That partner was not found. If you added them just now, wait for the phone to sync." });
+                if (!office && c != Me) return BadRequest(new { message = "You can only tag your own partners." });
             }
             await using var s = file.OpenReadStream();
             var key = await _files.SaveAsync("chat", file.FileName ?? $"file{ext}", s, mime, ct);
@@ -436,12 +492,20 @@ namespace SeemanchalOutreach.Api.Controllers
             return await SaveAsync(t, office, dto, caption.Length == 0 ? null : caption[..Math.Min(caption.Length, MaxText)], (key, name, mime, file.Length), ct);
         }
 
+        /// <summary>One message as the apps show it, with its reply quote and reactions.</summary>
+        private async Task<object> ShapeOneAsync(ChatMessage m, CancellationToken ct)
+        {
+            var replies = m.ReplyToId == null ? new Dictionary<Guid, ChatMessage>()
+                : await _db.ChatMessages.AsNoTracking().Where(x => x.Id == m.ReplyToId).ToDictionaryAsync(x => x.Id, ct);
+            return Shape(m, replies, await ReactionsForAsync(new List<Guid> { m.Id }, ct));
+        }
+
         private async Task<IActionResult> SaveAsync(ChatThread t, bool office, ChatSendDto dto, string? text, (string Key, string Name, string Mime, long Size)? file, CancellationToken ct)
         {
             var clientId = string.IsNullOrWhiteSpace(dto.ClientId) ? Guid.NewGuid().ToString() : dto.ClientId.Trim();
             if (clientId.Length > 64) clientId = clientId[..64];
             var existing = await _db.ChatMessages.AsNoTracking().FirstOrDefaultAsync(m => m.ClientId == clientId, ct);
-            if (existing != null) return Ok(Shape(existing, new()));
+            if (existing != null) return Ok(await ShapeOneAsync(existing, ct));
 
             // A tagged partner must exist; an agent can only tag their own partners.
             string? contactId = null, contactName = null;
@@ -474,6 +538,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 Lat = dto.Lat is >= -90 and <= 90 ? dto.Lat : null,
                 Lng = dto.Lng is >= -180 and <= 180 ? dto.Lng : null,
                 ReplyToId = replyTo,
+                CreatedAt = DateTime.UtcNow,
             };
             _db.ChatMessages.Add(m);
             var tracked = t; // loaded with tracking in AccessAsync
@@ -518,7 +583,9 @@ namespace SeemanchalOutreach.Api.Controllers
             if (t == null) return NotFound();
             var emoji = (dto.Emoji ?? "").Trim();
             // An emoji is a few UTF-16 units with no letters or digits; this keeps words out of reactions.
-            if (emoji.Length == 0 || emoji.Length > 16 || emoji.Any(char.IsLetterOrDigit)) return BadRequest(new { message = "Pick an emoji." });
+            var keycap = emoji.Contains('\u20E3');
+            if (emoji.Length == 0 || emoji.Length > 16 || (!keycap && emoji.Any(char.IsLetterOrDigit)) || emoji.Count(char.IsLetterOrDigit) > 1)
+                return BadRequest(new { message = "Pick an emoji." });
             if (!await _db.ChatMessages.AnyAsync(m => m.Id == messageId && m.ThreadId == id, ct)) return NotFound();
             var me = Me;
             var mine = await _db.ChatReactions.FirstOrDefaultAsync(r => r.MessageId == messageId && r.UserId == me && r.Emoji == emoji, ct);
@@ -545,7 +612,8 @@ namespace SeemanchalOutreach.Api.Controllers
             var since = (from ?? DateTime.UtcNow.AddDays(-7)).ToUniversalTime();
             var ids = _db.ChatMessages.Where(m => m.ThreadId == id && m.CreatedAt >= since).Select(m => m.Id);
             var rows = await _db.ChatReactions.AsNoTracking().Where(r => r.ThreadId == id && ids.Contains(r.MessageId))
-                .Select(r => new ReactionRow(r.MessageId, r.UserId, r.UserName, r.Emoji, r.CreatedAt)).Take(2000).ToListAsync(ct);
+                .OrderByDescending(r => r.CreatedAt).Take(5000)
+                .Select(r => new ReactionRow(r.MessageId, r.UserId, r.UserName, r.Emoji, r.CreatedAt)).ToListAsync(ct);
             return Ok(GroupReactions(rows).ToDictionary(k => k.Key.ToString(), v => v.Value));
         }
 

@@ -7,7 +7,7 @@ import './crm.css';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
 import {
   LayoutDashboard, PhoneCall, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
@@ -187,12 +187,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const groups = useMemo(() => NAV.map((g) => ({
     group: g.group,
-    // Chat: admins, marketing managers and anyone who can see the field pages (same rule as the API).
+    // Chat: everyone who signs in to the CRM (Team and one-to-one chats; the office chats need field access, decided by the API).
     // Team board: everyone who signs in to the CRM.
     // Vita marketing autonomous agents: admins and marketing managers (same rule as the API).
     items: g.items.filter((i) => (i.page === 'everyone' ? !!access : i.page === 'admin' ? !!access?.isAdmin
       : i.page === 'ai' ? !!access && (access.isAdmin || access.role === 'MarketingManager')
-      : i.page === 'chat' ? !!access && (access.isAdmin || access.role === 'MarketingManager' || canView(access, 'field'))
+      : i.page === 'chat' ? !!access
         // Leads: whoever works the Referral desk or WhatsApp (same rule as the API).
         : i.page === 'leads' || i.page === 'wa' ? canView(access, 'desk') || canView(access, 'whatsapp')
           // Referrals: the front desk and the pipeline are one board now.
@@ -203,7 +203,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const allowedItems = groups.flatMap((g) => g.items);
 
   // Unread chat messages, for the badge on Chat.
-  const chatAllowed = !!access && (access.isAdmin || access.role === 'MarketingManager' || canView(access, 'field'));
+  // Same rule as the Chat item in the menu: anyone who can open the chat page.
+  const chatAllowed = !!access;
   const [chatUnread, setChatUnread] = useState(0);
   const refreshUnread = useCallback(() => {
     if (!chatAllowed) return;
@@ -246,7 +247,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (n.kind === 'chat' || n.kind === 'team_chat') refreshUnread();
     if (n.kind === 'lead') { refreshLeads(); refreshSocial(); }
   }, [refreshUnread, refreshLeads, refreshSocial]);
-  useLiveEvents(noop, undefined, refreshUnread, onNotify);
+  // Chat pings come in bursts (a message, then each reader's receipt): count once they settle.
+  const unreadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onChatPing = useCallback(() => {
+    if (unreadTimer.current) clearTimeout(unreadTimer.current);
+    unreadTimer.current = setTimeout(() => { unreadTimer.current = null; refreshUnread(); }, 1500);
+  }, [refreshUnread]);
+  useEffect(() => () => { if (unreadTimer.current) clearTimeout(unreadTimer.current); }, []);
+  useLiveEvents(noop, undefined, onChatPing, onNotify);
   const current = allowedItems.find((i) => isActive(pathname, i));
   const phoneItems = allowedItems.filter((i) => i.phone).slice(0, 4);
   const moreItems = allowedItems.filter((i) => !phoneItems.includes(i));

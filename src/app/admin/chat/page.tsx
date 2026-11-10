@@ -34,6 +34,8 @@ export interface ChatMsg {
   reactions?: Reaction[];
   createdAt: string;
   pending?: boolean; failed?: boolean;
+  /** The file being sent from this browser, kept so a failed upload can be retried. */
+  localFile?: File | null;
 }
 interface Pinned { message: ChatMsg; pinnedBy: string; pinnedAt: string }
 interface MsgRes { messages: ChatMsg[]; otherReadAt?: string | null; otherSeenAt?: string | null; hasMore: boolean; pinned?: Pinned | null; live?: Live | null }
@@ -44,7 +46,15 @@ interface Staged { id: string; file: File; preview: string | null }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
-const ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt';
+// Exactly what the server accepts (ChatController.Allowed).
+const ALLOWED_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.csv', '.txt'];
+const ACCEPT = ALLOWED_EXT.join(',');
+const extOf = (name: string) => { const i = name.lastIndexOf('.'); return i < 0 ? '' : name.slice(i).toLowerCase(); };
+/** Photos a browser can show in place. HEIC (iPhone) can't be shown by most browsers, so it is a file card. */
+const showsInline = (mime?: string | null) => !!mime && mime.startsWith('image/') && mime !== 'image/heic' && mime !== 'image/heif';
+/** A timestamp as a fixed-width string (7 fraction digits), so plain string order is time order. */
+const isoKey = (iso: string) => iso.replace(/(\.\d+)?(Z|[+-]\d\d:\d\d)$/, (_, f: string | undefined, z: string) => `${(f ?? '.').padEnd(8, '0').slice(0, 8)}${z}`);
+const isTouch = () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
 const MAX_BYTES = 15 * 1024 * 1024;
 const MAX_STAGED = 10;
 const QUICK_REACTIONS = ['👍', '✅', '🙏', '❤️', '😂', '👀'];
@@ -63,7 +73,7 @@ function dayLabel(iso: string) {
 }
 const size = (n?: number | null) => (n == null ? '' : n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
-const isImage = (m: ChatMsg) => !!m.file && m.file.mime.startsWith('image/') && !!m.file.url;
+const isImage = (m: ChatMsg) => !!m.file && showsInline(m.file.mime) && !!m.file.url;
 const mapsUrl = (lat: number, lng: number) => `https://www.google.com/maps?q=${lat},${lng}`;
 const tomorrowIst = () => istDay(new Date(Date.now() + 864e5).toISOString());
 
@@ -100,6 +110,14 @@ function loadQuick(): string[] {
   return QR_DEFAULT;
 }
 function saveQuick(list: string[]) { try { localStorage.setItem(QR_KEY, JSON.stringify(list)); } catch { /* storage off: kept for this visit */ } }
+
+/** Polling continues from the newest message someone else sent (the server repeats the last 10 s, so nothing is missed). */
+function advanceFrom(lastAt: { current: string | null }, list: ChatMsg[], allowMine: boolean) {
+  for (const m of list) {
+    if (m.mine && !allowMine) continue;
+    if (!lastAt.current || isoKey(m.createdAt) > isoKey(lastAt.current)) lastAt.current = m.createdAt;
+  }
+}
 
 // ─── Page ────────────────────────────────────────────────────────────────
 
@@ -140,7 +158,20 @@ function ChatPage() {
     const t = setInterval(() => { if (!document.hidden) void loadThreads(); }, 20000);
     return () => { clearTimeout(first); clearInterval(t); };
   }, [loadThreads]);
-  const onChat = useCallback(() => { void loadThreads(); setPing((n) => n + 1); }, [loadThreads]);
+  // Chat pings come in bursts (a message, then each reader's receipt): reload the list once they settle.
+  const listTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadThreadsSoon = useCallback(() => {
+    if (listTimer.current) clearTimeout(listTimer.current);
+    listTimer.current = setTimeout(() => { listTimer.current = null; void loadThreads(); }, 1500);
+  }, [loadThreads]);
+  useEffect(() => () => { if (listTimer.current) clearTimeout(listTimer.current); }, []);
+  const selectedRef = useRef(selected);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
+  const onChat = useCallback((threadId: string) => {
+    loadThreadsSoon();
+    // Only the open conversation needs to fetch its messages again.
+    if (threadId && threadId === selectedRef.current) setPing((n) => n + 1);
+  }, [loadThreadsSoon]);
   const noop = useCallback(() => {}, []);
   useLiveEvents(noop, undefined, onChat);
 
@@ -189,9 +220,9 @@ function ChatPage() {
             <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats" />
             {search && <button type="button" className="ch-clear" onClick={() => setSearch('')} aria-label="Clear search"><X size={14} /></button>}
           </label>
-          <div className="ch-filters" role="tablist" aria-label="Show">
+          <div className="ch-filters" role="group" aria-label="Show">
             {chips.map((c) => (
-              <button key={c.k} type="button" role="tab" aria-selected={filter === c.k} onClick={() => setFilter(c.k)}>
+              <button key={c.k} type="button" aria-pressed={filter === c.k} onClick={() => setFilter(c.k)}>
                 {c.l}{c.n ? <span>{c.n}</span> : null}
               </button>
             ))}
@@ -225,7 +256,8 @@ function ChatPage() {
         <section className="ch-pane" aria-label="Conversation">
           {current ? (
             <Conversation key={current.id} thread={current} office={office} ping={ping} canTask={canAssignBlocks(access)}
-              onBack={() => open(null)} onSent={loadThreads} />
+              onBack={() => open(null)} onSent={loadThreadsSoon}
+              onRead={() => { setThreads((ts) => ts && ts.map((t) => (t.id === current.id ? { ...t, unread: 0 } : t))); loadThreadsSoon(); }} />
           ) : (
             <div className="ch-empty">
               <Lock size={22} aria-hidden />
@@ -320,8 +352,8 @@ function NewChat({ onClose, onOpened }: { onClose: () => void; onOpened: (id: st
 
 type Row = { kind: 'day'; at: string } | { kind: 'unread'; n: number } | { kind: 'msg'; m: ChatMsg; cont: boolean };
 
-function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
-  thread: ChatThread; office: boolean; ping: number; canTask: boolean; onBack: () => void; onSent: () => void;
+function Conversation({ thread, office, ping, canTask, onBack, onSent, onRead }: {
+  thread: ChatThread; office: boolean; ping: number; canTask: boolean; onBack: () => void; onSent: () => void; onRead: () => void;
 }) {
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -348,6 +380,8 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
   const [atBottom, setAtBottom] = useState(true);
   const [newBelow, setNewBelow] = useState(0);
   const [unreadFrom, setUnreadFrom] = useState<{ id: string; n: number } | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [announce, setAnnounce] = useState('');
   const [toast, showToast] = useToast();
   const bodyRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -359,6 +393,13 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
   const lastCount = useRef(0);
   const dragDepth = useRef(0);
   const unreadAtOpen = useRef(thread.unread);
+  const atBottomRef = useRef(true);
+  const olderBusy = useRef(false);
+  const readOwed = useRef(false); // messages from others arrived while the tab was hidden
+  const reacting = useRef(new Map<string, number>()); // message id → reactions in flight
+  const reactedAt = useRef(new Map<string, number>()); // message id → step at which I last changed a reaction
+  const step = useRef(0); // a counter that orders reaction taps and refreshes
+  const stagedRef = useRef<Staged[]>([]);
 
   const canPin = thread.kind === 'direct' || office;
   const taskAgent = thread.kind === 'agent' ? thread.agentId : thread.kind === 'direct' && thread.presence ? thread.agentId : null;
@@ -366,46 +407,87 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
   const presence = [liveText(live, thread.kind, office), presenceText(thread.presence)].filter(Boolean).join(' · ') || null;
 
   useEffect(() => { msgsRef.current = msgs; }, [msgs]);
+  useEffect(() => { stagedRef.current = staged; }, [staged]);
+  // Previews of files still waiting to be sent are released when the chat closes.
+  useEffect(() => () => { for (const s of stagedRef.current) if (s.preview) URL.revokeObjectURL(s.preview); }, []);
 
-  const merge = useCallback((incoming: ChatMsg[]) => {
+  /** Adds or updates messages by clientId. A copy from the server always wins and is no longer sending or failed. */
+  const merge = useCallback((incoming: ChatMsg[], fromServer = true) => {
     setMsgs((cur) => {
       const byClient = new Map(cur.map((m) => [m.clientId, m]));
-      for (const m of incoming) byClient.set(m.clientId, { ...byClient.get(m.clientId), ...m });
-      const all = [...byClient.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      const last = [...all].reverse().find((m) => !m.pending);
-      if (last) lastAt.current = last.createdAt;
-      return all;
+      for (const m of incoming) {
+        const was = byClient.get(m.clientId);
+        byClient.set(m.clientId, fromServer
+          // Keep reactions I'm changing right now; the server copy may predate my tap.
+          ? { ...was, ...m, pending: false, failed: false, localFile: null, reactions: was && reacting.current.has(was.id) ? was.reactions : m.reactions }
+          : { ...was, ...m });
+      }
+      return [...byClient.values()].sort((a, b) => (isoKey(a.createdAt) < isoKey(b.createdAt) ? -1 : isoKey(a.createdAt) > isoKey(b.createdAt) ? 1 : 0));
     });
   }, []);
+
+  // The parent's callbacks change on every render; the fetchers below must not restart because of that.
+  const parent = useRef({ onRead, onSent });
+  useEffect(() => { parent.current = { onRead, onSent }; }, [onRead, onSent]);
+
+  const markRead = useCallback(() => {
+    if (document.hidden) { readOwed.current = true; return; }
+    readOwed.current = false;
+    parent.current.onRead();
+    void crm.post(`/api/v1/chat/threads/${thread.id}/read`).then(() => parent.current.onSent()).catch(() => undefined);
+  }, [thread.id]);
 
   const fetchNew = useCallback(async (first = false) => {
     try {
       const q = first || !lastAt.current ? '' : `?after=${encodeURIComponent(lastAt.current)}`;
       const r = await crm.get<MsgRes>(`/api/v1/chat/threads/${thread.id}/messages${q}`);
+      const known = new Set(msgsRef.current.map((m) => m.clientId));
+      const fresh = r.messages.filter((m) => !known.has(m.clientId) && !m.mine);
       if (first) {
         setHasMore(r.hasMore);
         // "New messages" line above the first one I haven't read.
         const theirs = r.messages.filter((m) => !m.mine);
         const n = Math.min(unreadAtOpen.current, theirs.length);
         if (n > 0) setUnreadFrom({ id: theirs[theirs.length - n].id, n });
+      } else if (fresh.length) {
+        const m = fresh[fresh.length - 1];
+        setAnnounce(`New message from ${m.senderName}: ${m.text ?? m.file?.name ?? m.contact?.name ?? ''}`);
       }
       merge(r.messages);
+      // On first load the page is a full snapshot, so even a chat with only my messages has a starting point.
+      advanceFrom(lastAt, r.messages, first || !lastAt.current);
       setReadAt(r.otherReadAt ?? null);
       setSeenAt(r.otherSeenAt ?? null);
       setPinned(r.pinned ?? null);
       if (r.live !== undefined) setLive(r.live ?? null);
       setLoaded(true);
-      if (r.messages.some((m) => !m.mine) || first) void crm.post(`/api/v1/chat/threads/${thread.id}/read`).then(onSent).catch(() => undefined);
+      if (first || fresh.length > 0) markRead();
     } catch { setLoaded(true); }
-  }, [thread.id, merge, onSent]);
+  }, [thread.id, merge, markRead]);
+
+  // Back on the tab: tell the server I've now read what came in meanwhile.
+  useEffect(() => {
+    const onVis = () => { if (!document.hidden && readOwed.current) markRead(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [markRead]);
 
   /** Reactions change on older messages too, so they are refreshed for everything on screen. */
   const refreshReactions = useCallback(async () => {
-    const oldest = msgsRef.current.find((m) => !m.pending);
+    const oldest = msgsRef.current.find((m) => !m.pending && !m.failed);
     if (!oldest) return;
+    const started = ++step.current;
     try {
       const map = await crm.get<Record<string, Reaction[]>>(`/api/v1/chat/threads/${thread.id}/reactions?from=${encodeURIComponent(oldest.createdAt)}`);
-      setMsgs((cur) => cur.map((m) => (m.pending ? m : { ...m, reactions: map[m.id] ?? [] })));
+      // The server sends at most 2000 reactions; past that, a message missing from the answer may still have some.
+      const capped = Object.values(map).reduce((n, list) => n + list.reduce((k, x) => k + x.count, 0), 0) >= 2000;
+      setMsgs((cur) => cur.map((m) => {
+        if (m.pending || m.failed) return m;
+        // Mine in flight, or changed after this request left: what is shown is newer.
+        if (reacting.current.has(m.id) || (reactedAt.current.get(m.id) ?? 0) >= started) return m;
+        const next = map[m.id];
+        return next ? { ...m, reactions: next } : capped ? m : { ...m, reactions: [] };
+      }));
     } catch { /* keep what is shown */ }
   }, [thread.id]);
 
@@ -450,25 +532,44 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
     const el = bodyRef.current;
     if (!el) return;
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < 140;
+    atBottomRef.current = near;
     setAtBottom(near);
     if (near) setNewBelow(0);
   };
-
-  const older = useCallback(async () => {
-    const first = msgsRef.current.find((m) => !m.pending);
-    if (!first) return false;
-    const r = await crm.get<MsgRes>(`/api/v1/chat/threads/${thread.id}/messages?before=${encodeURIComponent(first.createdAt)}`);
+  /** A photo finished loading and made the list taller: stay on the latest if that is where I was. */
+  const onMediaLoad = useCallback(() => {
     const el = bodyRef.current;
-    if (el) restore.current = el.scrollHeight - el.scrollTop;
-    setHasMore(r.hasMore);
-    merge(r.messages);
-    return r.hasMore;
-  }, [thread.id, merge]);
+    if (el && atBottomRef.current && restore.current == null) el.scrollTop = el.scrollHeight;
+  }, []);
+
+  /** Loads the page before the oldest message shown. Returns whether there is more, or null if it failed. */
+  const older = useCallback(async (): Promise<boolean | null> => {
+    if (olderBusy.current) return true;
+    const first = msgsRef.current.find((m) => !m.pending && !m.failed);
+    if (!first) return false;
+    olderBusy.current = true;
+    setLoadingOlder(true);
+    try {
+      const r = await crm.get<MsgRes>(`/api/v1/chat/threads/${thread.id}/messages?before=${encodeURIComponent(first.createdAt)}`);
+      const el = bodyRef.current;
+      if (el) restore.current = el.scrollHeight - el.scrollTop;
+      setHasMore(r.hasMore);
+      merge(r.messages);
+      return r.hasMore;
+    } catch (e) {
+      showToast(`Couldn't load earlier messages. ${friendlyError(e)}`);
+      return null;
+    } finally {
+      olderBusy.current = false;
+      setLoadingOlder(false);
+    }
+  }, [thread.id, merge, showToast]);
 
   /** Scrolls to a message (loading older pages until it is there) and makes it glow for a moment. */
   const jumpTo = useCallback(async (id: string) => {
     for (let i = 0; i < 15 && !msgsRef.current.some((m) => m.id === id); i++) {
       const more = await older();
+      if (more === null) return;
       await new Promise((r) => setTimeout(r, 60));
       if (!more && !msgsRef.current.some((m) => m.id === id)) break;
     }
@@ -525,37 +626,49 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
     if (staged.length > 0) {
       const files = staged;
       setStaged([]);
+      // The bubbles don't use the previews, so they can go now.
+      for (const s of files) if (s.preview) URL.revokeObjectURL(s.preview);
       // The caption goes with the first file; reply and partner tag with every one.
       const jobs = files.map((s, i) => {
         const f = baseFields();
         const caption = i === 0 ? body : '';
-        merge([optimistic(f.clientId, { text: caption || null, file: { name: s.file.name, mime: s.file.type, size: s.file.size, url: '' } })]);
+        merge([optimistic(f.clientId, { text: caption || null, localFile: s.file, file: { name: s.file.name, mime: s.file.type || 'application/octet-stream', size: s.file.size, url: '' } })], false);
         return { s, f, caption };
       });
       resetCompose();
       scrollToBottom();
-      for (const j of jobs) { await uploadFile(j.s.file, j.caption, j.f); if (j.s.preview) URL.revokeObjectURL(j.s.preview); }
+      for (const j of jobs) await uploadFile(j.s.file, j.caption, j.f);
       return;
     }
     if (!body) return;
     const f = baseFields();
-    merge([optimistic(f.clientId, { text: body })]);
+    merge([optimistic(f.clientId, { text: body })], false);
     resetCompose();
     scrollToBottom();
     await postText(body, f);
   };
 
+  /** Sends a failed message again with the same clientId, so the server never stores it twice. */
   const retry = async (m: ChatMsg) => {
-    if (m.file) { showToast('Attach the file again to resend it.'); return; }
+    const f = { clientId: m.clientId, contactClientId: m.contact?.id, replyToId: m.replyTo?.id };
+    if (m.file) {
+      if (!m.localFile) { showToast('Attach the file again to resend it.'); return; }
+      setMsgs((cur) => cur.map((x) => (x.clientId === m.clientId ? { ...x, failed: false, pending: true } : x)));
+      await uploadFile(m.localFile, m.text ?? '', f);
+      return;
+    }
     if (!m.text) return;
     setMsgs((cur) => cur.map((x) => (x.clientId === m.clientId ? { ...x, failed: false, pending: true } : x)));
-    await postText(m.text, { clientId: m.clientId, contactClientId: m.contact?.id, replyToId: m.replyTo?.id });
+    await postText(m.text, f);
   };
+  /** Removes a message that was never sent. */
+  const dismiss = (m: ChatMsg) => setMsgs((cur) => cur.filter((x) => !(x.clientId === m.clientId && x.failed)));
 
   const stage = (files: File[]) => {
     const room = MAX_STAGED - staged.length;
     const ok: Staged[] = [];
     for (const f of files.slice(0, Math.max(0, room))) {
+      if (!ALLOWED_EXT.includes(extOf(f.name))) { showToast(`${f.name || 'That file'} can't be sent. Send photos (JPG, PNG, WebP, GIF, HEIC), PDF, Word, Excel, PowerPoint, CSV or text files.`); continue; }
       if (f.size > MAX_BYTES) { showToast(`${f.name} is over 15 MB.`); continue; }
       ok.push({ id: uid(), file: f, preview: f.type.startsWith('image/') ? URL.createObjectURL(f) : null });
     }
@@ -583,10 +696,21 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
       else list.push({ emoji, count: 1, mine: true, names: ['You'] });
       return { ...x, reactions: list };
     }));
+    // While this is in flight, polling and refreshes leave this message's reactions alone.
+    reacting.current.set(m.id, (reacting.current.get(m.id) ?? 0) + 1);
+    reactedAt.current.set(m.id, ++step.current);
+    let failed = false;
     try {
       const r = await crm.post<{ messageId: string; reactions: Reaction[] }>(`/api/v1/chat/threads/${thread.id}/messages/${m.id}/react`, { emoji });
-      setMsgs((cur) => cur.map((x) => (x.id === r.messageId ? { ...x, reactions: r.reactions } : x)));
-    } catch (e) { showToast(friendlyError(e)); void refreshReactions(); }
+      // Another tap on this message is still on its way: its answer is the one to show.
+      if ((reacting.current.get(m.id) ?? 0) <= 1) setMsgs((cur) => cur.map((x) => (x.id === r.messageId ? { ...x, reactions: r.reactions } : x)));
+    } catch (e) { failed = true; showToast(friendlyError(e)); }
+    finally {
+      const n = (reacting.current.get(m.id) ?? 1) - 1;
+      if (n > 0) reacting.current.set(m.id, n); else reacting.current.delete(m.id);
+      reactedAt.current.set(m.id, ++step.current);
+    }
+    if (failed) { reactedAt.current.delete(m.id); void refreshReactions(); }
   };
   const pin = async (m: ChatMsg | null) => {
     setActive(null);
@@ -614,6 +738,7 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
   const slash = text.startsWith('/') ? text.slice(1).toLowerCase() : null;
   const quickShown = quickOpen || slash !== null;
   const quickList = slash ? quick.filter((q) => q.toLowerCase().includes(slash)) : quick;
+  const pickFirstQuick = () => { if (quickList[0]) pickQuick(quickList[0]); };
   const pickQuick = (q: string) => {
     setText(q); setQuickOpen(false);
     requestAnimationFrame(() => { const el = inputRef.current; if (el) { el.focus(); el.setSelectionRange(q.length, q.length); grow(el); } });
@@ -676,9 +801,11 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
           </div>
         )}
 
-        <div className="ch-body" role="log" aria-live="polite" ref={bodyRef} onScroll={onScroll}>
+        {/* New messages are announced once, below; the list itself stays quiet so loading older pages isn't read out. */}
+        <div className="crm-sr" role="status" aria-live="polite">{announce}</div>
+        <div className="ch-body" role="log" aria-live="off" aria-label={`Messages with ${thread.title}`} aria-busy={loadingOlder || !loaded} ref={bodyRef} onScroll={onScroll}>
           <div className="ch-secure"><Lock size={12} aria-hidden /> {thread.kind === 'direct' ? `Only you and ${thread.title} can read this chat. Admins can't see it.` : 'Only the people in this chat can see these messages and files.'}</div>
-          {hasMore && <button type="button" className="ch-older" onClick={() => void older()}>Load earlier messages</button>}
+          {hasMore && <button type="button" className="ch-older" disabled={loadingOlder} onClick={() => void older()}>{loadingOlder ? 'Loading…' : 'Load earlier messages'}</button>}
           {!loaded ? <Skeleton h={200} /> : msgs.length === 0 ? (
             <div className="ch-none">
               No messages yet. Say namaste 👋
@@ -700,7 +827,7 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
                   onTask={() => { setTaskFor(r.m); setActive(null); }}
                   onQuote={() => r.m.replyTo && void jumpTo(r.m.replyTo.id)}
                   onImage={() => setViewer({ items: images, index: Math.max(0, images.findIndex((x) => x.id === r.m.id)) })}
-                  onRetry={() => void retry(r.m)} />
+                  onRetry={() => void retry(r.m)} onDismiss={() => dismiss(r.m)} onMediaLoad={onMediaLoad} onToast={showToast} />
               ))}
         </div>
 
@@ -712,8 +839,8 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
 
         {emojiFor && (
           <div className="ch-emoji" role="dialog" aria-label={emojiFor === 'compose' ? 'Emoji' : 'React with an emoji'}>
-            <div className="ch-emoji-tabs" role="tablist">
-              {EMOJI.map((g, i) => <button key={g.group} type="button" role="tab" aria-selected={i === emojiGroup} title={g.group} onClick={() => setEmojiGroup(i)}>{g.icon}</button>)}
+            <div className="ch-emoji-tabs" role="group" aria-label="Emoji groups">
+              {EMOJI.map((g, i) => <button key={g.group} type="button" aria-pressed={i === emojiGroup} aria-label={g.group} title={g.group} onClick={() => setEmojiGroup(i)}>{g.icon}</button>)}
               {emojiFor !== 'compose' && <span className="ch-emoji-note">Reacting to a message</span>}
               <button type="button" className="ch-icon is-sm" style={{ marginLeft: 'auto' }} onClick={() => setEmojiFor(null)} aria-label="Close"><X size={16} /></button>
             </div>
@@ -729,16 +856,16 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
         )}
 
         {quickShown && (
-          <div className="ch-quick" role="listbox" aria-label="Quick replies">
+          <div className="ch-quick" role="region" aria-label="Quick replies">
             <div className="ch-quick-head">
               <strong><Zap size={14} aria-hidden /> Quick replies</strong>
               <span className="crm-sub">{slash !== null ? 'Enter picks the first · Esc closes' : 'Saved in this browser'}</span>
               <button type="button" className="ch-icon is-sm" onClick={() => { setQuickOpen(false); if (slash !== null) setText(''); }} aria-label="Close quick replies"><X size={16} /></button>
             </div>
-            <ul>
+            <ul aria-label={slash !== null ? `${quickList.length} matching quick replies` : 'Saved quick replies'}>
               {quickList.map((q) => (
                 <li key={q}>
-                  <button type="button" role="option" aria-selected={false} onClick={() => pickQuick(q)}>{q}</button>
+                  <button type="button" onClick={() => pickQuick(q)}>{q}</button>
                   <button type="button" className="ch-icon is-sm" onClick={() => removeQuick(q)} aria-label={`Delete quick reply: ${q}`}><Trash2 size={14} /></button>
                 </li>
               ))}
@@ -786,9 +913,11 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
               onPaste={(e) => { const files = [...e.clipboardData.files]; if (files.length) { e.preventDefault(); stage(files); } }}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') { setQuickOpen(false); setEmojiFor(null); if (slash !== null) setText(''); return; }
-                if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  if (slash !== null) { e.preventDefault(); pickFirstQuick(); return; }
+                  // On a phone or tablet Enter is a new line; the send button sends.
+                  if (isTouch()) return;
                   e.preventDefault();
-                  if (slash !== null) { if (quickList[0]) pickQuick(quickList[0]); return; }
                   void send();
                 }
                 if (e.key === 'ArrowUp' && !text && reply == null) {
@@ -807,11 +936,11 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
 
       {infoOpen && (
         <InfoPanel thread={thread} presence={presence} onClose={() => setInfoOpen(false)} onJump={(id) => void jumpTo(id)}
-          onImage={(items, index) => setViewer({ items, index })} canTask={canTask && !!taskAgent} onTask={() => setTaskFor({ id: '', clientId: '', threadId: thread.id, senderId: '', senderName: '', fromOffice: true, mine: true, createdAt: new Date().toISOString() })} />
+          onImage={(items, index) => setViewer({ items, index })} onToast={showToast} canTask={canTask && !!taskAgent} onTask={() => setTaskFor({ id: '', clientId: '', threadId: thread.id, senderId: '', senderName: '', fromOffice: true, mine: true, createdAt: new Date().toISOString() })} />
       )}
 
       {tagOpen && <TagPicker agentId={thread.kind === 'agent' ? thread.agentId ?? undefined : undefined} onClose={() => setTagOpen(false)} onPick={(p) => { setTag(p); setTagOpen(false); inputRef.current?.focus(); }} />}
-      {viewer && <Lightbox items={viewer.items} start={viewer.index} onClose={() => setViewer(null)} />}
+      {viewer && <Lightbox items={viewer.items} start={viewer.index} onClose={() => setViewer(null)} onToast={showToast} />}
       {taskFor && taskAgent && (
         <TaskFromChat agentId={taskAgent} agentName={thread.title} msg={taskFor.id ? taskFor : null} onClose={() => setTaskFor(null)}
           onDone={async (title, due, tell) => {
@@ -820,7 +949,7 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
             if (tell) {
               const f = { clientId: uid(), contactClientId: undefined, replyToId: taskFor.id || undefined };
               const body = `📋 New task for you: ${title}${due ? ` (by ${shortDate.format(new Date(`${due}T12:00:00+05:30`))})` : ''}. It is in your Tasks in the app.`;
-              merge([optimistic(f.clientId, { text: body, replyTo: null })]);
+              merge([optimistic(f.clientId, { text: body, replyTo: null })], false);
               await postText(body, f);
             }
           }} />
@@ -832,14 +961,14 @@ function Conversation({ thread, office, ping, canTask, onBack, onSent }: {
 
 // ─── One message ─────────────────────────────────────────────────────────
 
-function Bubble({ m, cont, showName, readAt, seenAt, flash, active, pinned, canPin, canTask, onToggle, onReply, onReact, onMoreReactions, onCopy, onPin, onTask, onQuote, onImage, onRetry }: {
+function Bubble({ m, cont, showName, readAt, seenAt, flash, active, pinned, canPin, canTask, onToggle, onReply, onReact, onMoreReactions, onCopy, onPin, onTask, onQuote, onImage, onRetry, onDismiss, onMediaLoad, onToast }: {
   m: ChatMsg; cont: boolean; showName: boolean; readAt: string | null; seenAt: string | null; flash: boolean; active: boolean; pinned: boolean;
   canPin: boolean; canTask: boolean;
   onToggle: () => void; onReply: () => void; onReact: (e: string) => void; onMoreReactions: () => void; onCopy: () => void; onPin: () => void; onTask: () => void;
-  onQuote: () => void; onImage: () => void; onRetry: () => void;
+  onQuote: () => void; onImage: () => void; onRetry: () => void; onDismiss: () => void; onMediaLoad: () => void; onToast: (t: string) => void;
 }) {
-  const read = m.mine && readAt && readAt >= m.createdAt;
-  const seen = m.mine && seenAt && seenAt >= m.createdAt;
+  const read = m.mine && readAt && isoKey(readAt) >= isoKey(m.createdAt);
+  const seen = m.mine && seenAt && isoKey(seenAt) >= isoKey(m.createdAt);
   const reactions = m.reactions ?? [];
   // Tools sit above the message, or below it when it is at the top of the visible area.
   const [below, setBelow] = useState(false);
@@ -860,7 +989,7 @@ function Bubble({ m, cont, showName, readAt, seenAt, flash, active, pinned, canP
               <strong>{m.replyTo.senderName}</strong>{m.replyTo.text ?? (m.replyTo.fileName ? `📎 ${m.replyTo.fileName}` : '')}
             </button>
           )}
-          {m.file && <FileView m={m} onImage={onImage} />}
+          {m.file && <FileView m={m} onImage={onImage} onLoad={onMediaLoad} onToast={onToast} />}
           {m.lat != null && m.lng != null && (
             <a className="ch-place" href={mapsUrl(m.lat, m.lng)} target="_blank" rel="noopener noreferrer">
               <MapPin size={18} aria-hidden />
@@ -873,7 +1002,10 @@ function Bubble({ m, cont, showName, readAt, seenAt, flash, active, pinned, canP
           )}
           <span className="ch-meta">
             {timeFmt.format(new Date(m.createdAt))}
-            {m.mine && (m.failed ? <button type="button" className="ch-fail" onClick={onRetry}>Not sent · retry</button>
+            {m.mine && (m.failed ? <>
+                <button type="button" className="ch-fail" onClick={onRetry}>Not sent · retry</button>
+                <button type="button" className="ch-fail" onClick={onDismiss} aria-label="Remove this unsent message">Remove</button>
+              </>
               : m.pending ? <Check size={14} aria-label="Sending" style={{ opacity: 0.5 }} />
                 : read ? <CheckCheck size={15} aria-label="Read" className="is-read" />
                   : seen ? <CheckCheck size={15} aria-label="Delivered" /> : <Check size={14} aria-label="Sent" />)}
@@ -906,75 +1038,113 @@ function Bubble({ m, cont, showName, readAt, seenAt, flash, active, pinned, canP
 }
 
 /** Private files load through the API with the session, never from a public link. */
-function useBlobUrl(url?: string | null): string | null {
-  const [src, setSrc] = useState<string | null>(null);
+function useBlobUrl(url?: string | null): { src: string | null; failed: boolean } {
+  const [state, setState] = useState<{ url: string; src: string | null; failed: boolean } | null>(null);
   useEffect(() => {
     if (!url) return;
     let made: string | null = null, alive = true;
-    crm.blob(url).then((b) => { made = URL.createObjectURL(b); if (alive) setSrc(made); else URL.revokeObjectURL(made); }).catch(() => undefined);
+    crm.blob(url)
+      .then((b) => { made = URL.createObjectURL(b); if (alive) setState({ url, src: made, failed: false }); else URL.revokeObjectURL(made); })
+      .catch(() => { if (alive) setState({ url, src: null, failed: true }); });
     return () => { alive = false; if (made) URL.revokeObjectURL(made); };
   }, [url]);
-  return url ? src : null;
+  // Only what was loaded for this url: never the previous photo while the next one loads.
+  const cur = url && state?.url === url ? state : null;
+  return { src: cur?.src ?? null, failed: !!cur?.failed };
 }
 
+/**
+ * Opens (PDF, photo) or downloads a private file. The new tab is opened straight away, inside the tap,
+ * so browsers don't block it as a pop-up; it is pointed at the file once that has loaded.
+ */
 async function openFile(f: NonNullable<ChatMsg['file']>, download: boolean) {
   if (!f.url) return;
-  const b = await crm.blob(`${f.url}${download ? '?download=true' : ''}`);
-  const url = URL.createObjectURL(b);
-  if (download) {
-    const a = document.createElement('a'); a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
-  } else window.open(url, '_blank', 'noopener');
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  const win = download ? null : window.open('', '_blank');
+  if (win) { try { win.opener = null; win.document.title = f.name; } catch { /* another origin */ } }
+  try {
+    const b = await crm.blob(`${f.url}${download ? '?download=true' : ''}`);
+    const url = URL.createObjectURL(b);
+    if (download || !win) {
+      const a = document.createElement('a'); a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+    } else win.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    win?.close();
+    throw e;
+  }
 }
+const openOrToast = (f: NonNullable<ChatMsg['file']>, download: boolean, onToast: (t: string) => void) =>
+  void openFile(f, download).catch((e) => onToast(`Couldn't open ${f.name}. ${friendlyError(e)}`));
 
-function FileView({ m, onImage }: { m: ChatMsg; onImage: () => void }) {
+function FileView({ m, onImage, onLoad, onToast }: { m: ChatMsg; onImage: () => void; onLoad: () => void; onToast: (t: string) => void }) {
   const f = m.file!;
-  const image = f.mime.startsWith('image/');
-  const src = useBlobUrl(image ? f.url : null);
-  if (image) {
+  const image = showsInline(f.mime) && !!f.url;
+  const { src, failed } = useBlobUrl(image ? f.url : null);
+  if (image && !failed) {
     return src
       // A blob: URL for a private file, so next/image can't optimise it.
       // eslint-disable-next-line @next/next/no-img-element
-      ? <button type="button" className="ch-img" onClick={onImage} aria-label={`View ${f.name}`}><img src={src} alt={f.name} /></button>
-      : <span className="ch-img is-loading"><ImageIcon size={22} aria-hidden /></span>;
+      ? <button type="button" className="ch-img" onClick={onImage} aria-label={`View ${f.name}`}><img src={src} alt={f.name} onLoad={onLoad} /></button>
+      : <span className="ch-img is-loading" role="img" aria-label={`Loading ${f.name}`}><ImageIcon size={22} aria-hidden /></span>;
   }
+  const status = !f.url ? (m.failed ? 'Not sent' : 'Sending…') : failed ? "Photo couldn't load" : null;
   return (
     <span className="ch-doc">
-      <FileText size={26} aria-hidden />
+      {f.mime.startsWith('image/') ? <ImageIcon size={26} aria-hidden /> : <FileText size={26} aria-hidden />}
       <span style={{ minWidth: 0, flex: 1 }}>
         <strong>{f.name}</strong>
-        <span>{[f.name.split('.').pop()?.toUpperCase(), size(f.size)].filter(Boolean).join(' · ')}</span>
+        <span>{[f.name.split('.').pop()?.toUpperCase(), size(f.size), status].filter(Boolean).join(' · ')}</span>
       </span>
-      {f.url && <button type="button" onClick={() => void openFile(f, f.mime !== 'application/pdf')} aria-label={`Open ${f.name}`}><Download size={16} /></button>}
+      {f.url && <button type="button" onClick={() => openOrToast(f, f.mime !== 'application/pdf', onToast)} aria-label={f.mime === 'application/pdf' ? `Open ${f.name}` : `Download ${f.name}`}><Download size={16} /></button>}
     </span>
   );
 }
 
 /** Full-screen photo viewer: arrow keys or buttons move between the chat's photos. */
-function Lightbox({ items, start, onClose }: { items: ChatMsg[]; start: number; onClose: () => void }) {
+function Lightbox({ items, start, onClose, onToast }: { items: ChatMsg[]; start: number; onClose: () => void; onToast: (t: string) => void }) {
   const [i, setI] = useState(start);
   const m = items[i];
-  const src = useBlobUrl(m?.file?.url);
+  const { src, failed } = useBlobUrl(m?.file?.url);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  // A modal: focus moves in, Tab stays inside, and focus goes back where it was on close.
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    return () => { before?.focus?.(); };
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') { e.stopPropagation(); onCloseRef.current(); }
       if (e.key === 'ArrowLeft') setI((x) => Math.max(0, x - 1));
       if (e.key === 'ArrowRight') setI((x) => Math.min(items.length - 1, x + 1));
+      if (e.key === 'Tab' && boxRef.current) {
+        const f = [...boxRef.current.querySelectorAll<HTMLElement>('button:not([disabled])')];
+        if (!f.length) return;
+        const first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        else if (!boxRef.current.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [items.length, onClose]);
+  }, [items.length]);
   if (!m?.file) return null;
   return (
-    <div className="ch-lightbox" role="dialog" aria-label="Photo viewer" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div ref={boxRef} className="ch-lightbox" role="dialog" aria-modal="true" aria-label="Photo viewer" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="ch-lb-bar">
         <span><strong>{m.mine ? 'You' : m.senderName}</strong> · {dayLabel(m.createdAt)}, {timeFmt.format(new Date(m.createdAt))}{items.length > 1 ? ` · ${i + 1} of ${items.length}` : ''}</span>
-        <button type="button" className="ch-icon" onClick={() => void openFile(m.file!, true)} aria-label="Download"><Download size={18} /></button>
-        <button type="button" className="ch-icon" onClick={onClose} aria-label="Close"><X size={20} /></button>
+        <button type="button" className="ch-icon" onClick={() => openOrToast(m.file!, true, onToast)} aria-label="Download"><Download size={18} /></button>
+        <button ref={closeRef} type="button" className="ch-icon" onClick={onClose} aria-label="Close"><X size={20} /></button>
       </div>
       {i > 0 && <button type="button" className="ch-lb-nav is-prev" onClick={() => setI(i - 1)} aria-label="Previous photo"><ChevronLeft size={28} /></button>}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {src ? <img className="ch-lb-img" src={src} alt={m.file.name} /> : <Skeleton h={300} w="50%" />}
+      {src ? <img className="ch-lb-img" src={src} alt={m.file.name} />
+        : failed ? <p className="ch-lb-caption" role="alert">This photo couldn&apos;t be loaded. Try Download.</p>
+          : <Skeleton h={300} w="50%" />}
       {i < items.length - 1 && <button type="button" className="ch-lb-nav is-next" onClick={() => setI(i + 1)} aria-label="Next photo"><ChevronRight size={28} /></button>}
       {m.text && <p className="ch-lb-caption">{m.text}</p>}
     </div>
@@ -1032,7 +1202,7 @@ function ThreadSearch({ threadId, onClose, onPick }: { threadId: string; onClose
 // ─── Details panel ───────────────────────────────────────────────────────
 
 function Thumb({ m, onClick }: { m: ChatMsg; onClick: () => void }) {
-  const src = useBlobUrl(m.file?.url);
+  const { src } = useBlobUrl(m.file?.url);
   return (
     <button type="button" className="ch-thumb" onClick={onClick} aria-label={`View ${m.file?.name}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1041,9 +1211,9 @@ function Thumb({ m, onClick }: { m: ChatMsg; onClick: () => void }) {
   );
 }
 
-function InfoPanel({ thread, presence, onClose, onJump, onImage, canTask, onTask }: {
+function InfoPanel({ thread, presence, onClose, onJump, onImage, onToast, canTask, onTask }: {
   thread: ChatThread; presence: string | null; onClose: () => void; onJump: (id: string) => void; onImage: (items: ChatMsg[], index: number) => void;
-  canTask: boolean; onTask: () => void;
+  onToast: (t: string) => void; canTask: boolean; onTask: () => void;
 }) {
   const [tab, setTab] = useState<'media' | 'files' | 'places' | 'partners'>('media');
   const [data, setData] = useState<Shared | null>(null);
@@ -1054,11 +1224,13 @@ function InfoPanel({ thread, presence, onClose, onJump, onImage, canTask, onTask
     return () => { alive = false; };
   }, [thread.id]);
   const field = thread.kind === 'agent' || (thread.kind === 'direct' && !!thread.presence);
+  // Photos the browser can show go in Photos; HEIC (iPhone) photos are listed with the files to download.
+  const media = useMemo(() => (data?.media ?? []).filter((m) => showsInline(m.file?.mime)), [data]);
+  const files = useMemo(() => [...(data?.media ?? []).filter((m) => !showsInline(m.file?.mime)), ...(data?.files ?? [])], [data]);
   const tabs: { k: typeof tab; l: string; n: number }[] = [
-    { k: 'media', l: 'Photos', n: data?.media.length ?? 0 }, { k: 'files', l: 'Files', n: data?.files.length ?? 0 },
+    { k: 'media', l: 'Photos', n: media.length }, { k: 'files', l: 'Files', n: files.length },
     { k: 'places', l: 'Places', n: data?.places.length ?? 0 }, { k: 'partners', l: 'Partners', n: data?.partners.length ?? 0 },
   ];
-  const media = data?.media ?? [];
   return (
     <aside className="ch-info" aria-label="Chat details">
       <div className="ch-info-head">
@@ -1079,10 +1251,10 @@ function InfoPanel({ thread, presence, onClose, onJump, onImage, canTask, onTask
           {canTask && <button type="button" onClick={onTask}><ClipboardList size={14} aria-hidden /> Give a task</button>}
         </div>
       )}
-      <div className="ch-info-tabs" role="tablist">
-        {tabs.map((t) => <button key={t.k} type="button" role="tab" aria-selected={tab === t.k} onClick={() => setTab(t.k)}>{t.l}{t.n ? <span>{t.n}</span> : null}</button>)}
+      <div className="ch-info-tabs" role="tablist" aria-label="Shared in this chat">
+        {tabs.map((t) => <button key={t.k} type="button" role="tab" aria-selected={tab === t.k} aria-controls="ch-info-body" onClick={() => setTab(t.k)}>{t.l}{t.n ? <span>{t.n}</span> : null}</button>)}
       </div>
-      <div className="ch-info-body">
+      <div className="ch-info-body" id="ch-info-body" role="tabpanel">
         {!data ? <Skeleton h={160} /> : tab === 'media' ? (
           media.length === 0 ? <p className="crm-sub">No photos shared yet.</p> : (
             <>
@@ -1091,11 +1263,12 @@ function InfoPanel({ thread, presence, onClose, onJump, onImage, canTask, onTask
             </>
           )
         ) : tab === 'files' ? (
-          data.files.length === 0 ? <p className="crm-sub">No documents shared yet.</p> : (
+          files.length === 0 ? <p className="crm-sub">No documents shared yet.</p> : (
             <ul className="ch-info-list">
-              {data.files.map((m) => (
+              {files.map((m) => (
                 <li key={m.id}>
-                  <button type="button" onClick={() => m.file && void openFile(m.file, m.file.mime !== 'application/pdf')}><FileText size={18} aria-hidden />
+                  <button type="button" onClick={() => m.file && openOrToast(m.file, m.file.mime !== 'application/pdf', onToast)}>
+                    {m.file?.mime.startsWith('image/') ? <ImageIcon size={18} aria-hidden /> : <FileText size={18} aria-hidden />}
                     <span><strong>{m.file?.name}</strong><span>{[m.mine ? 'You' : m.senderName, listTime(m.createdAt), size(m.file?.size)].filter(Boolean).join(' · ')}</span></span>
                   </button>
                   <button type="button" className="ch-icon is-sm" onClick={() => onJump(m.id)} aria-label="Show in chat"><CornerUpLeft size={14} /></button>

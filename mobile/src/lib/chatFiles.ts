@@ -33,32 +33,70 @@ export async function pickGallery(): Promise<Picked | 'denied' | null> {
   return shrink(r.assets[0].uri, r.assets[0].width);
 }
 
-const DOC_TYPES = [
-  'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'text/csv', 'text/plain', 'image/*',
-];
+/** What the server accepts: extension → type (keep in step with ChatController.Allowed). */
+const ALLOWED: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', gif: 'image/gif',
+  pdf: 'application/pdf',
+  doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  csv: 'text/csv', txt: 'text/plain',
+};
+const EXT_OF: Record<string, string> = { ...Object.fromEntries(Object.entries(ALLOWED).map(([e, m]) => [m, e])), 'image/jpeg': 'jpg', 'image/heif': 'heic', 'application/csv': 'csv', 'text/comma-separated-values': 'csv' };
+const DOC_TYPES = [...new Set(Object.values(ALLOWED))];
 
-export async function pickDocument(): Promise<Picked | null> {
+/** Size of a file on the phone, or null if it can't be read. */
+export function fileSize(uri: string): number | null {
+  try { const f = new File(uri); return f.exists ? f.size : null; } catch { return null; }
+}
+/** Whether a file the phone kept (a photo we sent, a queued upload) is still there; the OS can clear the cache. */
+export function localFileExists(uri: string): boolean {
+  if (!uri.startsWith('file:')) return true; // content:// and others: let the upload decide
+  try { return new File(uri).exists; } catch { return false; }
+}
+
+/** 'unsupported' when the file isn't one the chat can send. */
+export async function pickDocument(): Promise<Picked | 'unsupported' | null> {
   const r = await DocumentPicker.getDocumentAsync({ type: DOC_TYPES, copyToCacheDirectory: true, multiple: false });
   if (r.canceled || !r.assets?.length) return null;
   const a = r.assets[0];
-  return { uri: a.uri, name: a.name, mime: a.mimeType ?? 'application/octet-stream', size: a.size ?? null };
+  const mime = (a.mimeType ?? '').toLowerCase();
+  let name = (a.name || 'file').trim();
+  const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
+  if (!ALLOWED[ext]) {
+    // Some Android apps (Drive, file managers) give a name with no extension: add it from the type.
+    const fromMime = EXT_OF[mime];
+    if (!fromMime) return 'unsupported';
+    name = `${name}.${fromMime}`;
+  }
+  const finalExt = name.split('.').pop()!.toLowerCase();
+  return { uri: a.uri, name, mime: ALLOWED[finalExt] ?? mime, size: a.size ?? fileSize(a.uri) };
 }
 
-/** The address and header to show a private chat photo. */
-export function imageSource(m: ChatMsg) {
-  if (m.file?.localUri) return { uri: m.file.localUri };
-  return { uri: `${API_URL}${m.file?.url ?? ''}`, headers: { Authorization: `Bearer ${accessToken() ?? ''}` } };
+type Src = { uri: string; headers?: Record<string, string> };
+const srcCache = new Map<string, { key: string; src: Src }>();
+/**
+ * The address and header to show a private chat photo. The same object comes back while nothing changes,
+ * so the image isn't reloaded on every refresh. A photo we sent whose phone copy is gone loads from the server.
+ */
+export function imageSource(m: ChatMsg): Src {
+  const tok = accessToken() ?? '';
+  const local = m.file?.localUri ?? '';
+  const url = m.file?.url ?? '';
+  const key = `${local}|${url}|${tok}`;
+  const hit = srcCache.get(m.clientId);
+  if (hit && hit.key === key) return hit.src;
+  const src: Src = local && (localFileExists(local) || !url) ? { uri: local } : { uri: `${API_URL}${url}`, headers: { Authorization: `Bearer ${tok}` } };
+  srcCache.set(m.clientId, { key, src });
+  return src;
 }
 
 /** Downloads a private chat file (signed in) into the app's own cache and offers "Open with". */
 export async function openChatFile(m: ChatMsg): Promise<void> {
   const f = m.file;
   if (!f) return;
-  let uri = f.localUri;
-  if (!uri) {
+  let uri = f.localUri && localFileExists(f.localUri) ? f.localUri : undefined;
+  if (!uri && f.url) {
     const dir = new Directory(Paths.cache, 'chat');
     dir.create({ idempotent: true, intermediates: true });
     const safe = f.name.replace(/[^\w.\- ]+/g, '_').slice(-80) || 'file';
@@ -68,5 +106,6 @@ export async function openChatFile(m: ChatMsg): Promise<void> {
     }
     uri = dest.uri;
   }
+  if (!uri) throw new Error('missing');
   if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: f.mime, dialogTitle: f.name });
 }
