@@ -77,7 +77,18 @@ const config: ExpoConfig = {
   plugins: [
     // Only the two phone CPU types (32-bit ARM for older phones, 64-bit ARM for newer ones); emulator-only
     // x86 code is left out, which makes the APK much smaller to download and install.
-    ['expo-build-properties', { android: { buildArchs: ['armeabi-v7a', 'arm64-v8a'] } }],
+    // Calls (LiveKit): its WebRTC classes are called from native code, so the release shrinker must keep them; and
+    // JniZeroJni only exists on the native side, which R8 would otherwise stop the build over as a "missing class".
+    ['expo-build-properties', {
+      android: {
+        buildArchs: ['armeabi-v7a', 'arm64-v8a'],
+        extraProguardRules: [
+          '-keep class livekit.org.webrtc.** { *; }',
+          '-keep class livekit.org.jni_zero.** { *; }',
+          '-dontwarn livekit.org.jni_zero.JniZeroJni',
+        ].join('\n'),
+      },
+    }],
     'expo-router',
     'expo-sqlite',
     'expo-secure-store',
