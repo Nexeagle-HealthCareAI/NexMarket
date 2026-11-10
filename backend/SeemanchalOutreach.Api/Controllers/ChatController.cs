@@ -40,7 +40,7 @@ namespace SeemanchalOutreach.Api.Controllers
     [ApiController]
     [Authorize]
     [Route("api/v1/chat")]
-    public class ChatController : ControllerBase
+    public partial class ChatController : ControllerBase
     {
         public const long MaxFileBytes = 15 * 1024 * 1024;
         private const int MaxText = 4000;

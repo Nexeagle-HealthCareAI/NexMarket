@@ -5,13 +5,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowDown, ArrowLeft, Check, CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Copy, CornerUpLeft, Download, FileText, Image as ImageIcon,
-  Info, Lock, MapPin, MessageSquarePlus, Paperclip, Phone, PhoneIncoming, PhoneMissed, Pin, PinOff, Plus, Search, Send, SmilePlus, Smile, Tag, Trash2, Upload, Users, Video, X, Zap,
+  Info, Languages, Lock, MapPin, MessageSquarePlus, Paperclip, Phone, PhoneIncoming, PhoneMissed, Pin, PinOff, Plus, Search, Send, Settings2, SmilePlus, Smile, Sparkles, Tag, Trash2, Upload, Users, Video, X, Zap,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
 import { EMOJI } from '@/lib/crm/emoji';
 import { lastSeenText, liveText, type Live } from '@/lib/crm/presence';
 import { canAssignBlocks, useAccess } from '@/lib/crm/access';
+import { digest, loadChatAi, needsEnglish, saveChatAi, suggestReplies, summarise, taskIdea, translateMessages, useChatAi, type ChatSummary, type Digest, type TaskIdea } from '@/lib/crm/chatAi';
 import { callNoteText, inCallCount, joinCall, live as callLive, startCall, useCalls, type Call, type CallNote } from '@/lib/crm/calls';
 import { contactTypeLabel, ErrorBox, friendlyError, initials, Modal, PageHead, Skeleton, useToast } from '@/components/crm/ui';
 
@@ -148,8 +149,12 @@ function ChatPage() {
   const [filter, setFilter] = useState<ListFilter>('all');
   const [ping, setPing] = useState(0);
   const [newOpen, setNewOpen] = useState(false);
+  const [digestOpen, setDigestOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const calls = useCalls();
+  const ai = useChatAi();
+  useEffect(() => { void loadChatAi(); }, []);
   // The call or huddle going on in each chat (mine first, then what /calls/active says).
   const liveCalls = useMemo(() => {
     const m = new Map<string, Call>();
@@ -222,6 +227,8 @@ function ChatPage() {
   return (
     <main className="crm-page">
       <PageHead title="Chat" sub={office && counts.field ? `${onShift} of ${counts.field} field agents on shift now${onlineNow ? ` · ${onlineNow} online` : ''} · Ctrl+K to find a chat` : 'Talk with the office, the whole team, or anyone one to one.'}>
+        {office && ai.status.summary && <button type="button" className="crm-btn is-secondary ch-ai-btn" onClick={() => setDigestOpen(true)}><Sparkles size={16} aria-hidden /> Today&apos;s digest</button>}
+        {ai.canManage && <button type="button" className="crm-btn is-secondary" onClick={() => setAiOpen(true)} aria-label="Smart chat settings" title="Smart chat settings"><Settings2 size={16} aria-hidden /> Smart chat</button>}
         <button type="button" className="crm-btn" onClick={() => setNewOpen(true)}><MessageSquarePlus size={16} aria-hidden /> New chat</button>
       </PageHead>
       {error && <ErrorBox message={error} onRetry={loadThreads} />}
@@ -284,6 +291,8 @@ function ChatPage() {
         </section>
       </div>
       {newOpen && <NewChat onClose={() => setNewOpen(false)} onOpened={(id) => { setNewOpen(false); void loadThreads().then(() => open(id)); }} />}
+      {digestOpen && <DigestModal onClose={() => setDigestOpen(false)} onOpen={(id) => { setDigestOpen(false); open(id); }} />}
+      {aiOpen && <SmartChatSettings onClose={() => setAiOpen(false)} />}
     </main>
   );
 }
@@ -407,6 +416,14 @@ function Conversation({ thread, office, ping, canTask, callsOn, liveCall, inCall
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [announce, setAnnounce] = useState('');
   const [toast, showToast] = useToast();
+  const ai = useChatAi();
+  const [tr, setTr] = useState<Record<string, string>>({});
+  const [sugg, setSugg] = useState<{ id: string; list: string[] } | null>(null);
+  const [summary, setSummary] = useState<{ busy: boolean; data?: ChatSummary; error?: string; since?: string } | null>(null);
+  const [idea, setIdea] = useState<TaskIdea | null>(null);
+  const [ideaFor, setIdeaFor] = useState<TaskIdea | null>(null);
+  const trAsked = useRef(new Set<string>());
+  const suggAsked = useRef<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -619,10 +636,14 @@ function Conversation({ thread, office, ping, canTask, callsOn, liveCall, inCall
     if (inputRef.current) inputRef.current.style.height = '';
   };
 
-  const postText = async (body: string, f: ReturnType<typeof baseFields>) => {
+  const postText = async (body: string, f: ReturnType<typeof baseFields>, spot = true) => {
     try {
       const m = await crm.post<ChatMsg>(`/api/v1/chat/threads/${thread.id}/messages`, { ...f, text: body });
       merge([m]); onSent();
+      // Smart chat: an office message that asks the agent to do something can become a task with one tap.
+      if (spot && ai.status.tasks && canTask && thread.kind === 'agent' && taskAgent && body.length >= 8) {
+        taskIdea(thread.id, m.id).then((r) => { if (r.isTask) setIdea(r); }).catch(() => undefined);
+      }
     } catch (e) {
       setMsgs((cur) => cur.map((m) => (m.clientId === f.clientId ? { ...m, pending: false, failed: true } : m)));
       showToast(friendlyError(e));
@@ -795,6 +816,42 @@ function Conversation({ thread, office, ping, canTask, callsOn, liveCall, inCall
   const removeQuick = (q: string) => { const next = quick.filter((x) => x !== q); setQuick(next); saveQuick(next); };
   const grow = (el: HTMLTextAreaElement) => { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 160)}px`; };
 
+  // ─── Smart chat ───
+  // Messages written in Hindi or Bangla script get an English version under them.
+  useEffect(() => {
+    if (!ai.status.translate) return;
+    const want = msgs.filter((m) => !m.mine && !m.pending && !m.failed && needsEnglish(m.text) && !trAsked.current.has(m.id)).slice(-40).map((m) => m.id);
+    if (!want.length) return;
+    const t = setTimeout(() => {
+      for (const id of want) trAsked.current.add(id);
+      translateMessages(thread.id, want)
+        .then((r) => setTr((cur) => { const next = { ...cur }; for (const it of r.items) next[it.id] = it.text; return next; }))
+        .catch(() => undefined); // not retried: the original text is still there
+    }, 400);
+    return () => clearTimeout(t);
+  }, [msgs, ai.status.translate, thread.id]);
+
+  // Suggested replies when the last word in the chat is someone else's (in a field agent's chat the office answers as one).
+  const lastReal = useMemo(() => [...msgs].reverse().find((m) => !m.call && !m.pending && !m.failed) ?? null, [msgs]);
+  const theirs = !!lastReal && !lastReal.mine && !(office && thread.kind === 'agent' && lastReal.fromOffice);
+  useEffect(() => {
+    if (!ai.status.replies || !theirs || !lastReal || suggAsked.current === lastReal.id) return;
+    const id = lastReal.id;
+    const t = setTimeout(() => {
+      suggAsked.current = id;
+      suggestReplies(thread.id).then((r) => setSugg({ id: r.forMessage ?? id, list: r.replies ?? [] })).catch(() => undefined);
+    }, 700);
+    return () => clearTimeout(t);
+  }, [ai.status.replies, theirs, lastReal, thread.id]);
+  const showSugg = ai.status.replies && theirs && !!sugg && sugg.id === lastReal?.id && sugg.list.length > 0 && !text && !quickShown && staged.length === 0;
+
+  const catchUp = async (since?: string) => {
+    setSummary({ busy: true, since });
+    try { setSummary({ busy: false, data: await summarise(thread.id, since), since }); }
+    catch (e) { setSummary({ busy: false, error: friendlyError(e), since }); }
+  };
+  const firstUnreadAt = unreadFrom ? msgs.find((m) => m.id === unreadFrom.id)?.createdAt : undefined;
+
   // ─── Rows: day lines, the "new messages" line, and messages grouped when the same person writes again within 5 minutes.
   const rows: Row[] = [];
   let lastDay = '';
@@ -837,9 +894,12 @@ function Conversation({ thread, office, ping, canTask, callsOn, liveCall, inCall
               <button type="button" className="ch-icon" disabled={calling || inCall} onClick={() => void call(true)} aria-label={`Video call ${thread.title}`} title="Video call"><Video size={19} /></button>
             </>
           ))}
+          {ai.status.summary && <button type="button" className="ch-icon ch-ai-icon" aria-label="Catch up: sum up this chat" title="Catch up: sum up this chat" aria-pressed={!!summary} onClick={() => (summary ? setSummary(null) : void catchUp())}><Sparkles size={18} /></button>}
           <button type="button" className="ch-icon" aria-label="Search this chat" aria-pressed={searchOpen} onClick={() => setSearchOpen((o) => !o)}><Search size={18} /></button>
           <button type="button" className="ch-icon" aria-label="Chat details and shared files" aria-pressed={infoOpen} onClick={() => setInfoOpen((o) => !o)}><Info size={18} /></button>
         </header>
+
+        {summary && <SummaryPanel s={summary} onClose={() => setSummary(null)} onRetry={() => void catchUp(summary.since)} />}
 
         {searchOpen && <ThreadSearch threadId={thread.id} onClose={() => setSearchOpen(false)} onPick={(id) => void jumpTo(id)} />}
 
@@ -870,13 +930,14 @@ function Conversation({ thread, office, ping, canTask, callsOn, liveCall, inCall
             </div>
           ) : null}
           {rows.map((r, i) => r.kind === 'day' ? <div key={`d${i}`} className="ch-day"><span>{dayLabel(r.at)}</span></div>
-            : r.kind === 'unread' ? <div key="unread" className="ch-unread-line"><span>{r.n} new {r.n === 1 ? 'message' : 'messages'}</span></div>
+            : r.kind === 'unread' ? <div key="unread" className="ch-unread-line"><span>{r.n} new {r.n === 1 ? 'message' : 'messages'}
+              {ai.status.summary && r.n >= 4 && firstUnreadAt && <button type="button" className="ch-unread-sum" onClick={() => void catchUp(new Date(new Date(firstUnreadAt).getTime() - 1).toISOString())}><Sparkles size={12} aria-hidden /> Sum up</button>}</span></div>
               : r.m.call ? <CallPill key={r.m.clientId} m={r.m} note={r.m.call} canCall={callsOn && !inCall && !calling}
                 onCallBack={() => void call(thread.kind === 'team' ? true : r.m.call!.video)} team={thread.kind === 'team'} />
               : (
                 <Bubble key={r.m.clientId} m={r.m} cont={r.cont} showName={!r.m.mine && thread.kind !== 'direct' && (thread.kind === 'team' || r.m.fromOffice)}
                   readAt={readAt} seenAt={seenAt} flash={flash === r.m.id} active={active === r.m.id} pinned={pinned?.message.id === r.m.id}
-                  canPin={canPin} canTask={canTask && !!taskAgent}
+                  canPin={canPin} canTask={canTask && !!taskAgent} translation={tr[r.m.id]}
                   onToggle={() => setActive((a) => (a === r.m.id ? null : r.m.id))}
                   onReply={() => { setReply(r.m); setActive(null); inputRef.current?.focus(); }}
                   onReact={(e) => void react(r.m, e)} onMoreReactions={() => { setEmojiFor(r.m.id); setEmojiGroup(0); }}
@@ -929,6 +990,23 @@ function Conversation({ thread, office, ping, canTask, callsOn, liveCall, inCall
               {quickList.length === 0 && <li className="crm-sub" style={{ padding: '6px 10px' }}>No quick reply matches.</li>}
             </ul>
             {slash === null && <button type="button" className="ch-quick-save" onClick={saveCurrentAsQuick}><Plus size={14} aria-hidden /> Save what I&apos;ve typed as a quick reply</button>}
+          </div>
+        )}
+
+        {idea && (
+          <div className="ch-ai-idea" role="status">
+            <Sparkles size={16} aria-hidden />
+            <span>Make this a task for {thread.title.split(' ')[0]}? <strong>{idea.title}</strong>{idea.dueDate ? ` · due ${dueText(idea.dueDate)}` : ''}</span>
+            <button type="button" className="crm-btn is-sm" onClick={() => { setIdeaFor(idea); setTaskFor(msgs.find((m) => m.id === idea.messageId) ?? null); setIdea(null); }}>Make it a task</button>
+            <button type="button" className="ch-icon is-sm" onClick={() => setIdea(null)} aria-label="No, it's not a task"><X size={16} /></button>
+          </div>
+        )}
+
+        {showSugg && (
+          <div className="ch-sugg" role="group" aria-label="Suggested replies">
+            <span className="ch-sugg-label"><Sparkles size={13} aria-hidden /> Suggested</span>
+            {sugg!.list.map((q) => <button key={q} type="button" onClick={() => pickQuick(q)} title="Put in the message box to edit or send">{q}</button>)}
+            <button type="button" className="ch-icon is-sm" onClick={() => setSugg(null)} aria-label="Hide suggestions"><X size={14} /></button>
           </div>
         )}
 
@@ -998,16 +1076,16 @@ function Conversation({ thread, office, ping, canTask, callsOn, liveCall, inCall
 
       {tagOpen && <TagPicker agentId={thread.kind === 'agent' ? thread.agentId ?? undefined : undefined} onClose={() => setTagOpen(false)} onPick={(p) => { setTag(p); setTagOpen(false); inputRef.current?.focus(); }} />}
       {viewer && <Lightbox items={viewer.items} start={viewer.index} onClose={() => setViewer(null)} onToast={showToast} />}
-      {taskFor && taskAgent && (
-        <TaskFromChat agentId={taskAgent} agentName={thread.title} msg={taskFor.id ? taskFor : null} onClose={() => setTaskFor(null)}
+      {(taskFor || ideaFor) && taskAgent && (
+        <TaskFromChat agentId={taskAgent} agentName={thread.title} msg={taskFor?.id ? taskFor : null} idea={ideaFor} onClose={() => { setTaskFor(null); setIdeaFor(null); }}
           onDone={async (title, due, tell) => {
-            setTaskFor(null);
+            setTaskFor(null); setIdeaFor(null);
             showToast(`Task sent to ${thread.title}.`);
             if (tell) {
-              const f = { clientId: uid(), contactClientId: undefined, replyToId: taskFor.id || undefined };
+              const f = { clientId: uid(), contactClientId: undefined, replyToId: taskFor?.id || undefined };
               const body = `📋 New task for you: ${title}${due ? ` (by ${shortDate.format(new Date(`${due}T12:00:00+05:30`))})` : ''}. It is in your Tasks in the app.`;
               merge([optimistic(f.clientId, { text: body, replyTo: null })], false);
-              await postText(body, f);
+              await postText(body, f, false);
             }
           }} />
       )}
@@ -1057,9 +1135,9 @@ function CallPill({ m, note, canCall, team, onCallBack }: { m: ChatMsg; note: Ca
 
 // ─── One message ─────────────────────────────────────────────────────────
 
-function Bubble({ m, cont, showName, readAt, seenAt, flash, active, pinned, canPin, canTask, onToggle, onReply, onReact, onMoreReactions, onCopy, onPin, onTask, onQuote, onImage, onRetry, onDismiss, onMediaLoad, onToast }: {
+function Bubble({ m, cont, showName, readAt, seenAt, flash, active, pinned, canPin, canTask, translation, onToggle, onReply, onReact, onMoreReactions, onCopy, onPin, onTask, onQuote, onImage, onRetry, onDismiss, onMediaLoad, onToast }: {
   m: ChatMsg; cont: boolean; showName: boolean; readAt: string | null; seenAt: string | null; flash: boolean; active: boolean; pinned: boolean;
-  canPin: boolean; canTask: boolean;
+  canPin: boolean; canTask: boolean; translation?: string;
   onToggle: () => void; onReply: () => void; onReact: (e: string) => void; onMoreReactions: () => void; onCopy: () => void; onPin: () => void; onTask: () => void;
   onQuote: () => void; onImage: () => void; onRetry: () => void; onDismiss: () => void; onMediaLoad: () => void; onToast: (t: string) => void;
 }) {
@@ -1093,6 +1171,7 @@ function Bubble({ m, cont, showName, readAt, seenAt, flash, active, pinned, canP
             </a>
           )}
           {m.text && <span className="ch-text"><Linkify text={m.text} /></span>}
+          {translation && <span className="ch-tr" title="Translated by smart chat"><Languages size={12} aria-label="English translation" /> {translation}</span>}
           {m.contact && (
             <Link className="ch-tag" href={`/admin/partners?id=${encodeURIComponent(m.contact.id)}`}><Tag size={12} aria-hidden /> {m.contact.name}</Link>
           )}
@@ -1405,23 +1484,24 @@ function InfoPanel({ thread, presence, onClose, onJump, onImage, onToast, canTas
 
 // ─── Make a task from a message ──────────────────────────────────────────
 
-function TaskFromChat({ agentId, agentName, msg, onClose, onDone }: {
-  agentId: string; agentName: string; msg: ChatMsg | null; onClose: () => void; onDone: (title: string, due: string | null, tell: boolean) => void;
+function TaskFromChat({ agentId, agentName, msg, idea, onClose, onDone }: {
+  agentId: string; agentName: string; msg: ChatMsg | null; idea?: TaskIdea | null; onClose: () => void; onDone: (title: string, due: string | null, tell: boolean) => void;
 }) {
   const source = (msg?.text ?? (msg?.file ? `See the file: ${msg.file.name}` : '')).trim();
   const firstLine = source.split('\n')[0];
-  const [title, setTitle] = useState(firstLine.length > 120 ? `${firstLine.slice(0, 117)}…` : firstLine);
-  const [detail, setDetail] = useState(source.length > title.length ? source : '');
-  const [priority, setPriority] = useState('normal');
-  const [due, setDue] = useState(tomorrowIst());
-  const [tell, setTell] = useState(true);
+  const [title, setTitle] = useState(idea?.title ?? (firstLine.length > 120 ? `${firstLine.slice(0, 117)}…` : firstLine));
+  const [detail, setDetail] = useState(idea ? (idea.detail ?? '') : source.length > title.length ? source : '');
+  const [priority, setPriority] = useState<string>(idea?.priority ?? 'normal');
+  const [due, setDue] = useState(idea?.dueDate ?? tomorrowIst());
+  // A task suggested from the office's own message: the agent already has the message, so no second note by default.
+  const [tell, setTell] = useState(!idea);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const save = async () => {
     if (!title.trim()) { setError('Write what the agent should do.'); return; }
     setBusy(true); setError(null);
     try {
-      await crm.post('/api/v1/tasks', { agentIds: [agentId], title: title.trim(), detail: detail.trim() || undefined, priority, dueDate: due || undefined });
+      await crm.post('/api/v1/tasks', { agentIds: [agentId], title: title.trim(), detail: detail.trim() || undefined, priority, dueDate: due || undefined, contactClientId: idea?.contactClientId || undefined });
       onDone(title.trim(), due || null, tell);
     } catch (e) { setError(friendlyError(e)); setBusy(false); }
   };
@@ -1431,7 +1511,7 @@ function TaskFromChat({ agentId, agentName, msg, onClose, onDone }: {
         <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
         <button type="button" className="crm-btn" onClick={() => void save()} disabled={busy}>{busy ? 'Sending…' : 'Send task'}</button>
       </>}>
-      <p className="crm-sub" style={{ margin: 0, fontSize: 13 }}>It appears in the agent&apos;s Tasks in the app until they mark it done.</p>
+      <p className="crm-sub" style={{ margin: 0, fontSize: 13 }}>{idea ? <><Sparkles size={13} aria-hidden style={{ verticalAlign: -2 }} /> Filled in by smart chat from your message: check it before sending. </> : null}It appears in the agent&apos;s Tasks in the app until they mark it done.</p>
       <label className="crm-field"><span>What to do</span>
         <input className="crm-input" value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Visit Dr. Shahid Anwar and collect the OPD list" />
       </label>
@@ -1451,6 +1531,136 @@ function TaskFromChat({ agentId, agentName, msg, onClose, onDone }: {
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
         <input type="checkbox" checked={tell} onChange={(e) => setTell(e.target.checked)} /> Also tell {agentName.split(' ')[0]} in this chat
       </label>
+      {error && <div className="crm-error" role="alert">{error}</div>}
+    </Modal>
+  );
+}
+
+// ─── Smart chat ──────────────────────────────────────────────────────────
+
+/** "today", "tomorrow" or "Fri 14 Nov" for a yyyy-MM-dd day (India time). */
+function dueText(day: string): string {
+  const today = istDay(new Date().toISOString());
+  if (day === today) return 'today';
+  if (day === tomorrowIst()) return 'tomorrow';
+  return shortDate.format(new Date(`${day}T12:00:00+05:30`));
+}
+
+function SummaryPanel({ s, onClose, onRetry }: { s: { busy: boolean; data?: ChatSummary; error?: string; since?: string }; onClose: () => void; onRetry: () => void }) {
+  return (
+    <section className="ch-sum" aria-label="Catch-up summary" aria-busy={s.busy}>
+      <div className="ch-sum-head">
+        <strong><Sparkles size={15} aria-hidden /> {s.since ? 'New since you last read' : 'Catch up'}</strong>
+        {s.data && <span className="crm-cell-sub">{s.data.count} messages · {dayLabel(s.data.from)} {timeFmt.format(new Date(s.data.from))} – {timeFmt.format(new Date(s.data.to))}</span>}
+        <button type="button" className="ch-icon is-sm" onClick={onClose} aria-label="Close summary"><X size={16} /></button>
+      </div>
+      {s.busy ? <div className="ch-sum-wait"><Skeleton h={14} /><Skeleton h={14} /><Skeleton h={14} /></div>
+        : s.error ? <div className="crm-error" role="alert">{s.error} <button type="button" className="crm-btn is-secondary is-sm" onClick={onRetry}>Try again</button></div>
+          : s.data && (
+            <>
+              <ul className="ch-sum-points">{s.data.points.map((p, i) => <li key={i}>{p}</li>)}</ul>
+              {s.data.todo.length > 0 && (
+                <>
+                  <span className="ch-sum-label">Still to do</span>
+                  <ul className="ch-sum-todo">{s.data.todo.map((p, i) => <li key={i}><ClipboardList size={13} aria-hidden /> {p}</li>)}</ul>
+                </>
+              )}
+              <span className="ch-sum-note">Written by AI from the messages above: check anything important in the chat itself.</span>
+            </>
+          )}
+    </section>
+  );
+}
+
+function DigestModal({ onClose, onOpen }: { onClose: () => void; onOpen: (threadId: string) => void }) {
+  const [hours, setHours] = useState(24);
+  const [data, setData] = useState<Digest | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    const t = setTimeout(() => {
+      setBusy(true); setError(null);
+      digest(hours).then((d) => { if (alive) setData(d); }).catch((e) => { if (alive) setError(friendlyError(e)); }).finally(() => { if (alive) setBusy(false); });
+    }, 0);
+    return () => { alive = false; clearTimeout(t); };
+  }, [hours]);
+  const urgent = data?.chats.filter((c) => c.urgent).length ?? 0;
+  const waiting = data?.chats.filter((c) => c.waiting).length ?? 0;
+  return (
+    <Modal title="Today's digest" onClose={onClose} wide>
+      <div className="ch-dig-bar">
+        <span className="crm-sub">What the field agents said in the last</span>
+        <div className="ch-filters" role="group" aria-label="Period">
+          {[12, 24, 48].map((h) => <button key={h} type="button" aria-pressed={hours === h} onClick={() => setHours(h)}>{h} h</button>)}
+        </div>
+      </div>
+      {error && <div className="crm-error" role="alert">{error}</div>}
+      {busy && !data ? <Skeleton h={240} /> : data && data.count === 0 ? (
+        <p className="crm-sub">No field agent has written in the last {data.hours} hours.</p>
+      ) : data && (
+        <div aria-busy={busy}>
+          {data.overview && <p className="ch-dig-over"><Sparkles size={15} aria-hidden /> {data.overview}</p>}
+          <p className="crm-cell-sub" style={{ margin: '0 0 8px' }}>{data.count} {data.count === 1 ? 'agent' : 'agents'} wrote{urgent ? ` · ${urgent} urgent` : ''}{waiting ? ` · ${waiting} waiting for a reply` : ''}</p>
+          <ul className="ch-dig-list">
+            {data.chats.map((c) => (
+              <li key={c.threadId}>
+                <button type="button" onClick={() => onOpen(c.threadId)} className={c.urgent ? 'is-urgent' : undefined}>
+                  <span className="ch-dig-top">
+                    <strong>{c.name}</strong>{c.block && <span className="crm-cell-sub">{c.block}</span>}
+                    {c.urgent && <span className="ch-dig-tag is-urgent">Urgent</span>}
+                    {c.waiting && <span className="ch-dig-tag">Waiting for reply</span>}
+                    <span className="crm-cell-sub" style={{ marginLeft: 'auto' }}>{listTime(c.lastAt)}</span>
+                  </span>
+                  <span className="ch-dig-sum">{c.summary}</span>
+                  {c.urgent && c.why && <span className="ch-dig-why">{c.why}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="ch-sum-note">Written by AI from the chats. Phone numbers, ID numbers and patient names were hidden from it.</p>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+const AI_FEATURES: { k: 'translate' | 'replies' | 'summary' | 'tasks'; title: string; text: string }[] = [
+  { k: 'translate', title: 'Translate messages', text: 'Agents read the office in their app language (Hindi, Bangla, Hinglish or English); the office sees an English line under messages written in Hindi or Bangla.' },
+  { k: 'replies', title: 'Suggested replies', text: 'Three short replies to tap and edit, in the reader’s language. Nothing is sent until they press send.' },
+  { k: 'summary', title: 'Catch-up and daily digest', text: 'Sum up a chat or the new messages, and a digest of all field agents’ chats with urgent ones first.' },
+  { k: 'tasks', title: 'Spot tasks', text: 'When the office asks an agent to do something, offer to make it a task; when an agent writes it’s done, the app offers to mark the task done.' },
+];
+
+function SmartChatSettings({ onClose }: { onClose: () => void }) {
+  const { status } = useChatAi();
+  const [v, setV] = useState({ translate: status.translate, replies: status.replies, summary: status.summary, tasks: status.tasks });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    setBusy(true); setError(null);
+    try { await saveChatAi(v); onClose(); } catch (e) { setError(friendlyError(e)); setBusy(false); }
+  };
+  return (
+    <Modal title="Smart chat" onClose={onClose}
+      actions={<>
+        <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
+        <button type="button" className="crm-btn" onClick={() => void save()} disabled={busy || !status.configured}>{busy ? 'Saving…' : 'Save'}</button>
+      </>}>
+      <p className="crm-sub" style={{ margin: 0 }}>AI helpers in chat, run by Groq. They only suggest: people still decide what is sent, saved or marked done.</p>
+      {!status.configured && <div className="crm-error" role="alert">The Groq API key isn&apos;t set on the server yet (Groq__ApiKey), so smart chat can&apos;t be switched on.</div>}
+      <div className="ch-ai-list">
+        {AI_FEATURES.map((f) => (
+          <label key={f.k} className="ch-ai-row">
+            <input type="checkbox" checked={v[f.k]} disabled={!status.configured} onChange={(e) => setV((x) => ({ ...x, [f.k]: e.target.checked }))} />
+            <span><strong>{f.title}</strong><span className="crm-cell-sub">{f.text}</span></span>
+          </label>
+        ))}
+      </div>
+      <div className="ch-ai-privacy">
+        <Lock size={14} aria-hidden />
+        <span>Message text goes to Groq only when a helper needs it. Phone numbers, ID numbers, email addresses and the names of patients in referrals, leads and camps are removed first and put back afterwards. Nothing the AI writes is stored. Each person has a daily limit, so the Groq bill stays predictable.</span>
+      </div>
       {error && <div className="crm-error" role="alert">{error}</div>}
     </Modal>
   );
