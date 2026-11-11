@@ -164,7 +164,7 @@ function AiAgents() {
           </div>
           <div className="ai-office">
             {view === '3d' && has3d
-              ? <Office3D data={d} selected={selected?.id ?? ''} onPick={pick} handoff={handoffs[0] ?? null} onFail={() => { setHas3d(false); setView('2d'); }} />
+              ? <Office3D data={d} selected={selected?.id ?? ''} onPick={pick} handoff={handoffs[0] ?? null} onFail={() => { setHas3d(false); setView('2d'); }} feed={feed} />
               : <Floor data={d} selected={selected?.id ?? ''} onPick={pick} incoming={handoffs[0]?.to_agent ?? null} />}
             {selected && (
               <Side a={selected} stopAll={d.stopAll.on} me={ov.me} busy={busy} feed={selFeed}

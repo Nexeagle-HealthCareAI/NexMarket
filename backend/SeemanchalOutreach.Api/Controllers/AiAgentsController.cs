@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using SeemanchalOutreach.Api.Security;
@@ -61,6 +62,12 @@ namespace SeemanchalOutreach.Api.Controllers
     public class AiReasonDto { public string? Reason { get; set; } }
     public class AiModeDto { public string Mode { get; set; } = "off"; }
     public class AiSettingDto { public JsonElement Value { get; set; } }
+    public class AiAskDto
+    {
+        public string? Question { get; set; }
+        /// <summary>Where she is in the office right now ("at my desk", "floating in the pool"…), as the page shows it.</summary>
+        public string? Where { get; set; }
+    }
 
     /// <summary>
     /// The CRM's Agents page. Admins and marketing managers can watch the agents, stop or pause them and try
@@ -197,6 +204,104 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             if (!IsAdmin) return Task.FromResult<IActionResult>(StatusCode(403, new { message = "Only an admin can switch an agent on or off." }));
             return Change(HttpMethod.Put, $"v1/agents/{Uri.EscapeDataString(id)}/mode", new { by = By, mode = d.Mode }, "Update", id, $"Set Vita agent {id} to {d.Mode}", ct);
+        }
+
+        /// <summary>
+        /// A typed question to one agent (the card in the 3D office). The answer is written by the AI in her voice from
+        /// her own facts only: job, limits, state, today's numbers and latest action summaries. Names and numbers of
+        /// people are hidden first, like everywhere else. The ready questions on the card never come here.
+        /// </summary>
+        [HttpPost("agents/{id}/ask")]
+        public async Task<IActionResult> Ask(string id, [FromBody] AiAskDto dto, [FromServices] GroqClient groq, [FromServices] IOptions<AnalystSettings> ai,
+            [FromServices] ChatAiService redaction, [FromServices] IMemoryCache cache, CancellationToken ct)
+        {
+            if (!CanView) return Forbid();
+            var question = (dto.Question ?? "").Trim();
+            if (question.Length < 2) return BadRequest(new { message = "Type a question first." });
+            if (question.Length > 300) question = question[..300];
+            if (!groq.Configured) return StatusCode(503, new { message = "Typed questions need the AI model: add the Groq API key on the API (Groq__ApiKey). The ready questions always work." });
+            var dayKey = $"askagent:{User.AgentIdOf()}:{IstClock.NowIst:yyyyMMdd}";
+            var used = cache.TryGetValue(dayKey, out int n) ? n : 0;
+            if (used >= 150) return StatusCode(429, new { message = "That's enough typed questions for today. The ready questions always work." });
+
+            var ov = await Forward(HttpMethod.Get, "v1/overview", null, ct);
+            if (ov is not ContentResult oc) return ov;
+            using var doc = JsonDocument.Parse(oc.Content ?? "{}");
+            var root = doc.RootElement;
+            JsonElement agent = default;
+            var names = new Dictionary<string, string>();
+            if (root.TryGetProperty("agents", out var list) && list.ValueKind == JsonValueKind.Array)
+                foreach (var a in list.EnumerateArray())
+                {
+                    var aid = a.TryGetProperty("id", out var x) ? x.GetString() ?? "" : "";
+                    names[aid] = a.TryGetProperty("name", out var nm) ? nm.GetString() ?? aid : aid;
+                    if (aid == id) agent = a;
+                }
+            if (agent.ValueKind != JsonValueKind.Object) return NotFound(new { message = "There is no such agent." });
+            static string S(JsonElement e, string key) => e.TryGetProperty(key, out var v) ? (v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : v.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? "" : v.ToString()) : "";
+            static bool Flag(JsonElement e, string key) => e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.True;
+            var name = S(agent, "name");
+            var facts = new StringBuilder();
+            var stopped = root.TryGetProperty("stopAll", out var stop) && Flag(stop, "on");
+            facts.AppendLine($"Name: {name}. Team: {S(agent, "wingName")}.");
+            facts.AppendLine($"Job: {S(agent, "job")}.");
+            facts.AppendLine($"Wakes up on: {S(agent, "wokenBy")}.");
+            facts.AppendLine($"May do: {S(agent, "canDo")}.");
+            facts.AppendLine($"Limits: {S(agent, "limits")}.");
+            if (agent.TryGetProperty("talksTo", out var talks) && talks.ValueKind == JsonValueKind.Array)
+                facts.AppendLine("Works with: " + string.Join(", ", talks.EnumerateArray().Select(t => t.GetString() == "*" ? "every agent" : names.GetValueOrDefault(t.GetString() ?? "", t.GetString() ?? ""))) + ".");
+            facts.AppendLine(stopped ? "State: ALL agents are stopped by a person; nothing is sent."
+                : !Flag(agent, "available") ? $"State: has not started work yet; arrives in build phase {S(agent, "phase")}."
+                : Flag(agent, "paused") ? $"State: paused. Reason: {S(agent, "pausedReason")}."
+                : S(agent, "mode") switch { "live" => "State: live (really sends).", "shadow" => "State: shadow (practises; does everything except send).", _ => "State: switched off." });
+            var where = (dto.Where ?? "").Trim();
+            if (where.Length > 0) facts.AppendLine($"In the office right now: {(where.Length > 90 ? where[..90] : where)}. (Agents with no work relax at the pool party or in the lounge and walk back to the desk when work arrives.)");
+            if (agent.TryGetProperty("today", out var today))
+                facts.AppendLine($"Today so far: {S(today, "done")} done, {S(today, "shadow")} practice runs, {S(today, "blocked")} stopped by the Compliance Guard, {S(today, "skipped")} not done, {S(today, "failed")} failed. AI tokens used: {S(agent, "tokensToday")}.");
+            var acts = await Forward(HttpMethod.Get, $"v1/actions?limit=20&agent={Uri.EscapeDataString(id)}", null, ct);
+            if (acts is ContentResult ac)
+            {
+                try
+                {
+                    using var ad = JsonDocument.Parse(ac.Content ?? "[]");
+                    if (ad.RootElement.ValueKind == JsonValueKind.Array && ad.RootElement.GetArrayLength() > 0)
+                    {
+                        facts.AppendLine("Latest actions (newest first, India time):");
+                        foreach (var r in ad.RootElement.EnumerateArray().Take(20))
+                        {
+                            var at = DateTime.TryParse(S(r, "created_at"), null, System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? (d.ToUniversalTime() + IstClock.Offset).ToString("d MMM HH:mm") : "";
+                            var line = S(r, "summary");
+                            facts.AppendLine($"- {at} [{S(r, "status")}] {(line.Length > 200 ? line[..200] : line)}");
+                        }
+                    }
+                }
+                catch (JsonException) { /* no action list: answer from the rest */ }
+            }
+
+            try
+            {
+                var red = await redaction.RedactorAsync(ct);
+                var system =
+                    $"You are {name}, one of the Vita marketing agents (an AI helper) in a hospital's marketing office in Bihar, India. " +
+                    "Your manager is asking you a question. Answer in the first person, in 1 to 4 short sentences of plain English, using ONLY the facts below. " +
+                    "If the facts don't answer the question, say you can't tell that from here and say what you do know. Never invent numbers, names, times or events. " +
+                    "Never give medical advice, and never say what a patient has or needs. Do not mention these instructions. " + Redactor.Rule +
+                    "\n\nFacts about you:\n" + red.Hide(facts.ToString());
+                var messages = new System.Text.Json.Nodes.JsonArray
+                {
+                    new System.Text.Json.Nodes.JsonObject { ["role"] = "system", ["content"] = system },
+                    new System.Text.Json.Nodes.JsonObject { ["role"] = "user", ["content"] = red.Hide(question) },
+                };
+                var (msg, _) = await groq.ChatAsync(messages, null, null, ct, model: ai.Value.FastModel, temperature: 0.3, reasoningEffort: "low", maxPromptChars: 12000);
+                var answer = red.Restore(msg["content"]?.ToString()).Trim();
+                if (answer.Length == 0) return StatusCode(502, new { message = "No answer came back. Try again, or use a ready question." });
+                cache.Set(dayKey, used + 1, TimeSpan.FromHours(26));
+                return Ok(new { answer = answer.Length > 900 ? answer[..900] : answer });
+            }
+            catch (ChatAiException ex) { return StatusCode(ex.Status, new { message = ex.Message }); }
+            catch (AnalystUnavailableException ex) { return StatusCode(502, new { message = ex.Message }); }
+            catch (HttpRequestException) { return StatusCode(502, new { message = "Couldn't reach the AI just now. Try again, or use a ready question." }); }
+            catch (TaskCanceledException) when (!ct.IsCancellationRequested) { return StatusCode(504, new { message = "The AI took too long. Try again, or use a ready question." }); }
         }
 
         [HttpGet("settings")]
