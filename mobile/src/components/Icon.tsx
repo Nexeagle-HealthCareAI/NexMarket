@@ -9,7 +9,7 @@ export type IconName =
   | 'fingerprint' | 'eye' | 'eyeOff' | 'backspace' | 'bolt'
   | 'turnLeft' | 'turnRight' | 'slightLeft' | 'slightRight' | 'straight' | 'uturn' | 'roundabout' | 'arrive' | 'volume' | 'volumeOff'
   | 'locate' | 'bike' | 'walk' | 'userPlus' | 'ambulance' | 'repeat' | 'route' | 'mic' | 'stop'
-  | 'video' | 'videoOff' | 'micOff' | 'cameraFlip' | 'speaker' | 'phoneOff';
+  | 'video' | 'videoOff' | 'micOff' | 'cameraFlip' | 'speaker' | 'phoneOff' | 'billboard';
 
 /** Line icons drawn on a 24×24 grid, 2 px stroke, matching the design canvas. */
 export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { name: IconName; size?: number; color?: string; strokeWidth?: number }) {
@@ -29,6 +29,7 @@ export function Icon({ name, size = 20, color = '#0f172a', strokeWidth = 2 }: { 
     case 'check': body = <><Path {...p} d="M5 12.5l4.5 4.5L19 7.5" /></>; break;
     case 'phone': body = <><Path {...p} d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z" /></>; break;
     case 'whatsapp': body = <><Path {...p} d="M3.5 20.5l1.3-4.2A8.5 8.5 0 1112 20.5a8.4 8.4 0 01-4.2-1.1l-4.3 1.1z" /><Path {...p} d="M9 8.5c0 3.5 2.6 6.5 6.5 6.5l1-1.6-2-1-1 1c-1.2-.5-2.3-1.6-2.8-2.8l1-1-1-2L9 8.5z" /></>; break;
+    case 'billboard': body = <><Rect {...p} x={3} y={4} width={18} height={10} rx={1.5} /><Path {...p} d="M8 14v6M16 14v6M7 8h10M7 11h6" /></>; break;
     case 'camera': body = <><Path {...p} d="M4 8h3l2-3h6l2 3h3v11H4z" /><Circle {...p} cx={12} cy={13} r={3.5} /></>; break;
     case 'star': body = <><Path {...p} d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z" /></>; break;
     case 'back': body = <><Path {...p} d="M15 5l-7 7 7 7" /></>; break;

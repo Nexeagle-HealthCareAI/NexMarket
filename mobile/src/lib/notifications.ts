@@ -216,6 +216,7 @@ export function openLink(link?: string | null) {
   else if (k === 'leave') router.push('/leave');
   else if (k === 'assignments') router.push('/shift');
   else if (k === 'tasks') router.push('/today');
+  else if (k === 'hoardings' || k === 'hoarding') router.push('/hoardings');
   else if (k === 'field-survey' && id) router.push({ pathname: '/field-survey', params: { id } });
   else router.push('/notifications');
 }

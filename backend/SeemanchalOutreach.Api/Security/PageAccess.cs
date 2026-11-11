@@ -31,11 +31,13 @@ namespace SeemanchalOutreach.Api.Security
         public const string Social = "social";
         public const string Departments = "departments";
         public const string Users = "users";
+        /// <summary>Banner and hoarding places, with their rent. Added later: roles with saved access get its default until an admin changes it.</summary>
+        public const string Hoardings = "hoardings";
 
         public static readonly string[] All =
         {
             Dashboard, Calls, Desk, Pipeline, Partners, WhatsApp, Field,
-            Payments, Targets, Analytics, Camps, Social, Departments, Users,
+            Payments, Targets, Analytics, Camps, Social, Departments, Users, Hoardings,
         };
 
         public const int None = 0, View = 1, Edit = 2;
@@ -47,20 +49,20 @@ namespace SeemanchalOutreach.Api.Security
             {
                 [Dashboard] = Edit, [Calls] = Edit, [Desk] = View, [Pipeline] = Edit, [Partners] = Edit,
                 [WhatsApp] = Edit, [Field] = View, [Payments] = View, [Targets] = Edit, [Analytics] = View,
-                [Camps] = Edit, [Social] = Edit, [Departments] = View, [Users] = None,
+                [Camps] = Edit, [Social] = Edit, [Departments] = View, [Users] = None, [Hoardings] = Edit,
             },
             [RoleChecks.HospitalRep] = new()
             {
                 [Dashboard] = View, [Calls] = None, [Desk] = Edit, [Pipeline] = View, [Partners] = None,
                 [WhatsApp] = None, [Field] = None, [Payments] = None, [Targets] = None, [Analytics] = View,
-                [Camps] = View, [Social] = None, [Departments] = Edit, [Users] = None,
+                [Camps] = View, [Social] = None, [Departments] = Edit, [Users] = None, [Hoardings] = None,
             },
             // Digital marketing specialist: everything under Network; no money, field or user pages.
             [RoleChecks.DigitalMarketing] = new()
             {
                 [Dashboard] = None, [Calls] = None, [Desk] = None, [Pipeline] = None, [Partners] = Edit,
                 [WhatsApp] = Edit, [Field] = None, [Payments] = None, [Targets] = None, [Analytics] = None,
-                [Camps] = Edit, [Social] = Edit, [Departments] = None, [Users] = None,
+                [Camps] = Edit, [Social] = Edit, [Departments] = None, [Users] = None, [Hoardings] = None,
             },
         };
     }
@@ -110,6 +112,9 @@ namespace SeemanchalOutreach.Api.Security
                 foreach (var kv in defaults) result[kv.Key] = kv.Value;
                 return result;
             }
+            // A page added after this role's access was saved has no row yet: it starts at its default.
+            if (Pages.Defaults.TryGetValue(canonical, out var starts))
+                foreach (var kv in starts) if (!mine.Any(r => r.PageKey == kv.Key)) result[kv.Key] = kv.Value;
             foreach (var r in mine)
             {
                 if (result.ContainsKey(r.PageKey)) result[r.PageKey] = Math.Clamp(r.Level, 0, 2);

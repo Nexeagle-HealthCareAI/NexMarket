@@ -40,6 +40,8 @@ export function crmHref(link?: string | null): string | null {
   if (k === 'work' && id) return `/admin/work?card=${encodeURIComponent(id)}`;
   if (k === 'ai-agents') return '/admin/ai-agents';
   if (k === 'field-survey' && id) return `/admin/field-surveys?id=${encodeURIComponent(id)}`;
+  if (k === 'hoarding' && id) return `/admin/hoardings?id=${encodeURIComponent(id)}`;
+  if (k === 'hoardings') return '/admin/hoardings';
   if (k === 'wa' && id) return `/admin/whatsapp?c=${encodeURIComponent(id)}`;
   if (k === 'social' && id === 'forms') return '/admin/social?tab=forms';
   if (k === 'social' && id) return `/admin/social?c=${encodeURIComponent(id)}`;

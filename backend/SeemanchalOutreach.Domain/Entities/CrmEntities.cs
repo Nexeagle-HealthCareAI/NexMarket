@@ -977,4 +977,67 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime? StageSentAt { get; set; }
         public string? StageError { get; set; }
     }
+
+    /// <summary>
+    /// A place for a NexEagle banner or hoarding. A field agent suggests it from the app (photo + GPS), the office approves
+    /// it with the rent, the agent marks it rented and then "banner up" with a photo. Rent is filled in and seen only in the CRM.
+    /// </summary>
+    public class Hoarding
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        /// <summary>The phone's own id for this place, so sending it twice makes one row.</summary>
+        public string ClientId { get; set; } = Guid.NewGuid().ToString("N");
+        public string Place { get; set; } = string.Empty;
+        public string? Landmark { get; set; }
+        public string? District { get; set; }
+        public string? Block { get; set; }
+        public double Lat { get; set; }
+        public double Lng { get; set; }
+        public double? Accuracy { get; set; }
+        public string Kind { get; set; } = "hoarding";            // hoarding | wall | shop | pole | gate | other
+        public string? Size { get; set; }                          // as written: "20 x 10 ft"
+        public string Status { get; set; } = "suggested";         // suggested | approved | rented | live | ended | rejected
+        public string SuggestedBy { get; set; } = string.Empty;   // agentId (or the office user who added it)
+        public string SuggestedByName { get; set; } = string.Empty;
+        public string? AgentNote { get; set; }
+        public string? OfficeNote { get; set; }
+        public Guid? OwnerId { get; set; }
+        public decimal? MonthlyRent { get; set; }
+        public DateOnly? RentStart { get; set; }
+        public DateOnly? RentEnd { get; set; }
+        /// <summary>The end date the office was last reminded about (one reminder per end date).</summary>
+        public DateOnly? RemindedFor { get; set; }
+        public string? DecidedBy { get; set; }
+        public DateTime? DecidedAt { get; set; }
+        public string? RejectReason { get; set; }
+        public DateTime? RentedAt { get; set; }
+        public DateTime? LiveAt { get; set; }
+        public DateTime? EndedAt { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>Who a hoarding place is rented from. One owner can have several places.</summary>
+    public class HoardingOwner
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Name { get; set; } = string.Empty;
+        public string? Phone { get; set; }
+        public string? Address { get; set; }
+        public string? Notes { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>A photo of a hoarding place: the empty site, or the banner once it is up. Kept in private storage.</summary>
+    public class HoardingPhoto
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid HoardingId { get; set; }
+        public string Kind { get; set; } = "site";                // site | banner
+        public string FileKey { get; set; } = string.Empty;
+        public string Mime { get; set; } = "image/jpeg";
+        public string By { get; set; } = string.Empty;
+        public DateTime At { get; set; } = DateTime.UtcNow;
+    }
 }

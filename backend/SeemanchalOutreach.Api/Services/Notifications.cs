@@ -40,6 +40,7 @@ namespace SeemanchalOutreach.Api.Services
             ("payment", "Payments to my partners and my incentives", "updates"),
             ("call", "Calls to me (ringing and missed)", "calls"),
             ("huddle", "Field team huddles", "chat"),
+            ("hoarding", "Banner and hoarding places", "updates"),
         };
         public static string ChannelOf(string kind) => All.FirstOrDefault(k => k.Kind == kind).Channel ?? "updates";
         public static bool IsKnown(string kind) => All.Any(k => k.Kind == kind);

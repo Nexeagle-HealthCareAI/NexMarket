@@ -59,6 +59,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<ChatRead> ChatReads => Set<ChatRead>();
         public DbSet<CallSession> CallSessions => Set<CallSession>();
         public DbSet<CallParticipant> CallParticipants => Set<CallParticipant>();
+        public DbSet<Hoarding> Hoardings => Set<Hoarding>();
+        public DbSet<HoardingOwner> HoardingOwners => Set<HoardingOwner>();
+        public DbSet<HoardingPhoto> HoardingPhotos => Set<HoardingPhoto>();
         public DbSet<ChatReaction> ChatReactions => Set<ChatReaction>();
         public DbSet<ChatPin> ChatPins => Set<ChatPin>();
         public DbSet<FieldRole> FieldRoles => Set<FieldRole>();
@@ -548,6 +551,27 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.MessageId, e.UserId, e.Emoji }).IsUnique();
                 entity.HasIndex(e => e.ThreadId);
+            });
+            modelBuilder.Entity<Hoarding>(entity =>
+            {
+                entity.ToTable("hoardings");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.ClientId).IsUnique();
+                entity.HasIndex(e => e.Status);
+                entity.HasIndex(e => e.SuggestedBy);
+                entity.HasIndex(e => e.OwnerId);
+                entity.Property(e => e.MonthlyRent).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<HoardingOwner>(entity =>
+            {
+                entity.ToTable("hoarding_owners");
+                entity.HasKey(e => e.Id);
+            });
+            modelBuilder.Entity<HoardingPhoto>(entity =>
+            {
+                entity.ToTable("hoarding_photos");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.HoardingId);
             });
             modelBuilder.Entity<CallSession>(entity =>
             {
