@@ -204,6 +204,19 @@ export function openIncoming(id: string, fromTap = false) {
 }
 export const markHandled = (id: string) => { handled.add(id); };
 
+/** "Answer" pressed on the ringing notification: answers on the incoming screen (opening it first if needed). */
+const answerListeners = new Set<(id: string) => void>();
+export function askToAnswer(id: string) {
+  if (!id) return;
+  if (incomingOpen === id) { answerListeners.forEach((l) => l(id)); return; }
+  handled.add(id);
+  router.push({ pathname: '/call/incoming', params: { id, answer: '1' } });
+}
+export function onAnswerAsked(l: (id: string) => void): () => void {
+  answerListeners.add(l);
+  return () => { answerListeners.delete(l); };
+}
+
 // ─── Words ───
 /** "3 min" / "45 sec". */
 export function callLength(t: TFn, seconds: number): string {

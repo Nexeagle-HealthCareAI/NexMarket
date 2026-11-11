@@ -8,7 +8,9 @@ import { T, toast } from '../../components/ui';
 import { Icon } from '../../components/Icon';
 import { ChatAvatar } from '../../components/ChatAvatar';
 import { useSession } from '../../lib/session';
-import { activeCalls, callErrorText, callsStatus, declineCall, fetchCall, joinCall, markHandled, setIncomingOpen, type Call } from '../../lib/calls';
+import { activeCalls, callErrorText, callsStatus, declineCall, fetchCall, joinCall, markHandled, onAnswerAsked, setIncomingOpen, type Call } from '../../lib/calls';
+import { showRing, stopRing } from '../../lib/callRing';
+import { holdOverLock } from '../../../modules/lock-screen';
 import { cachedThreads } from '../../lib/chat';
 import { kvGet } from '../../lib/db';
 import { lite } from '../../lib/perf';
@@ -18,6 +20,7 @@ const RING: number[] = [0, 900, 700];
 
 /** Removes this call's notifications from the tray (the push, or the local one this screen rang with). */
 async function clearCallNotifications(id: string) {
+  void stopRing(id);
   try {
     const shown = await Notifications.getPresentedNotificationsAsync();
     for (const n of shown) {
@@ -34,7 +37,7 @@ async function clearCallNotifications(id: string) {
  */
 export default function Incoming() {
   const { t } = useSession();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, answer: autoAnswer } = useLocalSearchParams<{ id: string; answer?: string }>();
   const [call, setCall] = useState<Call | null>(() => activeCalls().find((c) => c.id === id) ?? null);
   const [busy, setBusy] = useState(false);
   const done = useRef(false);
@@ -52,28 +55,36 @@ export default function Incoming() {
   };
 
   // This screen is the one ringing: the push for the same call doesn't put a banner on top of it.
+  // Over the lock screen while it rings (only the call screens ever are), like the phone's own dialer.
   useEffect(() => {
     markHandled(id);
     setIncomingOpen(id);
-    return () => { setIncomingOpen(null); Vibration.cancel(); };
+    const release = holdOverLock();
+    return () => { setIncomingOpen(null); Vibration.cancel(); release(); };
   }, [id]);
 
   // Ring: vibration loop; and when the call came by polling (no push on this phone), one alert on the "calls" channel for the sound.
   useEffect(() => {
     if (huddle || !ringing) return;
+    // Android: the phone-style ring (sound on repeat + vibration, Answer/Decline in the tray), the same one a push
+    // starts when the app is closed; showing it again doesn't restart it.
+    if (Platform.OS === 'android') {
+      void showRing({ callId: id, caller: call?.startedByName ?? '', video: !!call?.video, ringSeconds: callsStatus().ringSeconds });
+      return () => { void stopRing(id); };
+    }
     try { Vibration.vibrate(RING, true); } catch { /* no vibrator */ }
     let localId: string | null = null;
     if (kvGet('pushMode') !== 'fcm') {
       void Notifications.scheduleNotificationAsync({
         content: { title: call?.startedByName ?? t('clVoiceCall'), body: call?.video ? t('clIncomingVideo') : t('clIncomingVoice'), data: { link: `call:${id}`, kind: 'call' }, sound: 'default' },
-        trigger: Platform.OS === 'android' ? { channelId: 'calls' } : null,
+        trigger: null,
       }).then((x) => { localId = x; }).catch(() => undefined);
     }
     return () => {
       Vibration.cancel();
       if (localId) void Notifications.dismissNotificationAsync(localId).catch(() => undefined);
     };
-  }, [huddle, ringing, id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [huddle, ringing, id, call?.startedByName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The call's state from the server every 2 s; closes when it stops ringing (or the huddle ends), and after ringSeconds.
   useEffect(() => {
@@ -120,6 +131,14 @@ export default function Incoming() {
       close();
     }
   };
+  // Answer pressed on the notification (or the full-screen ring): answer here at once.
+  const answerRef = useRef(answer);
+  answerRef.current = answer;
+  useEffect(() => {
+    if (autoAnswer === '1' && !huddle) void answerRef.current();
+    return onAnswerAsked((x) => { if (x === id) void answerRef.current(); });
+  }, [id, autoAnswer, huddle]);
+
   const decline = () => {
     Vibration.cancel();
     if (!huddle) void declineCall(id);

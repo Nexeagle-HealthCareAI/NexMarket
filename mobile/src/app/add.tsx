@@ -57,6 +57,8 @@ export default function AddSheet() {
       onPress: () => setPicking('revisit') },
     ...(fieldOpen > 0 ? [{ key: 'fieldmap', icon: 'map' as IconName, title: t('fsTitle'), sub: t('fsAddSub'), from: '#9a3412', to: '#fb923c', tint: '#fff1e6',
       onPress: () => router.replace('/field-surveys') }] : []),
+    { key: 'hoarding', icon: 'billboard', title: t('hdTitle'), sub: t('hdAddSub'), from: '#be123c', to: '#fb7185', tint: '#ffe9ee',
+      onPress: () => router.replace('/hoardings') },
     { key: 'route', icon: 'route', title: t('addNavigate'), sub: t('addNavigateSub'), from: '#c2410c', to: '#fbbf24', tint: '#fff4e5',
       onPress: () => router.replace('/route') },
     { key: 'photo', icon: 'camera', title: t('photo'), sub: t('photoSub'), from: '#7e22ce', to: '#f0abfc', tint: '#f7ecfd',

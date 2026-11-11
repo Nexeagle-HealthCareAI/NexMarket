@@ -10,6 +10,7 @@ import { flushChat, pendingCount, refreshUnread } from './chat';
 import { pollNotifications } from './notifications';
 import { refreshMoney } from './money';
 import { refreshFieldSurveys, syncFieldSurveys } from './fieldSurvey';
+import { flushHoardings, refreshHoardings } from './hoardings';
 
 /**
  * The sync engine. Pushes the outbox in order (oldest first), then pulls what changed
@@ -70,6 +71,9 @@ async function run() {
     // Field mapping: send routes, spots and answers waiting on the phone, and get my surveys.
     await syncFieldSurveys().catch(() => undefined);
     await refreshFieldSurveys().catch(() => undefined);
+    // Hoarding places: send the ones waiting on the phone, and get what the office decided.
+    await flushHoardings();
+    await refreshHoardings().catch(() => undefined);
     // Chat: anything typed during the sync, and the unread badge.
     if (pendingCount() > 0) await flushChat().catch(() => undefined);
     await refreshUnread().catch(() => undefined);

@@ -56,6 +56,9 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<ChatRead> ChatReads { get; }
         DbSet<CallSession> CallSessions { get; }
         DbSet<CallParticipant> CallParticipants { get; }
+        DbSet<Hoarding> Hoardings { get; }
+        DbSet<HoardingOwner> HoardingOwners { get; }
+        DbSet<HoardingPhoto> HoardingPhotos { get; }
         DbSet<ChatReaction> ChatReactions { get; }
         DbSet<ChatPin> ChatPins { get; }
         DbSet<FieldRole> FieldRoles { get; }

@@ -19,6 +19,18 @@ namespace SeemanchalOutreach.Application.Interfaces
         public string? RefId { get; set; }
         /// <summary>Never notify this person (whoever caused it).</summary>
         public string? Except { get; set; }
+        /// <summary>
+        /// A call ringing: phones get a data-only push (no ready-made notification), so the app can wake up and ring
+        /// full screen like a phone call. Expires after <see cref="TtlSeconds"/>: a call that stopped ringing never rings late.
+        /// </summary>
+        public bool Ring { get; set; }
+        /// <summary>
+        /// A signal for phones only (e.g. "stop ringing for call X"): no inbox row and no CRM alert, just a data-only push
+        /// carrying <see cref="Data"/>.
+        /// </summary>
+        public bool Quiet { get; set; }
+        public Dictionary<string, string> Data { get; set; } = new();
+        public int? TtlSeconds { get; set; }
     }
 
     /// <summary>

@@ -1,7 +1,7 @@
 {
   "name": "nexeagle-field",
   "version": "1.0.0",
-  "main": "expo-router/entry",
+  "main": "index.ts",
   "dependencies": {
     "@config-plugins/react-native-webrtc": "15.0.2",
     "@livekit/react-native": "3.1.0",
@@ -38,6 +38,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.0",
+    "react-native-notify-kit": "10.10.0",
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.0",
     "react-native-svg": "15.16.0",

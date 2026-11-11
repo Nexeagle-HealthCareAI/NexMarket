@@ -86,3 +86,65 @@ export const CHANNELS: { k: string; l: string }[] = [
   { k: 'facebook', l: 'Facebook post' }, { k: 'instagram', l: 'Instagram post' }, { k: 'whatsapp_status', l: 'WhatsApp Status' },
   { k: 'google_review', l: 'Google review reply' }, { k: 'partner', l: 'Message to a partner' },
 ];
+
+// ─── Asking an agent (the card that opens when you tap a Vita in the 3D office) ───
+
+export interface Whereabouts { place: 'desk' | 'pool' | 'lounge' | 'meeting' | 'walking'; doing: string }
+export const QUICK = [
+  { k: 'now', q: 'What are you doing?' }, { k: 'today', q: 'What did you do today?' }, { k: 'job', q: 'What is your job?' },
+  { k: 'limits', q: 'What are your limits?' }, { k: 'team', q: 'Who do you work with?' }, { k: 'need', q: 'Do you need anything from me?' },
+] as const;
+export type QuickKey = (typeof QUICK)[number]['k'];
+
+const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+
+/** Her answer in her own words, built only from the agent's live state: nothing is made up and no AI is involved. */
+export function quickAnswer(k: QuickKey, a: AgentRow, o: { stopAll: boolean; groq: boolean; where: Whereabouts; feed: ActionRow[]; nameOf: (id: string) => string }): string {
+  const last = a.last ? `${a.last.summary} (${when(a.last.created_at)})` : null;
+  const mine = o.feed.filter((f) => f.agent_id === a.id);
+  switch (k) {
+    case 'now': {
+      if (o.stopAll) return 'All agents are stopped, so I am doing nothing and sending nothing until someone presses Resume.';
+      if (!a.available) return `I haven't started work yet: I arrive in phase ${a.phase}. Until then I'm ${o.where.doing || 'taking it easy'}. When I start, my job will be: ${a.job.toLowerCase()}.`;
+      if (a.paused) return `I'm paused${a.pausedBy ? ` by ${a.pausedBy.replace(/\s*\(.*\)$/, '')}` : ''}${a.pausedReason ? `: ${a.pausedReason}` : ''}. I'm asleep at my desk and do nothing until someone resumes me.`;
+      if (a.mode === 'off') return "I'm switched off, asleep at my desk. Switch me to Shadow to let me practise, or to Live to let me work.";
+      if (o.where.place === 'meeting') return `I'm ${o.where.doing}.${last ? ` It's about this: ${last}.` : ''}`;
+      if (o.where.place === 'walking') return `I'm ${o.where.doing}.${last ? ` The last thing I did: ${last}.` : ''}`;
+      if (o.where.place === 'desk') {
+        if (a.id === 'compliance_guard') return `I'm at my desk on guard: every message is checked by me before it leaves.${last ? ` Last check: ${last}.` : ''}`;
+        return last ? `I'm at my desk${a.mode === 'shadow' ? ', practising (I do everything except send)' : ', working'}. The last thing I did: ${last}.` : "I'm at my desk, ready for work.";
+      }
+      return `No work has come in for me${a.last ? ` since ${when(a.last.created_at)}` : ' yet today'}, so I'm ${o.where.doing}. The moment something arrives I walk back to my desk.`;
+    }
+    case 'today': {
+      const t = a.today, total = t.done + t.shadow + t.blocked + t.skipped + t.failed;
+      if (!a.available) return `Nothing yet: I arrive in phase ${a.phase}.`;
+      if (total === 0) return "Nothing yet today. I'm ready when work comes.";
+      const parts = [t.done ? `${t.done} done` : '', t.shadow ? plural(t.shadow, 'practice run') : '', t.blocked ? `${t.blocked} stopped by the Guard` : '', t.skipped ? `${t.skipped} not done` : '', t.failed ? `${t.failed} failed` : ''].filter(Boolean);
+      const recent = mine.slice(0, 3).map((f) => `• ${when(f.created_at)}: ${f.summary}`).join('\n');
+      return `Today: ${parts.join(', ')}. I used ${a.tokensToday.toLocaleString('en-IN')} AI tokens.${recent ? `\n\nLatest:\n${recent}` : ''}`;
+    }
+    case 'job':
+      return `${a.job}. I wake up on: ${a.wokenBy.charAt(0).toLowerCase()}${a.wokenBy.slice(1)}. What I may do: ${a.canDo.charAt(0).toLowerCase()}${a.canDo.slice(1)}.`;
+    case 'limits':
+      return `${a.limits}. And every message I write for a patient, a partner or the public goes through the Compliance Guard before it leaves.`;
+    case 'team': {
+      if (a.talksTo.includes('*')) return 'Everyone: I work with every agent in the office.';
+      const names = a.talksTo.map(o.nameOf);
+      return names.length ? `I work with ${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]}. I'm in the ${a.wingName}.` : `I work on my own, in the ${a.wingName}.`;
+    }
+    case 'need': {
+      if (o.stopAll) return 'Yes: all agents are stopped. Press "Resume all agents" when you want us to work again.';
+      if (!a.available) return `Not yet. I arrive in phase ${a.phase}; after my shadow trial you can switch me on.`;
+      if (a.paused) return 'Yes: I am paused. Press Resume on my card when I should work again.';
+      if (a.last?.status === 'held') return `Yes: this is held for a person to decide: ${a.last.summary}. Please look at it in Activity.`;
+      const needs: string[] = [];
+      if (!o.groq) needs.push('The AI model is not connected (the Groq key is missing on the agents service), so I cannot think.');
+      if (a.today.failed) needs.push(`${plural(a.today.failed, 'action')} of mine failed today. Please check Activity.`);
+      if (a.today.blocked) needs.push(`The Guard stopped ${plural(a.today.blocked, 'message')} of mine today. Have a look at why in Activity.`);
+      if (a.mode === 'off') needs.push('I am switched off. Switch me to Shadow to let me practise.');
+      if (a.mode === 'shadow') needs.push('I am in Shadow: I do everything except send. Read my practice runs, and switch me to Live when you are happy.');
+      return needs.length ? needs.join(' ') : 'No, all good. I will tell you if something needs you.';
+    }
+  }
+}

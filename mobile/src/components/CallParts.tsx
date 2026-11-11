@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, View } from 'react-native';
+import { AppState, Linking, Platform, Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { T, toast } from './ui';
 import { Icon, type IconName } from './Icon';
@@ -9,6 +9,7 @@ import {
   startCall, useActiveCalls, useCallsStatus, useCurrentCall, type Call, type CallNote,
 } from '../lib/calls';
 import { kvGet } from '../lib/db';
+import { fullScreenAllowed } from '../lib/callRing';
 import { C } from '../theme';
 
 type TFn = ReturnType<typeof useSession>['t'];
@@ -162,4 +163,38 @@ export function CallWatcher() {
   const ring = front ? ringingForMe(list) : null;
   useEffect(() => { if (ring) openIncoming(ring.id); }, [ring?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
+}
+
+/**
+ * Android 14+ can stop an app from ringing full screen (the phone-style incoming call). When it has, this says so and
+ * opens the setting. Shown only while calls are switched on for the hospital.
+ */
+export function FullScreenCallsBanner() {
+  const { t } = useSession();
+  const on = useCallsStatus().on;
+  const [allowed, setAllowed] = useState(true);
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !on) return;
+    const check = () => { void fullScreenAllowed().then(setAllowed); };
+    check();
+    // Back from the phone's settings: check again.
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') check(); });
+    return () => sub.remove();
+  }, [on]);
+  if (Platform.OS !== 'android' || !on || allowed) return null;
+  const open = async () => {
+    try { await Linking.sendIntent('android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT'); }
+    catch { void Linking.openSettings(); }
+  };
+  return (
+    <Pressable onPress={() => void open()} accessibilityRole="button" accessibilityLabel={`${t('clFsOffTitle')}. ${t('clFsAllow')}`}
+      style={{ margin: 12, flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: C.warnSoft, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#f5d9a8' }}>
+      <Icon name="phone" color={C.warnInk} />
+      <View style={{ flex: 1 }}>
+        <T style={{ fontWeight: '800', color: C.warnInk }}>{t('clFsOffTitle')}</T>
+        <T style={{ color: C.warnInk, fontSize: 13 }}>{t('clFsOffBody')}</T>
+      </View>
+      <T style={{ color: C.blueInk, fontWeight: '800' }}>{t('clFsAllow')}</T>
+    </Pressable>
+  );
 }

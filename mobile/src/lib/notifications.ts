@@ -60,6 +60,11 @@ export async function setupNotifications(): Promise<void> {
   setUp = true;
   Notifications.setNotificationHandler({
     handleNotification: async (n) => {
+      const remote = (n.request.trigger as { remoteMessage?: { data?: Record<string, string>; notification?: unknown } } | null)?.remoteMessage;
+      // A ringing call or "stop ringing" (data-only pushes): the incoming screen does the ringing, nothing to show here.
+      if (remote && !remote.notification && remote.data?.callId) {
+        return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
+      }
       const link = String(n.request.content.data?.link ?? '');
       // The incoming-call screen is already up for this call: it rings by itself, no banner on top of it.
       const ringingHere = link.startsWith('call:') && incomingShowing() === link.slice(5);
@@ -211,6 +216,7 @@ export function openLink(link?: string | null) {
   else if (k === 'leave') router.push('/leave');
   else if (k === 'assignments') router.push('/shift');
   else if (k === 'tasks') router.push('/today');
+  else if (k === 'hoardings' || k === 'hoarding') router.push('/hoardings');
   else if (k === 'field-survey' && id) router.push({ pathname: '/field-survey', params: { id } });
   else router.push('/notifications');
 }

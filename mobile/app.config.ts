@@ -62,6 +62,8 @@ const config: ExpoConfig = {
       'android.permission.MODIFY_AUDIO_SETTINGS',
       'android.permission.BLUETOOTH_CONNECT',
       'android.permission.WAKE_LOCK',
+      // An incoming call rings full screen, like a phone call, even when the phone is locked or the app is closed.
+      'android.permission.USE_FULL_SCREEN_INTENT',
     ],
     // The app records audio only while the agent taps Speak or is in a call, and never reads the photo gallery (photos must be taken live).
     // SYSTEM_ALERT_WINDOW (added by the WebRTC plugin) stays blocked: calls don't draw over other apps.
@@ -77,7 +79,18 @@ const config: ExpoConfig = {
   plugins: [
     // Only the two phone CPU types (32-bit ARM for older phones, 64-bit ARM for newer ones); emulator-only
     // x86 code is left out, which makes the APK much smaller to download and install.
-    ['expo-build-properties', { android: { buildArchs: ['armeabi-v7a', 'arm64-v8a'] } }],
+    // Calls (LiveKit): its WebRTC classes are called from native code, so the release shrinker must keep them; and
+    // JniZeroJni only exists on the native side, which R8 would otherwise stop the build over as a "missing class".
+    ['expo-build-properties', {
+      android: {
+        buildArchs: ['armeabi-v7a', 'arm64-v8a'],
+        extraProguardRules: [
+          '-keep class livekit.org.webrtc.** { *; }',
+          '-keep class livekit.org.jni_zero.** { *; }',
+          '-dontwarn livekit.org.jni_zero.JniZeroJni',
+        ].join('\n'),
+      },
+    }],
     'expo-router',
     'expo-sqlite',
     'expo-secure-store',
@@ -115,6 +128,8 @@ const config: ExpoConfig = {
         color: '#0a72d6',
       },
     ],
+    // The full-screen ringing for incoming calls (Answer / Decline on the notification, ringing until answered).
+    'react-native-notify-kit',
     [
       'expo-image-picker',
       {

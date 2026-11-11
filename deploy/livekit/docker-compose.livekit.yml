@@ -1,5 +1,6 @@
-# The calls server. Runs next to the API on the same VM:
-#   LIVEKIT_KEYS="<key>: <secret>" docker compose -f deploy/livekit/docker-compose.livekit.yml up -d
+# The calls server. Runs next to the API on the same VM. The deploy job writes livekit.active.yaml (livekit.yaml, with
+# the TURN-over-443 lines only once the certificate exists) and .env, then:
+#   docker compose -f docker-compose.livekit.yml up -d
 # Host networking because WebRTC needs a whole range of UDP ports.
 services:
   livekit:
@@ -11,4 +12,6 @@ services:
     environment:
       LIVEKIT_KEYS: ${LIVEKIT_KEYS:?set LIVEKIT_KEYS to "<key>: <secret>"}
     volumes:
-      - ./livekit.yaml:/etc/livekit.yaml:ro
+      - ./livekit.active.yaml:/etc/livekit.yaml:ro
+      # The Let's Encrypt certificate for turn.nexeagle.com (TURN over TLS on 443); read-only.
+      - /etc/letsencrypt:/etc/letsencrypt:ro

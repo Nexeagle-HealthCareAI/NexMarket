@@ -24,7 +24,7 @@ jobs:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           password: ${{ secrets.DEV_SSH_PASSWORD }}
-          source: 'deploy/livekit/livekit.yaml,deploy/livekit/docker-compose.livekit.yml'
+          source: 'deploy/livekit/livekit.yaml,deploy/livekit/docker-compose.livekit.yml,deploy/livekit/nginx-443-sni.conf'
           target: /opt/nexmarket-livekit
           strip_components: 2
       - name: Start LiveKit
@@ -44,6 +44,14 @@ jobs:
             cd /opt/nexmarket-livekit
             printf 'LIVEKIT_KEYS=%s: %s\n' "$LK_KEY" "$LK_SECRET" > .env
             chmod 600 .env
+            # TURN over TLS on 443 only once the certificate for turn.nexeagle.com exists (README, "Calls on strict networks").
+            if [ -f /etc/letsencrypt/live/turn.nexeagle.com/fullchain.pem ]; then
+              cp livekit.yaml livekit.active.yaml
+              echo "TURN over 443: on"
+            else
+              grep -v 'tls-only' livekit.yaml > livekit.active.yaml
+              echo "⚠️ TURN over 443 is off: no certificate for turn.nexeagle.com yet (see README)"
+            fi
             docker compose -f docker-compose.livekit.yml pull
             docker compose -f docker-compose.livekit.yml up -d
             sleep 3

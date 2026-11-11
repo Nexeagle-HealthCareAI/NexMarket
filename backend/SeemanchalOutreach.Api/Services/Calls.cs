@@ -194,6 +194,15 @@ namespace SeemanchalOutreach.Api.Services
                 ring.Title = $"{MyName} started a team huddle";
                 ring.Body = call.Video ? "Video huddle in Field team – tap to join" : "Voice huddle in Field team – tap to join";
             }
+            if (call.Kind == "call")
+            {
+                // Phones ring full screen like a phone call (the app's own ringing), for as long as the call can ring.
+                ring.Ring = true;
+                ring.TtlSeconds = _lk.RingSeconds;
+                ring.Data["callId"] = call.Id.ToString();
+                ring.Data["caller"] = ring.Title;
+                ring.Data["video"] = call.Video ? "1" : "0";
+            }
             await _db.SaveChangesAsync(ct);
             _notifier.Notify(ring);
             await _live.PublishChatAsync(t.Id);
@@ -265,9 +274,12 @@ namespace SeemanchalOutreach.Api.Services
             row.JoinedAt = DateTime.UtcNow;
             row.LeftAt = null;
             row.Declined = false;
-            if (c.Status == "ringing" && me != c.StartedBy) { c.Status = "active"; c.AnsweredAt = DateTime.UtcNow; }
+            var answered = c.Status == "ringing" && me != c.StartedBy;
+            if (answered) { c.Status = "active"; c.AnsweredAt = DateTime.UtcNow; }
             try { await _db.SaveChangesAsync(ct); }
             catch (DbUpdateException) { return Conflict(new { message = "Please try again." }); }
+            // Answered: the other phones that were ringing for it (the rest of the office) stop.
+            if (answered) CallSweeper.StopRinging(_notifier, c, t);
             await _live.PublishChatAsync(t.Id);
             var people = await _db.CallParticipants.AsNoTracking().Where(p => p.CallId == c.Id).ToListAsync(ct);
             return Ok(new { call = Shape(c, t, people), join = Pass(c) });
@@ -349,9 +361,28 @@ namespace SeemanchalOutreach.Api.Services
             foreach (var c in due) await FinishAsync(db, notifier, live, c, c.Status == "ringing" ? "missed" : "ended", ct);
         }
 
+        /// <summary>
+        /// Tells the phones that were rung for this call to stop ringing (a data-only push; the app cancels its full-screen
+        /// ring). Same people the call rang: the other person, the agent, or the office.
+        /// </summary>
+        public static void StopRinging(INotifier notifier, CallSession c, ChatThread t)
+        {
+            if (c.Kind != "call") return;
+            var job = new NotifyJob
+            {
+                Kind = "call", Quiet = true, TtlSeconds = 120, Except = c.StartedBy,
+                Data = new() { ["kind"] = "call-stop", ["callId"] = c.Id.ToString() },
+            };
+            if (t.Kind == "direct") job.To.Add(t.AgentId == c.StartedBy ? t.PeerId! : t.AgentId!);
+            else if (t.Kind == "agent") { if (c.StartedBy == t.AgentId) job.ToOffice = true; else job.To.Add(t.AgentId!); }
+            else return;
+            notifier.Notify(job);
+        }
+
         public static async Task FinishAsync(IMarketingDbContext db, INotifier notifier, ILiveEvents live, CallSession c, string status, CancellationToken ct)
         {
             if (c.Status is "ended" or "missed" or "declined") return;
+            var wasRinging = c.Status == "ringing";
             c.Status = status;
             c.EndedAt = DateTime.UtcNow;
             var people = await db.CallParticipants.Where(p => p.CallId == c.Id).ToListAsync(ct);
@@ -379,6 +410,8 @@ namespace SeemanchalOutreach.Api.Services
             }
             await db.SaveChangesAsync(ct);
             if (t != null) await live.PublishChatAsync(t.Id);
+            // Still ringing on someone's phone (missed, declined, or the caller hung up): stop it.
+            if (wasRinging && t != null) StopRinging(notifier, c, t);
 
             // A missed call reaches the bell of whoever was rung.
             if (status == "missed" && c.Kind == "call" && t != null)

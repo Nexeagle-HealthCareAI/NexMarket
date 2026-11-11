@@ -12,6 +12,7 @@ import { useSession } from '../../lib/session';
 import { cachedThreads, isOfficeUser } from '../../lib/chat';
 import { callErrorText, callLength, callsStatus, currentCall, fetchCall, joinCall, leaveCall, type Call, type CurrentCall } from '../../lib/calls';
 import { C } from '../../theme';
+import { holdOverLock } from '../../../modules/lock-screen';
 
 type EndWhy = 'hangup' | 'remoteLeft' | 'declined' | 'missed' | 'ended' | 'failed' | 'mic';
 type TFn = ReturnType<typeof useSession>['t'];
@@ -80,6 +81,9 @@ export default function CallScreen() {
   const video = cur?.video ?? server?.video ?? false;
 
   const goBack = () => { if (!mounted.current) return; if (router.canGoBack()) router.back(); else router.replace('/chat'); };
+
+  // A call answered on the lock screen carries on over it; the rest of the app still needs the phone unlocked.
+  useEffect(() => holdOverLock(), []);
 
   /** Ends the call on this phone: disconnect, tell the server, show "Call ended · 3 min" briefly, then close. */
   const finish = useCallback((why: EndWhy) => {
