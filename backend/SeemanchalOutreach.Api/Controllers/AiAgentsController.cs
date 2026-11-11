@@ -119,7 +119,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 if (!res.IsSuccessStatusCode)
                 {
                     string message = "The agents service refused that.";
-                    try { message = JsonDocument.Parse(text).RootElement.GetProperty("detail").ToString(); } catch { /* not JSON */ }
+                    try
+                    {
+                        var detail = JsonDocument.Parse(text).RootElement.GetProperty("detail");
+                        message = detail.ValueKind == JsonValueKind.Object && detail.TryGetProperty("message", out var dm) ? dm.ToString() : detail.ToString();
+                    }
+                    catch { /* not JSON */ }
                     return StatusCode((int)res.StatusCode >= 500 ? 502 : 400, new { message });
                 }
                 return Content(text, "application/json");
@@ -331,6 +336,36 @@ namespace SeemanchalOutreach.Api.Controllers
             return Forward(HttpMethod.Post, "v1/guard/check", new { text, channel = S("channel", "whatsapp"), audience = S("audience", "patient"), rules_only = rulesOnly, allow_rewrite = !rulesOnly, from_agent = (string?)null }, ct);
         }
 
+        /// <summary>
+        /// A person checks something an agent did or would have sent (shadow): good, edited (with the better text) or wrong,
+        /// and can send it to the lead from here. The verdicts are the agent's accuracy; a note can be kept as a lesson.
+        /// </summary>
+        [HttpPost("actions/{id:guid}/review")]
+        public Task<IActionResult> Review(Guid id, [FromBody] AiReviewDto d, CancellationToken ct)
+        {
+            if (!CanView) return Task.FromResult<IActionResult>(Forbid());
+            var verdict = d.Verdict is "good" or "edited" or "wrong" ? d.Verdict : "";
+            return Change(HttpMethod.Post, $"v1/actions/{id}/review",
+                new { by = By, verdict, text = d.Text, note = d.Note, send = d.Send, remember = d.Remember },
+                "Update", id.ToString(), $"Checked a Vita draft: {verdict}{(d.Send && verdict != "wrong" ? ", sent" : "")}", ct);
+        }
+
+        [HttpPost("lessons")]
+        public Task<IActionResult> AddLesson([FromBody] AiLessonDto d, CancellationToken ct)
+        {
+            if (!CanView) return Task.FromResult<IActionResult>(Forbid());
+            var text = (d.Text ?? "").Trim();
+            if (text.Length < 8) return Task.FromResult<IActionResult>(BadRequest(new { message = "Write the lesson in one sentence." }));
+            return Change(HttpMethod.Post, "v1/lessons", new { by = By, agent = d.Agent, text = text.Length > 400 ? text[..400] : text }, "Create", d.Agent, $"Gave Vita agent {d.Agent} a lesson", ct);
+        }
+
+        [HttpPost("lessons/{agent}/{key}/drop")]
+        public Task<IActionResult> DropLesson(string agent, string key, CancellationToken ct)
+        {
+            if (!CanView) return Task.FromResult<IActionResult>(Forbid());
+            return Change(HttpMethod.Post, $"v1/lessons/{Uri.EscapeDataString(agent)}/{Uri.EscapeDataString(key)}/drop", new { by = By }, "Delete", agent, $"Removed a lesson from Vita agent {agent}", ct);
+        }
+
         [HttpGet("lessons")]
         public Task<IActionResult> Lessons([FromQuery] string? agent, CancellationToken ct)
         {
@@ -355,6 +390,17 @@ namespace SeemanchalOutreach.Api.Controllers
         /// <summary>admin | marketing_manager (from the Agents page's report recipients).</summary>
         public List<string> Roles { get; set; } = new();
     }
+
+    public class AiReviewDto
+    {
+        public string Verdict { get; set; } = "";
+        public string? Text { get; set; }
+        public string? Note { get; set; }
+        public bool Send { get; set; }
+        public bool Remember { get; set; }
+    }
+    public class AiLessonDto { public string Agent { get; set; } = ""; public string? Text { get; set; } }
+    public class AgentIdDto { public string AgentId { get; set; } = ""; }
 
     public class AgentLeadReplyDto { public string Text { get; set; } = ""; public string AgentId { get; set; } = ""; }
     public class AgentLeadUpdateDto
@@ -538,6 +584,155 @@ namespace SeemanchalOutreach.Api.Controllers
             await _db.SaveChangesAsync(ct);
             await _live.PublishAsync(new LiveEvent { Kind = "lead", Text = $"Vita replied to {l.Name}", RefId = l.Id.ToString() });
             return Ok(new { status = msg.Status, error = msg.Error, messageId = msg.Id });
+        }
+
+        private static readonly string[] NotSent = { "failed", "blocked" };
+
+        /// <summary>
+        /// Leads whose last WhatsApp message nobody (desk or Vita) has answered, still inside the 24-hour window. The agents
+        /// service asks every few minutes, so a message it was never told about (it was restarting) is still picked up.
+        /// </summary>
+        [HttpGet("leads/waiting")]
+        public async Task<IActionResult> LeadsWaiting(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var since = DateTime.UtcNow.AddHours(-24);
+            var leads = await _db.Leads.AsNoTracking()
+                .Where(l => l.LastInboundAt != null && l.LastInboundAt > since && !l.OptOut && l.ClosedAt == null && l.Status != "lost")
+                .OrderBy(l => l.LastInboundAt).Take(300).Select(l => new { l.Id, l.Phone, l.LastInboundAt }).ToListAsync(ct);
+            if (leads.Count == 0) return Ok(new { items = Array.Empty<object>() });
+            var phones = leads.Select(l => l.Phone).Distinct().ToList();
+            var answered = (await _db.WaMessages.AsNoTracking()
+                    .Where(m => phones.Contains(m.Phone) && m.Direction == "out" && m.CreatedAt > since && m.SentBy != null && !NotSent.Contains(m.Status)
+                        && (m.SentBy.StartsWith("ai:") || HumanSources.Contains(m.Source)))
+                    .GroupBy(m => m.Phone).Select(g => new { Phone = g.Key, At = g.Max(m => m.CreatedAt) }).ToListAsync(ct))
+                .ToDictionary(x => x.Phone, x => x.At);
+            var optedOut = (await _db.WaConversations.AsNoTracking().Where(c => phones.Contains(c.Phone) && c.OptOut).Select(c => c.Phone).ToListAsync(ct)).ToHashSet();
+            return Ok(new
+            {
+                items = leads.Where(l => !optedOut.Contains(l.Phone) && (!answered.TryGetValue(l.Phone, out var at) || at < l.LastInboundAt))
+                    .Select(l => new { id = l.Id, lastInboundAt = l.LastInboundAt }),
+            });
+        }
+
+        // ─── Lead Follow-up ────────────────────────────────────────────────
+
+        public const int MaxFollowUps = 3;
+
+        /// <summary>
+        /// Open leads that have gone quiet, for the Lead Follow-up agent: how many follow-ups each has had since they last
+        /// wrote, and when anyone last touched it. No names and no phone numbers.
+        /// </summary>
+        [HttpGet("leads/idle")]
+        public async Task<IActionResult> LeadsIdle(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var now = DateTime.UtcNow;
+            var idleSince = now.AddMinutes(-25);
+            var notOlder = now.AddDays(-60);
+            var leads = await _db.Leads.AsNoTracking()
+                .Where(l => (l.Status == "new" || l.Status == "contacted") && !l.OptOut && l.ClosedAt == null && l.LastActivityAt < idleSince && l.CreatedAt > notOlder)
+                .OrderBy(l => l.LastActivityAt).Take(400).ToListAsync(ct);
+            var phones = leads.Select(l => l.Phone).Distinct().ToList();
+            var outs = phones.Count == 0 ? new() : await _db.WaMessages.AsNoTracking()
+                .Where(m => phones.Contains(m.Phone) && m.Direction == "out" && m.CreatedAt > notOlder && !NotSent.Contains(m.Status) && m.BroadcastId == null)
+                .Select(m => new { m.Phone, m.Source, m.SentBy, m.CreatedAt }).ToListAsync(ct);
+            var byPhone = outs.ToLookup(m => m.Phone);
+            var ids = leads.Select(l => l.Id).ToList();
+            var called = ids.Count == 0 ? new HashSet<Guid>() : (await _db.LeadActivities.AsNoTracking().Where(a => ids.Contains(a.LeadId) && a.Kind == "call").Select(a => a.LeadId).Distinct().ToListAsync(ct)).ToHashSet();
+            var optedOut = phones.Count == 0 ? new HashSet<string>() : (await _db.WaConversations.AsNoTracking().Where(c => phones.Contains(c.Phone) && c.OptOut).Select(c => c.Phone).ToListAsync(ct)).ToHashSet();
+            var cfg = _outbox.Config;
+            var template = cfg.Template("lead_followup");
+            return Ok(new
+            {
+                templateReady = cfg.IsConfigured && template != null,
+                // The wording itself is the template Meta approved; it is not rewritten here.
+                templateText = template != null ? $"Approved WhatsApp follow-up template “{template}”" : null,
+                whatsappPaused = _outbox.Rules.Paused,
+                maxFollowUps = MaxFollowUps,
+                items = leads.Where(l => !optedOut.Contains(l.Phone) && l.Phone.Length >= 10).Select(l =>
+                {
+                    var mine = byPhone[l.Phone].ToList();
+                    var follow = mine.Where(m => m.Source == "followup" && (l.LastInboundAt == null || m.CreatedAt > l.LastInboundAt)).ToList();
+                    var lastOut = mine.Count > 0 ? mine.Max(m => m.CreatedAt) : (DateTime?)null;
+                    var touch = new[] { l.LastActivityAt, l.LastInboundAt ?? DateTime.MinValue, lastOut ?? DateTime.MinValue }.Max();
+                    return new
+                    {
+                        id = l.Id, status = l.Status, source = l.Source, hasOwner = l.OwnerId != null, optOut = false,
+                        // Anything already sent to them counts (also the automatic thank-you a form lead gets), so nobody gets two templates in an hour.
+                        contacted = l.FirstResponseAt != null || called.Contains(l.Id) || mine.Count > 0,
+                        followUps = follow.Count,
+                        lastFollowUpAt = follow.Count > 0 ? follow.Max(m => m.CreatedAt) : (DateTime?)null,
+                        lastTouchAt = touch, createdAt = l.CreatedAt, lastInboundAt = l.LastInboundAt,
+                    };
+                }),
+            });
+        }
+
+        /// <summary>
+        /// Sends the approved follow-up template for the Lead Follow-up agent. Refused after an opt-out, for a lead that is no
+        /// longer open, after the third follow-up since they last wrote, within 20 hours of the last one, or when they have
+        /// just written (then a person or the Lead Responder answers instead).
+        /// </summary>
+        [HttpPost("leads/{id:guid}/follow-up")]
+        public async Task<IActionResult> LeadFollowUp(Guid id, [FromBody] AgentIdDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var l = await _db.Leads.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (l == null) return NotFound();
+            var now = DateTime.UtcNow;
+            if (l.OptOut || await _db.WaConversations.AsNoTracking().AnyAsync(c => c.Phone == l.Phone && c.OptOut, ct)) return Conflict(new { message = "opted_out" });
+            if (l.Status != "new" && l.Status != "contacted") return Conflict(new { message = "not_open" });
+            if (_outbox.Rules.Paused) return Conflict(new { message = "whatsapp_paused" });
+            if (l.LastInboundAt != null && l.LastInboundAt > now.AddHours(-20)) return Conflict(new { message = "fresh_reply" });
+            var cfg = _outbox.Config;
+            if (cfg.Template("lead_followup") == null) return Conflict(new { message = "no_template" });
+            var since = l.LastInboundAt ?? DateTime.MinValue;
+            var sent = await _db.WaMessages.AsNoTracking().Where(m => m.Phone == l.Phone && m.Direction == "out" && m.Source == "followup" && m.CreatedAt > since && !NotSent.Contains(m.Status))
+                .Select(m => m.CreatedAt).ToListAsync(ct);
+            if (sent.Count >= MaxFollowUps) return Conflict(new { message = "max_follow_ups" });
+            if (sent.Count > 0 && sent.Max() > now.AddHours(-20)) return Conflict(new { message = "too_soon" });
+
+            var agent = "ai:" + (d.AgentId.Length > 40 ? d.AgentId[..40] : d.AgentId);
+            var first = l.Name.StartsWith("+") ? "" : l.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+            var n = sent.Count + 1;
+            var msg = await _outbox.SendUseAsync(l.Phone, "lead_followup", "hi", new[] { first.Length > 0 ? first : "जी", cfg.HospitalName },
+                $"Follow-up {n} of {MaxFollowUps} ({cfg.Template("lead_followup")}) sent by Vita", "followup", agent, l.Id, null, ct);
+            if (msg.Status == "sent")
+                _db.LeadActivities.Add(new LeadActivity { LeadId = l.Id, Kind = "note", By = agent, Text = $"Vita sent follow-up {n} of {MaxFollowUps} on WhatsApp (the approved template)." });
+            await _db.SaveChangesAsync(ct);
+            if (msg.Status != "sent") return Conflict(new { message = "not_sent", error = msg.Error });
+            await _live.PublishAsync(new LiveEvent { Kind = "lead", Text = $"Vita followed up with {l.Name}", RefId = l.Id.ToString() });
+            return Ok(new { status = msg.Status, messageId = msg.Id, followUp = n });
+        }
+
+        /// <summary>
+        /// Closes a lead as lost for the Lead Follow-up agent, only when it is still open, has had all its follow-ups since
+        /// the person last wrote, and the last one was at least three days ago. A person can reopen it from the lead.
+        /// </summary>
+        [HttpPost("leads/{id:guid}/close-quiet")]
+        public async Task<IActionResult> LeadCloseQuiet(Guid id, [FromBody] AgentIdDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var l = await _db.Leads.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (l == null) return NotFound();
+            if (l.Status != "new" && l.Status != "contacted") return Conflict(new { message = "not_open" });
+            var now = DateTime.UtcNow;
+            var since = l.LastInboundAt ?? DateTime.MinValue;
+            var sent = await _db.WaMessages.AsNoTracking().Where(m => m.Phone == l.Phone && m.Direction == "out" && m.Source == "followup" && m.CreatedAt > since && !NotSent.Contains(m.Status))
+                .Select(m => m.CreatedAt).ToListAsync(ct);
+            if (sent.Count < MaxFollowUps) return Conflict(new { message = "follow_ups_not_done" });
+            if (sent.Max() > now.AddDays(-3)) return Conflict(new { message = "too_soon" });
+            var agent = "ai:" + (d.AgentId.Length > 40 ? d.AgentId[..40] : d.AgentId);
+            var from = l.Status;
+            l.Status = "lost";
+            l.LostReason = $"No response after {MaxFollowUps} follow-ups";
+            l.ClosedAt = now;
+            l.LastActivityAt = now;
+            _db.LeadActivities.Add(new LeadActivity { LeadId = l.Id, Kind = "status", By = agent, CreatedAt = now, Text = $"{LeadInbox.StatusLabel(from)} → {LeadInbox.StatusLabel("lost")} ({l.LostReason}). Closed by Vita; reopen it if they get in touch." });
+            await _db.SaveChangesAsync(ct);
+            await _live.PublishAsync(new LiveEvent { Kind = "lead", Text = $"Vita closed a lead that didn't answer: {l.Name}", RefId = l.Id.ToString() });
+            return Ok(new { status = l.Status });
         }
 
         /// <summary>Sets the lead's department, adds a note, and when asked tells its owner (or the desk) straight away.</summary>

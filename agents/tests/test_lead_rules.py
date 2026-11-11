@@ -185,3 +185,18 @@ def test_guard_accepts_iso_dates_in_records():
     facts = rules.facts_from({}, [{"type": "camp", "id": "x", "facts": {"date": "2026-11-21"}}])
     assert rules.check("Camp 21 Nov ko.", channel="whatsapp", facts=facts, has_sources=True) == []
     assert rules.check("Camp 21/11 ko.", channel="whatsapp", facts=facts, has_sources=True) == []
+
+
+# ─── Voice notes written out by NexMarket ("🎤 Voice message: “…”") are read like typed messages ───
+
+def test_voice_note_without_words_goes_to_a_person():
+    from nexagents.agents.lead_responder import triage
+    assert triage(["🎤 Voice message"]).media_only
+
+
+def test_voice_note_with_words_is_triaged_like_text():
+    from nexagents.agents.lead_responder import triage
+    assert triage(["🎤 Voice message: “mere papa ke seene me bahut dard hai”"]).emergency
+    assert triage(["🎤 Voice message: “operation ka kharcha kitna lagega”"]).handoff == "asked about price, fees or insurance"
+    t = triage(["🎤 Voice message: “aankh ke doctor kab baithte hain”"])
+    assert not t.media_only and not t.handoff and not t.emergency

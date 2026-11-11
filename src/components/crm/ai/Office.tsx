@@ -86,9 +86,9 @@ export function Lane({ items, nameOf, tick }: { items: ActionRow[]; nameOf: (id:
 }
 
 /** The selected agent's card: its job, what it may do, its limits, its switches. */
-export function Side({ a, stopAll, me, busy, onPause, onResume, onMode, feed }: {
+export function Side({ a, stopAll, me, busy, onPause, onResume, onMode, feed, onCheck }: {
   a: AgentRow; stopAll: boolean; me: { isAdmin: boolean }; busy: boolean;
-  onPause: () => void; onResume: () => void; onMode: (m: Mode) => void; feed: ActionRow[];
+  onPause: () => void; onResume: () => void; onMode: (m: Mode) => void; feed: ActionRow[]; onCheck?: () => void;
 }) {
   const l = lookOf(a, stopAll);
   const guard = a.id === 'compliance_guard';
@@ -113,6 +113,12 @@ export function Side({ a, stopAll, me, busy, onPause, onResume, onMode, feed }: 
           <dt>Limits</dt><dd>{a.limits}</dd>
           <dt>Works with</dt><dd>{a.talksTo.join(', ') || '—'}</dd>
           <dt>Today</dt><dd>{a.today.done} done · {a.today.shadow} practice · {a.today.blocked} stopped · {a.tokensToday.toLocaleString('en-IN')} tokens</dd>
+          {a.available && a.reviews && (a.reviews.checked > 0 || a.reviews.waiting > 0) && (
+            <><dt>Checked by people</dt><dd>
+              {a.reviews.checked > 0 ? `${a.reviews.percent}% good as written (${a.reviews.good} of ${a.reviews.checked} in 30 days; ${a.reviews.edited} edited, ${a.reviews.wrong} wrong)` : 'None checked yet'}
+              {a.reviews.waiting > 0 && onCheck ? <> · <button type="button" className="ai-linkish ai-to-check" onClick={onCheck}>{a.reviews.waiting} to check</button></> : null}
+            </dd></>
+          )}
         </dl>
         <div className="ai-side-actions">
           {guard ? (

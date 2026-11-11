@@ -161,9 +161,13 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly AgentEvents _agents;
         /// <summary>Leads that wrote in this request, told to the Vita agents once everything is saved.</summary>
         private readonly HashSet<Guid> _wroteIn = new();
+        private readonly VoiceNotes _voiceNotes;
+        /// <summary>Voice notes in this request: written out after the reply to Meta; the Vita agents are told then.</summary>
+        private readonly List<VoiceNotes.Note> _voice = new();
 
-        public WhatsAppWebhookController(IMarketingDbContext db, IConfiguration config, ILiveEvents live, IPermissionService perms, INotifier notifier, IWhatsAppSender wa, IAppSettings settings, WhatsAppOutbox outbox, AgentEvents agents)
+        public WhatsAppWebhookController(IMarketingDbContext db, IConfiguration config, ILiveEvents live, IPermissionService perms, INotifier notifier, IWhatsAppSender wa, IAppSettings settings, WhatsAppOutbox outbox, AgentEvents agents, VoiceNotes voiceNotes)
         {
+            _voiceNotes = voiceNotes;
             _agents = agents;
             _settings = settings;
             _outbox = outbox;
@@ -223,7 +227,9 @@ namespace SeemanchalOutreach.Api.Controllers
                 }
             }
             await _db.SaveChangesAsync(ct);
-            foreach (var id in _wroteIn) _agents.Publish("lead.message", id.ToString());
+            // A lead whose only new message is a voice note is told to Vita once the note has been written out.
+            foreach (var id in _wroteIn.Where(id => _voice.All(v => v.LeadId != id))) _agents.Publish("lead.message", id.ToString());
+            _voiceNotes.Queue(_voice);
             return Ok();
         }
 
@@ -349,6 +355,9 @@ namespace SeemanchalOutreach.Api.Controllers
             }, ct);
 
             if (res.Lead != null && !isStop && !string.IsNullOrWhiteSpace(text)) _wroteIn.Add(res.Lead.Id);
+            if (type == "audio" && m.TryGetProperty("audio", out var au) && au.TryGetProperty("id", out var auId) && auId.GetString() is { Length: > 0 } mediaId
+                && m.TryGetProperty("id", out var wamid) && wamid.GetString() is { Length: > 0 } wid)
+                _voice.Add(new VoiceNotes.Note(wid, mediaId, res.Lead?.Id));
             var who = res.Lead?.Name ?? res.Conversation?.Name ?? contacts.FirstOrDefault()?.Name ?? from;
             await _live.PublishAsync(new LiveEvent
             {

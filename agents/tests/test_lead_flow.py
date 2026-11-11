@@ -168,10 +168,9 @@ def test_invented_doctor_is_not_sent(monkeypatch):
     scenario(monkeypatch, nm, m, body=body)
 
 
-@pytest.mark.parametrize("intent", ["appointment", "medical_advice"])
-def test_the_ai_classing_it_for_a_person_is_handed_over(monkeypatch, intent):
-    nm, m = FakeNexMarket(), FakeModel([D(intent=intent, reply="ok")])
-    nm.lead("L1", ["kal ka appointment chahiye", ])
+def test_the_ai_classing_it_for_a_person_is_handed_over(monkeypatch):
+    nm, m = FakeNexMarket(), FakeModel([D(intent="medical_advice", reply="ok")])
+    nm.lead("L1", ["bukhar me kya khana chahiye", ])
 
     async def body():
         r = await lr.run("L1")

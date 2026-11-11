@@ -115,6 +115,7 @@ function AiAgents() {
   if (!ov) return <main className="crm-page">{err ? <ErrorBox message={err} onRetry={load} /> : <Skeleton h={560} />}</main>;
   const d = ov.data;
   const on = d.agents.filter((a) => a.available && a.mode !== 'off' && !a.paused).length;
+  const waitingCheck = d.agents.reduce((n, a) => n + (a.reviews?.waiting ?? 0), 0);
 
   return (
     <main className="crm-page ai-page">
@@ -150,6 +151,11 @@ function AiAgents() {
       </nav>
 
       {err && <ErrorBox message={err} onRetry={load} />}
+      {waitingCheck > 0 && tab !== 'activity' && (
+        <button type="button" className="ai-check-banner" onClick={() => router.replace('/admin/ai-agents?tab=activity&show=check', { scroll: false })}>
+          <strong>{waitingCheck} practice {waitingCheck === 1 ? 'message is' : 'messages are'} waiting for you to check.</strong> Say good, fix it, or wrong, and send the good ones from here.
+        </button>
+      )}
 
       {tab === 'office' && (
         <>
@@ -170,14 +176,16 @@ function AiAgents() {
               <Side a={selected} stopAll={d.stopAll.on} me={ov.me} busy={busy} feed={selFeed}
                 onPause={() => void act(() => crm.post(`/api/v1/ai-agents/agents/${selected.id}/pause`, { reason: null }), `${selected.name} paused.`)}
                 onResume={() => void act(() => crm.post(`/api/v1/ai-agents/agents/${selected.id}/resume`), `${selected.name} resumed.`)}
-                onMode={(m: Mode) => void act(() => crm.put(`/api/v1/ai-agents/agents/${selected.id}/mode`, { mode: m }), `${selected.name} is now ${m}.`)} />
+                onMode={(m: Mode) => void act(() => crm.put(`/api/v1/ai-agents/agents/${selected.id}/mode`, { mode: m }), `${selected.name} is now ${m}.`)}
+                onCheck={() => router.replace('/admin/ai-agents?tab=activity&show=check', { scroll: false })} />
             )}
           </div>
           <p className="ai-foot"><ShieldCheck size={15} aria-hidden /> Every message to patients, partners or the public passes the Compliance Guard first. Agents only act through NexMarket, and no patient details go to the AI.</p>
         </>
       )}
       {tab === 'activity' && (
-        <Activity rows={feed} agents={d.agents} more={more} onMore={() => {
+        <Activity key={params.get('show') ?? ''} startChecking={params.get('show') === 'check'} rows={feed} agents={d.agents} more={more}
+          onChanged={(m) => { show(m); void load(); void loadFeed(); }} onMore={() => {
           const last = feed[feed.length - 1];
           if (!last) return;
           void crm.get<ActionRow[]>(`/api/v1/ai-agents/actions?limit=60&before=${encodeURIComponent(last.created_at)}`).then((rows) => { setFeed((f) => [...f, ...rows]); setMore(rows.length === 60); }).catch(() => undefined);
@@ -186,7 +194,7 @@ function AiAgents() {
       {tab === 'guard' && <TryGuard />}
       {tab === 'limits' && (settings ? <LimitsPanel key={JSON.stringify(settings.meta)} settings={settings} canEdit={ov.me.canEdit} onSaved={(m) => { show(m); void loadSettings(); }} /> : <Skeleton h={420} />)}
       {tab === 'policy' && (settings ? <PolicyPanel key={JSON.stringify(settings.meta)} settings={settings} canEdit={ov.me.canEdit} onSaved={(m) => { show(m); void loadSettings(); }} /> : <Skeleton h={420} />)}
-      {tab === 'lessons' && <LessonsPanel lessons={lessons} agents={d.agents} />}
+      {tab === 'lessons' && <LessonsPanel lessons={lessons} agents={d.agents} onChanged={(m) => { show(m); void crm.get<Lesson[]>('/api/v1/ai-agents/lessons').then(setLessons).catch(() => undefined); void load(); }} />}
 
       {stopOpen && (
         <Modal title="Stop all agents?" onClose={() => setStopOpen(false)} actions={<>

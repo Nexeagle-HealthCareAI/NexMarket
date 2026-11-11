@@ -102,3 +102,10 @@ CREATE TABLE IF NOT EXISTS agents.usage (
     tokens_out  int NOT NULL DEFAULT 0,
     PRIMARY KEY (day, agent_id)
 );
+
+-- A person's verdict on something an agent did or would have done (shadow): good, edited (with the better text) or
+-- wrong. This is how an agent's accuracy is measured before it goes live, and where its lessons come from.
+ALTER TABLE agents.actions ADD COLUMN IF NOT EXISTS review jsonb;
+ALTER TABLE agents.actions ADD COLUMN IF NOT EXISTS reviewed_at timestamptz;
+ALTER TABLE agents.actions ADD COLUMN IF NOT EXISTS reviewed_by text;
+CREATE INDEX IF NOT EXISTS actions_reviewed ON agents.actions (agent_id, reviewed_at) WHERE reviewed_at IS NOT NULL;

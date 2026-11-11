@@ -8,6 +8,8 @@ export interface AgentRow {
   today: { done: number; shadow: number; blocked: number; skipped: number; failed: number };
   tokensToday: number;
   last?: { summary: string; status: string; created_at: string } | null;
+  /** How people judged its drafts in the last 30 days, and how many drafts wait to be checked. */
+  reviews?: { good: number; edited: number; wrong: number; checked: number; percent: number | null; waiting: number };
 }
 export interface Overview {
   version: string; groq: boolean; stopAll: { on: boolean; by?: string | null; reason?: string | null; at?: string | null };
@@ -18,7 +20,11 @@ export interface ActionRow {
   id: string; agent_id: string; kind: string; status: 'done' | 'shadow' | 'blocked' | 'held' | 'failed' | 'skipped';
   summary: string; subject_type?: string | null; subject_id?: string | null; channel?: string | null;
   detail?: Record<string, unknown>; reasons?: { rule: string; message: string; match?: string | null }[]; to_agent?: string | null; created_at: string;
+  review?: { verdict: 'good' | 'edited' | 'wrong'; text?: string | null; note?: string | null; sent?: boolean } | null;
+  reviewed_at?: string | null; reviewed_by?: string | null;
 }
+/** A practice (shadow) message a person can still check: it has the text and nobody has judged it yet. */
+export const needsCheck = (r: ActionRow) => r.status === 'shadow' && typeof r.detail?.text === 'string' && !r.reviewed_at;
 export interface GuardIssue { rule: string; severity: 'block' | 'fix'; message: string; match?: string | null; fixable: boolean }
 export interface GuardRes {
   outcome: 'pass' | 'fix' | 'block' | 'held'; text: string; rewritten: boolean; issues: GuardIssue[];
@@ -26,7 +32,7 @@ export interface GuardRes {
 }
 export interface Limits {
   quietHours: { from: string; to: string; allowRepliesToInbound: boolean };
-  lead: { repliesPerLeadPerHour: number; maxFollowUpsPerLead: number; autoRepliesPerPersonPerDay: number };
+  lead: { repliesPerLeadPerHour: number; maxFollowUpsPerLead: number; autoRepliesPerPersonPerDay: number; followUpsPerDay: number; closeAfterQuietDays: number };
   partner: { messagesPerDay: number };
   broadcast: { perListPerWeek: number; perPersonPerWeek: number };
   social: { postsPerChannelPerDay: number };
@@ -43,7 +49,7 @@ export interface Settings {
   recipients: { roles: string[]; whatsapp: boolean };
   meta: Record<string, { updatedAt?: string; updatedBy?: string }>;
 }
-export interface Lesson { agentId: string; key: string; text: string; status?: 'trial' | 'kept' | 'dropped'; episodes?: number; score?: number }
+export interface Lesson { agentId: string; key: string; text: string; status?: 'trial' | 'kept' | 'dropped'; episodes?: number; score?: number; by?: string; at?: string }
 
 const V = '/brand/vita/';
 export const POSE = {

@@ -64,6 +64,7 @@ builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.PresenceTracker>()
 builder.Services.Configure<SeemanchalOutreach.Api.Controllers.AgentsSettings>(builder.Configuration.GetSection("Agents"));
 builder.Services.AddHttpClient("agents", c => c.Timeout = TimeSpan.FromSeconds(90));
 builder.Services.AddSingleton<SeemanchalOutreach.Api.Controllers.AgentEvents>();
+builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.VoiceNotes>();
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.BusinessData>();
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.AnalystAgent>();
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.FieldAssistant>();

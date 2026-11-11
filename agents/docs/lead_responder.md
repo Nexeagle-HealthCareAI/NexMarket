@@ -67,6 +67,13 @@ Shadow mode runs every step and records what it *would* send, sending nothing.
 5. Repeated emergency messages would each send the emergency text; now once per 30 minutes, alerts every time.
 6. Every unanswerable message alerted the desk; now once per lead per hour.
 
+## Added 11 Nov 2026
+
+- **Appointments:** Vita still never books. It sends a fixed thank-you ("our team will call you"), asks what time suits
+  for the call unless they already said, and writes the time they give on the lead. Once per lead per day.
+- **Voice notes** arrive written out ("🎤 Voice message: “…”") and are answered like typed messages.
+- **Catch-up, failure alerts, checking drafts, lessons:** see `lead_follow_up.md`.
+
 ## Known limits
 
 - It answers WhatsApp leads only. Web-form and Facebook-form leads have no 24-hour window (a template is needed); the

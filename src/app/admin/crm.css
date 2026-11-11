@@ -2848,3 +2848,19 @@ div.wk-stat { cursor: default; }
   .hd-grid3 > :first-child { grid-column: 1 / -1; }
   .hd-photo { width: calc(50% - 4px); }
 }
+
+/* ─── Vita agents: checking practice messages ─── */
+.ai-review { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; background: #fff; border: 1px solid #b9d6f5; }
+.ai-review textarea, .ai-review input:not([type='checkbox']), .ai-lesson-add input, .ai-lesson-add select { border: 1px solid #d6dae3; border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 14px; background: #fff; color: var(--text); width: 100%; }
+.ai-review textarea { resize: vertical; min-height: 84px; }
+.ai-review-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.ai-review-btns button:empty { display: none; }
+.ai-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-3); }
+.ai-check-chip { margin-left: 8px; border: 1px solid #b9d6f5; background: var(--accent-tint); color: var(--accent-ink); border-radius: 999px; padding: 1px 9px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.ai-verdict { margin-left: 8px; font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: #eef0f4; color: #4a5263; white-space: nowrap; }
+.ai-verdict.is-good { background: #dcfae6; color: #067647; } .ai-verdict.is-edited { background: #fff4e0; color: #8a5100; } .ai-verdict.is-wrong { background: #fee4e2; color: #b42318; }
+.ai-check-banner { display: block; width: 100%; text-align: left; margin: 0 0 12px; padding: 12px 16px; border-radius: 14px; border: 1px solid #b9d6f5; background: var(--accent-tint); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+.ai-check-banner:hover { border-color: var(--accent); }
+.ai-to-check { color: var(--accent-ink); font-weight: 700; }
+.ai-lesson-add { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.ai-lesson-add select { width: auto; }

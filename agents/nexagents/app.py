@@ -7,15 +7,16 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from typing import Any, AsyncIterator
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from . import __version__, actions, blackboard, db, limits, nexmarket
+from . import __version__, actions, blackboard, db, limits, nexmarket, review as reviews
 from .act import guard, log_guard
-from .agents import lead_responder
+from .agents import lead_follow_up, lead_responder
 from .agents.base import runtime
 from .agents.registry import AGENTS, BY_ID, WINGS
 from .auth import require_secret
@@ -42,6 +43,13 @@ async def housekeeping() -> None:
         n = await blackboard.release_expired()
         if n:
             log.info("Released %s expired claims", n)
+        # Tasks given up on after three tries: a person hears about it once, instead of the work vanishing.
+        lost = await db.fetch("UPDATE agents.tasks SET result = result || '{\"told\": true}'::jsonb WHERE status = 'failed' AND result->>'error' LIKE 'gave up%%' "
+                              "AND NOT (result ? 'told') AND updated_at > now() - interval '1 day' RETURNING for_agent, goal")
+        if lost:
+            who = BY_ID[lost[0]["for_agent"]].name if lost[0]["for_agent"] in BY_ID else "An agent"
+            await nexmarket.notify_team(f"{who} gave up on {len(lost)} {'task' if len(lost) == 1 else 'tasks'}",
+                                        f"Tried three times and stopped: {lost[0]['goal'][:120]}. See Activity on the Agents page.", "ai-agents", agent_id=lost[0]["for_agent"] or "chief_of_staff")
     except Exception:
         log.exception("housekeeping failed")
 
@@ -57,8 +65,14 @@ async def watch_anomalies() -> None:
             if st.get("mode") == "off" or st.get("paused"):
                 continue
             blocks = await actions.blocks_last_hour(a.id)
+            today, usual = await actions.volume(a.id)
+            reason = None
             if blocks >= lim["blocksPerHourToPause"]:
                 reason = f"{blocks} messages blocked by the Guard in the last hour"
+            # Far more messages than this agent normally sends in a day (and enough of them to matter).
+            elif lim.get("volumeMultipleToPause", 0) > 0 and today >= VOLUME_FLOOR and usual >= 1 and today >= usual * lim["volumeMultipleToPause"]:
+                reason = f"it sent {today} messages today, {today / usual:.0f} times its usual {usual:.0f} a day"
+            if reason:
                 await limits.set_paused(a.id, True, "system", reason)
                 await actions.record(a.id, "pause", "done", f"Paused automatically: {reason}")
                 try:
@@ -67,6 +81,26 @@ async def watch_anomalies() -> None:
                     log.exception("could not send the pause alert")
     except Exception:
         log.exception("anomaly watch failed")
+
+
+# The unusual-volume pause only counts once an agent has sent this many messages in the day.
+VOLUME_FLOOR = 30
+
+
+async def catch_up_leads() -> None:
+    try:
+        n = await lead_responder.catch_up()
+        if n:
+            log.info("Catch-up queued %s missed leads", n)
+    except Exception:
+        log.exception("lead catch-up failed")
+
+
+async def follow_up_leads() -> None:
+    try:
+        await lead_follow_up.tick()
+    except Exception:
+        log.exception("lead follow-up failed")
 
 
 async def work_leads() -> None:
@@ -85,6 +119,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     sched.add_job(housekeeping, "interval", minutes=5, id="housekeeping")
     sched.add_job(watch_anomalies, "interval", minutes=10, id="anomalies")
     sched.add_job(work_leads, "interval", seconds=15, id="lead_responder", max_instances=1, coalesce=True)
+    sched.add_job(catch_up_leads, "interval", minutes=3, id="lead_catch_up", max_instances=1, coalesce=True)
+    # Follow-ups go out in the working day only: every hour from 10 am to 6 pm India time.
+    sched.add_job(follow_up_leads, "cron", hour="10-18", minute=20, id="lead_follow_up", max_instances=1, coalesce=True)
     sched.start()
     log.info("NexMarket Agents %s started (Groq %s)", __version__, "ready" if config.groq_ready else "NOT configured")
     try:
@@ -121,7 +158,13 @@ async def overview() -> dict[str, Any]:
     handoffs = await db.fetchone(
         "SELECT count(*) AS n FROM agents.actions WHERE kind = 'handoff' AND created_at >= date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'")
     stop = await limits.stop_all_state()
+    judged = await actions.review_counts()
+    waiting = await actions.waiting_review()
     lessons_week = 0
+    week_ago = (db.now() - timedelta(days=7)).isoformat()
+    for a in AGENTS:
+        if a.built:
+            lessons_week += sum(1 for x in await runtime.lessons(a.id, limit=50) if str(x.get("at") or "") >= week_ago)
     out = []
     for a in AGENTS:
         st = states.get(a.id, {})
@@ -135,6 +178,8 @@ async def overview() -> dict[str, Any]:
             "today": {"done": c.get("done", 0), "shadow": c.get("shadow", 0), "blocked": c.get("blocked", 0) + c.get("held", 0),
                       "skipped": c.get("skipped", 0), "failed": c.get("failed", 0)},
             "tokensToday": int(usage.get(a.id, {}).get("tokens", 0) or 0),
+            # How people judged its drafts in the last 30 days, and how many drafts still wait to be checked.
+            "reviews": {**reviews.score(judged.get(a.id, {})), "waiting": waiting.get(a.id, 0)},
             "last": db.to_json(last.get(a.id)) if last.get(a.id) else None,
         })
     total = {k: sum(x["today"][k] for x in out) for k in ("done", "shadow", "blocked", "skipped", "failed")}
@@ -270,6 +315,48 @@ async def guard_check(req: GuardRequest) -> dict[str, Any]:
     result = await guard(req)
     await log_guard(result, req)
     return result.model_dump()
+
+
+# ─── Checking an agent's work ────────────────────────────────────────────────
+
+class ReviewBody(By):
+    verdict: str
+    text: str | None = Field(default=None, max_length=2000)
+    note: str | None = Field(default=None, max_length=400)
+    send: bool = False
+    remember: bool = False
+
+
+@app.post("/v1/actions/{action_id}/review", dependencies=secured)
+async def review_action(action_id: str, body: ReviewBody) -> dict[str, Any]:
+    try:
+        return await reviews.review(action_id, by=body.by, verdict=body.verdict, text=body.text, note=body.note, send=body.send, remember=body.remember)
+    except reviews.ReviewError as e:
+        raise HTTPException(e.status, {"message": str(e), "issues": e.issues})
+
+
+class LessonBody(By):
+    agent: str
+    text: str = Field(min_length=8, max_length=400)
+
+
+@app.post("/v1/lessons", dependencies=secured)
+async def add_lesson(body: LessonBody) -> dict[str, Any]:
+    a = _agent(body.agent)
+    if not a.built:
+        raise HTTPException(400, f"{a.name} isn't built yet, so it can't use lessons.")
+    key = await runtime.add_lesson(a.id, body.text, body.by)
+    await actions.record(a.id, "lesson", "done", f"New lesson from {body.by}: {body.text[:200]}")
+    return {"ok": True, "key": key}
+
+
+@app.post("/v1/lessons/{agent_id}/{key}/drop", dependencies=secured)
+async def drop_lesson(agent_id: str, key: str, body: By) -> dict[str, Any]:
+    a = _agent(agent_id)
+    if not await runtime.drop_lesson(a.id, key, body.by):
+        raise HTTPException(404, "No such lesson.")
+    await actions.record(a.id, "lesson", "done", f"Lesson removed by {body.by}")
+    return {"ok": True}
 
 
 # ─── Lessons, blackboard, events ─────────────────────────────────────────────

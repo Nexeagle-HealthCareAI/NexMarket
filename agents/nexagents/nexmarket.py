@@ -77,3 +77,25 @@ async def lead_update(lead_id: str, *, agent_id: str, department: str | None = N
                       alert: str | None = None, urgent: bool = False) -> dict[str, Any]:
     return await _post(f"/api/v1/internal/agent-tools/leads/{lead_id}/update",
                        {"agentId": agent_id, "department": department, "note": note, "alert": alert, "urgent": urgent})
+
+
+async def leads_waiting() -> dict[str, Any]:
+    """Leads whose last WhatsApp message nobody (desk or Vita) has answered, still inside the 24-hour window."""
+    return await _get("/api/v1/internal/agent-tools/leads/waiting")
+
+
+# ─── Lead Follow-up ───────────────────────────────────────────────────────────
+
+async def leads_idle() -> dict[str, Any]:
+    """Open leads that have gone quiet, with how many follow-ups each has had. No names, no phone numbers."""
+    return await _get("/api/v1/internal/agent-tools/leads/idle")
+
+
+async def lead_follow_up(lead_id: str, *, agent_id: str) -> dict[str, Any]:
+    """Sends the approved follow-up template. NexMarket refuses (409) after an opt-out, the third follow-up, or a fresh reply."""
+    return await _post(f"/api/v1/internal/agent-tools/leads/{lead_id}/follow-up", {"agentId": agent_id})
+
+
+async def lead_close_quiet(lead_id: str, *, agent_id: str) -> dict[str, Any]:
+    """Closes a lead as lost (no response). NexMarket refuses (409) unless all follow-ups were sent and none in the last 3 days."""
+    return await _post(f"/api/v1/internal/agent-tools/leads/{lead_id}/close-quiet", {"agentId": agent_id})
