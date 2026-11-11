@@ -113,6 +113,11 @@ const en = {
   aiMarkDone: 'Yes, mark it done',
   aiNotYet: 'Not yet',
   aiMarkedDone: 'Task marked done',
+  clRingChannel: 'Incoming calls',
+  clRingChannelInfo: 'Rings full screen when the office or a colleague calls you',
+  clFsOffTitle: 'Calls can’t ring full screen',
+  clFsOffBody: 'Your phone stops this app from showing calls over the lock screen, so you may miss calls from the office. Tap to allow it.',
+  clFsAllow: 'Allow full-screen calls',
 };
 
 export default {
@@ -227,6 +232,11 @@ export default {
     aiMarkDone: 'हाँ, पूरा हो गया',
     aiNotYet: 'अभी नहीं',
     aiMarkedDone: 'काम पूरा माना गया',
+    clRingChannel: 'आने वाली कॉल',
+    clRingChannelInfo: 'ऑफ़िस या साथी कॉल करे तो पूरी स्क्रीन पर घंटी बजती है',
+    clFsOffTitle: 'कॉल पूरी स्क्रीन पर नहीं बज सकती',
+    clFsOffBody: 'आपका फ़ोन इस ऐप को लॉक स्क्रीन पर कॉल दिखाने से रोक रहा है, इसलिए ऑफ़िस की कॉल छूट सकती है। चालू करने के लिए दबाएँ।',
+    clFsAllow: 'पूरी स्क्रीन पर कॉल चालू करें',
   },
   hinglish: {
   chCallOffice: 'Office ko call karein',
@@ -338,6 +348,11 @@ export default {
     aiMarkDone: 'Haan, done karein',
     aiNotYet: 'Abhi nahi',
     aiMarkedDone: 'Kaam done ho gaya',
+    clRingChannel: 'Aane wali call',
+    clRingChannelInfo: 'Office ya saathi call kare to poori screen par ghanti bajti hai',
+    clFsOffTitle: 'Call poori screen par nahi baj sakti',
+    clFsOffBody: 'Aapka phone is app ko lock screen par call dikhane se rok raha hai, isliye office ki call chhoot sakti hai. Chalu karne ke liye dabaiye.',
+    clFsAllow: 'Poori screen par call chalu karein',
   },
   bn: {
   chCallOffice: 'অফিসে ফোন করুন',
@@ -449,5 +464,10 @@ export default {
     aiMarkDone: 'হ্যাঁ, শেষ হয়েছে',
     aiNotYet: 'এখনও না',
     aiMarkedDone: 'কাজ শেষ হিসেবে চিহ্নিত',
+    clRingChannel: 'আসা কল',
+    clRingChannelInfo: 'অফিস বা সহকর্মী কল করলে পুরো স্ক্রিনে রিং হয়',
+    clFsOffTitle: 'কল পুরো স্ক্রিনে বাজতে পারছে না',
+    clFsOffBody: 'আপনার ফোন এই অ্যাপকে লক স্ক্রিনে কল দেখাতে দিচ্ছে না, তাই অফিসের কল মিস হতে পারে। চালু করতে চাপুন।',
+    clFsAllow: 'পুরো স্ক্রিনে কল চালু করুন',
   },
 } satisfies UxTable<typeof en>;

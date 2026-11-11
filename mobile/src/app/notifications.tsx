@@ -5,6 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { T, toast } from '../components/ui';
 import { Icon, type IconName } from '../components/Icon';
 import { NX } from '../components/ChatAvatar';
+import { FullScreenCallsBanner } from '../components/CallParts';
 import { useSession } from '../lib/session';
 import {
   askPermission, cachedInbox, cachedNotifyUnread, loadSettings, markAllRead, markRead, openLink, permissionGranted, refreshInbox,
@@ -99,6 +100,7 @@ export default function NotificationsScreen() {
 
       <ScrollView style={{ flex: 1, backgroundColor: C.bg }} contentContainerStyle={{ paddingBottom: 24 + insets.bottom }}
         refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />}>
+        <FullScreenCallsBanner />
         {allowed === false && tab !== 'settings' ? (
           <Pressable onPress={() => void turnOn()} style={{ margin: 12, flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: C.warnSoft, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#f5d9a8' }}>
             <Icon name="bellOff" color={C.warnInk} />

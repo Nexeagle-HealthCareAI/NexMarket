@@ -53,7 +53,12 @@ namespace SeemanchalOutreach.Api.Services
             s = Aadhaar.Replace(s, m => Swap(m.Value, 'I'));
             s = Phone.Replace(s, m => Swap(m.Value, 'N'));
             s = LongNumber.Replace(s, m => Swap(m.Value, 'I'));
-            if (_names != null) s = _names.Replace(s, m => Swap(m.Value, 'P'));
+            if (_names != null)
+            {
+                // Too slow to check (a huge list of names): never send text whose names weren't hidden.
+                try { s = _names.Replace(s, m => Swap(m.Value, 'P')); }
+                catch (RegexMatchTimeoutException) { throw new ChatAiException(503, "Smart chat is busy just now. Try again in a minute."); }
+            }
             return s;
         }
 
@@ -150,6 +155,13 @@ namespace SeemanchalOutreach.Api.Services
             _cache.Set(key, used + 1, TimeSpan.FromHours(26));
         }
 
+        /// <summary>Gives back a request that didn't get an answer (the AI failed), so failures don't eat the allowance.</summary>
+        private void Refund(string who)
+        {
+            var key = DayKey(who);
+            if (_cache.TryGetValue(key, out int n) && n > 0) _cache.Set(key, n - 1, TimeSpan.FromHours(26));
+        }
+
         // ─── Patient names to hide ───────────────────────────────────────────
 
         /// <summary>
@@ -186,7 +198,14 @@ namespace SeemanchalOutreach.Api.Services
 
         // ─── Groq ────────────────────────────────────────────────────────────
 
-        private async Task<JsonObject> AskJsonAsync(string system, string user, string name, JsonObject schema, bool fast, CancellationToken ct, double temperature = 0.2)
+        private async Task<JsonObject> AskJsonAsync(string who, string system, string user, string name, JsonObject schema, bool fast, CancellationToken ct, double temperature = 0.2)
+        {
+            try { return await AskJsonOnceAsync(system, user, name, schema, fast, ct, temperature); }
+            catch (ChatAiException) { Refund(who); throw; }
+            catch (OperationCanceledException) { Refund(who); throw; }
+        }
+
+        private async Task<JsonObject> AskJsonOnceAsync(string system, string user, string name, JsonObject schema, bool fast, CancellationToken ct, double temperature)
         {
             var messages = new JsonArray
             {
@@ -278,7 +297,7 @@ namespace SeemanchalOutreach.Api.Services
                 "Be short and natural, the way a colleague would write it. If a message is already in that language, set same=true and text to \"\". " +
                 "Never add explanations.";
             var schema = Schema(Obj(("items", Arr(Schema(Obj(("id", Str()), ("same", Bool()), ("text", Str())), "id", "same", "text"), 40))), "items");
-            var json = await AskJsonAsync(system, sb.ToString(), "translations", schema, fast: true, ct);
+            var json = await AskJsonAsync(who, system, sb.ToString(), "translations", schema, fast: true, ct);
             foreach (var it in json["items"]?.AsArray() ?? new JsonArray())
             {
                 if (!int.TryParse(it?["id"]?.ToString(), out var i) || i < 1 || i > todo.Count) continue;
@@ -348,7 +367,7 @@ namespace SeemanchalOutreach.Api.Services
                 "one agreeing or confirming, one giving a time or status, one asking for what is missing (or saying why not). " +
                 "Never promise money, medical advice or anything about a patient's health. Never invent facts, places, numbers or names.";
             var schema = Schema(Obj(("replies", Arr(Str(), 3))), "replies");
-            var json = await AskJsonAsync(system, $"The chat so far (newest last):\n{convo}\n\nSuggest {myName}'s next reply.", "replies", schema, fast: true, ct, temperature: 0.5);
+            var json = await AskJsonAsync(who, system, $"The chat so far (newest last):\n{convo}\n\nSuggest {myName}'s next reply.", "replies", schema, fast: true, ct, temperature: 0.5);
             var list = (json["replies"]?.AsArray() ?? new JsonArray())
                 .Select(r => red.Restore(r?.ToString()).Trim().Trim('"'))
                 .Where(r => r.Length > 0 && r.Length <= 160)
@@ -375,7 +394,7 @@ namespace SeemanchalOutreach.Api.Services
                 "a payment problem, a partner unhappy). Then up to 4 things still to do, each naming who should do it. Only use what is in " +
                 "the chat; never guess. Each point at most 25 words.";
             var schema = Schema(Obj(("points", Arr(Str(), 6)), ("todo", Arr(Str(), 4))), "points", "todo");
-            var json = await AskJsonAsync(system, convo, "summary", schema, fast: false, ct);
+            var json = await AskJsonAsync(who, system, convo, "summary", schema, fast: false, ct);
             static List<string> Take(JsonNode? a, Redactor r) => (a?.AsArray() ?? new JsonArray()).Select(x => r.Restore(x?.ToString()).Trim()).Where(x => x.Length > 0).ToList();
             var s = new Summary(Take(json["points"], red), Take(json["todo"], red));
             _cache.Set(key, s, TimeSpan.FromHours(6));
@@ -405,7 +424,7 @@ namespace SeemanchalOutreach.Api.Services
                 ("overview", Str()),
                 ("chats", Arr(Schema(Obj(("key", Str()), ("summary", Str()), ("urgent", Bool()), ("why", Str())), "key", "summary", "urgent", "why"), 60))),
                 "overview", "chats");
-            var json = await AskJsonAsync(system, sb.ToString(), "digest", schema, fast: false, ct);
+            var json = await AskJsonAsync(who, system, sb.ToString(), "digest", schema, fast: false, ct);
             var keys = chats.Select(c => c.Key).ToHashSet();
             var lines = (json["chats"]?.AsArray() ?? new JsonArray())
                 .Select(x => new DigestLine(x?["key"]?.ToString() ?? "", red.Restore(x?["summary"]?.ToString()).Trim(),
@@ -444,7 +463,7 @@ namespace SeemanchalOutreach.Api.Services
                 "priority high only if urgent (a patient, \"urgent\", \"abhi\", \"turant\"), else normal.";
             var schema = Schema(Obj(("isTask", Bool()), ("title", Str()), ("detail", Str()), ("due", Str()), ("priority", new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("high", "normal") })),
                 "isTask", "title", "detail", "due", "priority");
-            var json = await AskJsonAsync(system, $"Earlier in the chat:\n{context}\n\nThe message:\n{red.Hide(text)}", "task", schema, fast: true, ct);
+            var json = await AskJsonAsync(who, system, $"Earlier in the chat:\n{context}\n\nThe message:\n{red.Hide(text)}", "task", schema, fast: true, ct);
             var isTask = json["isTask"]?.GetValue<bool>() ?? false;
             var title = red.Restore(json["title"]?.ToString()).Trim();
             if (title.Length > 200) title = title[..200];
@@ -479,7 +498,7 @@ namespace SeemanchalOutreach.Api.Services
                 "A field agent wrote a chat message to the office. Decide whether it reports that ONE of the agent's open tasks below is finished. " +
                 "Answer the task number, or 0 when it doesn't clearly finish one (a plan, a question, a partial update, or unrelated).";
             var schema = Schema(Obj(("task", new JsonObject { ["type"] = "integer" })), "task");
-            var json = await AskJsonAsync(system, $"Open tasks:\n{list}\n\nThe agent's message:\n{red.Hide(text)}", "done", schema, fast: true, ct);
+            var json = await AskJsonAsync(who, system, $"Open tasks:\n{list}\n\nThe agent's message:\n{red.Hide(text)}", "done", schema, fast: true, ct);
             var n = json["task"]?.GetValue<int>() ?? 0;
             var task = n >= 1 && n <= Math.Min(open.Count, 20) ? open[n - 1] : null;
             _cache.Set(key, task?.Id, TimeSpan.FromDays(1));

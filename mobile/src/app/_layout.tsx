@@ -22,7 +22,9 @@ import { LockScreen } from '../components/LockScreen';
 import { lockNow, lockState, useLock } from '../lib/lock';
 import { useLite } from '../lib/perf';
 import { startPresence } from '../lib/presence';
-import { openIncoming } from '../lib/calls';
+import { askToAnswer, declineCall, openIncoming } from '../lib/calls';
+import notifee, { EventType } from 'react-native-notify-kit';
+import { ringTapOf, stopRing, type RingTap } from '../lib/callRing';
 import { CallWatcher } from '../components/CallParts';
 
 // WebRTC for LiveKit calls (voice and video through the hospital's own server): once, before any call starts.
@@ -95,7 +97,21 @@ function Gate() {
     Notifications.getLastNotificationResponseAsync().then((r) => {
       if (r) { handleResponse(r); void Notifications.clearLastNotificationResponseAsync().catch(() => undefined); }
     }).catch(() => undefined);
-    return () => { sub.remove(); received.remove(); };
+    // The phone-style ring (Android): a tap opens the incoming screen, Answer answers, Decline declines.
+    const onRingTap = (tap: RingTap | null) => {
+      if (!tap) return;
+      if (tap.action === 'decline') { void stopRing(tap.callId); void declineCall(tap.callId); return; }
+      if (tap.action === 'answer') askToAnswer(tap.callId);
+      else openIncoming(tap.callId, true);
+    };
+    const ringSub = notifee.onForegroundEvent((e) => onRingTap(ringTapOf(e)));
+    // The full-screen ring or a tap that started the app.
+    notifee.getInitialNotification().then((init) => {
+      if (!init) return;
+      const action = init.pressAction?.id;
+      onRingTap(ringTapOf({ type: action && action !== 'default' ? EventType.ACTION_PRESS : EventType.PRESS, detail: { notification: init.notification, pressAction: init.pressAction } }));
+    }).catch(() => undefined);
+    return () => { sub.remove(); received.remove(); ringSub(); };
   }, [ready, agent]);
 
   // Online / last seen in chat: a heartbeat while the app is on screen.

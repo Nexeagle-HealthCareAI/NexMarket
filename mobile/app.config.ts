@@ -62,6 +62,8 @@ const config: ExpoConfig = {
       'android.permission.MODIFY_AUDIO_SETTINGS',
       'android.permission.BLUETOOTH_CONNECT',
       'android.permission.WAKE_LOCK',
+      // An incoming call rings full screen, like a phone call, even when the phone is locked or the app is closed.
+      'android.permission.USE_FULL_SCREEN_INTENT',
     ],
     // The app records audio only while the agent taps Speak or is in a call, and never reads the photo gallery (photos must be taken live).
     // SYSTEM_ALERT_WINDOW (added by the WebRTC plugin) stays blocked: calls don't draw over other apps.
@@ -126,6 +128,8 @@ const config: ExpoConfig = {
         color: '#0a72d6',
       },
     ],
+    // The full-screen ringing for incoming calls (Answer / Decline on the notification, ringing until answered).
+    'react-native-notify-kit',
     [
       'expo-image-picker',
       {

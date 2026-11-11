@@ -12,7 +12,7 @@ import { liveLine } from '../../lib/presence';
 import { explainOnce } from '../../lib/speak';
 import { relDay, timeOf } from '../../lib/format';
 import { C } from '../../theme';
-import { CallBanner, callPreview } from '../../components/CallParts';
+import { CallBanner, FullScreenCallsBanner, callPreview } from '../../components/CallParts';
 import { liveCallIn, localCallPreview, useActiveCalls } from '../../lib/calls';
 
 type Filter = 'all' | 'unread' | 'people';
@@ -109,6 +109,7 @@ export default function ChatList() {
       <View style={{ flex: 1, backgroundColor: C.bg }}>
         <ScrollView refreshControl={<RefreshControl refreshing={busy} onRefresh={load} />} keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, gap: 10, paddingBottom: 110 + insets.bottom }}>
+          <FullScreenCallsBanner />
           {live.map(({ th, c }) => <CallBanner key={c.id} call={c} where={titleOf(th, t, office)} />)}
           {shown.length === 0 ? (
             <View style={{ padding: 28, alignItems: 'center', gap: 10 }}>

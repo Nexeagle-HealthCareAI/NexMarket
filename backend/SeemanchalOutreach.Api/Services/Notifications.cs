@@ -128,6 +128,15 @@ namespace SeemanchalOutreach.Api.Services
             ids = await db.Agents.AsNoTracking().Where(a => ids.Contains(a.AgentId) && a.IsActive).Select(a => a.AgentId).ToListAsync(ct);
             if (ids.Count == 0) return;
 
+            // A phone-only signal (stop ringing): straight to the phones, nothing in the inbox.
+            if (job.Quiet)
+            {
+                if (!_fcm.Configured) return;
+                var quietTo = await db.PushDevices.Where(d => ids.Contains(d.UserId) && d.Enabled).ToListAsync(ct);
+                foreach (var d in quietTo) await _fcm.SendDataAsync(d.Token, job.Data, job.TtlSeconds ?? 60, ct);
+                return;
+            }
+
             var muted = (await db.NotificationSettings.AsNoTracking().Where(s => ids.Contains(s.UserId)).ToListAsync(ct))
                 .ToDictionary(s => s.UserId, s => new HashSet<string>(s.MutedKinds.Split(',', StringSplitOptions.RemoveEmptyEntries)));
 
@@ -168,7 +177,12 @@ namespace SeemanchalOutreach.Api.Services
                     ["link"] = job.Link ?? "",
                     ["badge"] = unread.GetValueOrDefault(d.UserId).ToString(),
                 };
-                var r = await _fcm.SendAsync(d.Token, Trim(job.Title, 120), job.Body, NotificationKinds.ChannelOf(job.Kind), job.Link ?? job.Kind, data, ct);
+                foreach (var kv in job.Data) data[kv.Key] = kv.Value;
+                // A ringing call: data only, so the app shows its own full-screen ringing (no title or body keys, or
+                // Android would show a plain notification of its own as well).
+                var r = job.Ring
+                    ? await _fcm.SendDataAsync(d.Token, data, job.TtlSeconds ?? 45, ct)
+                    : await _fcm.SendAsync(d.Token, Trim(job.Title, 120), job.Body, NotificationKinds.ChannelOf(job.Kind), job.Link ?? job.Kind, data, ct);
                 if (r == FcmResult.TokenGone) { d.Enabled = false; changed = true; }
             }
             if (changed) await db.SaveChangesAsync(ct);
@@ -253,27 +267,44 @@ namespace SeemanchalOutreach.Api.Services
             finally { _lock.Release(); }
         }
 
-        public async Task<FcmResult> SendAsync(string deviceToken, string title, string body, string channel, string tag, Dictionary<string, string> data, CancellationToken ct)
+        public Task<FcmResult> SendAsync(string deviceToken, string title, string body, string channel, string tag, Dictionary<string, string> data, CancellationToken ct) =>
+            PostAsync(new
+            {
+                message = new
+                {
+                    token = deviceToken,
+                    notification = new { title, body },
+                    data,
+                    android = new
+                    {
+                        priority = "HIGH",
+                        notification = new { channel_id = channel, tag, color = "#0a72d6", sound = "default", notification_priority = channel == "updates" ? "PRIORITY_DEFAULT" : "PRIORITY_HIGH" },
+                    },
+                },
+            }, ct);
+
+        /// <summary>
+        /// A data-only push at high priority: wakes the app (even when it was closed) without showing anything by itself.
+        /// Dropped by Firebase if it can't be delivered within <paramref name="ttlSeconds"/>.
+        /// </summary>
+        public Task<FcmResult> SendDataAsync(string deviceToken, Dictionary<string, string> data, int ttlSeconds, CancellationToken ct) =>
+            PostAsync(new
+            {
+                message = new
+                {
+                    token = deviceToken,
+                    data,
+                    android = new { priority = "HIGH", ttl = $"{Math.Max(1, ttlSeconds)}s" },
+                },
+            }, ct);
+
+        private async Task<FcmResult> PostAsync(object payload, CancellationToken ct)
         {
             if (!Configured) return FcmResult.Failed;
             try
             {
                 var token = await AccessTokenAsync(ct);
                 if (token == null) return FcmResult.Failed;
-                var payload = new
-                {
-                    message = new
-                    {
-                        token = deviceToken,
-                        notification = new { title, body },
-                        data,
-                        android = new
-                        {
-                            priority = "HIGH",
-                            notification = new { channel_id = channel, tag, color = "#0a72d6", sound = "default", notification_priority = channel == "updates" ? "PRIORITY_DEFAULT" : "PRIORITY_HIGH" },
-                        },
-                    },
-                };
                 var client = _http.CreateClient("fcm");
                 using var req = new HttpRequestMessage(HttpMethod.Post, $"https://fcm.googleapis.com/v1/projects/{_projectId}/messages:send")
                 {
