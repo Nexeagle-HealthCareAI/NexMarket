@@ -3,4 +3,5 @@
   <Project Path="SeemanchalOutreach.Application/SeemanchalOutreach.Application.csproj" />
   <Project Path="SeemanchalOutreach.Domain/SeemanchalOutreach.Domain.csproj" />
   <Project Path="SeemanchalOutreach.Infrastructure/SeemanchalOutreach.Infrastructure.csproj" />
+  <Project Path="SeemanchalOutreach.Tests/SeemanchalOutreach.Tests.csproj" />
 </Solution>

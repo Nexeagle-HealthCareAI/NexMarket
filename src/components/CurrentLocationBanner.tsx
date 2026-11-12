@@ -26,7 +26,7 @@ export function CurrentLocationBanner({ position, variant = 'default' }: { posit
     // Fetch panchayats data to do client-side reverse geocoding to find the Block
     fetch('/data/panchayats.json')
       .then(res => res.json())
-      .then((data: any[]) => {
+      .then((data: { centroidLat?: number; centroidLng?: number; block?: string | null; district?: string }[]) => {
         let minDist = Infinity;
         let nearestBlock = null;
         for (const p of data) {
@@ -34,7 +34,7 @@ export function CurrentLocationBanner({ position, variant = 'default' }: { posit
             const dist = getDistance(position.lat, position.lng, p.centroidLat, p.centroidLng);
             if (dist < minDist) {
               minDist = dist;
-              nearestBlock = p.block;
+              nearestBlock = p.block ?? null;
             }
           }
         }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   LineChart, Line, Legend, AreaChart, Area 
@@ -38,8 +38,11 @@ export const HealthcareDashboard: React.FC = () => {
     return document.cookie.split('; ').find(row => row.startsWith('access_token='))?.split('=')[1];
   };
 
+  const loadRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
-    loadDashboardData();
+    // Runs just after the screen is drawn, with the newest filters.
+    const t = setTimeout(() => void loadRef.current(), 0);
+    return () => clearTimeout(t);
   }, [selectedDistrict, selectedBlock]);
 
   const loadDashboardData = async () => {
@@ -71,6 +74,7 @@ export const HealthcareDashboard: React.FC = () => {
       setLoading(false);
     }
   };
+  useEffect(() => { loadRef.current = loadDashboardData; });
 
   if (loading && !kpis) {
     return <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>Loading Healthcare Intelligence Engine...</div>;
@@ -252,7 +256,7 @@ export const HealthcareDashboard: React.FC = () => {
               <div style={{ padding: '0.75rem', background: '#ecfdf5', borderLeft: '4px solid #10b981', borderRadius: '0 8px 8px 0' }}>
                 <span style={{ fontWeight: 700, color: '#064e3b', fontSize: '0.9rem' }}>2. B2B Intake Pipeline:</span>
                 <p style={{ fontSize: '0.85rem', color: '#065f46', margin: '0.25rem 0 0 0' }}>
-                  Launch the <strong>"RMP Tele-Triage Helpline"</strong> across {selectedBlock || selectedDistrict || 'the region'}. {kpis?.rmpTeleTriageReadiness}% of surveyed village doctors confirmed direct referral intent.
+                  Launch the <strong>&ldquo;RMP Tele-Triage Helpline&rdquo;</strong> across {selectedBlock || selectedDistrict || 'the region'}. {kpis?.rmpTeleTriageReadiness}% of surveyed village doctors confirmed direct referral intent.
                 </p>
               </div>
 

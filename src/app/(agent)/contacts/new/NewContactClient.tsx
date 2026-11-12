@@ -118,8 +118,10 @@ export default function NewContactPage() {
 
   // Auto-fill panchayat from active visit
   useEffect(() => {
-    if (!activeVisit?.panchayatId) return;
-    setForm((prev) => (prev.panchayatId ? prev : { ...prev, panchayatId: activeVisit.panchayatId }));
+    const id = activeVisit?.panchayatId;
+    if (!id) return;
+    const t = setTimeout(() => setForm((prev) => (prev.panchayatId ? prev : { ...prev, panchayatId: id })), 0);
+    return () => clearTimeout(t);
   }, [activeVisit?.panchayatId]);
 
   // Flat sorted panchayat list for search
@@ -521,7 +523,7 @@ export default function NewContactPage() {
                 <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b' }}>{t.crmDetails}</h3>
                 <div className="field-group">
                   <label className="field-label" htmlFor="contact-status">{t.leadStatus}</label>
-                  <select id="contact-status" className="field-input" value={form.status} onChange={(e) => update('status', e.target.value as any)}>
+                  <select id="contact-status" className="field-input" value={form.status} onChange={(e) => update('status', e.target.value as 'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected')}>
                     <option value="Lead">{t.statusLead}</option>
                     <option value="Contacted">{t.statusContacted}</option>
                     <option value="Interested">{t.statusInterested}</option>

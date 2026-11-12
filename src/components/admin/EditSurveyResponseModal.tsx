@@ -10,20 +10,25 @@ interface EditSurveyResponseModalProps {
   onSave: (id: string, newAnswersJson: string) => Promise<void>;
 }
 
+/** One saved answer: typed text, a number, or several ticked choices. */
+type Answer = string | number | string[];
+
 export default function EditSurveyResponseModal({ response, questions, isOpen, onClose, onSave }: EditSurveyResponseModalProps) {
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [answers, setAnswers] = useState<Record<string, Answer>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (response && isOpen) {
+    if (!response || !isOpen) return;
+    const t = setTimeout(() => {
       try {
         setAnswers(JSON.parse(response.answersJson || '{}'));
         setError('');
-      } catch (e) {
+      } catch {
         setError('Failed to parse existing answers.');
       }
-    }
+    }, 0);
+    return () => clearTimeout(t);
   }, [response, isOpen]);
 
   if (!isOpen || !response) return null;
@@ -42,7 +47,7 @@ export default function EditSurveyResponseModal({ response, questions, isOpen, o
     }
   };
 
-  const handleAnswerChange = (questionId: string, value: any) => {
+  const handleAnswerChange = (questionId: string, value: Answer) => {
     setAnswers(prev => ({
       ...prev,
       [questionId]: value
@@ -104,7 +109,8 @@ export default function EditSurveyResponseModal({ response, questions, isOpen, o
               {q.type === 'multi' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {q.optionsJson && JSON.parse(q.optionsJson).map((opt: string) => {
-                    const currentValues: string[] = Array.isArray(answers[q.questionId]) ? answers[q.questionId] : [];
+                    const saved = answers[q.questionId];
+                    const currentValues: string[] = Array.isArray(saved) ? saved : [];
                     const isChecked = currentValues.includes(opt);
                     return (
                       <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.95rem', color: '#475569' }}>

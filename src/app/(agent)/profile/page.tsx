@@ -25,7 +25,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!agentId) return;
-    setLoading(true);
+    const busy = setTimeout(() => setLoading(true), 0);
     getAgentDetail(agentId)
       .then((data) => {
         setAgent(data);
@@ -46,7 +46,7 @@ export default function ProfilePage() {
         });
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load your profile.'))
-      .finally(() => setLoading(false));
+      .finally(() => { clearTimeout(busy); setLoading(false); });
   }, [agentId]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {

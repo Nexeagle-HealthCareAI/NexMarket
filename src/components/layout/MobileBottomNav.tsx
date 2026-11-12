@@ -110,7 +110,7 @@ export default function MobileBottomNav() {
 
         {rightItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
-          const sb = (item as any).showBadge;
+          const sb = (item as { showBadge?: boolean }).showBadge;
           return (
             <Link
               key={item.href}

@@ -13,7 +13,7 @@ export default function NotFound() {
       <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '1rem' }}>Page Not Found</h2>
       
       <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', maxWidth: '400px' }}>
-        The page you are looking for doesn't exist or has been moved.
+        The page you are looking for doesn&rsquo;t exist or has been moved.
       </p>
 
       <Link href="/" className="btn btn-primary" style={{ padding: '0.75rem 2rem' }}>

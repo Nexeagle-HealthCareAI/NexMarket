@@ -246,7 +246,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '0.75rem' }}>
             <input value={editName} onChange={e => setEditName(e.target.value)} className="field-input" placeholder="Name" />
             <input value={editPhone} onChange={e => setEditPhone(e.target.value)} className="field-input" placeholder="Phone (10 digits)" type="tel" maxLength={10} />
-            <select value={editRole} onChange={e => setEditRole(e.target.value as any)} className="field-input">
+            <select value={editRole} onChange={e => setEditRole(e.target.value as ContactRole)} className="field-input">
               <option value="asha_worker">ASHA Worker</option>
               <option value="rmp_doctor">RMP Doctor</option>
               <option value="ward_member">Ward Member</option>
@@ -361,7 +361,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <select 
                     value={newStatus} 
-                    onChange={e => setNewStatus(e.target.value as any)}
+                    onChange={e => setNewStatus(e.target.value as 'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected')}
                     style={{ padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1' }}
                   >
                     <option value="Lead">Lead</option>

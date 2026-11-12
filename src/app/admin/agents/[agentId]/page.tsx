@@ -58,7 +58,12 @@ export default function AgentDetailPage({ params }: { params: Promise<{ agentId:
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [viewerAgentId, agentId]);
+  useEffect(() => {
+    const t = setTimeout(load, 0);
+    return () => clearTimeout(t);
+    // load reads the newest ids each time it runs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewerAgentId, agentId]);
   
   useEffect(() => {
     getPanchayats().then(setPanchayats).catch(console.error);

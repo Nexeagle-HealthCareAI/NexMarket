@@ -926,7 +926,7 @@ export function deleteAdminSurveyResponse(id: string): Promise<void> {
 }
 
 export function updateAdminSurveyResponse(id: string, answersJson: string): Promise<AdminSurveyDto> {
-  return put<any, AdminSurveyDto>(
+  return put<{ answersJson: string }, AdminSurveyDto>(
     `/api/v1/admin/surveys/${encodeURIComponent(id)}`,
     { answersJson }
   );

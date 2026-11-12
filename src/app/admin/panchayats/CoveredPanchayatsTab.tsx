@@ -40,11 +40,12 @@ export default function CoveredPanchayatsTab() {
   const [drawerLoading, setDrawerLoading] = useState(false);
 
   useEffect(() => {
-    setLoading(true);
+    let alive = true;
     getCoveredPanchayats()
-      .then(setData)
-      .catch(e => setError(e instanceof Error ? e.message : 'Failed to load'))
-      .finally(() => setLoading(false));
+      .then((d) => { if (alive) setData(d); })
+      .catch(e => { if (alive) setError(e instanceof Error ? e.message : 'Failed to load'); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
   }, []);
 
   const uniqueDistricts = useMemo(() => Array.from(new Set(data.map(p => p.district))).sort(), [data]);
@@ -52,7 +53,7 @@ export default function CoveredPanchayatsTab() {
 
   const sortedAndFiltered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    let res = data.filter((p) => {
+    const res = data.filter((p) => {
       if (filterDistrict && p.district !== filterDistrict) return false;
       if (filterBlock && p.block !== filterBlock) return false;
       if (!q) return true;
@@ -60,7 +61,9 @@ export default function CoveredPanchayatsTab() {
     });
 
     res.sort((a, b) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a column can be text or a number; the branches below treat each
       let aVal = a[sortField as keyof CoveredPanchayatDto] as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- same as above
       let bVal = b[sortField as keyof CoveredPanchayatDto] as any;
       
       if (sortField === 'contactCount') {
@@ -85,7 +88,8 @@ export default function CoveredPanchayatsTab() {
 
   useEffect(() => {
     if (totalPages > 0 && page > totalPages) {
-      setPage(totalPages);
+      const t = setTimeout(() => setPage(totalPages), 0);
+      return () => clearTimeout(t);
     }
   }, [totalPages, page]);
 
