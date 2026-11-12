@@ -39,11 +39,25 @@ settings and the in-memory cache follow it. Background work uses `OrgDirectory.F
   name, creates the database `nm_<name>`, and makes the person the admin (User ID `admin`, or their mobile number).
 - **Limits:** 5 tries per 10 minutes per network, one sign-up at a time, and `Platform:MaxSignupsPerDay` (default 10)
   new organisations a day. `Platform:SignUpOpen=false` closes sign-up.
+- **Checking the person:** when the server can send codes (the same mail and WhatsApp settings as "Forgot password"
+  below), sign-up first sends a 6-digit code to the mobile number (WhatsApp) and the email typed in the form, and the
+  organisation is created only with the right code. The code fits only that phone and email, works for 10 minutes and
+  5 tries, at most 3 codes an hour for one number and `Platform:MaxSignupCodesPerDay` (default 60) for the whole
+  server. If only email is set up, the email becomes compulsory and the mobile number is not checked. With no mail
+  and no WhatsApp template set up, sign-up works without a code, as before.
 - **Not verified:** the phone number and email are not checked yet. There is no email or SMS sender on the server.
 - **Sign-in:** the web page and the phone app have an Organisation field. Empty = the first organisation.
 - **The database user needs the CREATEDB right**, and PostGIS must be installable in new databases.
 - A browser or phone that holds field work from one organisation will not sign in to another (web), or starts
   clean (phone app), so two organisations' work never mixes.
+
+## The organisation's own name
+
+Screens, WhatsApp previews, review replies, QR posters, the phone app's wording and the AI helpers' instructions name
+the organisation that is signed in. The first organisation keeps exactly the wording it always had (its name and its
+region); every other organisation sees the name it signed up with. `Platform:DefaultOrgName` changes the first
+organisation's name. The rule is in one place: `OrgText` on the server, `orgName()` in the web app and
+`setOrgWording` in the phone app.
 
 ## Running the platform
 

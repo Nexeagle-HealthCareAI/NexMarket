@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, ShieldAlert, Star } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Skeleton } from '@/components/crm/ui';
+import { orgName } from '@/lib/crm/access';
 import { n0, when, type GoogleStatus } from './shared';
 
 interface Review { id: string; reviewer?: string | null; stars: number; comment?: string | null; postedAt: string; reply?: string | null; repliedAt?: string | null; repliedBy?: string | null }
@@ -13,8 +14,8 @@ const SHOWS = [{ k: 'unanswered', l: 'No reply yet' }, { k: 'low', l: '3 stars o
 
 /** Starting points for a reply. They never mention illness or treatment: a public reply must not confirm someone was a patient. */
 const STARTERS = [
-  { l: 'Thank you', t: (n: string) => `Thank you${n ? `, ${n}` : ''}, for your kind words. Our team will be glad to hear it. We wish you good health. – Glisan Akbari Hospital` },
-  { l: 'Sorry, please call us', t: (n: string) => `Dear ${n || 'reviewer'}, we are sorry to read this. We take every concern seriously and would like to understand what happened. Please call our patient help desk so we can look into it personally. – Glisan Akbari Hospital` },
+  { l: 'Thank you', t: (n: string) => `Thank you${n ? `, ${n}` : ''}, for your kind words. Our team will be glad to hear it. We wish you good health. – ${orgName()}` },
+  { l: 'Sorry, please call us', t: (n: string) => `Dear ${n || 'reviewer'}, we are sorry to read this. We take every concern seriously and would like to understand what happened. Please call our patient help desk so we can look into it personally. – ${orgName()}` },
 ];
 
 const stars = (n: number) => <span className="gg-stars" aria-label={`${n} of 5 stars`}>{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={14} aria-hidden fill={i <= n ? '#f2a600' : 'none'} color={i <= n ? '#f2a600' : 'var(--border)'} />)}</span>;

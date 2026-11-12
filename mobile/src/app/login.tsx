@@ -56,7 +56,7 @@ export default function Login() {
               <Image source={require('../../assets/brand/logo.png')} style={{ width: 34, height: 25 }} resizeMode="contain" />
               <T style={{ color: '#fff', fontSize: 26, fontWeight: '800' }}>NexEagle</T>
             </View>
-            <T style={{ color: C.sideText, fontSize: 14, textAlign: 'center' }}>{t('hospital')}</T>
+            <T style={{ color: C.sideText, fontSize: 14, textAlign: 'center' }}>{org === getOrg() ? t('hospital') : ' '}</T>
             <T style={{ color: C.mint, fontSize: 14, fontWeight: '700' }}>{t('fieldTeamApp')}</T>
           </View>
 

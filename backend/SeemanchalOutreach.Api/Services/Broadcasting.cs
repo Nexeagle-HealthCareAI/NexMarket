@@ -67,16 +67,16 @@ namespace SeemanchalOutreach.Api.Services
             {
                 case "doctor_availability":
                     return hi
-                        ? $"नमस्ते {name} जी,\nग्लिसन अकबरी सुपर स्पेशलिटी हॉस्पिटल में {Get(p, "doctorName")} ({Get(p, "department")}) {Get(p, "date")} को {Get(p, "timing")} OPD में उपलब्ध रहेंगे।" + (note != "" ? $"\n{note}" : "")
-                        : $"Hello {name},\n{Get(p, "doctorName")} ({Get(p, "department")}) will be available in OPD at Glisan Akbari Super Speciality Hospital on {Get(p, "date")}, {Get(p, "timing")}." + (note != "" ? $"\n{note}" : "");
+                        ? $"नमस्ते {name} जी,\n{OrgText.For("ग्लिसन अकबरी सुपर स्पेशलिटी हॉस्पिटल")} में {Get(p, "doctorName")} ({Get(p, "department")}) {Get(p, "date")} को {Get(p, "timing")} OPD में उपलब्ध रहेंगे।" + (note != "" ? $"\n{note}" : "")
+                        : $"Hello {name},\n{Get(p, "doctorName")} ({Get(p, "department")}) will be available in OPD at {OrgText.For("Glisan Akbari Super Speciality Hospital")} on {Get(p, "date")}, {Get(p, "timing")}." + (note != "" ? $"\n{note}" : "");
                 case "schedule_change":
                     return hi
                         ? $"नमस्ते {name} जी,\n{Get(p, "doctorName")} ({Get(p, "department")}) के OPD समय में बदलाव: {Get(p, "details")}"
                         : $"Hello {name},\nOPD change for {Get(p, "doctorName")} ({Get(p, "department")}): {Get(p, "details")}";
                 case "camp_invite":
                     return hi
-                        ? $"नमस्ते {name} जी,\nग्लिसन अकबरी हॉस्पिटल का स्वास्थ्य शिविर: {Get(p, "place")}, {Get(p, "date")}। {Get(p, "details")}"
-                        : $"Hello {name},\nGlisan Akbari Hospital health camp: {Get(p, "place")}, {Get(p, "date")}. {Get(p, "details")}";
+                        ? $"नमस्ते {name} जी,\n{OrgText.For("ग्लिसन अकबरी हॉस्पिटल")} का स्वास्थ्य शिविर: {Get(p, "place")}, {Get(p, "date")}। {Get(p, "details")}"
+                        : $"Hello {name},\n{OrgText.For("Glisan Akbari Hospital")} health camp: {Get(p, "place")}, {Get(p, "date")}. {Get(p, "details")}";
                 default:
                     return hi ? $"नमस्ते {name} जी,\n{Get(p, "message")}" : $"Hello {name},\n{Get(p, "message")}";
             }

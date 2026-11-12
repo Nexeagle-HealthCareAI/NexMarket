@@ -19,7 +19,7 @@ import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/a
 import { useLiveEvents } from '@/lib/crm/live';
 import { usePresenceBeat } from '@/lib/crm/presence';
 import { useAgentStore } from '@/store/agent-store';
-import { canView, clearAccess, isDashboardRole, ROLE_LABELS, useAccess, type PageKey } from '@/lib/crm/access';
+import { canView, clearAccess, isDashboardRole, orgName, ROLE_LABELS, useAccess, type PageKey } from '@/lib/crm/access';
 import { initials } from '@/components/crm/ui';
 
 type IconType = ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidden'?: boolean }>;
@@ -302,7 +302,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Image src="/brand/nexeagle-mark.png" alt="" width={40} height={40} className="crm-brand-mark" priority unoptimized />
           <div className="crm-brand-text">
             <span className="crm-brand-name">NexEagle</span>
-            <span className="crm-brand-sub">Glisan Akbari SuperSpeciality Hospital</span>
+            <span className="crm-brand-sub">{orgName('full')}</span>
           </div>
           <button type="button" className="crm-icon-btn crm-collapse-btn" onClick={toggleSidebar}
             aria-label="Collapse or expand sidebar" title="Collapse or expand sidebar">
@@ -373,7 +373,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="crm-topbar">
           <Image src="/brand/nexeagle-mark.png" alt="NexEagle" width={34} height={34} className="crm-brand-mark" style={{ width: 34, height: 34 }} priority unoptimized />
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <span style={{ fontSize: 12, color: '#aeb7ca', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>NexEagle · Glisan Akbari SuperSpeciality</span>
+            <span style={{ fontSize: 12, color: '#aeb7ca', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>NexEagle · {access?.orgFirst === false ? orgName() : 'Glisan Akbari SuperSpeciality'}</span>
             <span style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 700, fontSize: 16 }}>{current?.label ?? 'Dashboard'}</span>
           </div>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }} className="crm-top-bell">

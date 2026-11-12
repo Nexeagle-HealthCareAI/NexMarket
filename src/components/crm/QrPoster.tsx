@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Copy, Download, ExternalLink, Printer, Share2 } from 'lucide-react';
 import { Modal } from '@/components/crm/ui';
+import { orgName } from '@/lib/crm/access';
 
 /** A QR code as an inline SVG (generated here in the browser; nothing is sent anywhere). */
 export function QrCode({ text, size = 200, label }: { text: string; size?: number; label: string }) {
@@ -37,7 +38,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 export function QrPosterModal({ info, onClose, intro }: { info: QrPosterInfo; onClose: () => void; intro?: React.ReactNode }) {
   const [copied, setCopied] = useState(false);
   const link = info.waLink;
-  const hospital = info.hospital ?? 'Glisan Akbari Hospital';
+  const hospital = info.hospital ?? orgName();
 
   const copy = async () => {
     if (!link) return;

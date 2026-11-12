@@ -249,7 +249,7 @@ export function WaSetup({ onSaved }: { onSaved?: () => void }) {
 
       {/* 4. Messages */}
       <section className="crm-card wa-step">
-        <StepHead n={4} done={!!form.hospitalName} title="Automatic messages and QR codes" sub="What patients see. Hindi and English together work well across Seemanchal." />
+        <StepHead n={4} done={!!form.hospitalName} title="Automatic messages and QR codes" sub="What patients see. Your patients' language and English together work well." />
         <div className="wa-grid">
           <Field label="Hospital name" hint="Used in templates and on QR posters" server={fromServer('hospitalName')}>
             <input className="crm-input" value={form.hospitalName} onChange={set('hospitalName')} />

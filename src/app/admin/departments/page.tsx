@@ -4,7 +4,7 @@ import { Suspense, useState } from 'react';
 import { Building2, Pencil, Plus, Stethoscope } from 'lucide-react';
 import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit, useAccess } from '@/lib/crm/access';
+import { canEdit, orgName, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { Pager, usePaged } from '@/components/crm/Pager';
 
@@ -34,7 +34,7 @@ function DepartmentsPage() {
 
   return (
     <main className="crm-page">
-      <PageHead title="Departments & doctors" sub="Glisan Akbari's departments and doctors. Field agents pick from these when referring, and WhatsApp broadcasts use them for OPD updates." />
+      <PageHead title="Departments & doctors" sub={`${orgName()}: departments and doctors. Field agents pick from these when referring, and WhatsApp broadcasts use them for OPD updates.`} />
 
       <PageTabs label="Departments and doctors" value={tab} onChange={setTab} tabs={[
         { key: 'doctors', label: 'Doctors', icon: Stethoscope, count: doctors.data?.length },

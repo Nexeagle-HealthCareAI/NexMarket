@@ -34,32 +34,23 @@ namespace SeemanchalOutreach.Api.Controllers
 
         private readonly IMarketingDbContext _db;
         private readonly IMemoryCache _cache;
-        private readonly IConfiguration _config;
-        private readonly EmailSender _email;
-        private readonly IWhatsAppSender _wa;
-        private readonly IAppSettings _settings;
-        private readonly ILogger<RecoveryController> _log;
+        private readonly CodeSender _codes;
 
-        public RecoveryController(IMarketingDbContext db, IMemoryCache cache, IConfiguration config, EmailSender email, IWhatsAppSender wa, IAppSettings settings, ILogger<RecoveryController> log)
+        public RecoveryController(IMarketingDbContext db, IMemoryCache cache, CodeSender codes)
         {
-            _db = db; _cache = cache; _config = config; _email = email; _wa = wa; _settings = settings; _log = log;
+            _db = db; _cache = cache; _codes = codes;
         }
-
-        private string? OtpTemplate => string.IsNullOrWhiteSpace(_config["Platform:OtpTemplate"]) ? null : _config["Platform:OtpTemplate"]!.Trim();
-
-        /// <summary>The platform's WhatsApp number (the first organisation's) sends the codes, whichever organisation asks.</summary>
-        private bool WhatsAppReady { get { using (OrgScope.Enter(null)) return OtpTemplate != null && _wa.IsConfigured; } }
 
         /// <summary>Which ways a code can be sent on this server, so the page can say so honestly.</summary>
         [HttpGet("recovery/options")]
-        public IActionResult Options() => Ok(new { email = _email.Configured, whatsapp = WhatsAppReady });
+        public IActionResult Options() => Ok(new { email = _codes.EmailReady, whatsapp = _codes.WhatsAppReady });
 
         [HttpPost("forgot")]
         public async Task<IActionResult> Forgot([FromBody] ForgotDto dto, CancellationToken ct)
         {
             var typed = (dto?.UserId ?? "").Trim();
             if (typed.Length == 0 || typed.Length > 120) return BadRequest(new { message = "Enter your User ID, phone or email." });
-            if (!_email.Configured && !WhatsAppReady)
+            if (!_codes.Ready)
                 return StatusCode(503, new { message = "Codes can't be sent from this server yet. Ask your admin to reset your password." });
 
             var agent = await _db.Agents.FirstOrDefaultAsync(a => a.AgentId == typed || a.Phone == typed || (a.Email != null && a.Email == typed), ct);
@@ -75,32 +66,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 TimeSpan.FromMinutes(Recovery.CodeMinutes + 1));
 
             var org = OrgScope.Current?.Name ?? "NexEagle";
-            var byEmail = false; var byWhatsApp = false;
-            if (_email.Configured && !string.IsNullOrWhiteSpace(agent.Email))
-                byEmail = await _email.SendAsync(agent.Email!, $"Your NexEagle code: {code}", Recovery.EmailText(code, org), ct);
-            if (!string.IsNullOrWhiteSpace(agent.Phone) && OtpTemplate is { } template)
-            {
-                using (OrgScope.Enter(null))   // from the platform's own number
-                {
-                    if (_wa.IsConfigured)
-                    {
-                        var wa = LeadInbox.Wa(_settings, _config);
-                        var to = new string(agent.Phone.Where(char.IsDigit).ToArray());
-                        if (to.Length == 10) to = "91" + to;
-                        var components = new List<object> { new { type = "body", parameters = new[] { new { type = "text", text = code } } } };
-                        // Meta's "authentication" templates carry the code in a copy-code button as well.
-                        if (!string.Equals(_config["Platform:OtpTemplateButton"], "false", StringComparison.OrdinalIgnoreCase))
-                            components.Add(new { type = "button", sub_type = "url", index = "0", parameters = new[] { new { type = "text", text = code } } });
-                        var (ok, _, error) = await _wa.GraphPostAsync($"{wa.PhoneNumberId}/messages", new
-                        {
-                            messaging_product = "whatsapp", to, type = "template",
-                            template = new { name = template, language = new { code = _config["Platform:OtpTemplateLang"] ?? "en" }, components },
-                        }, ct);
-                        byWhatsApp = ok;
-                        if (!ok) _log.LogWarning("Recovery code could not be sent on WhatsApp: {Error}", error);
-                    }
-                }
-            }
+            var (byEmail, byWhatsApp) = await _codes.SendAsync(agent.Email, agent.Phone, code, $"Your NexEagle code: {code}", Recovery.EmailText(code, org), ct);
             _db.AuditLogs.Add(AuthAudit.Event(HttpContext, agent, "password_code_sent",
                 byEmail || byWhatsApp ? $"Forgot-password code sent by {string.Join(" and ", new[] { byEmail ? "email" : null, byWhatsApp ? "WhatsApp" : null }.Where(x => x != null))}"
                     : "Forgot-password code could not be sent (no email or WhatsApp number on the account, or sending failed)", null, DeviceKinds.Detect(Request)));

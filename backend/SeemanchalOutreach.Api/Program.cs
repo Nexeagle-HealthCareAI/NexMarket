@@ -27,6 +27,7 @@ builder.Services.AddSingleton<Microsoft.Extensions.Caching.Memory.IMemoryCache>(
     new OrgMemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())));
 builder.Services.AddSingleton<OrgDirectory>();
 builder.Services.AddSingleton<EmailSender>();
+builder.Services.AddScoped<CodeSender>();
 builder.Services.AddScoped<IOrgDatabase, OrgDatabaseSetup>();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);

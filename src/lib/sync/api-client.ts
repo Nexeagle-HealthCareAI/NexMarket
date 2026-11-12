@@ -524,8 +524,14 @@ export const resetPasswordWithCode = (userId: string, code: string, newPassword:
 export interface SignupBody {
   orgName: string; orgKey?: string; kinds: string[]; city?: string;
   name: string; phone: string; email?: string; password: string;
+  /** The code sent to the phone and email, when the server checks them. */
+  code?: string;
 }
-export interface SignupOptions { open: boolean; kinds: { key: string; label: string }[] }
+export interface SignupOptions {
+  open: boolean; kinds: { key: string; label: string }[];
+  /** The server sends a code to prove the phone or email before it creates the organisation. */
+  verify?: boolean; verifyEmail?: boolean; verifyWhatsApp?: boolean;
+}
 export interface SignupCheck { key: string | null; available: boolean; message?: string | null }
 export class SignupError extends Error {
   constructor(message: string, public fields: Record<string, string> = {}) { super(message); }
@@ -542,6 +548,18 @@ export const checkOrgKey = (key: string, name: string) =>
 /** The organisation's name for a sign-in name, or null when there is no such organisation. */
 export async function findOrg(key: string): Promise<{ key: string; name: string } | null> {
   try { return await publicGet<{ key: string; name: string }>(`/api/v1/signup/org/${encodeURIComponent(key)}`); } catch { return null; }
+}
+/** Sends the sign-up code. Says where it really went. */
+export async function sendSignupCode(body: { phone: string; email?: string; orgName?: string }): Promise<{ needed: boolean; email?: boolean; whatsapp?: boolean; minutes?: number }> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/v1/signup/code`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) });
+  } catch {
+    throw new SignupError('Can’t reach the server. Check your internet connection and try again.');
+  }
+  if (res.ok) return res.json();
+  const j = (await res.json().catch(() => null)) as { message?: string; fields?: Record<string, string> } | null;
+  throw new SignupError(j?.message ?? (res.status === 429 ? 'Too many tries from this network. Wait a minute and try again.' : 'Something went wrong. Please try again.'), j?.fields ?? {});
 }
 /** Creates the organisation and its first admin. Can take up to a minute: a new database is made. */
 export async function signUp(body: SignupBody): Promise<{ key: string; name: string; userId: string }> {

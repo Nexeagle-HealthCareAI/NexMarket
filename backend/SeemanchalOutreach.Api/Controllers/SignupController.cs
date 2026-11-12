@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -28,11 +29,23 @@ namespace SeemanchalOutreach.Api.Controllers
         public string? Phone { get; set; }
         public string? Email { get; set; }
         public string? Password { get; set; }
+        /// <summary>The 6-digit code sent to the phone and email, when this server can send codes.</summary>
+        public string? Code { get; set; }
     }
+
+    public class SignupCodeDto { public string? Phone { get; set; } public string? Email { get; set; } public string? OrgName { get; set; } }
 
     /// <summary>The rules for signing up, apart from the database, so they can be checked on their own.</summary>
     public static class Signup
     {
+        /// <summary>Where a waiting sign-up code is kept: by the phone number being checked.</summary>
+        public static string CodeKey(string phone) => "signup-code:" + phone;
+        public static string CodeSendsKey(string phone) => "signup-code-sends:" + phone;
+        public const string CodesTodayKey = "signup-codes-today";
+
+        /// <summary>The code proves the phone, and the email too when one was given: change either and the code no longer fits.</summary>
+        public static string CodeOwner(string phone, string? email) => phone + "|" + (email ?? "").Trim().ToLowerInvariant();
+
         public static readonly (string Key, string Label)[] Kinds =
         {
             ("hospital", "Hospital"), ("clinic", "Clinic"), ("diagnostic", "Diagnostic centre"), ("lab", "Pathology lab"),
@@ -110,19 +123,22 @@ namespace SeemanchalOutreach.Api.Controllers
         private readonly OrgDirectory _orgs;
         private readonly IConfiguration _config;
         private readonly ILogger<SignupController> _log;
+        private readonly CodeSender _codes;
+        private readonly IMemoryCache _cache;
         // One sign-up at a time: creating a database is heavy, and this keeps the daily limit exact.
         private static readonly SemaphoreSlim OneAtATime = new(1, 1);
 
-        public SignupController(IServiceScopeFactory scopes, OrgDirectory orgs, IConfiguration config, ILogger<SignupController> log)
+        public SignupController(IServiceScopeFactory scopes, OrgDirectory orgs, IConfiguration config, ILogger<SignupController> log, CodeSender codes, IMemoryCache cache)
         {
-            _scopes = scopes; _orgs = orgs; _config = config; _log = log;
+            _scopes = scopes; _orgs = orgs; _config = config; _log = log; _codes = codes; _cache = cache;
         }
 
         private bool Open => !string.Equals(_config["Platform:SignUpOpen"], "false", StringComparison.OrdinalIgnoreCase);
+        private int CodesPerDay => int.TryParse(_config["Platform:MaxSignupCodesPerDay"], out var n) && n > 0 ? n : 60;
         private int PerDay => int.TryParse(_config["Platform:MaxSignupsPerDay"], out var n) && n > 0 ? n : 10;
 
         [HttpGet("options")]
-        public IActionResult Options() => Ok(new { open = Open, kinds = Signup.Kinds.Select(k => new { key = k.Key, label = k.Label }) });
+        public IActionResult Options() => Ok(new { open = Open, verify = _codes.Ready, verifyEmail = _codes.EmailReady, verifyWhatsApp = _codes.WhatsAppReady, kinds = Signup.Kinds.Select(k => new { key = k.Key, label = k.Label }) });
 
         /// <summary>Is this sign-in name free? Also suggests one from the organisation's name.</summary>
         [HttpGet("check")]
@@ -149,6 +165,59 @@ namespace SeemanchalOutreach.Api.Controllers
             return org == null ? NotFound(new { message = "We don't know this organisation. Check the name and try again." }) : Ok(new { key = org.Key, name = org.Name });
         }
 
+        /// <summary>
+        /// Sends a code to the phone (WhatsApp) and email typed in the form, so an organisation can only be created by
+        /// someone who really has them. Only when this server can send codes; otherwise sign-up works without one.
+        /// </summary>
+        [HttpPost("code")]
+        [EnableRateLimiting("auth")]
+        public async Task<IActionResult> SendCode([FromBody] SignupCodeDto dto, CancellationToken ct)
+        {
+            if (!Open) return StatusCode(403, new { message = "New sign-ups are closed at the moment." });
+            if (!_codes.Ready) return Ok(new { needed = false });
+            var phone = Hoardings.Phone(dto?.Phone);
+            var email = string.IsNullOrWhiteSpace(dto?.Email) ? null : dto!.Email!.Trim().ToLowerInvariant();
+            var bad = new Dictionary<string, string>();
+            if (phone == null) bad["phone"] = "Enter a 10-digit mobile number.";
+            if (email != null && !Signup.EmailOk(email)) bad["email"] = "This email address doesn't look right.";
+            else if (email == null && !_codes.WhatsAppReady) bad["email"] = "Enter your email: the code is sent there.";
+            if (bad.Count > 0) return BadRequest(new { message = "Please check the form.", fields = bad });
+
+            using var platform = OrgScope.Enter(null);   // codes wait in the platform's own memory, whatever the request carried
+            var sends = _cache.TryGetValue<int>(Signup.CodeSendsKey(phone!), out var n) ? n : 0;
+            var today = _cache.TryGetValue<int>(Signup.CodesTodayKey, out var t) ? t : 0;
+            if (sends >= Recovery.MaxSendsPerHour) return StatusCode(429, new { message = "Too many codes were sent to this number. Please wait an hour and try again." });
+            if (today >= CodesPerDay) return StatusCode(429, new { message = "We can't send more codes today. Please try again tomorrow." });
+
+            var code = Recovery.NewCode();
+            var org = Hoardings.Clean(dto?.OrgName, 80) ?? "your organisation";
+            var (byEmail, byWhatsApp) = await _codes.SendAsync(email, phone, code, $"Your NexEagle code: {code}", Recovery.SignupEmailText(code, org), ct);
+            if (!byEmail && !byWhatsApp)
+                return StatusCode(502, new { message = "We could not send the code. Check the mobile number and email, then try again." });
+
+            _cache.Set(Signup.CodeSendsKey(phone!), sends + 1, TimeSpan.FromHours(1));
+            _cache.Set(Signup.CodesTodayKey, today + 1, TimeSpan.FromHours(24));
+            _cache.Set(Signup.CodeKey(phone!), new Recovery.Pending(Recovery.Hash(Signup.CodeOwner(phone!, email), code), DateTime.UtcNow.AddMinutes(Recovery.CodeMinutes), 0),
+                TimeSpan.FromMinutes(Recovery.CodeMinutes + 1));
+            return Ok(new { needed = true, email = byEmail, whatsapp = byWhatsApp, minutes = Recovery.CodeMinutes });
+        }
+
+        /// <summary>Checks the code typed with the form. Wrong tries are counted; five finish the code.</summary>
+        private string? CodeProblem(SignupDto dto)
+        {
+            if (!_codes.Ready) return null;
+            var phone = Hoardings.Phone(dto.Phone)!;
+            using var platform = OrgScope.Enter(null);
+            var key = Signup.CodeKey(phone);
+            _cache.TryGetValue<Recovery.Pending>(key, out var pending);
+            var result = Recovery.Check(pending, Signup.CodeOwner(phone, dto.Email), dto.Code, DateTime.UtcNow);
+            if (result == Recovery.Result.Ok) return null;
+            if (pending != null && result == Recovery.Result.Wrong)
+                _cache.Set(key, pending with { Tries = pending.Tries + 1 }, pending.Expires - DateTime.UtcNow + TimeSpan.FromMinutes(1));
+            return result == Recovery.Result.None ? "Ask for a code first: we send it to your mobile number and email."
+                : "That code is wrong or has expired. Ask for a new one.";
+        }
+
         [HttpPost]
         [EnableRateLimiting("webform")]
         public async Task<IActionResult> Create([FromBody] SignupDto dto, CancellationToken ct)
@@ -156,6 +225,8 @@ namespace SeemanchalOutreach.Api.Controllers
             if (!Open) return StatusCode(403, new { message = "New sign-ups are closed at the moment." });
             var bad = Signup.Check(dto ?? new SignupDto(), _orgs.Default.Key, out var key);
             if (bad.Count > 0 || key == null) return BadRequest(new { message = "Please check the form.", fields = bad });
+            if (CodeProblem(dto!) is { } codeProblem)
+                return BadRequest(new { message = codeProblem, fields = new Dictionary<string, string> { ["code"] = codeProblem } });
 
             var orgName = dto!.OrgName!.Trim();
             var org = new OrgInfo(key, orgName, OrgNames.DatabaseFor(key));
@@ -219,6 +290,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     await SetStatusAsync(rowId, "failed");
                     return StatusCode(500, new { message = "We could not finish setting up your organisation. Nothing was lost: please try again in a few minutes." });
                 }
+
+                using (OrgScope.Enter(null)) _cache.Remove(Signup.CodeKey(Hoardings.Phone(dto.Phone)!));   // a code works once
 
                 // 3. Open it for sign-in.
                 await SetStatusAsync(rowId, "active");

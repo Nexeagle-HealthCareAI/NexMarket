@@ -8,7 +8,7 @@ import {
   StickyNote, UserPlus, X,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit, useAccess } from '@/lib/crm/access';
+import { canEdit, orgName, useAccess } from '@/lib/crm/access';
 import { useLiveEvents, useNow } from '@/lib/crm/live';
 import { useAgentStore } from '@/store/agent-store';
 import { Pager } from '@/components/crm/Pager';
@@ -478,7 +478,7 @@ function LeadPane({ id, ping, editable, onBack, onChanged, toast }: {
           )}
           {mode === 'wa' && waUsable && d.windowOpen && (
             <div className="ld-quick" aria-label="Quick replies">
-              {QUICK.map((qr2) => <button key={qr2} type="button" className="crm-chip" onClick={() => setText(qr2)}>{qr2.length > 34 ? qr2.slice(0, 34) + '…' : qr2}</button>)}
+              {quick().map((qr2) => <button key={qr2} type="button" className="crm-chip" onClick={() => setText(qr2)}>{qr2.length > 34 ? qr2.slice(0, 34) + '…' : qr2}</button>)}
             </div>
           )}
         </footer>
@@ -490,8 +490,8 @@ function LeadPane({ id, ping, editable, onBack, onChanged, toast }: {
   );
 }
 
-const QUICK = [
-  'नमस्ते! हम Glisan Akbari Hospital से बात कर रहे हैं। आप किस समस्या के लिए दिखाना चाहते हैं?',
+const quick = () => [
+  `नमस्ते! हम ${orgName()} से बात कर रहे हैं। आप किस समस्या के लिए दिखाना चाहते हैं?`,
   'OPD सुबह 9 बजे से दोपहर 2 बजे तक है। किस दिन आना ठीक रहेगा?',
   'आपका appointment बुक हो गया है। आते समय पुरानी रिपोर्ट साथ लाएं।',
   'Thank you! Our desk will call you shortly.',
@@ -680,7 +680,7 @@ function CampQr({ onClose }: { onClose: () => void }) {
   const make = async () => {
     try {
       const r = await crm.get<{ message: string; waLink: string | null; displayPhone?: string | null }>(`/api/v1/leads/link${camp.trim() ? `?camp=${encodeURIComponent(camp.trim())}` : ''}`);
-      setInfo({ title: camp.trim() || 'Glisan Akbari Hospital', sub: camp.trim() ? 'Health camp' : undefined, waLink: r.waLink, message: r.message, displayPhone: r.displayPhone });
+      setInfo({ title: camp.trim() || orgName(), sub: camp.trim() ? 'Health camp' : undefined, waLink: r.waLink, message: r.message, displayPhone: r.displayPhone });
     } catch (e) { setError(friendlyError(e)); }
   };
   if (info) return <QrPosterModal info={info} onClose={onClose} intro={<p className="crm-sub" style={{ margin: 0 }}>Everyone who scans this lands in the leads inbox tagged with {camp.trim() ? `“${camp.trim()}”` : 'the poster'}.</p>} />;

@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { Dimensions } from 'react-native';
 import { API_URL } from './config';
+import { setOrgWording } from '../i18n';
 
 /**
  * Talks to the NexMarket API. Tokens live in the phone's secure keystore, never in
@@ -12,6 +13,7 @@ const K_REFRESH = 'nx_refresh';
 const K_AGENT = 'nx_agent';
 const K_DEVICE = 'nx_device';
 const K_ORG = 'nx_org';
+const K_ORG_NAME = 'nx_org_name';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -47,13 +49,22 @@ export function setSignedOutHandler(fn: (() => void) | null) {
 let org = '';
 export const getOrg = () => org;
 export async function setOrg(key: string) {
-  org = key.trim().toLowerCase();
+  const next = key.trim().toLowerCase();
+  if (next !== org) await setOrgName(null); // a different organisation: its name arrives with the sign-in
+  org = next;
   if (org) await SecureStore.setItemAsync(K_ORG, org); else await SecureStore.deleteItemAsync(K_ORG);
+}
+
+/** Keeps the organisation's own name for the app's wording. Null for the first organisation. */
+async function setOrgName(name: string | null) {
+  setOrgWording(name);
+  if (name) await SecureStore.setItemAsync(K_ORG_NAME, name); else await SecureStore.deleteItemAsync(K_ORG_NAME);
 }
 
 export async function loadTokens(): Promise<{ agentId: string | null; deviceId: string | null }> {
   access = await SecureStore.getItemAsync(K_ACCESS);
   org = (await SecureStore.getItemAsync(K_ORG)) ?? '';
+  setOrgWording(await SecureStore.getItemAsync(K_ORG_NAME));
   return { agentId: await SecureStore.getItemAsync(K_AGENT), deviceId: await SecureStore.getItemAsync(K_DEVICE) };
 }
 
@@ -166,6 +177,9 @@ export interface LoginResult {
   deviceId: string;
   profileCompleted: boolean;
   mustChangePassword: boolean;
+  /** The organisation's name, and whether it is the first one (which keeps the app's own wording). */
+  orgName?: string;
+  orgFirst?: boolean;
   accessToken?: string;
   refreshToken?: string;
 }
@@ -189,6 +203,7 @@ export async function login(userId: string, password: string, deviceId: string):
   pending = j.mustChangePassword ? password : null;
   endedReason = null;
   await saveTokens(j.accessToken, j.refreshToken);
+  await setOrgName(j.orgFirst === false && j.orgName ? j.orgName : null);
   await SecureStore.setItemAsync(K_AGENT, j.agentId);
   await SecureStore.setItemAsync(K_DEVICE, j.deviceId || deviceId);
   return j;

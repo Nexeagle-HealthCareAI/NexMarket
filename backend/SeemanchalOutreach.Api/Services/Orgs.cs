@@ -35,7 +35,7 @@ namespace SeemanchalOutreach.Api.Services
         {
             _scopes = scopes;
             _logger = logger;
-            Default = new OrgInfo(OrgNames.Key(config["Platform:DefaultOrg"]) ?? "main", config["Platform:DefaultOrgName"] ?? "NexMarket", null);
+            Default = new OrgInfo(OrgNames.Key(config["Platform:DefaultOrg"]) ?? "main", config["Platform:DefaultOrgName"] ?? OrgText.FirstName, null);
         }
 
         private List<OrgInfo> Others()

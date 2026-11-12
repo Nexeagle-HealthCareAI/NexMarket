@@ -192,7 +192,7 @@ export function WaBilling({ isAdmin, toast }: { isAdmin: boolean; toast: (m: str
               {r.numbers.filter((n) => /^\d+$/.test(n.key)).map((n) => (
                 <label key={n.key} className="wb-label-row">
                   <span>{showPhone(n.key)}</span>
-                  <input className="crm-input" disabled={!isAdmin} maxLength={80} placeholder="e.g. Glisan Akbari Hospital" value={form.numberLabels[n.key] ?? ''}
+                  <input className="crm-input" disabled={!isAdmin} maxLength={80} placeholder="e.g. Main reception" value={form.numberLabels[n.key] ?? ''}
                     onChange={(e) => setForm({ ...form, numberLabels: { ...form.numberLabels, [n.key]: e.target.value } })} />
                 </label>
               ))}

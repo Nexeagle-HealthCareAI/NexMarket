@@ -14,6 +14,10 @@ export interface AccessMe {
   isDashboardUser: boolean;
   /** Runs the platform (an admin of the first organisation): sees the Organisations screen. */
   isPlatformOwner?: boolean;
+  /** The organisation's own name. */
+  orgName?: string;
+  /** True for the first organisation, which keeps the wording it always had. */
+  orgFirst?: boolean;
   pages: Record<PageKey, number>; // 0 none, 1 view, 2 edit
 }
 
@@ -50,6 +54,16 @@ export function loadAccess(force = false): Promise<AccessMe> {
       .finally(() => { inflight = null; });
   }
   return inflight;
+}
+
+/**
+ * The organisation's name for the screens. The first organisation keeps its familiar short and full names;
+ * every other organisation is shown by the name it signed up with.
+ */
+export function orgName(form: 'short' | 'full' = 'short'): string {
+  if (cached && cached.orgFirst === false && cached.orgName) return cached.orgName;
+  if (form === 'full') return cached?.orgName || 'Glisan Akbari SuperSpeciality Hospital';
+  return 'Glisan Akbari Hospital';
 }
 
 export function clearAccess() {

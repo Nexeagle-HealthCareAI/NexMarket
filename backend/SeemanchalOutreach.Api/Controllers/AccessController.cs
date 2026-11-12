@@ -76,6 +76,9 @@ namespace SeemanchalOutreach.Api.Controllers
                 role = canonical ?? role,
                 isAdmin = User.IsAdmin(),
                 isDashboardUser = canonical != null,
+                // The organisation's own name, for every place the screens used to name the first hospital.
+                orgName = SeemanchalOutreach.Application.Interfaces.OrgText.Name,
+                orgFirst = SeemanchalOutreach.Application.Interfaces.OrgText.IsFirst,
                 // Runs the platform: sees the Organisations screen.
                 isPlatformOwner = Platform.IsOwner(User, SeemanchalOutreach.Application.Interfaces.OrgScope.Current),
                 pages = await _perms.GetLevelsAsync(role),

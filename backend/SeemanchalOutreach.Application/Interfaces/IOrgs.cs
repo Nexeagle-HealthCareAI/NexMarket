@@ -34,6 +34,27 @@ namespace SeemanchalOutreach.Application.Interfaces
         }
     }
 
+    /// <summary>
+    /// Wording that names the organisation. The first organisation keeps the exact words it always had; every other
+    /// organisation gets its own name in their place.
+    /// </summary>
+    public static class OrgText
+    {
+        /// <summary>The first organisation's full name, unless the server sets Platform:DefaultOrgName.</summary>
+        public const string FirstName = "Glisan Akbari SuperSpeciality Hospital";
+
+        public static bool IsFirst => OrgScope.Current?.Database == null;
+
+        /// <summary>The organisation's name as people know it.</summary>
+        public static string Name => OrgScope.Current?.Name ?? FirstName;
+
+        /// <summary>The first organisation's own wording, or this organisation's name.</summary>
+        public static string For(string firstOrgWording) => IsFirst ? firstOrgWording : OrgScope.Current!.Name;
+
+        /// <summary>Words that only fit the first organisation (its region, its districts); nothing for the others.</summary>
+        public static string OnlyFirst(string firstOrgWording) => IsFirst ? firstOrgWording : "";
+    }
+
     public static class OrgNames
     {
         public const int MaxKey = 30;

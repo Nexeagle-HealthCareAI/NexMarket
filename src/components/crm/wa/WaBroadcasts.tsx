@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Send } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit, useAccess } from '@/lib/crm/access';
+import { canEdit, orgName, useAccess } from '@/lib/crm/access';
 import { CONTACT_TYPES, Empty, ErrorBox, fmt, friendlyError, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { Pager, usePaged } from '@/components/crm/Pager';
 
@@ -252,7 +252,7 @@ export function WaBroadcasts() {
                 <div style={{ background: 'var(--ink)', color: '#fff', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ width: 34, height: 34, borderRadius: 999, background: '#fff', color: 'var(--ink)', fontWeight: 800, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>GA</span>
                   <span style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: 14, fontWeight: 600 }}>Glisan Akbari Hospital</span>
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>{orgName()}</span>
                     <span style={{ fontSize: 11, color: '#aeb7ca' }}>Business account</span>
                   </span>
                 </div>

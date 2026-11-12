@@ -41,12 +41,28 @@ for (const l of ['hi', 'hinglish', 'bn', 'en'] as Lang[]) {
   TABLES[l] = Object.assign({}, BASE[l], ...UX.map((u) => u[l]));
 }
 
+// Every organisation other than the first sees its own name wherever the app's wording names the first hospital.
+// Longest wording first, so the full name is swapped before its shorter forms.
+const FIRST_ORG_WORDING = [
+  'Glisan Akbari SuperSpeciality Hospital', 'ग्लिसन अकबरी सुपर स्पेशलिटी हॉस्पिटल', 'গ্লিসান আকবরী সুপার স্পেশালিটি হাসপাতাল',
+  'Glisan Akbari Hospital', 'Glisan Akbari', 'ग्लिसन अकबरी', 'গ্লিসান আকবরী',
+];
+let orgWording: string | null = null;
+/** The organisation's own name, or null for the first organisation (which keeps its wording). */
+export function setOrgWording(name: string | null) { orgWording = name && name.trim() ? name.trim() : null; }
+export const orgDisplayName = () => orgWording ?? FIRST_ORG_WORDING[0];
+
 /**
  * Fills {name} placeholders. Counts: "{n|one|other}" picks the first word when n is 1, the second otherwise
  * (e.g. 'Met {n} {n|time|times}'), so "1 days" never shows. Missing keys fall back to English.
  */
 export function translate(lang: Lang, key: StringKey, vars?: Record<string, string | number>): string {
   let s = TABLES[lang]?.[key] ?? TABLES.en[key] ?? key;
+  if (orgWording && (s.includes('lisan') || s.includes('ग्लिसन') || s.includes('গ্লিসান'))) {
+    // A marker first, so a name that itself contains one of the words is never swapped twice.
+    for (const w of FIRST_ORG_WORDING) s = s.split(w).join('\u0001');
+    s = s.split('\u0001').join(orgWording);
+  }
   if (vars) {
     s = s.replace(/\{(\w+)\|([^|{}]*)\|([^|{}]*)\}/g, (_m, k: string, one: string, other: string) => (Number(vars[k]) === 1 ? one : other));
     for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v));
