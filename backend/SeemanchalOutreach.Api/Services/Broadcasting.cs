@@ -111,24 +111,21 @@ namespace SeemanchalOutreach.Api.Services
         private readonly IServiceScopeFactory _scopes;
         private readonly ILogger<BroadcastDispatcher> _logger;
 
-        public BroadcastDispatcher(IServiceScopeFactory scopes, ILogger<BroadcastDispatcher> logger)
+        private readonly OrgDirectory _orgs;
+
+        public BroadcastDispatcher(IServiceScopeFactory scopes, ILogger<BroadcastDispatcher> logger, OrgDirectory orgs)
         {
             _scopes = scopes;
             _logger = logger;
+            _orgs = orgs;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                try
-                {
-                    await RunOnceAsync(stoppingToken);
-                }
-                catch (Exception ex) when (!(ex is OperationCanceledException))
-                {
-                    _logger.LogError(ex, "Broadcast dispatcher run failed");
-                }
+                // Each organisation's broadcasts go out from its own database with its own WhatsApp number.
+                await _orgs.ForEachAsync(_ => RunOnceAsync(stoppingToken));
                 try
                 {
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);

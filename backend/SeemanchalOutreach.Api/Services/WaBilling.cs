@@ -127,7 +127,7 @@ namespace SeemanchalOutreach.Api.Services
 
         public async Task<WaBillingReport> ReportAsync(int year, int month, bool force, CancellationToken ct)
         {
-            var key = $"{year:D4}-{month:D2}";
+            var key = OrgKeys.Of($"{year:D4}-{month:D2}");   // each organisation has its own bill
             if (!force && Cache.TryGetValue(key, out var hit) && DateTime.UtcNow - hit.FetchedAt < CacheFor) return hit;
 
             var cfg = LeadInbox.Wa(_settings, _config);

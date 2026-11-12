@@ -1,20 +1,75 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Lightbulb, Lock, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, Lightbulb, Lock, Send, ShieldAlert, ShieldCheck, X } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { friendlyError } from '@/components/crm/ui';
 import type { ActionRow, AgentRow, GuardRes, Lesson, Limits, Settings } from './shared';
-import { CHANNELS, STATUS_LABEL, when } from './shared';
+import { CHANNELS, needsCheck, STATUS_LABEL, when } from './shared';
 
 // ─── Activity ──────────────────────────────────────────────────────────────
 
-export function Activity({ rows, agents, onMore, more }: { rows: ActionRow[]; agents: AgentRow[]; onMore: () => void; more: boolean }) {
+const VERDICT = { good: 'Good', edited: 'Edited', wrong: 'Wrong' } as const;
+
+/**
+ * A person checks a practice message: good (send it as it is), a better version (send mine), or wrong (don't send).
+ * The verdicts are the agent's accuracy score; a note can be kept as a lesson it reads on every run from then on.
+ */
+function ReviewBox({ row, onDone }: { row: ActionRow; onDone: (msg: string) => void }) {
+  const draft = String(row.detail?.text ?? '');
+  // A lead reply drafted in practice can go to the lead; a camp invitation held for approval can be scheduled.
+  const canSend = (row.kind === 'lead_reply' && row.status === 'shadow') || (row.kind === 'camp_broadcast' && row.status === 'held');
+  const canEdit = row.kind === 'lead_reply' || row.kind === 'content_draft';
+  const isDraft = row.kind === 'content_draft';
+  const live = row.status === 'held';
+  const recipients = typeof row.detail?.recipients === 'number' ? row.detail.recipients : null;
+  const [text, setText] = useState(draft);
+  const [note, setNote] = useState('');
+  const [remember, setRemember] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const edited = text.trim() !== draft.trim();
+  const send = async (verdict: 'good' | 'edited' | 'wrong', andSend: boolean) => {
+    if (remember && !note.trim()) { setErr('Write the lesson in one sentence, or untick "Teach this".'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const r = await crm.post<{ sent?: boolean; reason?: string }>(`/api/v1/ai-agents/actions/${row.id}/review`,
+        { verdict, text: verdict === 'edited' ? text.trim() : null, note: note.trim() || null, send: andSend, remember });
+      onDone(verdict === 'wrong' ? 'Marked wrong. Nothing was sent.' : r.sent ? (row.kind === 'camp_broadcast' ? 'The invitation is scheduled.' : 'Sent to the lead.')
+        : andSend ? `Checked, but not sent: ${r.reason ?? 'NexMarket refused it.'}` : isDraft && live ? 'Approved. It will be posted at the next slot.' : 'Checked.');
+    } catch (e) { setErr(friendlyError(e)); setBusy(false); }
+  };
+  return (
+    <div className="ai-review">
+      <strong>{row.kind === 'camp_broadcast' ? `Camp invitation${recipients != null ? ` to ${recipients} partners` : ''}` : isDraft ? 'Check this draft post' : 'Check this message'}</strong>
+      {canEdit ? <textarea value={text} rows={isDraft ? 6 : 4} maxLength={2000} aria-label="The message" onChange={(e) => setText(e.target.value)} /> : <blockquote>{draft}</blockquote>}
+      <input value={note} maxLength={400} placeholder="What should it do differently? (optional)" aria-label="Note" onChange={(e) => setNote(e.target.value)} />
+      <label className="ai-check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Teach this to the agent (it reads the note on every run)</label>
+      <div className="ai-review-btns">
+        {canSend && !edited && <button type="button" className="crm-btn is-ok is-sm" disabled={busy} onClick={() => void send('good', true)}><Send size={14} aria-hidden /> Good, send it</button>}
+        {canSend && edited && <button type="button" className="crm-btn is-sm" disabled={busy || !text.trim()} onClick={() => void send('edited', true)}><Send size={14} aria-hidden /> Send my version</button>}
+        {!canSend && !edited && <button type="button" className="crm-btn is-ok is-sm" disabled={busy} onClick={() => void send('good', false)}><Check size={14} aria-hidden /> {isDraft && live ? 'Good, it can be posted' : 'Good'}</button>}
+        {!canSend && edited && <button type="button" className="crm-btn is-sm" disabled={busy || !text.trim()} onClick={() => void send('edited', false)}><Check size={14} aria-hidden /> {isDraft && live ? 'Post my version' : 'Save my version'}</button>}
+        {canSend && <button type="button" className="crm-btn is-secondary is-sm" disabled={busy} onClick={() => void send(edited ? 'edited' : 'good', false)}>{edited ? 'Save my version, don’t send' : 'Good, but don’t send'}</button>}
+        <button type="button" className="crm-btn is-danger is-sm" disabled={busy} onClick={() => void send('wrong', false)}><X size={14} aria-hidden /> Wrong</button>
+      </div>
+      {row.kind === 'lead_reply' && canSend && <span className="ai-muted">Sending checks the text against the fixed rules first, and NexMarket refuses it if the desk already replied or 24 hours have passed.</span>}
+      {row.kind === 'camp_broadcast' && <span className="ai-muted">{canSend ? 'Sending schedules the approved camp template now, to the partners of this block who have not opted out.' : 'A practice run: nothing can be sent from it.'}</span>}
+      {isDraft && <span className="ai-muted">{live ? 'A draft you mark good is posted on the Facebook page by the Social Publisher at 10 am or 6 pm, when that agent is live.' : 'A practice draft: it is never posted.'}</span>}
+      {err && <div className="crm-error" role="alert">{err}</div>}
+    </div>
+  );
+}
+
+export function Activity({ rows, agents, onMore, more, onChanged, startChecking }: {
+  rows: ActionRow[]; agents: AgentRow[]; onMore: () => void; more: boolean; onChanged?: (msg: string) => void; startChecking?: boolean;
+}) {
   const [agent, setAgent] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(startChecking ? 'check' : '');
   const [open, setOpen] = useState<string | null>(null);
   const name = (id: string) => agents.find((a) => a.id === id)?.name ?? id;
-  const shown = rows.filter((r) => (!agent || r.agent_id === agent) && (!status || r.status === status));
+  const toCheck = rows.filter(needsCheck).length;
+  const shown = rows.filter((r) => (!agent || r.agent_id === agent) && (!status || (status === 'check' ? needsCheck(r) : r.status === status)));
   return (
     <section className="ai-panel">
       <div className="ai-filters">
@@ -27,12 +82,13 @@ export function Activity({ rows, agents, onMore, more }: { rows: ActionRow[]; ag
         <label><span>What happened</span>
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">Everything</option>
+            <option value="check">To check ({toCheck})</option>
             {Object.entries(STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
         </label>
         <span className="ai-muted">Every action is kept with its reasons. Practice (shadow) actions show what an agent would have sent.</span>
       </div>
-      {shown.length === 0 ? <p className="ai-empty">Nothing here yet.</p> : (
+      {shown.length === 0 ? <p className="ai-empty">{status === 'check' ? 'Nothing waiting to be checked.' : 'Nothing here yet.'}</p> : (
         <div className="ai-table-wrap">
           <table className="ai-table">
             <thead><tr><th>When</th><th>Agent</th><th>What</th><th>Result</th></tr></thead>
@@ -43,10 +99,15 @@ export function Activity({ rows, agents, onMore, more }: { rows: ActionRow[]; ag
                   <td className="ai-nowrap">{name(r.agent_id)}</td>
                   <td>
                     <button type="button" className="ai-linkish" onClick={() => setOpen(open === r.id ? null : r.id)} aria-expanded={open === r.id}>{r.summary}</button>
+                    {needsCheck(r) && open !== r.id && <button type="button" className="ai-check-chip" onClick={() => setOpen(r.id)}>Check it</button>}
+                    {r.review && <span className={`ai-verdict is-${r.review.verdict}`}>{VERDICT[r.review.verdict]}{r.review.sent ? ' · sent' : ''}{r.reviewed_by ? ` · ${r.reviewed_by.replace(/\s*\(.*\)$/, '')}` : ''}</span>}
                     {open === r.id && (
                       <div className="ai-detail">
                         {r.channel && <div><b>Channel:</b> {r.channel}</div>}
-                        {typeof r.detail?.text === 'string' && <blockquote>{r.detail.text}</blockquote>}
+                        {needsCheck(r) && onChanged ? <ReviewBox row={r} onDone={(m) => { setOpen(null); onChanged(m); }} />
+                          : typeof r.detail?.text === 'string' && <blockquote>{r.detail.text}</blockquote>}
+                        {r.review?.text && <div><b>Better version:</b><blockquote>{r.review.text}</blockquote></div>}
+                        {r.review?.note && <div><b>Note:</b> {r.review.note}</div>}
                         {r.reasons && r.reasons.length > 0 && (
                           <ul>{r.reasons.map((x, i) => <li key={i}>{x.message}{x.match ? <> — <q>{x.match}</q></> : null}</li>)}</ul>
                         )}
@@ -136,6 +197,8 @@ const NUMS: { title: string; items: NumKey[] }[] = [
     { group: 'lead', key: 'repliesPerLeadPerHour', label: 'Replies per lead per hour' },
     { group: 'lead', key: 'maxFollowUpsPerLead', label: 'Follow-ups per lead, at most' },
     { group: 'lead', key: 'autoRepliesPerPersonPerDay', label: 'Automatic replies per person per day' },
+    { group: 'lead', key: 'followUpsPerDay', label: 'Follow-up templates per day, all leads' },
+    { group: 'lead', key: 'closeAfterQuietDays', label: 'Close a quiet lead this many days after its last follow-up (0 = never)', unit: 'days' },
   ] },
   { title: 'Messages and posts', items: [
     { group: 'whatsapp', key: 'sendsPerDay', label: 'WhatsApp sends per day, all agents' },
@@ -264,28 +327,81 @@ export function PolicyPanel({ settings, canEdit, onSaved }: { settings: Settings
 
 // ─── Lessons ───────────────────────────────────────────────────────────────
 
-export function LessonsPanel({ lessons, agents }: { lessons: Lesson[]; agents: AgentRow[] }) {
+export function LessonsPanel({ lessons, agents, onChanged }: { lessons: Lesson[]; agents: AgentRow[]; onChanged?: (msg: string) => void }) {
   const name = (id: string) => agents.find((a) => a.id === id)?.name ?? id;
+  const built = agents.filter((a) => a.available && a.id !== 'compliance_guard');
+  const [agent, setAgent] = useState(built[0]?.id ?? '');
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const kept = lessons.filter((l) => l.status !== 'dropped' && l.status !== 'proposed');
+  const suggested = lessons.filter((l) => l.status === 'proposed');
+  const keep = async (l: Lesson) => {
+    setBusy(true);
+    try { await crm.post(`/api/v1/ai-agents/lessons/${l.agentId}/${l.key}/keep`); onChanged?.('Kept. The agent reads it from its next run.'); }
+    catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); }
+  };
+  const add = async () => {
+    if (text.trim().length < 8) { setErr('Write the lesson in one sentence.'); return; }
+    setBusy(true); setErr(null);
+    try { await crm.post('/api/v1/ai-agents/lessons', { agent, text: text.trim() }); setText(''); onChanged?.('Lesson saved. The agent reads it from its next run.'); }
+    catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); }
+  };
+  const drop = async (l: Lesson) => {
+    setBusy(true);
+    try { await crm.post(`/api/v1/ai-agents/lessons/${l.agentId}/${l.key}/drop`); onChanged?.('Lesson removed.'); }
+    catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); }
+  };
   return (
     <section className="ai-panel">
       <div className="ai-card ai-how">
         <h3>How agents learn</h3>
         <ol className="ai-steps">
-          <li><b>Record</b> every action and why.</li>
-          <li><b>Measure</b> what happened: replied, came in, reach.</li>
-          <li><b>Reflect</b> each night: the Coach proposes a lesson with its numbers.</li>
-          <li><b>Trial</b> on a quarter of cases until it holds on 20 or more.</li>
-          <li><b>Keep</b> it, or drop it when it stops working.</li>
+          <li><b>Check</b> their practice messages in Activity: good, your better version, or wrong.</li>
+          <li><b>Teach</b>: tick “Teach this” on a correction, or write a lesson here.</li>
+          <li><b>Read</b>: the agent is given its lessons (up to 8) on every run.</li>
+          <li><b>Suggested</b>: each evening the Coach reads the week’s corrections and suggests lessons. An agent reads one only after you keep it.</li>
+          <li><b>Remove</b> a lesson that no longer holds.</li>
         </ol>
       </div>
-      {lessons.length === 0 ? (
-        <p className="ai-empty"><Lightbulb size={18} aria-hidden /> No lessons yet. They start once agents are working and results come back (phase 2).</p>
+      {onChanged && built.length > 0 && (
+        <div className="ai-card ai-lesson-add">
+          <label className="ai-field"><span>Agent</span>
+            <select value={agent} onChange={(e) => setAgent(e.target.value)}>{built.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+          </label>
+          <label className="ai-field" style={{ flex: 1, minWidth: 220 }}><span>Lesson, in one sentence</span>
+            <input value={text} maxLength={400} placeholder="e.g. When someone asks for a lady doctor, name the gynaecology OPD days." onChange={(e) => setText(e.target.value)} />
+          </label>
+          <button type="button" className="crm-btn is-sm" disabled={busy} onClick={() => void add()}>Add lesson</button>
+          {err && <div className="crm-error" role="alert" style={{ flexBasis: '100%' }}>{err}</div>}
+        </div>
+      )}
+      {suggested.length > 0 && (
+        <div className="ai-card ai-suggested">
+          <h3>Suggested by the Coach ({suggested.length})</h3>
+          <ul className="ai-lessons">
+            {suggested.map((l) => (
+              <li key={l.agentId + l.key} className="is-proposed">
+                <Lightbulb size={16} aria-hidden />
+                <div style={{ flex: 1 }}><strong>{l.text}</strong><span>For {name(l.agentId)}{l.episodes ? ` · from ${l.episodes} corrections` : ''}{l.at ? ` · ${when(l.at)}` : ''}</span></div>
+                {onChanged && <>
+                  <button type="button" className="crm-btn is-ok is-sm" disabled={busy} onClick={() => void keep(l)}>Keep</button>
+                  <button type="button" className="crm-btn is-ghost is-sm" disabled={busy} onClick={() => void drop(l)}>Drop</button>
+                </>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {kept.length === 0 ? (
+        <p className="ai-empty"><Lightbulb size={18} aria-hidden /> No lessons yet. Check a few practice messages in Activity and tick “Teach this”.</p>
       ) : (
         <ul className="ai-lessons">
-          {lessons.map((l) => (
+          {kept.map((l) => (
             <li key={l.agentId + l.key} className={`is-${l.status ?? 'trial'}`}>
               <Lightbulb size={16} aria-hidden />
-              <div><strong>{l.text}</strong><span>{name(l.agentId)} · {l.status === 'kept' ? 'kept' : l.status === 'dropped' ? 'dropped' : 'on trial'}{l.episodes ? ` · ${l.episodes} cases` : ''}</span></div>
+              <div style={{ flex: 1 }}><strong>{l.text}</strong><span>{name(l.agentId)}{l.by ? ` · from ${l.by.replace(/\s*\(.*\)$/, '')}` : ''}{l.at ? ` · ${when(l.at)}` : ''}</span></div>
+              {onChanged && <button type="button" className="crm-btn is-ghost is-sm" disabled={busy} onClick={() => void drop(l)}>Remove</button>}
             </li>
           ))}
         </ul>

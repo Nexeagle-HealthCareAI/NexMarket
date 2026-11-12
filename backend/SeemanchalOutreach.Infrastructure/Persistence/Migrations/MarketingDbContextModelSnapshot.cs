@@ -2566,6 +2566,41 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.ToTable("notification_settings", "marketing");
                 });
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.Organisation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Database")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Kinds")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("organisations", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.OutreachContact", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3778,6 +3813,24 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("CreatedBy")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileKey")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileMime")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileName")
+                        .HasColumnType("text");
+
+                    b.Property<long?>("FileSize")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("Kind")
                         .IsRequired()

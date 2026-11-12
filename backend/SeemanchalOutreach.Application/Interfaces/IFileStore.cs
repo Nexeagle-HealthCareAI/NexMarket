@@ -12,5 +12,8 @@ namespace SeemanchalOutreach.Application.Interfaces
     {
         Task<string> SaveAsync(string folder, string fileName, Stream content, string contentType, CancellationToken ct = default);
         Task<(Stream Content, string ContentType)?> OpenAsync(string key, CancellationToken ct = default);
+
+        /// <summary>Removes a stored file for good. Only for a file of the organisation in charge. False when it could not be removed.</summary>
+        Task<bool> DeleteAsync(string key, CancellationToken ct = default);
     }
 }

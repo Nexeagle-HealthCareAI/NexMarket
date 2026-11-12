@@ -81,7 +81,7 @@ namespace SeemanchalOutreach.Infrastructure.Services
 
             var extension = Path.GetExtension(fileName);
             var safeExtension = string.Concat(extension.Split(Path.GetInvalidFileNameChars()));
-            var key = $"{_prefix}/{DateTime.UtcNow:yyyy/MM/dd}/{Guid.NewGuid()}{safeExtension}";
+            var key = OrgKeys.FileKey($"{_prefix}/{DateTime.UtcNow:yyyy/MM/dd}/{Guid.NewGuid()}{safeExtension}");
 
             try
             {

@@ -18,7 +18,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 # "Careful start" (chosen 9 Nov 2026). Every number can be changed on the Agents page.
 DEFAULT_LIMITS: dict[str, Any] = {
     "quietHours": {"from": "21:00", "to": "08:00", "allowRepliesToInbound": True},
-    "lead": {"repliesPerLeadPerHour": 1, "maxFollowUpsPerLead": 3, "autoRepliesPerPersonPerDay": 1},
+    "lead": {"repliesPerLeadPerHour": 1, "maxFollowUpsPerLead": 3, "autoRepliesPerPersonPerDay": 1, "followUpsPerDay": 40, "closeAfterQuietDays": 10},
     "partner": {"messagesPerDay": 20},
     "broadcast": {"perListPerWeek": 1, "perPersonPerWeek": 1},
     "social": {"postsPerChannelPerDay": 2},

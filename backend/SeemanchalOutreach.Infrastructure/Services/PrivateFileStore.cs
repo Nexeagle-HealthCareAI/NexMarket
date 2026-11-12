@@ -58,7 +58,7 @@ namespace SeemanchalOutreach.Infrastructure.Services
         {
             var ext = new string(Path.GetExtension(fileName).Where(c => char.IsLetterOrDigit(c) || c == '.').ToArray());
             if (ext.Length > 10) ext = "";
-            var key = $"{folder.Trim('/')}/{DateTime.UtcNow:yyyy/MM/dd}/{Guid.NewGuid():N}{ext.ToLowerInvariant()}";
+            var key = OrgKeys.FileKey($"{folder.Trim('/')}/{DateTime.UtcNow:yyyy/MM/dd}/{Guid.NewGuid():N}{ext.ToLowerInvariant()}");
             if (_s3 != null)
             {
                 await _s3.PutObjectAsync(new PutObjectRequest
@@ -78,6 +78,8 @@ namespace SeemanchalOutreach.Infrastructure.Services
         public async Task<(Stream Content, string ContentType)?> OpenAsync(string key, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(key) || key.Contains("..")) return null;
+            // A file can only be opened by the organisation it was saved for.
+            if (!OrgKeys.OwnsFile(key)) return null;
             if (_s3 != null)
             {
                 try
@@ -94,6 +96,23 @@ namespace SeemanchalOutreach.Infrastructure.Services
             var path = Path.Combine(_localRoot, key.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(path)) return null;
             return (File.OpenRead(path), "application/octet-stream");
+        }
+
+        public async Task<bool> DeleteAsync(string key, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(key) || key.Contains("..") || !OrgKeys.OwnsFile(key)) return false;
+            try
+            {
+                if (_s3 != null) { await _s3.DeleteObjectAsync(_bucket, key, ct); return true; }
+                var path = Path.Combine(_localRoot, key.Replace('/', Path.DirectorySeparatorChar));
+                if (File.Exists(path)) File.Delete(path);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not delete stored file {Key}", key);
+                return false;
+            }
         }
     }
 }

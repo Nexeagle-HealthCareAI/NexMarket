@@ -107,6 +107,7 @@ class Decision(BaseModel):
     reply: str | None = Field(default=None, description="The WhatsApp reply, in the person's language, or null when a person must answer.")
     sources: list[str] = Field(default_factory=list, description="Record ids the reply relies on: doctor:<id>, camp:<id>, department:<id>, facts.")
     needs_person: str | None = Field(default=None, description="What a person must do or decide, or null.")
+    callback_time: str | None = Field(default=None, description="For an appointment: the day or time the person said suits them, in their own words, or null.")
 
 
 SYSTEM = """\
@@ -118,7 +119,8 @@ Rules:
   If the records don't answer the question, set reply to null and say what is missing in needs_person.
 - Never give medical advice, never say what an illness is or what to take. For that, intent = medical_advice, reply = null.
 - Never mention prices, fees, discounts, insurance. intent = price, reply = null.
-- Booking an appointment: intent = appointment, reply = null (the desk confirms it).
+- Booking an appointment: intent = appointment, reply = null (the desk confirms it). If they said which day or time
+  suits them, copy their words into callback_time; never choose a time for them.
 - Reply in the person's language and script: Hindi (Devanagari), Hinglish (Roman Hindi), Bangla or English.
 - Short: 1 to 4 lines, polite, no "best", no promises, at most one emoji. Do not greet again if the hospital already greeted them.
 - department: the one department their question is about, copied exactly from the list, or null.
@@ -307,7 +309,8 @@ def verify(d: Decision, directory: dict[str, Any]) -> Decision:
     if reply and not sources and d.intent not in ("greeting",):
         # A factual answer with no record behind it is not sent.
         needs, reply = needs or "the answer wasn't in the hospital records", None
-    return d.model_copy(update={"department": dep, "sources": sources, "reply": reply, "needs_person": needs})
+    callback = (d.callback_time or "").strip()[:80] or None if d.intent == "appointment" else None
+    return d.model_copy(update={"department": dep, "sources": sources, "reply": reply, "needs_person": needs, "callback_time": callback})
 
 
 def after_decide(state: State) -> str:
@@ -351,12 +354,51 @@ def after_send(state: State) -> str:
     return "handoff" if state.get("outcome") == "handoff" else END
 
 
+# Fixed wording (no AI) for someone who wants an appointment: the desk will call; when would suit them?
+APPOINTMENT_ACK = {
+    "hi": ("धन्यवाद। अपॉइंटमेंट तय करने के लिए हमारी टीम आपको कॉल करेगी।", " कॉल के लिए कौन सा समय ठीक रहेगा?"),
+    "hinglish": ("Dhanyavaad. Appointment tay karne ke liye hamari team aapko call karegi.", " Call ke liye kaun sa samay theek rahega?"),
+    "bn": ("ধন্যবাদ। অ্যাপয়েন্টমেন্ট ঠিক করতে আমাদের টিম আপনাকে কল করবে।", " কল করার জন্য কোন সময়টা সুবিধাজনক?"),
+    "en": ("Thank you. Our team will call you to fix the appointment.", " What time suits you for the call?"),
+}
+
+
+async def _appointment(state: State, d: Decision) -> str:
+    """
+    Someone wants an appointment. Vita never books: it thanks them, asks when to call (unless they already said),
+    and puts the time they gave on the lead, so the desk calls once at the right time instead of chasing.
+    """
+    lead_id = state["lead_id"]
+    first, ask = APPOINTMENT_ACK.get(d.language, APPOINTMENT_ACK["hi"])
+    text = first + ("" if d.callback_time else ask)
+
+    async def do_send(t: str) -> dict[str, Any]:
+        return await nexmarket.lead_reply(lead_id, t, agent_id=AGENT_ID)
+
+    sent_today = await limits.count_today(AGENT_ID, ["lead_ack"], ("lead", lead_id))
+    await act.outgoing(AGENT_ID, kind="lead_ack", cap=(sent_today, 1), channel="whatsapp", text=text, rules_only=True, inbound_reply=True,
+                       summary="Told a lead the desk will call about their appointment" + ("" if d.callback_time else ", and asked when"),
+                       send=do_send, subject=("lead", lead_id))
+    why = "wants an appointment" + (f" ({d.department})" if d.department else "")
+    if d.callback_time:
+        why += f"; said this time suits them: “{d.callback_time}”"
+        st = await limits.agent_state(AGENT_ID)
+        # The time they gave always goes on the lead, even when the desk was already told about this lead within the hour.
+        if st.get("mode") == "live":
+            await nexmarket.lead_update(lead_id, agent_id=AGENT_ID, department=d.department, note=f"Vita: for the appointment call, they said “{d.callback_time}”.")
+    else:
+        why += "; Vita asked what time suits them for a call"
+    return why
+
+
 async def handoff(state: State) -> State:
     """A person takes it: a note on the lead and an alert to its owner, or the desk. Shadow mode only records it."""
     lead_id = state["lead_id"]
     t = state.get("triage") or Triage()
     d = state.get("decision")
     why = (state.get("detail") or {}).get("why") or t.handoff or (d.needs_person if d else None) or "needs a person"
+    if d and d.intent == "appointment" and not (state.get("detail") or {}).get("why"):
+        why = await _appointment(state, d)
     st = await limits.agent_state(AGENT_ID)
     # The desk is told once per lead per hour, not for every message.
     recent = await db.fetchone("SELECT count(*) AS n FROM agents.actions WHERE agent_id = %s AND kind = 'handoff_person' AND subject_id = %s "
@@ -489,5 +531,65 @@ async def tick(max_tasks: int = 5) -> int:
         task = got[0]
         res = await run(task["subject_key"])
         await blackboard.finish(task["id"], AGENT_ID, res, ok=res.get("error") is None)
+        if res.get("error"):
+            await _failed(task["subject_key"], str(res["error"]))
         done += 1
     return done
+
+
+async def _failed(lead_id: str, error: str) -> None:
+    """A run broke: the lead must not sit unanswered because of it. Its owner (or the desk) is told now; the managers once in 30 minutes."""
+    st = await limits.agent_state(AGENT_ID)
+    live = st.get("mode") == "live"
+    await actions.record(AGENT_ID, "lead_failed", "failed", "Couldn't work on a lead; a person has been told", subject=("lead", lead_id), detail={"error": error[:300]})
+    try:
+        if live:
+            await nexmarket.lead_update(lead_id, agent_id=AGENT_ID, alert="Vita couldn't answer this lead (a technical problem). Please reply yourself.")
+        recent = await db.fetchone("SELECT count(*) AS n FROM agents.actions WHERE agent_id = %s AND kind = 'failure_alert' AND created_at > now() - interval '30 minutes'", AGENT_ID)
+        if not recent or recent["n"] == 0:
+            await nexmarket.notify_team("Lead Responder had a problem", f"A run failed: {error[:200]}. " + ("The lead's owner was told to reply." if live else "It is in shadow, so nothing was due to be sent."),
+                                        "ai-agents", agent_id=AGENT_ID)
+            await actions.record(AGENT_ID, "failure_alert", "done", "Told the managers about a failed run")
+    except Exception:
+        log.exception("could not report a failed run")
+
+
+CATCH_UP_AFTER = timedelta(minutes=6)
+
+
+async def catch_up() -> int:
+    """
+    The safety net. NexMarket tells Vita about each message once; if Vita was restarting or unreachable at that
+    moment, the message was never queued. Every few minutes this asks NexMarket which leads are still waiting for
+    an answer and queues any that Vita has not looked at since they wrote.
+    """
+    st = await limits.agent_state(AGENT_ID)
+    if st.get("mode", "off") == "off" or st.get("paused") or (await limits.stop_all_state()).get("on"):
+        return 0
+    try:
+        waiting = (await nexmarket.leads_waiting()).get("items", [])
+    except Exception as e:
+        log.warning("catch-up: NexMarket not reachable: %s", e)
+        return 0
+    picked = 0
+    for w in waiting:
+        lead_id, at = str(w.get("id")), w.get("lastInboundAt")
+        try:
+            wrote = datetime.fromisoformat(str(at).replace("Z", "+00:00"))
+            if wrote.tzinfo is None:
+                wrote = wrote.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        if db.now() - wrote < CATCH_UP_AFTER:
+            continue  # the normal path (event → 3-minute wait → answer) is still in time
+        seen = await db.fetchone(
+            "SELECT (SELECT count(*) FROM agents.tasks WHERE kind = %s AND subject_key = %s AND (status IN ('open', 'claimed') OR created_at >= %s)) "
+            "+ (SELECT count(*) FROM agents.actions WHERE agent_id = %s AND subject_type = 'lead' AND subject_id = %s AND created_at >= %s) AS n",
+            TASK_KIND, lead_id, wrote, AGENT_ID, lead_id, wrote)
+        if seen and seen["n"] > 0:
+            continue
+        tid = await blackboard.post(TASK_KIND, lead_id, "Answer a lead on WhatsApp (missed earlier)", for_agent=AGENT_ID, created_by="catch-up", payload={"missed": True})
+        if tid:
+            picked += 1
+            await actions.record(AGENT_ID, "catch_up", "done", "Picked up a lead that had been missed", subject=("lead", lead_id))
+    return picked

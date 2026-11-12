@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { Mail, Pause, Play, ShieldCheck } from 'lucide-react';
 import type { ActionRow, AgentRow, Mode, Overview } from './shared';
-import { lookOf, POSE, when } from './shared';
+import { lookOf, POSE, when, RUN_JOB } from './shared';
 
 const WING_COLOR: Record<AgentRow['wing'], string> = { command: '#01a0ec', leads: '#38f6a9', studio: '#b48cff', growth: '#f5b544' };
 const WING_HINT: Record<AgentRow['wing'], string> = {
@@ -86,9 +86,9 @@ export function Lane({ items, nameOf, tick }: { items: ActionRow[]; nameOf: (id:
 }
 
 /** The selected agent's card: its job, what it may do, its limits, its switches. */
-export function Side({ a, stopAll, me, busy, onPause, onResume, onMode, feed }: {
+export function Side({ a, stopAll, me, busy, onPause, onResume, onMode, feed, onCheck, onRun }: {
   a: AgentRow; stopAll: boolean; me: { isAdmin: boolean }; busy: boolean;
-  onPause: () => void; onResume: () => void; onMode: (m: Mode) => void; feed: ActionRow[];
+  onPause: () => void; onResume: () => void; onMode: (m: Mode) => void; feed: ActionRow[]; onCheck?: () => void; onRun?: (job: string, label: string) => void;
 }) {
   const l = lookOf(a, stopAll);
   const guard = a.id === 'compliance_guard';
@@ -113,6 +113,12 @@ export function Side({ a, stopAll, me, busy, onPause, onResume, onMode, feed }: 
           <dt>Limits</dt><dd>{a.limits}</dd>
           <dt>Works with</dt><dd>{a.talksTo.join(', ') || '—'}</dd>
           <dt>Today</dt><dd>{a.today.done} done · {a.today.shadow} practice · {a.today.blocked} stopped · {a.tokensToday.toLocaleString('en-IN')} tokens</dd>
+          {a.available && a.reviews && (a.reviews.checked > 0 || a.reviews.waiting > 0) && (
+            <><dt>Checked by people</dt><dd>
+              {a.reviews.checked > 0 ? `${a.reviews.percent}% good as written (${a.reviews.good} of ${a.reviews.checked} in 30 days; ${a.reviews.edited} edited, ${a.reviews.wrong} wrong)` : 'None checked yet'}
+              {a.reviews.waiting > 0 && onCheck ? <> · <button type="button" className="ai-linkish ai-to-check" onClick={onCheck}>{a.reviews.waiting} to check</button></> : null}
+            </dd></>
+          )}
         </dl>
         <div className="ai-side-actions">
           {guard ? (
@@ -134,6 +140,9 @@ export function Side({ a, stopAll, me, busy, onPause, onResume, onMode, feed }: 
                   </select>
                 </label>
               )}
+              {me.isAdmin && onRun && a.mode !== 'off' && !a.paused && !stopAll && (RUN_JOB[a.id] ?? []).map((j) => (
+                <button key={j.job} type="button" className="crm-btn is-secondary is-sm" disabled={busy} onClick={() => onRun(j.job, j.label)}>{j.label}</button>
+              ))}
             </>
           )}
         </div>

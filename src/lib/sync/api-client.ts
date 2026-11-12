@@ -358,6 +358,21 @@ export function setSessionExpiredHandler(handler: (() => void) | null): void {
 // 401s share one in-flight refresh instead of each firing their own.
 let refreshInFlight: Promise<boolean> | null = null;
 
+// ─── Organisation ─────────────────────────────────────────────────────────────
+// Which organisation this browser signs in to (its short name). Empty = the first organisation.
+// Only sign-in, renewing the session and sign-out send it: once signed in, the session itself says which one.
+const ORG_KEY = 'nx.org';
+export function getOrg(): string {
+  try { return (localStorage.getItem(ORG_KEY) ?? '').trim().toLowerCase(); } catch { return ''; }
+}
+export function setOrg(key: string): void {
+  try { const k = key.trim().toLowerCase(); if (k) localStorage.setItem(ORG_KEY, k); else localStorage.removeItem(ORG_KEY); } catch { /* storage off */ }
+}
+function orgHeader(): Record<string, string> {
+  const k = getOrg();
+  return k ? { 'X-Org': k } : {};
+}
+
 async function refreshSession(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
@@ -368,7 +383,7 @@ async function refreshSession(): Promise<boolean> {
 
         const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
           method: 'POST',
-          headers: { ...JSON_HEADERS, 'X-Device-Type': deviceKind() },
+          headers: { ...JSON_HEADERS, 'X-Device-Type': deviceKind(), ...orgHeader() },
           credentials: 'include',
           body: JSON.stringify({ agentId, deviceId }),
         });
@@ -393,7 +408,7 @@ async function refreshSession(): Promise<boolean> {
 // password, not an expired session, and retrying /auth/refresh on its own
 // 401 would just recurse forever.
 async function doFetch(path: string, init: RequestInit, isAuthEndpoint = false): Promise<Response> {
-  if (path.startsWith('/api/v1/auth/')) init = { ...init, headers: { ...(init.headers as Record<string, string> | undefined), 'X-Device-Type': deviceKind() } };
+  if (path.startsWith('/api/v1/auth/')) init = { ...init, headers: { ...(init.headers as Record<string, string> | undefined), 'X-Device-Type': deviceKind(), ...orgHeader() } };
   let res = await fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' });
 
   if (res.status === 401 && !isAuthEndpoint) {
@@ -482,6 +497,44 @@ export async function loginWithPassword(
     password: pass,
     deviceId,
   }, true);
+}
+
+// ─── Sign-up: a new organisation ──────────────────────────────────────────────
+
+export interface SignupBody {
+  orgName: string; orgKey?: string; kinds: string[]; city?: string;
+  name: string; phone: string; email?: string; password: string;
+}
+export interface SignupOptions { open: boolean; kinds: { key: string; label: string }[] }
+export interface SignupCheck { key: string | null; available: boolean; message?: string | null }
+export class SignupError extends Error {
+  constructor(message: string, public fields: Record<string, string> = {}) { super(message); }
+}
+
+async function publicGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
+  return res.json() as Promise<T>;
+}
+export const getSignupOptions = () => publicGet<SignupOptions>('/api/v1/signup/options');
+export const checkOrgKey = (key: string, name: string) =>
+  publicGet<SignupCheck>(`/api/v1/signup/check?key=${encodeURIComponent(key)}&name=${encodeURIComponent(name)}`);
+/** The organisation's name for a sign-in name, or null when there is no such organisation. */
+export async function findOrg(key: string): Promise<{ key: string; name: string } | null> {
+  try { return await publicGet<{ key: string; name: string }>(`/api/v1/signup/org/${encodeURIComponent(key)}`); } catch { return null; }
+}
+/** Creates the organisation and its first admin. Can take up to a minute: a new database is made. */
+export async function signUp(body: SignupBody): Promise<{ key: string; name: string; userId: string }> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/v1/signup`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) });
+  } catch {
+    throw new SignupError('Can’t reach the server. Check your internet connection and try again.');
+  }
+  if (res.ok) return res.json();
+  const j = (await res.json().catch(() => null)) as { message?: string; fields?: Record<string, string> } | null;
+  if (res.status === 429 && !j?.message) throw new SignupError('Too many tries from this network. Wait ten minutes and try again.');
+  throw new SignupError(j?.message ?? 'Something went wrong. Please try again.', j?.fields ?? {});
 }
 
 export async function syncBatch(body: SyncBatchRequest): Promise<SyncBatchResponse> {

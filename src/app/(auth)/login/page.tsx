@@ -3,7 +3,8 @@
 import { isDashboardRole } from '@/lib/crm/access';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
-import { loginWithPassword, syncPull, SIGNED_OUT_KEY } from '@/lib/sync/api-client';
+import Link from 'next/link';
+import { loginWithPassword, syncPull, SIGNED_OUT_KEY, getOrg, setOrg, findOrg } from '@/lib/sync/api-client';
 import { setSyncStateValue, isLocalDatabaseEmpty, getOrCreateDeviceId, db } from '@/lib/db';
 import { refreshReferenceData } from '@/lib/sync/seeder';
 import { useAgentStore } from '@/store/agent-store';
@@ -33,6 +34,7 @@ function loginError(err: unknown): { message: string; lockedUntil?: number } {
   try { body = JSON.parse(m[2]); } catch { /* plain text */ }
   const text = typeof body === 'string' ? body.replace(/^"|"$/g, '') : body.message ?? '';
   if (status === 423 && typeof body === 'object' && body.lockedUntil) return { message: text, lockedUntil: new Date(body.lockedUntil).getTime() };
+  if (status === 404) return { message: text || 'We don’t know this organisation. Check the name and try again.' };
   if (status === 429) return { message: 'Too many sign-in attempts from this network. Wait a minute and try again.' };
   if (status === 401 || status === 400) return { message: text || 'Wrong User ID or password.' };
   return { message: text || 'Something went wrong. Please try again.' };
@@ -48,6 +50,9 @@ export default function LoginPage() {
   const setAuth = useAgentStore((s) => s.setAuth);
 
   const [userId, setUserId] = useState('');
+  // The organisation's short sign-in name. Empty = the first organisation on this server.
+  const [org, setOrgName] = useState('');
+  const [orgFound, setOrgFound] = useState<{ key: string; name: string } | null | undefined>(undefined);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -67,6 +72,25 @@ export default function LoginPage() {
       return () => clearTimeout(t);
     }
   }, []);
+  // The organisation used last time on this browser, or the one in the link (/login?org=…).
+  useEffect(() => {
+    let fromLink = '';
+    try { fromLink = new URLSearchParams(window.location.search).get('org') ?? ''; } catch { /* no address */ }
+    const start = (fromLink || getOrg()).trim().toLowerCase();
+    if (!start) return;
+    const t = setTimeout(() => setOrgName((o) => o || start), 0);
+    return () => clearTimeout(t);
+  }, []);
+  // Show the organisation's full name once a short name is typed, so a typo is seen before the password is sent.
+  useEffect(() => {
+    const k = org.trim().toLowerCase();
+    let live = true;
+    const t = setTimeout(() => {
+      if (k.length < 3) { setOrgFound(undefined); return; }
+      findOrg(k).then((o) => { if (live) setOrgFound(o); });
+    }, 400);
+    return () => { live = false; clearTimeout(t); };
+  }, [org]);
   // Count down a sign-in lock.
   useEffect(() => {
     if (!lockedUntil) return;
@@ -82,6 +106,14 @@ export default function LoginPage() {
     setIsInitializing(true);
 
     try {
+      // Field work saved on this browser belongs to the organisation that was signed in here. Never mix two.
+      const wanted = org.trim().toLowerCase();
+      if (wanted !== getOrg() && !(await isLocalDatabaseEmpty())) {
+        setError('This browser still holds field work from another organisation. Sign in to that one and let it sync, or use a different browser for this organisation.');
+        setIsInitializing(false);
+        return;
+      }
+      setOrg(wanted);
       const deviceId = await getOrCreateDeviceId();
       const auth = await loginWithPassword(targetId, targetPass, deviceId);
       try { if (remember) localStorage.setItem(LAST_USER_KEY, targetId); else localStorage.removeItem(LAST_USER_KEY); } catch { /* storage off */ }
@@ -209,7 +241,7 @@ export default function LoginPage() {
             <li><strong>Results</strong> What each campaign and partner brought in, as patients.</li>
           </ul>
         </div>
-        <div className="lg-side-foot">Glisan Akbari SuperSpeciality Hospital</div>
+        <div className="lg-side-foot">For hospitals, clinics, diagnostic centres, labs, pharmacies and dialysis centres</div>
       </aside>
 
       <main className="lg-main">
@@ -218,7 +250,7 @@ export default function LoginPage() {
             <span className="lg-mark is-sm"><NexMarketLogo size={28} /></span>
             <div>
               <h2>Sign in</h2>
-              <p>NexEagle · Glisan Akbari SuperSpeciality Hospital</p>
+              <p>{orgFound ? `NexEagle · ${orgFound.name}` : 'NexEagle'}</p>
             </div>
           </div>
           <PwaInstallPrompt />
@@ -231,6 +263,15 @@ export default function LoginPage() {
             </div>
           ) : (
             <form onSubmit={handleFormSubmit} className="lg-form" noValidate>
+              <label className="lg-field">
+                <span>Organisation</span>
+                <input id="org-input" type="text" value={org} onChange={(e) => setOrgName(e.target.value)} autoComplete="organization"
+                  autoCapitalize="none" spellCheck={false} placeholder="e.g. citylab" maxLength={30} aria-describedby="org-hint" />
+                <span id="org-hint" className={`lg-hint${orgFound === null ? ' is-warn' : ''}`}>
+                  {orgFound ? orgFound.name : orgFound === null ? 'We don’t know this organisation. Check the name.' : 'The short name your organisation chose. Leave empty if you were not given one.'}
+                </span>
+              </label>
+
               <label className="lg-field">
                 <span>User ID, phone or email</span>
                 <input id="userid-input" type="text" value={userId} onChange={(e) => setUserId(e.target.value)} autoComplete="username"
@@ -273,6 +314,7 @@ export default function LoginPage() {
                 {isLoading ? 'Signing in…' : lockLeft > 0 ? `Locked · ${mmss}` : 'Sign in'}
               </button>
 
+              <p className="lg-help">New here? <Link href="/signup">Create an account for your organisation</Link></p>
               <p className="lg-help">Forgot your password? Ask your admin to reset it. Never share your password, even with the NexEagle team.</p>
             </form>
           )}

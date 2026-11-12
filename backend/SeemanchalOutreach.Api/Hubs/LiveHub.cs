@@ -22,10 +22,10 @@ namespace SeemanchalOutreach.Api.Hubs
         {
             if (Context.User.IsDashboardUser())
             {
-                await Groups.AddToGroupAsync(Context.ConnectionId, RoleChecks.DashboardGroup);
+                await Groups.AddToGroupAsync(Context.ConnectionId, OrgKeys.Of(RoleChecks.DashboardGroup));
             }
             var me = Context.User.AgentIdOf();
-            if (!string.IsNullOrEmpty(me)) await Groups.AddToGroupAsync(Context.ConnectionId, UserGroup(me));
+            if (!string.IsNullOrEmpty(me)) await Groups.AddToGroupAsync(Context.ConnectionId, OrgKeys.Of(UserGroup(me)));
             await base.OnConnectedAsync();
         }
     }
@@ -45,7 +45,7 @@ namespace SeemanchalOutreach.Api.Hubs
         {
             try
             {
-                await _hub.Clients.Group(RoleChecks.DashboardGroup).SendAsync("event", new
+                await _hub.Clients.Group(OrgKeys.Of(RoleChecks.DashboardGroup)).SendAsync("event", new
                 {
                     kind = e.Kind,
                     text = e.Text,
@@ -63,7 +63,7 @@ namespace SeemanchalOutreach.Api.Hubs
         {
             try
             {
-                await _hub.Clients.Group(RoleChecks.DashboardGroup).SendAsync("chat", new { threadId });
+                await _hub.Clients.Group(OrgKeys.Of(RoleChecks.DashboardGroup)).SendAsync("chat", new { threadId });
             }
             catch (Exception ex)
             {
@@ -75,7 +75,7 @@ namespace SeemanchalOutreach.Api.Hubs
         {
             try
             {
-                await _hub.Clients.Group(RoleChecks.DashboardGroup).SendAsync("location", new
+                await _hub.Clients.Group(OrgKeys.Of(RoleChecks.DashboardGroup)).SendAsync("location", new
                 {
                     agentId = l.AgentId,
                     name = l.Name,

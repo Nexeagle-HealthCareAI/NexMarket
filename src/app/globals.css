@@ -827,6 +827,33 @@ textarea.field-input { resize: none; min-height: 80px; }
 .lg-eye:focus-visible { outline: 2px solid #0a72d6; outline-offset: 1px; }
 .lg-hint { font-size: 13px; font-weight: 600; }
 .lg-hint.is-warn { color: #9a5b00; }
+.lg-hint:not(.is-warn):not(.is-bad):not(.is-good) { font-weight: 500; color: #5b6475; }
+.lg-hint.is-bad { color: #a1180f; }
+.lg-hint.is-good { color: #0b6b3a; }
+.lg-help a { color: #0a72d6; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.lg-card.is-wide { max-width: 540px; }
+.lg-field span em { font-style: normal; font-weight: 500; color: #5b6475; margin-left: 4px; }
+.lg-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.lg-sep { font-size: 13px; font-weight: 700; color: #5b6475; text-transform: uppercase; letter-spacing: .04em; border-top: 1px solid #e3e8f0; padding-top: 14px; }
+.lg-kinds { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.lg-kinds legend { padding: 0; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: #334155; }
+.lg-kinds legend span { font-weight: 500; color: #5b6475; margin-left: 4px; }
+.lg-kinds > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.lg-kinds label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid #cfd6e2; border-radius: 999px; font-size: 14px; font-weight: 600; color: #334155; cursor: pointer; background: #fff; }
+.lg-kinds label.is-on { border-color: #0a72d6; background: #eaf3fd; color: #07498c; }
+.lg-kinds label:focus-within { box-shadow: 0 0 0 3px rgba(10, 114, 214, 0.18); }
+.lg-kinds input { width: 18px; height: 18px; accent-color: #0a72d6; }
+.lg-note.is-good { background: #e9f7ef; color: #0b5b32; border: 1px solid #bfe5cf; }
+.lg-facts { margin: 0; display: flex; flex-direction: column; border: 1px solid #e3e8f0; border-radius: 12px; }
+.lg-facts > div { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; font-size: 14px; }
+.lg-facts > div + div { border-top: 1px solid #e3e8f0; }
+.lg-facts dt { color: #5b6475; font-weight: 500; }
+.lg-facts dd { margin: 0; font-weight: 700; color: #0f172a; text-align: right; overflow-wrap: anywhere; }
+.lg-facts dd span { font-weight: 500; color: #5b6475; }
+.lg-submit.is-link { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+.lg-pw:has(.lg-eye.is-text) input { padding-right: 76px; }
+.lg-eye.is-text { width: auto; padding: 0 12px; font-size: 14px; font-weight: 700; color: #0a72d6; }
+@media (max-width: 480px) { .lg-row2 { grid-template-columns: 1fr; } }
 .lg-check { display: flex; gap: 10px; align-items: center; font-size: 14px; color: #334155; cursor: pointer; min-height: 32px; }
 .lg-check input { width: 18px; height: 18px; accent-color: #0a72d6; }
 .lg-note { border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.45; font-weight: 500; }

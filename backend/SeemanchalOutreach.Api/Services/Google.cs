@@ -779,14 +779,15 @@ namespace SeemanchalOutreach.Api.Services
     {
         private readonly IServiceScopeFactory _scopes;
         private readonly ILogger<GoogleSyncScheduler> _log;
-        public GoogleSyncScheduler(IServiceScopeFactory scopes, ILogger<GoogleSyncScheduler> log) { _scopes = scopes; _log = log; }
+        private readonly OrgDirectory _orgs;
+        public GoogleSyncScheduler(IServiceScopeFactory scopes, ILogger<GoogleSyncScheduler> log, OrgDirectory orgs) { _scopes = scopes; _log = log; _orgs = orgs; }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             try { await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken); } catch (OperationCanceledException) { return; }
             while (!stoppingToken.IsCancellationRequested)
             {
-                try
+                await _orgs.ForEachAsync(async _ =>
                 {
                     using var scope = _scopes.CreateScope();
                     var settings = scope.ServiceProvider.GetRequiredService<IAppSettings>();
@@ -795,11 +796,7 @@ namespace SeemanchalOutreach.Api.Services
                     var due = last == null || IstClock.StartOfDayUtc(last.Value) < IstClock.TodayStartUtc;
                     if (cfg.Connected && cfg.AnySource && due && IstClock.NowIst.Hour >= 6)
                         await scope.ServiceProvider.GetRequiredService<GoogleSyncService>().SyncAsync("auto", stoppingToken);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _log.LogError(ex, "Daily Google fetch failed");
-                }
+                });
                 try { await Task.Delay(TimeSpan.FromMinutes(30), stoppingToken); }
                 catch (OperationCanceledException) { break; }
             }

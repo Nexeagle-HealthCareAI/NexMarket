@@ -62,6 +62,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<Hoarding> Hoardings => Set<Hoarding>();
         public DbSet<HoardingOwner> HoardingOwners => Set<HoardingOwner>();
         public DbSet<HoardingPhoto> HoardingPhotos => Set<HoardingPhoto>();
+        public DbSet<Organisation> Organisations => Set<Organisation>();
         public DbSet<ChatReaction> ChatReactions => Set<ChatReaction>();
         public DbSet<ChatPin> ChatPins => Set<ChatPin>();
         public DbSet<FieldRole> FieldRoles => Set<FieldRole>();
@@ -561,6 +562,12 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.SuggestedBy);
                 entity.HasIndex(e => e.OwnerId);
                 entity.Property(e => e.MonthlyRent).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<Organisation>(entity =>
+            {
+                entity.ToTable("organisations");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Key).IsUnique();
             });
             modelBuilder.Entity<HoardingOwner>(entity =>
             {

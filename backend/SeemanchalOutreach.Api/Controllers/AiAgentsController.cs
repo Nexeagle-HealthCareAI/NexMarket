@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -44,6 +45,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public void Publish(string kind, string refId, object? data = null)
         {
             if (string.IsNullOrWhiteSpace(_cfg.Secret)) return;
+            // The agents service knows only the first organisation so far: other organisations' events are not sent to it.
+            if (OrgScope.Current?.Database != null) return;
             _ = Task.Run(async () =>
             {
                 try
@@ -108,6 +111,9 @@ namespace SeemanchalOutreach.Api.Controllers
         /// <summary>Calls the agents service and passes its answer (or a plain message if it can't be reached).</summary>
         private async Task<IActionResult> Forward(HttpMethod method, string path, object? body, CancellationToken ct)
         {
+            // The agents service knows only the first organisation so far. Nobody else may read or steer its agents.
+            if (OrgScope.Current?.Database != null)
+                return StatusCode(503, new { message = "The AI agents are not available for your organisation yet.", offline = true });
             if (string.IsNullOrWhiteSpace(_cfg.Secret))
                 return StatusCode(503, new { message = "The agents service isn't set up yet (Agents__Secret is missing on the API).", offline = true });
             try
@@ -119,7 +125,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 if (!res.IsSuccessStatusCode)
                 {
                     string message = "The agents service refused that.";
-                    try { message = JsonDocument.Parse(text).RootElement.GetProperty("detail").ToString(); } catch { /* not JSON */ }
+                    try
+                    {
+                        var detail = JsonDocument.Parse(text).RootElement.GetProperty("detail");
+                        message = detail.ValueKind == JsonValueKind.Object && detail.TryGetProperty("message", out var dm) ? dm.ToString() : detail.ToString();
+                    }
+                    catch { /* not JSON */ }
                     return StatusCode((int)res.StatusCode >= 500 ? 502 : 400, new { message });
                 }
                 return Content(text, "application/json");
@@ -331,6 +342,59 @@ namespace SeemanchalOutreach.Api.Controllers
             return Forward(HttpMethod.Post, "v1/guard/check", new { text, channel = S("channel", "whatsapp"), audience = S("audience", "patient"), rules_only = rulesOnly, allow_rewrite = !rulesOnly, from_agent = (string?)null }, ct);
         }
 
+        /// <summary>
+        /// A person checks something an agent did or would have sent (shadow): good, edited (with the better text) or wrong,
+        /// and can send it to the lead from here. The verdicts are the agent's accuracy; a note can be kept as a lesson.
+        /// </summary>
+        [HttpPost("actions/{id:guid}/review")]
+        public Task<IActionResult> Review(Guid id, [FromBody] AiReviewDto d, CancellationToken ct)
+        {
+            if (!CanView) return Task.FromResult<IActionResult>(Forbid());
+            var verdict = d.Verdict is "good" or "edited" or "wrong" ? d.Verdict : "";
+            return Change(HttpMethod.Post, $"v1/actions/{id}/review",
+                new { by = By, verdict, text = d.Text, note = d.Note, send = d.Send, remember = d.Remember },
+                "Update", id.ToString(), $"Checked a Vita draft: {verdict}{(d.Send && verdict != "wrong" ? ", sent" : "")}", ct);
+        }
+
+        [HttpPost("lessons")]
+        public Task<IActionResult> AddLesson([FromBody] AiLessonDto d, CancellationToken ct)
+        {
+            if (!CanView) return Task.FromResult<IActionResult>(Forbid());
+            var text = (d.Text ?? "").Trim();
+            if (text.Length < 8) return Task.FromResult<IActionResult>(BadRequest(new { message = "Write the lesson in one sentence." }));
+            return Change(HttpMethod.Post, "v1/lessons", new { by = By, agent = d.Agent, text = text.Length > 400 ? text[..400] : text }, "Create", d.Agent, $"Gave Vita agent {d.Agent} a lesson", ct);
+        }
+
+        /// <summary>A lesson the Coach suggested is kept: the agent reads it from its next run.</summary>
+        [HttpPost("lessons/{agent}/{key}/keep")]
+        public Task<IActionResult> KeepLesson(string agent, string key, CancellationToken ct)
+        {
+            if (!CanView) return Task.FromResult<IActionResult>(Forbid());
+            return Change(HttpMethod.Post, $"v1/lessons/{Uri.EscapeDataString(agent)}/{Uri.EscapeDataString(key)}/keep", new { by = By }, "Update", agent, $"Kept a suggested lesson for Vita agent {agent}", ct);
+        }
+
+        /// <summary>Runs one of the agents' daily jobs now instead of at its hour (the agent's own mode and limits still apply).</summary>
+        private static readonly HashSet<string> RunJobs = new()
+        {
+            "data_watcher", "chief_plan", "chief_check", "evening_report", "coach", "lead_follow_up", "reputation", "content_writer", "social_publisher",
+            "broadcast_manager", "partner_network", "field_coordinator", "camp_planner", "ads_optimiser",
+        };
+
+        [HttpPost("run")]
+        public Task<IActionResult> RunNow([FromBody] AiRunDto d, CancellationToken ct)
+        {
+            if (!IsAdmin) return Task.FromResult<IActionResult>(StatusCode(403, new { message = "Only an admin can run an agent's job by hand." }));
+            if (!RunJobs.Contains(d.Job)) return Task.FromResult<IActionResult>(NotFound());
+            return Change(HttpMethod.Post, "v1/run", new { by = By, job = d.Job }, "Update", d.Job, $"Ran the Vita job {d.Job} by hand", ct);
+        }
+
+        [HttpPost("lessons/{agent}/{key}/drop")]
+        public Task<IActionResult> DropLesson(string agent, string key, CancellationToken ct)
+        {
+            if (!CanView) return Task.FromResult<IActionResult>(Forbid());
+            return Change(HttpMethod.Post, $"v1/lessons/{Uri.EscapeDataString(agent)}/{Uri.EscapeDataString(key)}/drop", new { by = By }, "Delete", agent, $"Removed a lesson from Vita agent {agent}", ct);
+        }
+
         [HttpGet("lessons")]
         public Task<IActionResult> Lessons([FromQuery] string? agent, CancellationToken ct)
         {
@@ -355,6 +419,27 @@ namespace SeemanchalOutreach.Api.Controllers
         /// <summary>admin | marketing_manager (from the Agents page's report recipients).</summary>
         public List<string> Roles { get; set; } = new();
     }
+
+    public class AiReviewDto
+    {
+        public string Verdict { get; set; } = "";
+        public string? Text { get; set; }
+        public string? Note { get; set; }
+        public bool Send { get; set; }
+        public bool Remember { get; set; }
+    }
+    public class AgentTaskDto
+    {
+        public string AgentId { get; set; } = "";       // the Vita agent making the task
+        public string ForAgent { get; set; } = "";      // the field agent it is for
+        public string Kind { get; set; } = "";          // revive | thank | coverage
+        public string? ContactClientId { get; set; }
+        public int Count { get; set; }
+        public List<string>? PanchayatIds { get; set; }
+    }
+    public class AiRunDto { public string Job { get; set; } = ""; }
+    public class AiLessonDto { public string Agent { get; set; } = ""; public string? Text { get; set; } }
+    public class AgentIdDto { public string AgentId { get; set; } = ""; }
 
     public class AgentLeadReplyDto { public string Text { get; set; } = ""; public string AgentId { get; set; } = ""; }
     public class AgentLeadUpdateDto
@@ -411,6 +496,488 @@ namespace SeemanchalOutreach.Api.Controllers
             var a = Encoding.UTF8.GetBytes(given);
             var b = Encoding.UTF8.GetBytes(secret);
             return a.Length == b.Length && CryptographicOperations.FixedTimeEquals(a, b);
+        }
+
+        // ─── Reputation: Google reviews ────────────────────────────────────
+
+        private static string ScriptOf(string? text)
+        {
+            foreach (var ch in text ?? "")
+            {
+                if (ch >= 0x0980 && ch <= 0x09FF) return "bn";
+                if (ch >= 0x0900 && ch <= 0x097F) return "hi";
+            }
+            return string.IsNullOrWhiteSpace(text) ? "hi" : "en";
+        }
+
+        /// <summary>
+        /// Google reviews from the last 30 days that have no reply. Only the stars, the date and which script the review
+        /// is written in: the reviewer's name and words are not given out.
+        /// </summary>
+        [HttpGet("reviews/unanswered")]
+        public async Task<IActionResult> ReviewsUnanswered(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var since = DateTime.UtcNow.AddDays(-30);
+            var rows = await _db.GoogleReviews.AsNoTracking().Where(r => r.RepliedAt == null && r.ReplyText == null && r.PostedAt >= since)
+                .OrderBy(r => r.PostedAt).Take(100).Select(r => new { r.Id, r.Stars, r.PostedAt, r.Comment }).ToListAsync(ct);
+            return Ok(new { items = rows.Select(r => new { id = r.Id, stars = r.Stars, postedAt = r.PostedAt, hasComment = !string.IsNullOrWhiteSpace(r.Comment), language = ScriptOf(r.Comment) }) });
+        }
+
+        /// <summary>Posts the hospital's reply to a review on Google. Refused when the review already has a reply.</summary>
+        [HttpPost("reviews/{id:guid}/reply")]
+        public async Task<IActionResult> ReviewReply(Guid id, [FromBody] AgentLeadReplyDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var text = (d.Text ?? "").Trim();
+            if (text.Length == 0 || text.Length > 1500) return BadRequest(new { message = "bad_text" });
+            var review = await _db.GoogleReviews.FirstOrDefaultAsync(r => r.Id == id, ct);
+            if (review == null) return NotFound();
+            if (review.RepliedAt != null || review.ReplyText != null) return Conflict(new { message = "already_replied" });
+            var sync = HttpContext.RequestServices.GetRequiredService<GoogleSyncService>();
+            var err = await sync.ReplyAsync(review, text, "ai:" + d.AgentId, ct);
+            if (err != null) return Conflict(new { message = "google_refused", error = err });
+            return Ok(new { status = "replied" });
+        }
+
+        // ─── Social Publisher: a post on the hospital's Facebook page ─────────
+
+        /// <summary>
+        /// Publishes a text post on the connected Facebook page and adds it to the Social page. Needs the page connection in
+        /// Marketing settings to allow publishing; Facebook's own reason is passed back when it refuses.
+        /// </summary>
+        [HttpPost("social/publish")]
+        public async Task<IActionResult> SocialPublish([FromBody] AgentLeadReplyDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var text = (d.Text ?? "").Trim();
+            if (text.Length < 20 || text.Length > 3000) return BadRequest(new { message = "bad_text" });
+            var meta = MetaConfig.Load(HttpContext.RequestServices.GetRequiredService<IAppSettings>());
+            if (!meta.PageConnected) return Conflict(new { message = "page_not_connected" });
+            var graph = HttpContext.RequestServices.GetRequiredService<MetaGraph>();
+            var r = await graph.PostAsync(meta.ApiVersion, $"{meta.PageId}/feed", meta.PageToken, new { message = text }, ct);
+            if (!r.Ok || r.Doc == null) return Conflict(new { message = "facebook_refused", error = r.Error });
+            string? postId;
+            using (r.Doc) postId = r.Doc.RootElement.TryGetProperty("id", out var pid) ? pid.GetString() : null;
+            var post = new SocialPost
+            {
+                Channel = "facebook", ExternalId = postId, Source = "manual", Text = text, MediaType = "text", PostedAt = DateTime.UtcNow,
+                Permalink = postId != null ? $"https://www.facebook.com/{postId}" : null, CreatedBy = "ai:" + d.AgentId, Note = "Published by Vita",
+            };
+            _db.SocialPosts.Add(post);
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { status = "published", id = post.Id, permalink = post.Permalink });
+        }
+
+        // ─── Broadcast Manager: a camp invitation to the partners of its block ─────
+
+        private static string CampDate(HealthCamp c) => c.Date.ToString("d MMM (dddd)", System.Globalization.CultureInfo.InvariantCulture);
+
+        /// <summary>
+        /// Camps 2 to 5 days away that have had no invitation broadcast yet, with how many partners in the camp's block would
+        /// get it (opted-out and wrong numbers already left out), and whether that block had any broadcast in the last 7 days.
+        /// </summary>
+        [HttpGet("broadcasts/camp-candidates")]
+        public async Task<IActionResult> CampCandidates(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var today = AttendanceService.TodayIst;
+            var camps = await _db.HealthCamps.AsNoTracking().Where(c => c.Date >= today.AddDays(2) && c.Date <= today.AddDays(5) && (c.Status == "planned" || c.Status == "confirmed") && c.Block != null && c.Block != "")
+                .OrderBy(c => c.Date).Take(10).ToListAsync(ct);
+            var recent = await _db.Broadcasts.AsNoTracking().Where(b => b.CreatedAt > DateTime.UtcNow.AddDays(-30) && b.Status != "cancelled" && b.Status != "failed")
+                .Select(b => new { b.Kind, b.ParamsJson, b.AudienceJson, At = b.ScheduledAt ?? b.CreatedAt }).ToListAsync(ct);
+            var items = new List<object>();
+            foreach (var c in camps)
+            {
+                if (recent.Any(b => b.ParamsJson.Contains(c.Id.ToString()))) continue;
+                var audience = new BroadcastAudience { Blocks = new() { c.Block! } };
+                var count = await BroadcastComposer.Audience(_db, audience).CountAsync(ct);
+                var blockBusy = recent.Any(b => b.At > DateTime.UtcNow.AddDays(-7) && (b.AudienceJson.Contains($"\"{c.Block}\"") || b.AudienceJson.Contains("\"Blocks\":[]")));
+                var p = CampParams(c);
+                items.Add(new
+                {
+                    campId = c.Id, title = c.Title, date = c.Date, block = c.Block, recipients = count, blockHadBroadcastThisWeek = blockBusy,
+                    preview = BroadcastComposer.Preview("camp_invite", "hi", p, ""),
+                    facts = new { place = p["place"], date = p["date"], start = c.StartTime, end = c.EndTime, venue = c.Venue, block = c.Block },
+                });
+            }
+            return Ok(new { connected = _outbox.Config.IsConfigured, paused = _outbox.Rules.Paused, items });
+        }
+
+        private static Dictionary<string, string> CampParams(HealthCamp c) => new()
+        {
+            ["place"] = string.IsNullOrWhiteSpace(c.Venue) ? c.Block ?? "" : $"{c.Venue}, {c.Block}",
+            ["date"] = CampDate(c),
+            ["details"] = $"{c.Title}. समय: {c.StartTime} से {c.EndTime}.",
+            ["campId"] = c.Id.ToString(),
+        };
+
+        /// <summary>
+        /// Schedules the camp invitation (the approved camp template) to the partners of the camp's block, now. Refused when
+        /// the camp already has one, when the block had a broadcast in the last 7 days, or when nobody would receive it.
+        /// </summary>
+        [HttpPost("broadcasts/camp/{campId:guid}")]
+        public async Task<IActionResult> CampBroadcast(Guid campId, [FromBody] AgentIdDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var c = await _db.HealthCamps.AsNoTracking().FirstOrDefaultAsync(x => x.Id == campId, ct);
+            if (c == null) return NotFound();
+            var today = AttendanceService.TodayIst;
+            if (c.Date < today || c.Status == "cancelled" || c.Status == "done" || string.IsNullOrWhiteSpace(c.Block)) return Conflict(new { message = "camp_not_open" });
+            if (!_outbox.Config.IsConfigured) return Conflict(new { message = "whatsapp_not_connected" });
+            if (_outbox.Rules.Paused) return Conflict(new { message = "whatsapp_paused" });
+            var recent = await _db.Broadcasts.AsNoTracking().Where(b => b.CreatedAt > DateTime.UtcNow.AddDays(-30) && b.Status != "cancelled" && b.Status != "failed")
+                .Select(b => new { b.ParamsJson, b.AudienceJson, At = b.ScheduledAt ?? b.CreatedAt }).ToListAsync(ct);
+            if (recent.Any(b => b.ParamsJson.Contains(c.Id.ToString()))) return Conflict(new { message = "already_sent" });
+            if (recent.Any(b => b.At > DateTime.UtcNow.AddDays(-7) && (b.AudienceJson.Contains($"\"{c.Block}\"") || b.AudienceJson.Contains("\"Blocks\":[]")))) return Conflict(new { message = "block_had_broadcast_this_week" });
+            var audience = new BroadcastAudience { Blocks = new() { c.Block! } };
+            var count = await BroadcastComposer.Audience(_db, audience).CountAsync(ct);
+            if (count == 0) return Conflict(new { message = "nobody" });
+            var p = CampParams(c);
+            var b = new Broadcast
+            {
+                Kind = "camp_invite", Language = "hi", Title = BroadcastComposer.TitleFor("camp_invite", p), ParamsJson = JsonSerializer.Serialize(p),
+                AudienceJson = JsonSerializer.Serialize(audience), PreviewText = BroadcastComposer.Preview("camp_invite", "hi", p, ""), RecipientCount = count,
+                ScheduledAt = DateTime.UtcNow, Status = "scheduled", CreatedBy = "ai:" + d.AgentId, CreatedAt = DateTime.UtcNow,
+            };
+            _db.Broadcasts.Add(b);
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { status = "scheduled", id = b.Id, recipients = count });
+        }
+
+        // ─── Field wing: partners, coverage, tasks for agents ────────────────────────────
+
+        private static readonly string[] RoleWords = { "asha_worker:ASHA", "rmp_doctor:RMP doctor", "medicine_shop:chemist", "ward_member:ward member", "anganwadi_worker:Anganwadi worker" };
+        private static string RoleWord(string role) => RoleWords.Select(x => x.Split(':')).FirstOrDefault(x => x[0] == role)?[1] ?? "partner";
+
+        /// <summary>
+        /// Partners worth a visit, for the Partner Network agent. "quiet": referred at least twice in the 60 days before,
+        /// nothing in the last 30. "thank": a patient of theirs came to the hospital in the last 7 days. Ids only, no names.
+        /// </summary>
+        [HttpGet("partners/watch")]
+        public async Task<IActionResult> PartnersWatch(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var now = DateTime.UtcNow;
+            var refs = await _db.Referrals.AsNoTracking().Where(r => r.CreatedAt > now.AddDays(-90)).Select(r => new { r.ContactId, r.CreatedAt, r.ArrivedAt }).ToListAsync(ct);
+            var byContact = refs.GroupBy(r => r.ContactId).ToDictionary(g => g.Key, g => g.ToList());
+            var ids = byContact.Keys.ToList();
+            var contacts = ids.Count == 0 ? new() : (await _db.Contacts.AsNoTracking().Where(c => ids.Contains(c.ClientId) && !c.IsMerged && c.Status != "Closed")
+                .Select(c => new { c.ClientId, c.AgentId, c.Role }).ToListAsync(ct));
+            var activeAgents = (await _db.Agents.AsNoTracking().Where(a => a.IsActive).Select(a => a.AgentId).ToListAsync(ct)).ToHashSet();
+            var quiet = new List<object>(); var thank = new List<object>();
+            foreach (var c in contacts.Where(c => activeAgents.Contains(c.AgentId)))
+            {
+                var mine = byContact[c.ClientId];
+                var last30 = mine.Count(r => r.CreatedAt > now.AddDays(-30));
+                var before = mine.Count(r => r.CreatedAt <= now.AddDays(-30));
+                if (last30 == 0 && before >= 2)
+                    quiet.Add(new { contactClientId = c.ClientId, agentId = c.AgentId, role = c.Role, before, daysSinceLast = (int)(now - mine.Max(r => r.CreatedAt)).TotalDays });
+                var came = mine.Count(r => r.ArrivedAt != null && r.ArrivedAt > now.AddDays(-7));
+                if (came >= 1) thank.Add(new { contactClientId = c.ClientId, agentId = c.AgentId, role = c.Role, came });
+            }
+            return Ok(new { quiet = quiet.Take(40), thank = thank.Take(40) });
+        }
+
+        /// <summary>
+        /// How well each field agent's block is covered: active panchayats, how many were visited in the last 21 days, and
+        /// the ones longest without a visit. Panchayat names only; nothing about people.
+        /// </summary>
+        [HttpGet("field/coverage")]
+        public async Task<IActionResult> FieldCoverage(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var now = DateTime.UtcNow;
+            var agents = (await _db.Agents.AsNoTracking().Where(a => a.IsActive && a.Block != "").Select(a => new { a.AgentId, a.Role, a.Block, a.District }).ToListAsync(ct))
+                .Where(a => !RoleChecks.IsDashboardRole(a.Role)).ToList();
+            var blocks = agents.Select(a => a.Block).Distinct().ToList();
+            var panchayats = await _db.Panchayats.AsNoTracking().Where(p => p.IsActiveForMarketing && blocks.Contains(p.Block)).Select(p => new { p.PanchayatId, p.Name, p.Block }).ToListAsync(ct);
+            var pids = panchayats.Select(p => p.PanchayatId).ToList();
+            var lastVisit = (await _db.Visits.AsNoTracking().Where(v => pids.Contains(v.PanchayatId) && v.CheckInAt > now.AddDays(-120))
+                .GroupBy(v => v.PanchayatId).Select(g => new { g.Key, At = g.Max(v => v.CheckInAt) }).ToListAsync(ct)).ToDictionary(x => x.Key, x => x.At);
+            var shifts = await _db.Shifts.AsNoTracking().Where(x => x.StartTime > now.AddDays(-7)).Select(x => x.AgentId).ToListAsync(ct);
+            var openAi = (await _db.AgentTasks.AsNoTracking().Where(t => t.Status == "open" && t.CreatedBy.StartsWith("ai:")).Select(t => t.AgentId).ToListAsync(ct)).GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
+            var perBlock = agents.GroupBy(a => a.Block).ToDictionary(g => g.Key, g => g.Count());
+            return Ok(new
+            {
+                agents = agents.Select(a =>
+                {
+                    var mine = panchayats.Where(p => p.Block == a.Block).ToList();
+                    var stale = mine.Select(p => new { p.PanchayatId, p.Name, days = lastVisit.TryGetValue(p.PanchayatId, out var at) ? (int?)(now - at).TotalDays : null })
+                        .Where(p => p.days == null || p.days >= 21).OrderByDescending(p => p.days ?? 999).ToList();
+                    return new
+                    {
+                        agentId = a.AgentId, block = a.Block, district = a.District, agentsInBlock = perBlock[a.Block], panchayats = mine.Count, visitedIn21Days = mine.Count - stale.Count,
+                        shiftsLast7Days = shifts.Count(x => x == a.AgentId), openAiTasks = openAi.GetValueOrDefault(a.AgentId),
+                        stale = stale.Take(6).Select(p => new { id = p.PanchayatId, name = p.Name, daysSinceVisit = p.days }),
+                    };
+                }),
+            });
+        }
+
+        /// <summary>
+        /// A task on a field agent's phone, made by a Vita agent. Kinds: "revive" and "thank" (about one partner; the
+        /// partner's name is filled in here, so it never leaves NexMarket) and "coverage" (panchayats to visit).
+        /// Refused when the agent already has 5 open Vita tasks, got 2 today, or has the same one open.
+        /// </summary>
+        [HttpPost("tasks")]
+        public async Task<IActionResult> MakeTask([FromBody] AgentTaskDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var agent = await _db.Agents.AsNoTracking().FirstOrDefaultAsync(a => a.AgentId == d.ForAgent && a.IsActive, ct);
+            if (agent == null || RoleChecks.IsDashboardRole(agent.Role)) return Conflict(new { message = "no_such_field_agent" });
+            var by = "ai:" + (d.AgentId.Length > 40 ? d.AgentId[..40] : d.AgentId);
+            var open = await _db.AgentTasks.AsNoTracking().Where(t => t.AgentId == agent.AgentId && t.CreatedBy.StartsWith("ai:") && (t.Status == "open" || t.CreatedAt > IstClock.TodayStartUtc))
+                .Select(t => new { t.Status, t.CreatedAt, t.ContactClientId, t.CreatedBy, t.PanchayatIdsJson }).ToListAsync(ct);
+            if (open.Count(t => t.Status == "open") >= 5) return Conflict(new { message = "agent_has_enough" });
+            if (open.Count(t => t.CreatedAt > IstClock.TodayStartUtc) >= 2) return Conflict(new { message = "two_today" });
+
+            var today = AttendanceService.TodayIst;
+            var task = new AgentTask { GroupId = Guid.NewGuid(), AgentId = agent.AgentId, CreatedBy = by, Priority = "normal", District = agent.District, Block = agent.Block };
+            if (d.Kind is "revive" or "thank")
+            {
+                var c = await _db.Contacts.AsNoTracking().FirstOrDefaultAsync(x => x.ClientId == d.ContactClientId && !x.IsMerged, ct);
+                if (c == null) return Conflict(new { message = "no_such_partner" });
+                if (c.AgentId != agent.AgentId) return Conflict(new { message = "not_their_partner" });
+                if (open.Any(t => t.Status == "open" && t.ContactClientId == c.ClientId)) return Conflict(new { message = "already_open" });
+                var n = Math.Clamp(d.Count, 0, 999);
+                task.ContactClientId = c.ClientId;
+                task.Title = d.Kind == "revive" ? $"Visit {c.Name} ({RoleWord(c.Role)}): no referral for {n} days" : $"Thank {c.Name} ({RoleWord(c.Role)}): {n} of their patients came this week";
+                task.Detail = d.Kind == "revive"
+                    ? "They used to send patients and have stopped. Ask how things are, whether something went wrong with a patient, and leave a card. Do not offer money or any commission."
+                    : "Tell them their patients reached the hospital and were seen. A thank-you in person keeps a good partner. Do not offer money or any commission.";
+                task.DueDate = today.AddDays(d.Kind == "revive" ? 5 : 3);
+            }
+            else if (d.Kind == "coverage")
+            {
+                var want = (d.PanchayatIds ?? new()).Distinct().Take(6).ToList();
+                var found = await _db.Panchayats.AsNoTracking().Where(p => want.Contains(p.PanchayatId) && p.Block == agent.Block && p.IsActiveForMarketing).Select(p => new { p.PanchayatId, p.Name }).ToListAsync(ct);
+                if (found.Count == 0) return Conflict(new { message = "no_panchayats_in_their_block" });
+                if (open.Any(t => t.Status == "open" && t.CreatedBy == by && t.PanchayatIdsJson != null)) return Conflict(new { message = "already_open" });
+                task.PanchayatIdsJson = JsonSerializer.Serialize(found.Select(p => p.PanchayatId));
+                task.Title = $"Visit these panchayats this week: {string.Join(", ", found.Select(p => p.Name))}";
+                if (task.Title.Length > 200) task.Title = task.Title[..197] + "…";
+                task.Detail = "Nobody has checked in at these panchayats for three weeks or more. Meet the ASHA, the RMP and the chemist in each, and add any new partner you find.";
+                task.DueDate = today.AddDays(6);
+            }
+            else return BadRequest(new { message = "unknown_kind" });
+
+            _db.AgentTasks.Add(task);
+            await _db.SaveChangesAsync(ct);
+            await _live.PublishAsync(new LiveEvent { Kind = "task", Text = $"Vita gave {agent.Name} a task: {task.Title}", RefId = task.GroupId.ToString() });
+            _notifier.Notify(new NotifyJob { To = new() { agent.AgentId }, Kind = "task", Title = $"New task: {task.Title}", Body = $"{task.Detail} Due {task.DueDate:d MMM}.", Link = "tasks", RefId = task.GroupId.ToString() });
+            return Ok(new { status = "created", id = task.Id, title = task.Title });
+        }
+
+        // ─── Camp Planner: where a camp would be worth holding ──────────────────
+
+        /// <summary>
+        /// Per block, the last 90 days: referrals (and for which departments), partners, and when a camp was last held or is
+        /// next planned. Counts only.
+        /// </summary>
+        [HttpGet("camps/demand")]
+        public async Task<IActionResult> CampDemand(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var now = DateTime.UtcNow;
+            var today = AttendanceService.TodayIst;
+            var blockOf = (await _db.Panchayats.AsNoTracking().Where(p => p.IsActiveForMarketing).Select(p => new { p.PanchayatId, p.Block }).ToListAsync(ct)).ToDictionary(p => p.PanchayatId, p => p.Block);
+            var contacts = await _db.Contacts.AsNoTracking().Where(c => !c.IsMerged).Select(c => new { c.ClientId, c.PanchayatId, c.Phone, c.WhatsappOptOut, c.PhoneInvalid }).ToListAsync(ct);
+            var contactBlock = contacts.Where(c => blockOf.ContainsKey(c.PanchayatId)).ToDictionary(c => c.ClientId, c => blockOf[c.PanchayatId]);
+            var refs = await _db.Referrals.AsNoTracking().Where(r => r.CreatedAt > now.AddDays(-90)).Select(r => new { r.ContactId, r.Department }).ToListAsync(ct);
+            var camps = await _db.HealthCamps.AsNoTracking().Where(c => c.Status != "cancelled" && c.Block != null).Select(c => new { c.Block, c.Date }).ToListAsync(ct);
+            var blocks = blockOf.Values.Distinct().OrderBy(b => b).ToList();
+            return Ok(new
+            {
+                blocks = blocks.Select(b =>
+                {
+                    var mine = refs.Where(r => contactBlock.TryGetValue(r.ContactId, out var cb) && cb == b).ToList();
+                    var deps = mine.Where(r => !string.IsNullOrWhiteSpace(r.Department)).GroupBy(r => r.Department).OrderByDescending(g => g.Count()).Take(3).Select(g => new { department = g.Key, referrals = g.Count() });
+                    var past = camps.Where(c => c.Block == b && c.Date < today).Select(c => c.Date).ToList();
+                    var next = camps.Where(c => c.Block == b && c.Date >= today).Select(c => c.Date).ToList();
+                    return new
+                    {
+                        block = b, referrals90Days = mine.Count, topDepartments = deps,
+                        partners = contacts.Count(c => contactBlock.TryGetValue(c.ClientId, out var cb) && cb == b),
+                        partnersReachable = contacts.Count(c => contactBlock.TryGetValue(c.ClientId, out var cb) && cb == b && !string.IsNullOrEmpty(c.Phone) && !c.WhatsappOptOut && !c.PhoneInvalid),
+                        lastCamp = past.Count > 0 ? past.Max().ToString("yyyy-MM-dd") : null, daysSinceCamp = past.Count > 0 ? today.DayNumber - past.Max().DayNumber : (int?)null,
+                        nextCamp = next.Count > 0 ? next.Min().ToString("yyyy-MM-dd") : null,
+                    };
+                }),
+            });
+        }
+
+        // ─── Ads Optimiser: what the ads cost against who came ────────────────────
+
+        /// <summary>
+        /// The last 14 days of ads, per campaign: Meta (spend, leads that reached the CRM, how many came) and Google Ads
+        /// (cost, clicks, conversions). Read only: you run the ads yourself.
+        /// </summary>
+        [HttpGet("ads/results")]
+        public async Task<IActionResult> AdsResults(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var today = AttendanceService.TodayIst;
+            var from = today.AddDays(-13);
+            var meta = HttpContext.RequestServices.GetRequiredService<MetaService>();
+            var (rows, currency, error) = await meta.AdsAsync(from, today, ct);
+            var g = await _db.ChannelMetrics.AsNoTracking().Where(m => m.Source == "google_ads" && m.Date >= from && m.Dimension.StartsWith("campaign:"))
+                .GroupBy(m => new { m.Dimension, m.Metric }).Select(x => new { x.Key.Dimension, x.Key.Metric, Label = x.Max(m => m.Label), Value = x.Sum(m => m.Value) }).ToListAsync(ct);
+            decimal G(string dim, string metric) => g.Where(x => x.Dimension == dim && x.Metric == metric).Select(x => x.Value).FirstOrDefault();
+            return Ok(new
+            {
+                days = 14, currency = currency ?? "INR", metaError = error,
+                meta = rows.Where(r => r.Spend > 0 || r.CrmLeads > 0).Select(r => new { id = r.Id, name = r.Name, status = r.Status, spend = Math.Round(r.Spend), leads = r.CrmLeads, came = r.Arrived, clicks = r.Clicks }),
+                google = g.Select(x => x.Dimension).Distinct().Select(dim => new
+                {
+                    id = dim, name = g.First(x => x.Dimension == dim).Label ?? dim, cost = Math.Round(G(dim, "cost")), clicks = (long)G(dim, "clicks"),
+                    conversions = Math.Round(G(dim, "conversions"), 1), calls = (long)G(dim, "phone_calls"),
+                }).Where(x => x.cost > 0),
+            });
+        }
+
+        // ─── Numbers for the Data Watcher, the Chief of Staff and the Reporter ─────────────────
+
+        /// <summary>
+        /// Today's totals next to what is usual, for the Data Watcher. Counts only: no names, no phone numbers, no message
+        /// text. "usualByNow" is the average of the last 7 days up to this time of day, so a morning is compared with mornings.
+        /// </summary>
+        [HttpGet("numbers")]
+        public async Task<IActionResult> Numbers(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var now = DateTime.UtcNow;
+            var day0 = IstClock.TodayStartUtc;
+            var into = now - day0;                         // how far into the India day we are
+            var week0 = day0.AddDays(-7);
+            var weekStart = day0.AddDays(-6);              // this week = today and the 6 days before
+            var prevWeekStart = weekStart.AddDays(-7);
+            double Usual(IEnumerable<DateTime> times) => Math.Round(times.Count(t => t >= week0 && t < day0 && (t - day0.AddDays(Math.Floor((t - day0).TotalDays))) <= into) / 7.0, 1);
+
+            // Leads
+            var leads = await _db.Leads.AsNoTracking().Where(l => l.CreatedAt >= prevWeekStart).Select(l => new { l.CreatedAt, l.Source, l.Status, l.FirstResponseAt, l.ClosedAt }).ToListAsync(ct);
+            var leadsToday = leads.Where(l => l.CreatedAt >= day0).ToList();
+            var sources = leads.Where(l => l.CreatedAt >= week0).GroupBy(l => l.Source).Select(g => new
+            {
+                source = g.Key, today = g.Count(l => l.CreatedAt >= day0), usualByNow = Usual(g.Select(l => l.CreatedAt)), last7 = g.Count(l => l.CreatedAt < day0),
+            }).OrderByDescending(x => x.last7).ToList();
+            var waiting = await _db.Leads.AsNoTracking().Where(l => l.Status == "new" && l.FirstResponseAt == null && !l.OptOut && l.CreatedAt > now.AddDays(-3) && l.CreatedAt < now.AddMinutes(-30))
+                .Select(l => l.CreatedAt).ToListAsync(ct);
+            var openIdle = await _db.Leads.AsNoTracking().CountAsync(l => (l.Status == "new" || l.Status == "contacted") && l.ClosedAt == null && l.LastActivityAt < now.AddDays(-3), ct);
+            var moved = await _db.LeadActivities.AsNoTracking().Where(a => a.Kind == "status" && a.CreatedAt >= prevWeekStart).Select(a => new { a.CreatedAt, a.Text }).ToListAsync(ct);
+            int Moved(string to, DateTime from, DateTime until) => moved.Count(m => m.CreatedAt >= from && m.CreatedAt < until && m.Text.Contains("→ " + LeadInbox.StatusLabel(to)));
+
+            // WhatsApp
+            var wa = await _db.WaMessages.AsNoTracking().Where(m => m.CreatedAt >= week0).Select(m => new { m.CreatedAt, m.Direction, m.Status }).ToListAsync(ct);
+            var waOutToday = wa.Where(m => m.Direction == "out" && m.CreatedAt >= day0).ToList();
+            var waOutWeek = wa.Where(m => m.Direction == "out" && m.CreatedAt < day0).ToList();
+
+            // Referrals from partners
+            var refs = await _db.Referrals.AsNoTracking().Where(r => r.CreatedAt >= prevWeekStart).Select(r => new { r.CreatedAt, r.ArrivedAt }).ToListAsync(ct);
+            var arrived = await _db.Referrals.AsNoTracking().Where(r => r.ArrivedAt != null && r.ArrivedAt >= prevWeekStart).Select(r => r.ArrivedAt!.Value).ToListAsync(ct);
+
+            // Field work
+            var visits = await _db.Visits.AsNoTracking().Where(v => v.CheckInAt >= week0).Select(v => v.CheckInAt).ToListAsync(ct);
+            var onShift = await _db.Shifts.AsNoTracking().Where(x => x.StartTime >= day0).Select(x => x.AgentId).Distinct().CountAsync(ct);
+            var shiftsWeek = await _db.Shifts.AsNoTracking().Where(x => x.StartTime >= week0 && x.StartTime < day0).Select(x => new { x.AgentId, x.StartTime }).ToListAsync(ct);
+            var usualOnShift = Math.Round(shiftsWeek.GroupBy(x => (int)Math.Floor((x.StartTime - week0).TotalDays)).Select(g => g.Select(x => x.AgentId).Distinct().Count()).DefaultIfEmpty(0).Average(), 1);
+
+            var today = AttendanceService.TodayIst;
+            var overdue = await _db.AgentTasks.AsNoTracking().CountAsync(t => t.Status == "open" && t.DueDate != null && t.DueDate < today, ct);
+            var reviews = await _db.GoogleReviews.AsNoTracking().Where(r => r.PostedAt >= now.AddDays(-30)).Select(r => new { r.PostedAt, r.Stars, r.RepliedAt }).ToListAsync(ct);
+            var hoard = await _db.Hoardings.AsNoTracking().Where(h => h.Status != "ended" && h.Status != "rejected").ToListAsync(ct);
+
+            var brief = await _db.AiBriefings.AsNoTracking().Where(b => b.Status == "ok" && b.Scope == "business").OrderByDescending(b => b.CreatedAt)
+                .Select(b => new { b.CreatedAt, b.Health, b.Summary }).FirstOrDefaultAsync(ct);
+            var items = await _db.AiItems.AsNoTracking().Where(i => (i.Status == "open" || i.Status == "in_progress") && i.Scope == "business")
+                .OrderBy(i => i.Severity == "high" ? 0 : i.Severity == "medium" ? 1 : 2).ThenByDescending(i => i.UpdatedAt).Take(6)
+                .Select(i => new { i.Kind, i.Title, i.Area, i.Metric, i.Severity, i.Trend, i.Owner, due = i.DueDate }).ToListAsync(ct);
+
+            return Ok(new
+            {
+                asOf = now, istHour = IstClock.NowIst.Hour, weekday = IstClock.NowIst.DayOfWeek.ToString(),
+                leads = new
+                {
+                    today = leadsToday.Count, usualByNow = Usual(leads.Select(l => l.CreatedAt)),
+                    yesterday = leads.Count(l => l.CreatedAt >= day0.AddDays(-1) && l.CreatedAt < day0),
+                    last7 = leads.Count(l => l.CreatedAt >= week0 && l.CreatedAt < day0),
+                    bySource = sources,
+                    waitingNoReply = waiting.Count,
+                    oldestWaitingMinutes = waiting.Count == 0 ? 0 : (int)(now - waiting.Min()).TotalMinutes,
+                    openIdle3Days = openIdle,
+                    appointmentsThisWeek = Moved("appointment", weekStart, now), appointmentsPrevWeek = Moved("appointment", prevWeekStart, weekStart),
+                    arrivedThisWeek = Moved("arrived", weekStart, now), arrivedPrevWeek = Moved("arrived", prevWeekStart, weekStart),
+                    lostThisWeek = Moved("lost", weekStart, now), lostPrevWeek = Moved("lost", prevWeekStart, weekStart),
+                },
+                whatsapp = new
+                {
+                    paused = _outbox.Rules.Paused, configured = _outbox.Config.IsConfigured,
+                    sentToday = waOutToday.Count, failedToday = waOutToday.Count(m => m.Status == "failed"),
+                    sentLast7 = waOutWeek.Count, failedLast7 = waOutWeek.Count(m => m.Status == "failed"),
+                    inboundToday = wa.Count(m => m.Direction == "in" && m.CreatedAt >= day0), inboundUsualByNow = Usual(wa.Where(m => m.Direction == "in").Select(m => m.CreatedAt)),
+                },
+                referrals = new
+                {
+                    today = refs.Count(r => r.CreatedAt >= day0), usualByNow = Usual(refs.Select(r => r.CreatedAt)),
+                    thisWeek = refs.Count(r => r.CreatedAt >= weekStart), prevWeek = refs.Count(r => r.CreatedAt >= prevWeekStart && r.CreatedAt < weekStart),
+                    arrivedThisWeek = arrived.Count(t => t >= weekStart), arrivedPrevWeek = arrived.Count(t => t >= prevWeekStart && t < weekStart),
+                },
+                field = new
+                {
+                    visitsToday = visits.Count(v => v >= day0), visitsUsualByNow = Usual(visits),
+                    agentsOnShiftToday = onShift, agentsOnShiftUsual = usualOnShift, tasksOverdue = overdue,
+                },
+                reviews = new
+                {
+                    newThisWeek = reviews.Count(r => r.PostedAt >= weekStart), unanswered = reviews.Count(r => r.RepliedAt == null),
+                    lowUnanswered = reviews.Count(r => r.RepliedAt == null && r.Stars <= 3),
+                },
+                hoardings = new
+                {
+                    waiting = hoard.Count(h => h.Status == "suggested"),
+                    endingSoon = hoard.Count(h => Hoardings.Stage(h, today) == "ending"),
+                    rentMissing = hoard.Count(h => (h.Status == "approved" || Hoardings.Running(h)) && h.MonthlyRent == null),
+                },
+                analyst = new { lastBriefingAt = brief?.CreatedAt, health = brief?.Health, summary = brief?.Summary, openItems = items },
+            });
+        }
+
+        /// <summary>
+        /// What happened to leads after Vita or the desk wrote to them, as counts, for the Reporter & Coach: did they write
+        /// back, did they get an appointment, did they come. No names, numbers or message text.
+        /// </summary>
+        [HttpGet("lead-outcomes")]
+        public async Task<IActionResult> LeadOutcomes([FromQuery] int days = 7, CancellationToken ct = default)
+        {
+            if (!Allowed()) return Unauthorized();
+            days = Math.Clamp(days, 1, 60);
+            var from = IstClock.TodayStartUtc.AddDays(-days + 1);
+            var outs = await _db.WaMessages.AsNoTracking()
+                .Where(m => m.Direction == "out" && m.CreatedAt >= from && m.LeadId != null && !NotSent.Contains(m.Status) && m.SentBy != null
+                    && (m.SentBy.StartsWith("ai:") || HumanSources.Contains(m.Source)))
+                .Select(m => new { LeadId = m.LeadId!.Value, m.SentBy, m.Source, m.CreatedAt }).ToListAsync(ct);
+            var ids = outs.Select(o => o.LeadId).Distinct().ToList();
+            var leads = ids.Count == 0 ? new() : (await _db.Leads.AsNoTracking().Where(l => ids.Contains(l.Id)).Select(l => new { l.Id, l.Status, l.LastInboundAt }).ToListAsync(ct)).ToDictionary(l => l.Id);
+            object Group(Func<string, string, bool> pick)
+            {
+                var first = outs.Where(o => pick(o.SentBy!, o.Source)).GroupBy(o => o.LeadId).Select(g => new { g.Key, At = g.Min(o => o.CreatedAt) }).Where(x => leads.ContainsKey(x.Key)).ToList();
+                var rows = first.Select(x => new { L = leads[x.Key], x.At }).ToList();
+                return new
+                {
+                    leads = rows.Count,
+                    wroteBack = rows.Count(r => r.L.LastInboundAt != null && r.L.LastInboundAt > r.At),
+                    appointmentOrCame = rows.Count(r => r.L.Status is "appointment" or "arrived" or "admitted"),
+                    came = rows.Count(r => r.L.Status is "arrived" or "admitted"),
+                    lost = rows.Count(r => r.L.Status == "lost"),
+                };
+            }
+            return Ok(new
+            {
+                days,
+                answeredByVita = Group((by, src) => by == "ai:lead_responder"),
+                answeredByDesk = Group((by, src) => !by.StartsWith("ai:")),
+                followedUp = Group((by, src) => src == "followup"),
+            });
         }
 
         [HttpPost("notify")]
@@ -538,6 +1105,155 @@ namespace SeemanchalOutreach.Api.Controllers
             await _db.SaveChangesAsync(ct);
             await _live.PublishAsync(new LiveEvent { Kind = "lead", Text = $"Vita replied to {l.Name}", RefId = l.Id.ToString() });
             return Ok(new { status = msg.Status, error = msg.Error, messageId = msg.Id });
+        }
+
+        private static readonly string[] NotSent = { "failed", "blocked" };
+
+        /// <summary>
+        /// Leads whose last WhatsApp message nobody (desk or Vita) has answered, still inside the 24-hour window. The agents
+        /// service asks every few minutes, so a message it was never told about (it was restarting) is still picked up.
+        /// </summary>
+        [HttpGet("leads/waiting")]
+        public async Task<IActionResult> LeadsWaiting(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var since = DateTime.UtcNow.AddHours(-24);
+            var leads = await _db.Leads.AsNoTracking()
+                .Where(l => l.LastInboundAt != null && l.LastInboundAt > since && !l.OptOut && l.ClosedAt == null && l.Status != "lost")
+                .OrderBy(l => l.LastInboundAt).Take(300).Select(l => new { l.Id, l.Phone, l.LastInboundAt }).ToListAsync(ct);
+            if (leads.Count == 0) return Ok(new { items = Array.Empty<object>() });
+            var phones = leads.Select(l => l.Phone).Distinct().ToList();
+            var answered = (await _db.WaMessages.AsNoTracking()
+                    .Where(m => phones.Contains(m.Phone) && m.Direction == "out" && m.CreatedAt > since && m.SentBy != null && !NotSent.Contains(m.Status)
+                        && (m.SentBy.StartsWith("ai:") || HumanSources.Contains(m.Source)))
+                    .GroupBy(m => m.Phone).Select(g => new { Phone = g.Key, At = g.Max(m => m.CreatedAt) }).ToListAsync(ct))
+                .ToDictionary(x => x.Phone, x => x.At);
+            var optedOut = (await _db.WaConversations.AsNoTracking().Where(c => phones.Contains(c.Phone) && c.OptOut).Select(c => c.Phone).ToListAsync(ct)).ToHashSet();
+            return Ok(new
+            {
+                items = leads.Where(l => !optedOut.Contains(l.Phone) && (!answered.TryGetValue(l.Phone, out var at) || at < l.LastInboundAt))
+                    .Select(l => new { id = l.Id, lastInboundAt = l.LastInboundAt }),
+            });
+        }
+
+        // ─── Lead Follow-up ────────────────────────────────────────────────
+
+        public const int MaxFollowUps = 3;
+
+        /// <summary>
+        /// Open leads that have gone quiet, for the Lead Follow-up agent: how many follow-ups each has had since they last
+        /// wrote, and when anyone last touched it. No names and no phone numbers.
+        /// </summary>
+        [HttpGet("leads/idle")]
+        public async Task<IActionResult> LeadsIdle(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var now = DateTime.UtcNow;
+            var idleSince = now.AddMinutes(-25);
+            var notOlder = now.AddDays(-60);
+            var leads = await _db.Leads.AsNoTracking()
+                .Where(l => (l.Status == "new" || l.Status == "contacted") && !l.OptOut && l.ClosedAt == null && l.LastActivityAt < idleSince && l.CreatedAt > notOlder)
+                .OrderBy(l => l.LastActivityAt).Take(400).ToListAsync(ct);
+            var phones = leads.Select(l => l.Phone).Distinct().ToList();
+            var outs = phones.Count == 0 ? new() : await _db.WaMessages.AsNoTracking()
+                .Where(m => phones.Contains(m.Phone) && m.Direction == "out" && m.CreatedAt > notOlder && !NotSent.Contains(m.Status) && m.BroadcastId == null)
+                .Select(m => new { m.Phone, m.Source, m.SentBy, m.CreatedAt }).ToListAsync(ct);
+            var byPhone = outs.ToLookup(m => m.Phone);
+            var ids = leads.Select(l => l.Id).ToList();
+            var called = ids.Count == 0 ? new HashSet<Guid>() : (await _db.LeadActivities.AsNoTracking().Where(a => ids.Contains(a.LeadId) && a.Kind == "call").Select(a => a.LeadId).Distinct().ToListAsync(ct)).ToHashSet();
+            var optedOut = phones.Count == 0 ? new HashSet<string>() : (await _db.WaConversations.AsNoTracking().Where(c => phones.Contains(c.Phone) && c.OptOut).Select(c => c.Phone).ToListAsync(ct)).ToHashSet();
+            var cfg = _outbox.Config;
+            var template = cfg.Template("lead_followup");
+            return Ok(new
+            {
+                templateReady = cfg.IsConfigured && template != null,
+                // The wording itself is the template Meta approved; it is not rewritten here.
+                templateText = template != null ? $"Approved WhatsApp follow-up template “{template}”" : null,
+                whatsappPaused = _outbox.Rules.Paused,
+                maxFollowUps = MaxFollowUps,
+                items = leads.Where(l => !optedOut.Contains(l.Phone) && l.Phone.Length >= 10).Select(l =>
+                {
+                    var mine = byPhone[l.Phone].ToList();
+                    var follow = mine.Where(m => m.Source == "followup" && (l.LastInboundAt == null || m.CreatedAt > l.LastInboundAt)).ToList();
+                    var lastOut = mine.Count > 0 ? mine.Max(m => m.CreatedAt) : (DateTime?)null;
+                    var touch = new[] { l.LastActivityAt, l.LastInboundAt ?? DateTime.MinValue, lastOut ?? DateTime.MinValue }.Max();
+                    return new
+                    {
+                        id = l.Id, status = l.Status, source = l.Source, hasOwner = l.OwnerId != null, optOut = false,
+                        // Anything already sent to them counts (also the automatic thank-you a form lead gets), so nobody gets two templates in an hour.
+                        contacted = l.FirstResponseAt != null || called.Contains(l.Id) || mine.Count > 0,
+                        followUps = follow.Count,
+                        lastFollowUpAt = follow.Count > 0 ? follow.Max(m => m.CreatedAt) : (DateTime?)null,
+                        lastTouchAt = touch, createdAt = l.CreatedAt, lastInboundAt = l.LastInboundAt,
+                    };
+                }),
+            });
+        }
+
+        /// <summary>
+        /// Sends the approved follow-up template for the Lead Follow-up agent. Refused after an opt-out, for a lead that is no
+        /// longer open, after the third follow-up since they last wrote, within 20 hours of the last one, or when they have
+        /// just written (then a person or the Lead Responder answers instead).
+        /// </summary>
+        [HttpPost("leads/{id:guid}/follow-up")]
+        public async Task<IActionResult> LeadFollowUp(Guid id, [FromBody] AgentIdDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var l = await _db.Leads.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (l == null) return NotFound();
+            var now = DateTime.UtcNow;
+            if (l.OptOut || await _db.WaConversations.AsNoTracking().AnyAsync(c => c.Phone == l.Phone && c.OptOut, ct)) return Conflict(new { message = "opted_out" });
+            if (l.Status != "new" && l.Status != "contacted") return Conflict(new { message = "not_open" });
+            if (_outbox.Rules.Paused) return Conflict(new { message = "whatsapp_paused" });
+            if (l.LastInboundAt != null && l.LastInboundAt > now.AddHours(-20)) return Conflict(new { message = "fresh_reply" });
+            var cfg = _outbox.Config;
+            if (cfg.Template("lead_followup") == null) return Conflict(new { message = "no_template" });
+            var since = l.LastInboundAt ?? DateTime.MinValue;
+            var sent = await _db.WaMessages.AsNoTracking().Where(m => m.Phone == l.Phone && m.Direction == "out" && m.Source == "followup" && m.CreatedAt > since && !NotSent.Contains(m.Status))
+                .Select(m => m.CreatedAt).ToListAsync(ct);
+            if (sent.Count >= MaxFollowUps) return Conflict(new { message = "max_follow_ups" });
+            if (sent.Count > 0 && sent.Max() > now.AddHours(-20)) return Conflict(new { message = "too_soon" });
+
+            var agent = "ai:" + (d.AgentId.Length > 40 ? d.AgentId[..40] : d.AgentId);
+            var first = l.Name.StartsWith("+") ? "" : l.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+            var n = sent.Count + 1;
+            var msg = await _outbox.SendUseAsync(l.Phone, "lead_followup", "hi", new[] { first.Length > 0 ? first : "जी", cfg.HospitalName },
+                $"Follow-up {n} of {MaxFollowUps} ({cfg.Template("lead_followup")}) sent by Vita", "followup", agent, l.Id, null, ct);
+            if (msg.Status == "sent")
+                _db.LeadActivities.Add(new LeadActivity { LeadId = l.Id, Kind = "note", By = agent, Text = $"Vita sent follow-up {n} of {MaxFollowUps} on WhatsApp (the approved template)." });
+            await _db.SaveChangesAsync(ct);
+            if (msg.Status != "sent") return Conflict(new { message = "not_sent", error = msg.Error });
+            await _live.PublishAsync(new LiveEvent { Kind = "lead", Text = $"Vita followed up with {l.Name}", RefId = l.Id.ToString() });
+            return Ok(new { status = msg.Status, messageId = msg.Id, followUp = n });
+        }
+
+        /// <summary>
+        /// Closes a lead as lost for the Lead Follow-up agent, only when it is still open, has had all its follow-ups since
+        /// the person last wrote, and the last one was at least three days ago. A person can reopen it from the lead.
+        /// </summary>
+        [HttpPost("leads/{id:guid}/close-quiet")]
+        public async Task<IActionResult> LeadCloseQuiet(Guid id, [FromBody] AgentIdDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var l = await _db.Leads.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (l == null) return NotFound();
+            if (l.Status != "new" && l.Status != "contacted") return Conflict(new { message = "not_open" });
+            var now = DateTime.UtcNow;
+            var since = l.LastInboundAt ?? DateTime.MinValue;
+            var sent = await _db.WaMessages.AsNoTracking().Where(m => m.Phone == l.Phone && m.Direction == "out" && m.Source == "followup" && m.CreatedAt > since && !NotSent.Contains(m.Status))
+                .Select(m => m.CreatedAt).ToListAsync(ct);
+            if (sent.Count < MaxFollowUps) return Conflict(new { message = "follow_ups_not_done" });
+            if (sent.Max() > now.AddDays(-3)) return Conflict(new { message = "too_soon" });
+            var agent = "ai:" + (d.AgentId.Length > 40 ? d.AgentId[..40] : d.AgentId);
+            var from = l.Status;
+            l.Status = "lost";
+            l.LostReason = $"No response after {MaxFollowUps} follow-ups";
+            l.ClosedAt = now;
+            l.LastActivityAt = now;
+            _db.LeadActivities.Add(new LeadActivity { LeadId = l.Id, Kind = "status", By = agent, CreatedAt = now, Text = $"{LeadInbox.StatusLabel(from)} → {LeadInbox.StatusLabel("lost")} ({l.LostReason}). Closed by Vita; reopen it if they get in touch." });
+            await _db.SaveChangesAsync(ct);
+            await _live.PublishAsync(new LiveEvent { Kind = "lead", Text = $"Vita closed a lead that didn't answer: {l.Name}", RefId = l.Id.ToString() });
+            return Ok(new { status = l.Status });
         }
 
         /// <summary>Sets the lead's department, adds a note, and when asked tells its owner (or the desk) straight away.</summary>

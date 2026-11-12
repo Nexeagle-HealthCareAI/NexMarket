@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Btn, Field, T } from '../components/ui';
 import { LANGS } from '../i18n';
-import { ApiError, OfflineError, pendingPasswordChange, signedOutReason } from '../lib/api';
+import { ApiError, OfflineError, getOrg, pendingPasswordChange, setOrg, signedOutReason } from '../lib/api';
 import { APP_VERSION } from '../lib/config';
 import { useSession } from '../lib/session';
 import { C } from '../theme';
@@ -14,6 +14,7 @@ import { Vita } from '../components/Vita';
 
 export default function Login() {
   const { t, lang, setLang, signIn } = useSession();
+  const [org, setOrgText] = useState(() => getOrg());
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -28,12 +29,14 @@ export default function Login() {
     setBusy(true);
     setError(null);
     try {
+      await setOrg(org);
       await signIn(userId, password);
       // First time on this phone: offer a PIN and fingerprint so the password isn't needed every day.
       const l = lockState();
       router.replace(pendingPasswordChange() ? '/set-password' : !l.pinSet && !l.asked ? '/quick-unlock?first=1' : '/today');
     } catch (e) {
       if (e instanceof OfflineError) setError(t('loginOffline'));
+      else if (e instanceof ApiError && e.status === 404) setError(t('orgUnknown'));
       else if (e instanceof ApiError && e.status === 423) setError(t('loginLocked'));
       else if (e instanceof ApiError && e.status === 429) setError(t('loginTooMany'));
       else if (e instanceof ApiError && (e.status === 401 || e.status === 400)) setError(/more tr(y|ies)/.test(e.message) ? `${t('loginFailed')} ${e.message.replace(/^.*?\. /, '')}` : t('loginFailed'));
@@ -72,6 +75,8 @@ export default function Login() {
 
           <View style={{ backgroundColor: C.card, borderRadius: 24, padding: 20, gap: 14 }}>
             <T style={{ fontSize: 20, fontWeight: '800' }}>{t('login')}</T>
+            <Field label={t('organisation')} hint={t('organisationHint')} value={org} onChangeText={(v) => setOrgText(v.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+              autoCapitalize="none" autoCorrect={false} placeholder="citylab" returnKeyType="next" maxLength={30} />
             <Field label={t('agentId')} value={userId} onChangeText={setUserId} autoCapitalize="characters" autoCorrect={false}
               placeholder="MKT-1001" returnKeyType="next" textContentType="username" autoComplete="username" />
             <View>

@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { getLocales } from 'expo-localization';
-import { clearTokens, ensureDeviceId, loadTokens, login as apiLogin, logoutRemote, setSignedOutHandler, type LoginResult } from './api';
+import { clearTokens, ensureDeviceId, getOrg, loadTokens, login as apiLogin, logoutRemote, setSignedOutHandler, type LoginResult } from './api';
 import { dbVersion, kvGet, kvSet, onDbChange, wipeAll } from './db';
 import { translate, type Lang, type TFn } from '../i18n';
 import { uuid } from './util';
@@ -99,7 +99,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const deviceId = await ensureDeviceId(uuid);
     const r = await apiLogin(userId, password, deviceId);
     const prev = kvGet('agentId');
-    if (prev && prev !== r.agentId) {
+    // The same Agent ID can exist in two organisations, so the organisation counts too.
+    if ((prev && prev !== r.agentId) || (prev && (kvGet('org') ?? '') !== getOrg())) {
       // A different person on this phone: start clean.
       const keep = langRef.current;
       const phone = keepPhoneKv();
@@ -110,6 +111,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
     const a: Agent = { agentId: r.agentId, name: r.name, district: r.district ?? '', block: r.block ?? '' };
     kvSet('agentId', r.agentId);
+    kvSet('org', getOrg());
     kvSet('deviceId', r.deviceId || deviceId);
     kvSet('agent', JSON.stringify(a));
     await syncNow(true);

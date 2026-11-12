@@ -234,7 +234,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Select(n => new { id = n.Id, kind = n.Kind, agentId = n.AgentId, text = n.Text, at = n.CreatedAt }).ToListAsync(ct);
             var subs = await _db.WorkCards.AsNoTracking().Where(x => x.ParentId == id && !x.Archived).ToListAsync(ct);
             var family = await FamilyAsync(subs.Append(c), ct);
-            var docs = await _db.WorkDocs.AsNoTracking().Where(x => x.CardId == id && !x.Archived).OrderByDescending(x => x.UpdatedAt)
+            var docs = await _db.WorkDocs.AsNoTracking().Where(x => x.CardId == id && !x.Archived && x.DeletedAt == null).OrderByDescending(x => x.UpdatedAt)
                 .Select(x => new { id = x.Id, title = x.Title, kind = x.Kind, updatedAt = x.UpdatedAt, updatedBy = x.UpdatedBy }).ToListAsync(ct);
             return Ok(new
             {
