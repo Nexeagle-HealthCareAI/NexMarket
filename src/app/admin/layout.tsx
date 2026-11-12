@@ -45,7 +45,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Overview',
     items: [
       { href: '/admin/dashboard', label: 'Command centre', page: 'dashboard', icon: LayoutDashboard, phone: true },
-      { href: '/admin/work', label: 'Team board', page: 'everyone', icon: KanbanSquare },
+      { href: '/admin/work', label: 'Team board', page: 'work', icon: KanbanSquare },
       { href: '/admin/ai-agents', label: 'Vita marketing agents', page: 'ai', icon: VitaIcon },
       { href: '/admin/leads', label: 'Leads inbox', page: 'leads', icon: UserPlus, phone: true },
       { href: '/admin/calls', label: 'Daily calls', page: 'calls', icon: PhoneCall, phone: true },
@@ -190,7 +190,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const groups = useMemo(() => NAV.map((g) => ({
     group: g.group,
     // Chat: everyone who signs in to the CRM (Team and one-to-one chats; the office chats need field access, decided by the API).
-    // Team board: everyone who signs in to the CRM.
+    // Team board: office roles by default; an admin can change it in Users & roles.
     // Vita marketing autonomous agents: admins and marketing managers (same rule as the API).
     items: g.items.filter((i) => (i.page === 'everyone' ? !!access : i.page === 'admin' ? !!access?.isAdmin
       : i.page === 'ai' ? !!access && (access.isAdmin || access.role === 'MarketingManager')

@@ -33,11 +33,13 @@ namespace SeemanchalOutreach.Api.Security
         public const string Users = "users";
         /// <summary>Banner and hoarding places, with their rent. Added later: roles with saved access get its default until an admin changes it.</summary>
         public const string Hoardings = "hoardings";
+        /// <summary>Team board, plans and uploaded files. Office roles start with full access; field agents never have it.</summary>
+        public const string Work = "work";
 
         public static readonly string[] All =
         {
             Dashboard, Calls, Desk, Pipeline, Partners, WhatsApp, Field,
-            Payments, Targets, Analytics, Camps, Social, Departments, Users, Hoardings,
+            Payments, Targets, Analytics, Camps, Social, Departments, Users, Hoardings, Work,
         };
 
         public const int None = 0, View = 1, Edit = 2;
@@ -49,20 +51,20 @@ namespace SeemanchalOutreach.Api.Security
             {
                 [Dashboard] = Edit, [Calls] = Edit, [Desk] = View, [Pipeline] = Edit, [Partners] = Edit,
                 [WhatsApp] = Edit, [Field] = View, [Payments] = View, [Targets] = Edit, [Analytics] = View,
-                [Camps] = Edit, [Social] = Edit, [Departments] = View, [Users] = None, [Hoardings] = Edit,
+                [Camps] = Edit, [Social] = Edit, [Departments] = View, [Users] = None, [Hoardings] = Edit, [Work] = Edit,
             },
             [RoleChecks.HospitalRep] = new()
             {
                 [Dashboard] = View, [Calls] = None, [Desk] = Edit, [Pipeline] = View, [Partners] = None,
                 [WhatsApp] = None, [Field] = None, [Payments] = None, [Targets] = None, [Analytics] = View,
-                [Camps] = View, [Social] = None, [Departments] = Edit, [Users] = None, [Hoardings] = None,
+                [Camps] = View, [Social] = None, [Departments] = Edit, [Users] = None, [Hoardings] = None, [Work] = Edit,
             },
             // Digital marketing specialist: everything under Network; no money, field or user pages.
             [RoleChecks.DigitalMarketing] = new()
             {
                 [Dashboard] = None, [Calls] = None, [Desk] = None, [Pipeline] = None, [Partners] = Edit,
                 [WhatsApp] = Edit, [Field] = None, [Payments] = None, [Targets] = None, [Analytics] = None,
-                [Camps] = Edit, [Social] = Edit, [Departments] = None, [Users] = None, [Hoardings] = None,
+                [Camps] = Edit, [Social] = Edit, [Departments] = None, [Users] = None, [Hoardings] = None, [Work] = Edit,
             },
         };
     }

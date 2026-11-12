@@ -47,6 +47,7 @@ namespace SeemanchalOutreach.Api.Controllers
     [ApiController]
     [Route("api/v1/work")]
     [Authorize]
+    [PageAccess(Pages.Work)]
     public class WorkBoardController : ControllerBase
     {
         public static readonly string[] Statuses = { "idea", "todo", "doing", "review", "done" };

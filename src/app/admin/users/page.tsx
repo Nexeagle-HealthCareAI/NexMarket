@@ -19,7 +19,7 @@ const DEV = { desktop: { label: 'Laptop', icon: Laptop }, tablet: { label: 'Tabl
 const PAGE_LABELS: Record<PageKey, string> = {
   dashboard: 'Command centre', calls: 'Daily calls', desk: 'Referral desk', pipeline: 'Referral pipeline', partners: 'Partners',
   whatsapp: 'WhatsApp broadcasts', field: 'Field force & map', payments: 'Payments', targets: 'Targets', analytics: 'Analytics & surveys',
-  camps: 'Health camps', social: 'Facebook & Instagram', departments: 'Departments & doctors', users: 'Users & roles', hoardings: 'Hoardings & rent',
+  camps: 'Health camps', social: 'Facebook & Instagram', departments: 'Departments & doctors', users: 'Users & roles', hoardings: 'Hoardings & rent', work: 'Team board & plans',
 };
 const HIDDEN_PAGES: PageKey[] = ['targets']; // not built yet
 

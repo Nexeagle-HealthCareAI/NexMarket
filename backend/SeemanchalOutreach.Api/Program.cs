@@ -313,4 +313,9 @@ app.MapHub<LiveHub>("/hubs/live").RequireAuthorization();
 // (keep it cheap so it can't false-negative on a slow query under load).
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 
+// For monitoring: also checks that the database answers. 503 when it does not, so an alert can fire.
+app.MapGet("/health/ready", async (MarketingDbContext db, CancellationToken ct) =>
+    await db.Database.CanConnectAsync(ct) ? Results.Ok(new { status = "ok", database = "ok" }) : Results.Json(new { status = "down", database = "unreachable" }, statusCode: 503))
+    .AllowAnonymous();
+
 app.Run();
