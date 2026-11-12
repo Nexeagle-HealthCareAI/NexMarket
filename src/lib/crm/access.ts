@@ -12,6 +12,8 @@ export interface AccessMe {
   role: string;
   isAdmin: boolean;
   isDashboardUser: boolean;
+  /** Runs the platform (an admin of the first organisation): sees the Organisations screen. */
+  isPlatformOwner?: boolean;
   pages: Record<PageKey, number>; // 0 none, 1 view, 2 edit
 }
 

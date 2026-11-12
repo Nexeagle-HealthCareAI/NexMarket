@@ -11,7 +11,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
 import {
   LayoutDashboard, PhoneCall, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
-  Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
+  Wallet, BarChart3, ListChecks, Building2, Landmark, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
   PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus, Tent,
   AtSign, Search, Route, Signpost, KanbanSquare,
 } from 'lucide-react';
@@ -27,7 +27,7 @@ type IconType = ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidde
 interface NavItem {
   href: string;
   label: string;
-  page: PageKey | 'admin' | 'chat' | 'leads' | 'wa' | 'referrals' | 'everyone' | 'ai';
+  page: PageKey | 'admin' | 'chat' | 'leads' | 'wa' | 'referrals' | 'everyone' | 'ai' | 'platform';
   icon: IconType;
   /** extra paths that should highlight this item */
   match?: string[];
@@ -91,6 +91,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/admin/users', label: 'Users & roles', page: 'users', icon: ShieldCheck },
       { href: '/admin/audit', label: 'Activity log', page: 'admin', icon: History },
       { href: '/admin/sync', label: 'Sync health', page: 'admin', icon: RefreshCw },
+      { href: '/admin/platform', label: 'Organisations', page: 'platform', icon: Landmark },
     ],
   },
 ];
@@ -192,7 +193,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     // Chat: everyone who signs in to the CRM (Team and one-to-one chats; the office chats need field access, decided by the API).
     // Team board: office roles by default; an admin can change it in Users & roles.
     // Vita marketing autonomous agents: admins and marketing managers (same rule as the API).
-    items: g.items.filter((i) => (i.page === 'everyone' ? !!access : i.page === 'admin' ? !!access?.isAdmin
+    items: g.items.filter((i) => (i.page === 'everyone' ? !!access : i.page === 'platform' ? !!access?.isPlatformOwner : i.page === 'admin' ? !!access?.isAdmin
       : i.page === 'ai' ? !!access && (access.isAdmin || access.role === 'MarketingManager')
       : i.page === 'chat' ? !!access
         // Leads: whoever works the Referral desk or WhatsApp (same rule as the API).

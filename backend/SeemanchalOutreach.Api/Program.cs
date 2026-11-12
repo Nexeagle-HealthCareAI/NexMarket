@@ -26,6 +26,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<Microsoft.Extensions.Caching.Memory.IMemoryCache>(_ =>
     new OrgMemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())));
 builder.Services.AddSingleton<OrgDirectory>();
+builder.Services.AddSingleton<EmailSender>();
 builder.Services.AddScoped<IOrgDatabase, OrgDatabaseSetup>();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);

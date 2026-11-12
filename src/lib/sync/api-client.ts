@@ -499,6 +499,26 @@ export async function loginWithPassword(
   }, true);
 }
 
+// ─── Forgot password ──────────────────────────────────────────────────────────
+// The organisation comes from setOrg() (sent as X-Org on every /auth/ call).
+
+async function authPost(path: string, body: unknown): Promise<{ ok: boolean; status: number; message: string }> {
+  let res: Response;
+  try { res = await doFetch(path, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) }, true); }
+  catch { return { ok: false, status: 0, message: 'Can’t reach the server. Check your internet connection and try again.' }; }
+  const j = (await res.json().catch(() => null)) as { message?: string } | null;
+  const message = j?.message ?? (res.status === 429 ? 'Too many tries from this network. Wait a minute and try again.' : res.ok ? '' : 'Something went wrong. Please try again.');
+  return { ok: res.ok, status: res.status, message };
+}
+export async function getRecoveryOptions(): Promise<{ email: boolean; whatsapp: boolean }> {
+  try {
+    const res = await doFetch('/api/v1/auth/recovery/options', {}, true);
+    return res.ok ? await res.json() : { email: false, whatsapp: false };
+  } catch { return { email: false, whatsapp: false }; }
+}
+export const forgotPassword = (userId: string) => authPost('/api/v1/auth/forgot', { userId });
+export const resetPasswordWithCode = (userId: string, code: string, newPassword: string) => authPost('/api/v1/auth/reset', { userId, code, newPassword });
+
 // ─── Sign-up: a new organisation ──────────────────────────────────────────────
 
 export interface SignupBody {

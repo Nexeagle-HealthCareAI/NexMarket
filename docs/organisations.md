@@ -45,6 +45,28 @@ settings and the in-memory cache follow it. Background work uses `OrgDirectory.F
 - A browser or phone that holds field work from one organisation will not sign in to another (web), or starts
   clean (phone app), so two organisations' work never mixes.
 
+## Running the platform
+
+- **Organisations screen** (`/admin/platform`): only admins of the first organisation see it. It lists every
+  organisation, can pause or resume one, and can give a locked-out admin of an organisation a one-time password.
+  It shows counts and admins' names only. A reset is written in that organisation's own activity log.
+- **Paused** means nobody there can sign in and nothing is sent for it. No data is touched.
+
+## Forgot password (every organisation)
+
+`/forgot` sends a 6-digit code to the email and WhatsApp number already saved on the account. The code works for
+10 minutes and 5 tries, at most 3 codes an hour per account. Codes are sent from the platform, not from the
+organisation's own accounts. Set these on the server (never in the repository):
+
+    Email__SmtpHost, Email__SmtpPort (587), Email__SmtpUser, Email__SmtpPassword, Email__From
+    Platform__OtpTemplate        name of an approved WhatsApp "authentication" template on the first
+                                 organisation's WhatsApp number (its body takes the code)
+    Platform__OtpTemplateLang    en (default)
+    Platform__OtpTemplateButton  true (default): the template has a copy-code button
+
+With neither set, `/forgot` says codes cannot be sent and points people to their admin. Codes are kept in the
+server's memory, so a restart cancels codes that are waiting.
+
 ## What is NOT separated yet
 
 - **Vita agents service:** knows only the first organisation. Other organisations get "not available yet" on the

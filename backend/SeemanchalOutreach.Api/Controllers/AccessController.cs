@@ -76,6 +76,8 @@ namespace SeemanchalOutreach.Api.Controllers
                 role = canonical ?? role,
                 isAdmin = User.IsAdmin(),
                 isDashboardUser = canonical != null,
+                // Runs the platform: sees the Organisations screen.
+                isPlatformOwner = Platform.IsOwner(User, SeemanchalOutreach.Application.Interfaces.OrgScope.Current),
                 pages = await _perms.GetLevelsAsync(role),
             });
         }
