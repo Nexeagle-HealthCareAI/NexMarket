@@ -6,6 +6,7 @@ import { crm } from '@/lib/sync/api-client';
 import { friendlyError, Modal, Skeleton } from '@/components/crm/ui';
 import { DOC_KIND, MAX_UPLOAD_MB, UPLOAD_ACCEPT, fileSize, type BoardRes, type DocRow } from './shared';
 import { EditorContent, ReadOnly, Toolbar, useDocEditor, type JSONContent } from './Editor';
+import { PdfView } from './PdfView';
 
 const when = (iso: string) => {
   const d = new Date(iso);
@@ -291,6 +292,13 @@ function DocEditor({ id, board, toast, openCard, onClose, onSaved, onGone, dirty
     return () => { window.removeEventListener('keydown', k); window.removeEventListener('beforeunload', leave); };
   }, [dirtyRef]);
 
+  // On a phone the document opens below the board's numbers: bring it to the top of the screen once it has loaded.
+  const article = useRef<HTMLElement>(null);
+  const loaded = !!row;
+  useEffect(() => {
+    if (loaded && window.innerWidth < 900) article.current?.scrollIntoView({ block: 'start' });
+  }, [loaded]);
+
   // In the Bin it can be read, not changed.
   const inBin = !!row?.deleted;
   useEffect(() => { if (editor) editor.setEditable(!inBin, false); }, [editor, inBin]);
@@ -347,7 +355,7 @@ function DocEditor({ id, board, toast, openCard, onClose, onSaved, onGone, dirty
 
   if (!editor || !row) return <Skeleton h={480} />;
   return (
-    <article className="wk-doc">
+    <article className="wk-doc" ref={article}>
       <header className="wk-doc-head">
         <button type="button" className="wk-x wk-doc-back" aria-label="Close" onClick={onClose}><X size={18} aria-hidden /></button>
         {row.kind === 'file' ? <span className="wk-doc-filetag"><Paperclip size={14} aria-hidden /> File</span> : (
@@ -418,7 +426,7 @@ function DocEditor({ id, board, toast, openCard, onClose, onSaved, onGone, dirty
 
 /** Shows an uploaded file in the page: PDFs, pictures, text and Word files open here; anything else is a download. */
 function FileView({ id, file, toast }: { id: string; file: { name: string; mime: string; size: number }; toast: (m: string) => void }) {
-  type View = { kind: 'pdf' | 'image'; url: string } | { kind: 'text'; text: string; cut: boolean } | { kind: 'word'; html: string } | { kind: 'none' } | { kind: 'error'; message: string };
+  type View = { kind: 'pdf'; data: ArrayBuffer } | { kind: 'image'; url: string } | { kind: 'text'; text: string; cut: boolean } | { kind: 'word'; html: string } | { kind: 'none' } | { kind: 'error'; message: string };
   const [view, setView] = useState<View | null>(null);
   const path = `/api/v1/work/docs/${id}/file`;
   const ext = (file.name.split('.').pop() ?? '').toLowerCase();
@@ -431,9 +439,12 @@ function FileView({ id, file, toast }: { id: string; file: { name: string; mime:
         if (file.mime !== 'application/pdf' && !file.mime.startsWith('image/') && !file.mime.startsWith('text/') && ext !== 'docx') { setView({ kind: 'none' }); return; }
         const blob = await crm.blob(path);
         if (!alive) return;
-        if (file.mime === 'application/pdf' || file.mime.startsWith('image/')) {
-          url = URL.createObjectURL(file.mime === 'application/pdf' ? new Blob([blob], { type: 'application/pdf' }) : blob);
-          setView({ kind: file.mime === 'application/pdf' ? 'pdf' : 'image', url });
+        if (file.mime === 'application/pdf') {
+          const data = await blob.arrayBuffer();
+          if (alive) setView({ kind: 'pdf', data });
+        } else if (file.mime.startsWith('image/')) {
+          url = URL.createObjectURL(blob);
+          setView({ kind: 'image', url });
         } else if (file.mime.startsWith('text/')) {
           const t = await blob.text();
           if (alive) setView({ kind: 'text', text: t.slice(0, 300000), cut: t.length > 300000 });
@@ -459,10 +470,9 @@ function FileView({ id, file, toast }: { id: string; file: { name: string; mime:
       <div className="wk-file-bar">
         <button type="button" className="crm-btn is-secondary is-sm" onClick={download}><Download size={14} aria-hidden /> Download</button>
         {view?.kind === 'word' && <span className="crm-sub">Shown as plain reading text. Download it to see the exact layout.</span>}
-        {view?.kind === 'pdf' && <span className="crm-sub">If the PDF does not show here, download it.</span>}
       </div>
       {!view ? <Skeleton h={420} />
-        : view.kind === 'pdf' ? <iframe className="wk-file-frame" src={view.url} title={file.name} />
+        : view.kind === 'pdf' ? <PdfView data={view.data} name={file.name} onFail={() => setView({ kind: 'error', message: 'This PDF could not be opened here. It may be damaged or locked with a password. Download it to open it.' })} />
         : view.kind === 'image' ? (
           <div className="wk-file-img">
             {/* A private file fetched with the session, shown from memory: next/image cannot load it. */}
