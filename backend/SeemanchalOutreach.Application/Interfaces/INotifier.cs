@@ -31,6 +31,8 @@ namespace SeemanchalOutreach.Application.Interfaces
         public bool Quiet { get; set; }
         public Dictionary<string, string> Data { get; set; } = new();
         public int? TtlSeconds { get; set; }
+        /// <summary>The organisation this is for. Filled in when it is queued; delivery then uses that organisation's database.</summary>
+        public OrgInfo? Org { get; set; }
     }
 
     /// <summary>

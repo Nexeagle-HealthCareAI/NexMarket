@@ -98,13 +98,15 @@ namespace SeemanchalOutreach.Api.Services
 
         /// <summary>
         /// Which organisation a request is for. A signed-in person: always the one in their token, whatever else the
-        /// request says. Not signed in (the sign-in page, a public form, a webhook): the X-Org header, else the cookie
-        /// left by the last sign-in on this browser.
+        /// request says. Not signed in (the sign-in page, a public form, a webhook): the X-Org header, else ?org= in the
+        /// address, else the cookie left by the last sign-in on this browser.
         /// </summary>
-        public static string? KeyFor(bool signedIn, string? claim, string? header, string? cookie)
+        public static string? KeyFor(bool signedIn, string? claim, string? header, string? query, string? cookie)
         {
             if (signedIn) return claim;
-            return !string.IsNullOrWhiteSpace(header) ? header : cookie;
+            if (!string.IsNullOrWhiteSpace(header)) return header;
+            // Webhooks (Meta) and public forms cannot send a header: their address ends in ?org=<name>.
+            return !string.IsNullOrWhiteSpace(query) ? query : cookie;
         }
 
         /// <summary>Runs a piece of background work once for each organisation, each against its own database.</summary>
@@ -114,7 +116,7 @@ namespace SeemanchalOutreach.Api.Services
             {
                 using var enter = OrgScope.Enter(org);
                 try { await work(org); }
-                catch (Exception ex) when (ex is not OperationCanceledException) { _logger.LogWarning(ex, "Background work failed for organisation {Org}", org.Key); }
+                catch (Exception ex) when (ex is not OperationCanceledException) { _logger.LogError(ex, "Background work failed for organisation {Org}", org.Key); }
             }
         }
     }
@@ -129,7 +131,7 @@ namespace SeemanchalOutreach.Api.Services
         {
             var signedIn = ctx.User?.Identity?.IsAuthenticated == true;
             var key = OrgDirectory.KeyFor(signedIn, ctx.User?.FindFirst(OrgDirectory.Claim)?.Value,
-                ctx.Request.Headers[OrgDirectory.Header].ToString(), ctx.Request.Cookies.TryGetValue(OrgDirectory.Cookie, out var c) ? c : null);
+                ctx.Request.Headers[OrgDirectory.Header].ToString(), ctx.Request.Query[OrgDirectory.Claim].ToString(), ctx.Request.Cookies.TryGetValue(OrgDirectory.Cookie, out var c) ? c : null);
             var org = orgs.Find(key);
             if (org == null)
             {

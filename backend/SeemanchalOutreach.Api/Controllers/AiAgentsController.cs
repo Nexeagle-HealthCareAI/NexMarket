@@ -45,6 +45,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public void Publish(string kind, string refId, object? data = null)
         {
             if (string.IsNullOrWhiteSpace(_cfg.Secret)) return;
+            // The agents service knows only the first organisation so far: other organisations' events are not sent to it.
+            if (OrgScope.Current?.Database != null) return;
             _ = Task.Run(async () =>
             {
                 try
@@ -109,6 +111,9 @@ namespace SeemanchalOutreach.Api.Controllers
         /// <summary>Calls the agents service and passes its answer (or a plain message if it can't be reached).</summary>
         private async Task<IActionResult> Forward(HttpMethod method, string path, object? body, CancellationToken ct)
         {
+            // The agents service knows only the first organisation so far. Nobody else may read or steer its agents.
+            if (OrgScope.Current?.Database != null)
+                return StatusCode(503, new { message = "The AI agents are not available for your organisation yet.", offline = true });
             if (string.IsNullOrWhiteSpace(_cfg.Secret))
                 return StatusCode(503, new { message = "The agents service isn't set up yet (Agents__Secret is missing on the API).", offline = true });
             try

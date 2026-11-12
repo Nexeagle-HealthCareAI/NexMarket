@@ -41,6 +41,7 @@ namespace SeemanchalOutreach.Api.Services
         /// <summary>Records a heartbeat; true when "last seen" should be written to the database now.</summary>
         public bool Beat(string agentId, string on, bool active, DateTime now)
         {
+            agentId = OrgKeys.Of(agentId);   // the same User ID can exist in two organisations
             var devices = _beats.GetOrAdd(agentId, _ => new ConcurrentDictionary<string, Ping>());
             devices[on] = new Ping(now, !active);
             var last = _written.GetValueOrDefault(agentId);
@@ -55,7 +56,7 @@ namespace SeemanchalOutreach.Api.Services
         /// <summary>The live view from heartbeats alone (null when this server has heard nothing from them).</summary>
         public PresenceView? Live(string agentId, DateTime now)
         {
-            if (!_beats.TryGetValue(agentId, out var devices) || devices.IsEmpty) return null;
+            if (!_beats.TryGetValue(OrgKeys.Of(agentId), out var devices) || devices.IsEmpty) return null;
             var all = devices.ToArray();
             var online = all.Where(d => !d.Value.Away && now - d.Value.At < OnlineWindow).OrderByDescending(d => d.Value.At).FirstOrDefault();
             if (online.Key != null) return new PresenceView(true, online.Value.At, online.Key);

@@ -30,10 +30,13 @@ namespace SeemanchalOutreach.Api.Services
         private readonly IServiceScopeFactory _scopes;
         private readonly ILogger<LeadSignals> _log;
 
-        public LeadSignals(IServiceScopeFactory scopes, ILogger<LeadSignals> log)
+        private readonly OrgDirectory _orgs;
+
+        public LeadSignals(IServiceScopeFactory scopes, ILogger<LeadSignals> log, OrgDirectory orgs)
         {
             _scopes = scopes;
             _log = log;
+            _orgs = orgs;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stop)
@@ -41,10 +44,13 @@ namespace SeemanchalOutreach.Api.Services
             await Task.Delay(TimeSpan.FromSeconds(30), stop); // let the app start first
             while (!stop.IsCancellationRequested)
             {
-                try { using var scope = _scopes.CreateScope(); await RemindAsync(scope.ServiceProvider, stop); }
-                catch (Exception ex) when (ex is not OperationCanceledException) { _log.LogError(ex, "Lead reminders failed"); }
-                try { using var scope = _scopes.CreateScope(); await ReportStagesAsync(scope.ServiceProvider, stop); }
-                catch (Exception ex) when (ex is not OperationCanceledException) { _log.LogError(ex, "Sending lead stages to Meta failed"); }
+                await _orgs.ForEachAsync(async org =>
+                {
+                    try { using var scope = _scopes.CreateScope(); await RemindAsync(scope.ServiceProvider, stop); }
+                    catch (Exception ex) when (ex is not OperationCanceledException) { _log.LogError(ex, "Lead reminders failed for {Org}", org.Key); }
+                    try { using var scope = _scopes.CreateScope(); await ReportStagesAsync(scope.ServiceProvider, stop); }
+                    catch (Exception ex) when (ex is not OperationCanceledException) { _log.LogError(ex, "Sending lead stages to Meta failed for {Org}", org.Key); }
+                });
                 await Task.Delay(Every, stop);
             }
         }

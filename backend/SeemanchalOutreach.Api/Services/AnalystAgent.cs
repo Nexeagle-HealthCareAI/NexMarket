@@ -1107,8 +1107,11 @@ namespace SeemanchalOutreach.Api.Services
         private readonly AnalystSettings _settings;
         private readonly ILogger<AnalystScheduler> _logger;
 
-        public AnalystScheduler(IServiceScopeFactory scopes, IOptions<AnalystSettings> settings, ILogger<AnalystScheduler> logger)
+        private readonly OrgDirectory _orgs;
+
+        public AnalystScheduler(IServiceScopeFactory scopes, IOptions<AnalystSettings> settings, ILogger<AnalystScheduler> logger, OrgDirectory orgs)
         {
+            _orgs = orgs;
             _scopes = scopes;
             _settings = settings.Value;
             _logger = logger;
@@ -1119,7 +1122,7 @@ namespace SeemanchalOutreach.Api.Services
             if (_settings.DailyHourIst < 0 || string.IsNullOrWhiteSpace(_settings.ApiKey)) return;
             while (!stoppingToken.IsCancellationRequested)
             {
-                try
+                await _orgs.ForEachAsync(async _ =>
                 {
                     if (IstClock.NowIst.Hour >= _settings.DailyHourIst)
                     {
@@ -1150,11 +1153,7 @@ namespace SeemanchalOutreach.Api.Services
                             }
                         }
                     }
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.LogError(ex, "Daily AI briefing failed");
-                }
+                });
                 try { await Task.Delay(TimeSpan.FromMinutes(10), stoppingToken); }
                 catch (OperationCanceledException) { break; }
             }

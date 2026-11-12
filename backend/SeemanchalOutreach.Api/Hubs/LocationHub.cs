@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
+using SeemanchalOutreach.Application.Interfaces;
+
 namespace SeemanchalOutreach.Api.Hubs
 {
     public class LocationUpdateDto
@@ -23,12 +25,16 @@ namespace SeemanchalOutreach.Api.Hubs
         // Only admins join the "admins" group, and location updates go only to
         // that group — field agents can send their own position but never
         // receive anyone else's live GPS.
+        public const string Everyone = "everyone";
+
         public override async Task OnConnectedAsync()
         {
             if (Context.User.IsAdmin())
             {
-                await Groups.AddToGroupAsync(Context.ConnectionId, RoleChecks.AdminsGroup);
+                await Groups.AddToGroupAsync(Context.ConnectionId, OrgKeys.Of(RoleChecks.AdminsGroup));
             }
+            // Everyone in this organisation: "something was synced" goes here, never to other organisations.
+            await Groups.AddToGroupAsync(Context.ConnectionId, OrgKeys.Of(Everyone));
             await base.OnConnectedAsync();
         }
 
@@ -41,7 +47,7 @@ namespace SeemanchalOutreach.Api.Hubs
             var agentName = Context.User?.FindFirst(ClaimTypes.Name)?.Value;
             if (string.IsNullOrEmpty(agentId)) return;
 
-            await Clients.Group(RoleChecks.AdminsGroup).SendAsync("ReceiveLocationUpdate", new
+            await Clients.Group(OrgKeys.Of(RoleChecks.AdminsGroup)).SendAsync("ReceiveLocationUpdate", new
             {
                 AgentId = agentId,
                 AgentName = agentName,

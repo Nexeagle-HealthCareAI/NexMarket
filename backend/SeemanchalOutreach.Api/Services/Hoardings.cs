@@ -80,7 +80,8 @@ namespace SeemanchalOutreach.Api.Services
     {
         private readonly IServiceScopeFactory _scopes;
         private readonly ILogger<HoardingSweeper> _logger;
-        public HoardingSweeper(IServiceScopeFactory scopes, ILogger<HoardingSweeper> logger) { _scopes = scopes; _logger = logger; }
+        private readonly OrgDirectory _orgs;
+        public HoardingSweeper(IServiceScopeFactory scopes, ILogger<HoardingSweeper> logger, OrgDirectory orgs) { _scopes = scopes; _logger = logger; _orgs = orgs; }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -93,9 +94,12 @@ namespace SeemanchalOutreach.Api.Services
                     var hour = IstClock.NowIst.Hour;
                     if (hour >= 9 && hour < 19)
                     {
-                        using var scope = _scopes.CreateScope();
-                        var sp = scope.ServiceProvider;
-                        await SweepAsync(sp.GetRequiredService<IMarketingDbContext>(), sp.GetRequiredService<INotifier>(), AttendanceService.TodayIst, stoppingToken);
+                        await _orgs.ForEachAsync(async _ =>
+                        {
+                            using var scope = _scopes.CreateScope();
+                            var sp = scope.ServiceProvider;
+                            await SweepAsync(sp.GetRequiredService<IMarketingDbContext>(), sp.GetRequiredService<INotifier>(), AttendanceService.TodayIst, stoppingToken);
+                        });
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException) { _logger.LogDebug(ex, "Hoarding sweep failed"); }

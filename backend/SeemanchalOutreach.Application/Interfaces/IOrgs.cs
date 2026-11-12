@@ -64,4 +64,30 @@ namespace SeemanchalOutreach.Application.Interfaces
             return b.ConnectionString;
         }
     }
+
+    /// <summary>
+    /// Names that must not collide between organisations: live-update groups, in-memory keys and stored file paths.
+    /// The first organisation keeps the plain names it always had.
+    /// </summary>
+    public static class OrgKeys
+    {
+        private static string? Other(OrgInfo? org) => org?.Database == null ? null : org.Key;
+
+        /// <summary>A live-update group or in-memory key for the organisation in charge.</summary>
+        public static string Of(string name) => Of(OrgScope.Current, name);
+        public static string Of(OrgInfo? org, string name) => Other(org) is { } k ? $"org:{k}:{name}" : name;
+
+        /// <summary>Where a new file goes: the first organisation at the top, every other one under its own folder.</summary>
+        public static string FileKey(string key) => FileKey(OrgScope.Current, key);
+        public static string FileKey(OrgInfo? org, string key) => Other(org) is { } k ? $"org/{k}/{key.TrimStart('/')}" : key;
+
+        /// <summary>True when a stored file belongs to the organisation in charge. Stops one organisation opening another's file by its path.</summary>
+        public static bool OwnsFile(string? key) => OwnsFile(OrgScope.Current, key);
+        public static bool OwnsFile(OrgInfo? org, string? key)
+        {
+            var k = (key ?? "").TrimStart('/');
+            if (k.Length == 0 || k.Contains("..")) return false;
+            return Other(org) is { } o ? k.StartsWith($"org/{o}/", System.StringComparison.Ordinal) : !k.StartsWith("org/", System.StringComparison.Ordinal);
+        }
+    }
 }

@@ -21,14 +21,28 @@ dialysis centre…) can run its own account. This file describes the foundation 
 `OrgScope.Current` holds the organisation for the piece of work in hand; every database connection, the saved
 settings and the in-memory cache follow it. Background work uses `OrgDirectory.ForEachAsync`.
 
-## What is NOT separated yet (so do not add a second real organisation yet)
+## What is separated
 
-- Background jobs (reminders, broadcasts, Google sync, notifications, analyst) still run for the first organisation only.
-- Queued work (notifications, live events), SignalR groups and presence do not carry the organisation.
-- Meta / Google webhooks and the web lead form always go to the first organisation.
-- Uploaded files share one folder tree.
-- The Vita agents service knows one organisation.
-- There is no sign-up, and the sign-in page does not ask for the organisation.
+- **Data:** every request and every background job uses the organisation's own database.
+- **Background jobs:** call clean-up, hoarding reminders, Google sync, lead reminders, broadcasts and the daily AI
+  briefing run once per organisation.
+- **Notifications:** each one remembers its organisation from the moment it is queued.
+- **Live updates:** dashboard, personal and map groups are per organisation (`org:<key>:…`).
+- **Memory:** saved settings, the in-memory cache, presence ("online") and the WhatsApp bill are per organisation.
+- **Files:** other organisations' files are saved under `org/<key>/…`, and a file opens only for its own organisation.
+- **Webhooks and public forms:** add `?org=<key>` to the address (Meta webhook, web lead form). Google sign-in comes
+  back through the browser, which carries the `nx_org` cookie.
+
+## What is NOT separated yet
+
+- **Vita agents service:** knows only the first organisation. Other organisations get "not available yet" on the
+  Agents page and their events are not sent to it.
+- **No sign-up**, and the sign-in page and the phone app do not send the organisation yet (`X-Org`).
+- **Setup screens** still show the webhook address without `?org=`.
+- **Shared by all organisations on the server:** the Groq key and its daily allowance, Firebase (one phone app),
+  LiveKit, Mapbox, and the Bihar panchayat list that is loaded into every new database.
+- **Scale:** each organisation adds its own database connections and its own pass of every background job. Fine for
+  tens of organisations; hundreds will need pooling (PgBouncer) and staggered jobs.
 
 ## Trying a second organisation on a test server
 

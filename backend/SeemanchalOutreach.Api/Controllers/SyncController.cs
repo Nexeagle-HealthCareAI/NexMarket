@@ -65,7 +65,7 @@ namespace SeemanchalOutreach.Api.Controllers
             // Notify real-time admin dashboard if any items processed successfully
             if (syncedCount > 0)
             {
-                await _locationHub.Clients.All.SendAsync("ReceiveSyncNotification", new
+                await _locationHub.Clients.Group(OrgKeys.Of(LocationHub.Everyone)).SendAsync("ReceiveSyncNotification", new
                 {
                     AgentId = command.AgentId,
                     DeviceId = command.DeviceId,

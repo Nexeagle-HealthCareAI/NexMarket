@@ -56,6 +56,7 @@ namespace SeemanchalOutreach.Api.Services
         {
             if (job == null || string.IsNullOrWhiteSpace(job.Title)) return;
             if (job.Body.Length > 300) job.Body = job.Body[..300] + "…";
+            job.Org ??= OrgScope.Current;
             _queue.Writer.TryWrite(job);
         }
     }
@@ -85,7 +86,7 @@ namespace SeemanchalOutreach.Api.Services
         {
             await foreach (var job in _notifier.Reader.ReadAllAsync(stoppingToken))
             {
-                try { await DeliverAsync(job, stoppingToken); }
+                try { using (OrgScope.Enter(job.Org)) await DeliverAsync(job, stoppingToken); }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     _logger.LogWarning(ex, "Could not deliver notification {Kind}", job.Kind);
@@ -153,7 +154,7 @@ namespace SeemanchalOutreach.Api.Services
                 var off = muted.TryGetValue(n.UserId, out var m) && m.Contains(n.Kind);
                 try
                 {
-                    await _hub.Clients.Group(LiveHub.UserGroup(n.UserId)).SendAsync("notify", new
+                    await _hub.Clients.Group(OrgKeys.Of(LiveHub.UserGroup(n.UserId))).SendAsync("notify", new
                     {
                         id = n.Id, kind = n.Kind, title = n.Title, body = n.Body, link = n.Link, createdAt = n.CreatedAt, muted = off,
                     }, ct);

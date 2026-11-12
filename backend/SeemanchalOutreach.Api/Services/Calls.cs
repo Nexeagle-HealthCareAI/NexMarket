@@ -335,20 +335,20 @@ namespace SeemanchalOutreach.Api.Services
     {
         private readonly IServiceScopeFactory _scopes;
         private readonly ILogger<CallSweeper> _logger;
-        public CallSweeper(IServiceScopeFactory scopes, ILogger<CallSweeper> logger) { _scopes = scopes; _logger = logger; }
+        private readonly OrgDirectory _orgs;
+        public CallSweeper(IServiceScopeFactory scopes, ILogger<CallSweeper> logger, OrgDirectory orgs) { _scopes = scopes; _logger = logger; _orgs = orgs; }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                try
+                await _orgs.ForEachAsync(async _ =>
                 {
                     using var scope = _scopes.CreateScope();
                     var sp = scope.ServiceProvider;
                     await SweepAsync(sp.GetRequiredService<IMarketingDbContext>(), sp.GetRequiredService<INotifier>(), sp.GetRequiredService<ILiveEvents>(),
                         sp.GetRequiredService<IOptions<LiveKitSettings>>().Value, stoppingToken);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException) { _logger.LogDebug(ex, "Call sweep failed"); }
+                });
                 await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
             }
         }
