@@ -874,7 +874,7 @@ namespace SeemanchalOutreach.Domain.Entities
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string Title { get; set; } = string.Empty;
-        public string Kind { get; set; } = "plan";                // plan | doc | notes
+        public string Kind { get; set; } = "plan";                // plan | doc | notes | file (an uploaded document)
         public string ContentJson { get; set; } = "{}";           // the editor's document (Tiptap / ProseMirror JSON)
         public string PlainText { get; set; } = string.Empty;     // for search and previews
         public string? Project { get; set; }
@@ -886,6 +886,14 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public string UpdatedBy { get; set; } = string.Empty;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        // In the Bin: hidden everywhere else, can be put back. Only "Delete for ever" removes the row.
+        public DateTime? DeletedAt { get; set; }
+        public string? DeletedBy { get; set; }
+        // An uploaded document (Kind = file): where it is in private storage, and what it was called.
+        public string? FileKey { get; set; }
+        public string? FileName { get; set; }
+        public string? FileMime { get; set; }
+        public long? FileSize { get; set; }
     }
 
     /// <summary>An earlier version of a plan, kept when it is saved again, so nothing written is ever lost.</summary>

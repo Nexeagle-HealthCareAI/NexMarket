@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SeemanchalOutreach.Application.Interfaces;
@@ -25,7 +26,8 @@ namespace SeemanchalOutreach.Api.Controllers
 
     /// <summary>
     /// Plans and documents on the Team board, written in a rich-text editor. Everyone in the CRM can read and write them.
-    /// Nothing is lost: every save keeps the version before it, and documents are archived, never deleted.
+    /// Every save keeps the version before it. A deleted document goes to the Bin and can be put back; only
+    /// "Delete for ever" (its writer or an admin) removes it. Uploaded files (PDF, Word, pictures…) sit beside the plans.
     /// </summary>
     [ApiController]
     [Route("api/v1/work/docs")]
@@ -33,12 +35,46 @@ namespace SeemanchalOutreach.Api.Controllers
     public class WorkDocsController : ControllerBase
     {
         private static readonly string[] Kinds = { "plan", "doc", "notes" };
+        public const string FileKind = "file";
+        public const long MaxFileBytes = 25 * 1024 * 1024;
+        /// <summary>What can be uploaded. Nothing a browser would run (no HTML, SVG or scripts).</summary>
+        public static readonly Dictionary<string, string> Uploads = new(StringComparer.OrdinalIgnoreCase)
+        {
+            [".pdf"] = "application/pdf",
+            [".doc"] = "application/msword", [".docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            [".xls"] = "application/vnd.ms-excel", [".xlsx"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            [".ppt"] = "application/vnd.ms-powerpoint", [".pptx"] = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            [".csv"] = "text/csv", [".txt"] = "text/plain",
+            [".jpg"] = "image/jpeg", [".jpeg"] = "image/jpeg", [".png"] = "image/png", [".webp"] = "image/webp", [".gif"] = "image/gif",
+        };
+
+        /// <summary>The file's first bytes must match what its name says (a renamed program is not a PDF).</summary>
+        public static bool LooksLike(string ext, byte[] head)
+        {
+            bool Starts(params byte[] sig) => head.Length >= sig.Length && sig.Select((b, i) => head[i] == b).All(x => x);
+            switch (ext.ToLowerInvariant())
+            {
+                case ".pdf": return Starts(0x25, 0x50, 0x44, 0x46);                                   // %PDF
+                case ".docx": case ".xlsx": case ".pptx": return Starts(0x50, 0x4B, 0x03, 0x04);     // zip
+                case ".doc": case ".xls": case ".ppt": return Starts(0xD0, 0xCF, 0x11, 0xE0);        // old Office
+                case ".png": return Starts(0x89, 0x50, 0x4E, 0x47);
+                case ".jpg": case ".jpeg": return Starts(0xFF, 0xD8, 0xFF);
+                case ".gif": return Starts(0x47, 0x49, 0x46, 0x38);
+                case ".webp": return Starts(0x52, 0x49, 0x46, 0x46) && head.Length >= 12 && head[8] == 0x57 && head[9] == 0x45 && head[10] == 0x42 && head[11] == 0x50;
+                case ".txt": case ".csv": return !head.Contains((byte)0);                            // text has no zero bytes
+                default: return false;
+            }
+        }
+
+        /// <summary>Who may delete a document for ever: an admin, or the person who wrote or uploaded it.</summary>
+        public static bool CanErase(bool admin, string me, string createdBy) => admin || (me.Length > 0 && me == createdBy);
         private const int MaxContent = 2_000_000;  // characters of editor JSON (about 300 pages of text)
         private const int MaxText = 400_000;
 
         private readonly IMarketingDbContext _db;
         private readonly ILiveEvents _live;
-        public WorkDocsController(IMarketingDbContext db, ILiveEvents live) { _db = db; _live = live; }
+        private readonly IFileStore _files;
+        public WorkDocsController(IMarketingDbContext db, ILiveEvents live, IFileStore files) { _db = db; _live = live; _files = files; }
 
         private string Me => User.AgentIdOf();
 
@@ -62,6 +98,9 @@ namespace SeemanchalOutreach.Api.Controllers
             card = d.CardId != null && cards.TryGetValue(d.CardId.Value, out var c) ? new { number = c.Number, title = c.Title } : null,
             pinned = d.Pinned, archived = d.Archived, createdBy = d.CreatedBy, createdAt = d.CreatedAt, updatedBy = d.UpdatedBy, updatedAt = d.UpdatedAt,
             preview = Preview(d.PlainText), words = Words(d.PlainText), version = d.Version,
+            deleted = d.DeletedAt != null, deletedAt = d.DeletedAt, deletedBy = d.DeletedBy,
+            file = d.FileKey == null ? null : new { name = d.FileName ?? "file", mime = d.FileMime ?? "application/octet-stream", size = d.FileSize ?? 0 },
+            canErase = CanErase(User.IsAdmin(), Me, d.CreatedBy),
         };
 
         private async Task<Dictionary<Guid, (int, string)>> CardsAsync(IEnumerable<Guid?> ids, CancellationToken ct)
@@ -74,10 +113,12 @@ namespace SeemanchalOutreach.Api.Controllers
 
         /// <summary>All plans and documents (pinned first, then the latest), with search across titles and text.</summary>
         [HttpGet]
-        public async Task<IActionResult> List([FromQuery] string? q, [FromQuery] string? kind, [FromQuery] bool archived, [FromQuery] Guid? card, CancellationToken ct)
+        public async Task<IActionResult> List([FromQuery] string? q, [FromQuery] string? kind, [FromQuery] bool archived, [FromQuery] bool bin, [FromQuery] Guid? card, CancellationToken ct)
         {
-            var query = _db.WorkDocs.AsNoTracking().Where(d => d.Archived == archived);
-            if (!string.IsNullOrWhiteSpace(kind) && Kinds.Contains(kind)) query = query.Where(d => d.Kind == kind);
+            // The Bin shows deleted ones (archived or not); every other list leaves them out.
+            var query = bin ? _db.WorkDocs.AsNoTracking().Where(d => d.DeletedAt != null)
+                : _db.WorkDocs.AsNoTracking().Where(d => d.DeletedAt == null && d.Archived == archived);
+            if (!string.IsNullOrWhiteSpace(kind) && (Kinds.Contains(kind) || kind == FileKind)) query = query.Where(d => d.Kind == kind);
             if (card != null) query = query.Where(d => d.CardId == card);
             if (!string.IsNullOrWhiteSpace(q))
             {
@@ -135,6 +176,8 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             var d = await _db.WorkDocs.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (d == null) return NotFound(new { message = "That document isn't here any more." });
+            if (d.DeletedAt != null) return BadRequest(new { message = "This is in the Bin. Put it back before changing it." });
+            if (d.Kind == FileKind) { dto.Content = null; dto.Kind = null; }   // an uploaded file: only its title, project and card can change
             if (!force && dto.Version != null && dto.Version != d.Version)
                 return Conflict(new { message = "Someone else saved this document while you were editing it.", version = d.Version, updatedBy = d.UpdatedBy, updatedAt = d.UpdatedAt });
             var content = ContentOf(dto.Content, out var err);
@@ -187,6 +230,101 @@ namespace SeemanchalOutreach.Api.Controllers
             if (!undo) d.Pinned = false;
             await _db.SaveChangesAsync(ct);
             return Ok(Row(d, await CardsAsync(new[] { d.CardId }, ct)));
+        }
+
+        /// <summary>To the Bin (or back out of it with undo). Nothing is removed.</summary>
+        [HttpPost("{id:guid}/delete")]
+        public async Task<IActionResult> Delete(Guid id, [FromQuery] bool undo, CancellationToken ct)
+        {
+            var d = await _db.WorkDocs.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (d == null) return NotFound(new { message = "That document isn't here any more." });
+            if (undo) { d.DeletedAt = null; d.DeletedBy = null; }
+            else if (d.DeletedAt == null) { d.DeletedAt = DateTime.UtcNow; d.DeletedBy = Me; d.Pinned = false; }
+            await _db.SaveChangesAsync(ct);
+            if (d.CardId != null)
+            {
+                _db.WorkNotes.Add(new WorkNote { CardId = d.CardId.Value, Kind = "activity", AgentId = Me, Text = undo ? $"put \"{d.Title}\" back from the Bin" : $"moved \"{d.Title}\" to the Bin" });
+                await _db.SaveChangesAsync(ct);
+            }
+            return Ok(Row(d, await CardsAsync(new[] { d.CardId }, ct)));
+        }
+
+        /// <summary>
+        /// Delete for ever: the document, its earlier versions and its uploaded file. Only from the Bin, and only by an
+        /// admin or the person who wrote it. This cannot be undone.
+        /// </summary>
+        [HttpDelete("{id:guid}")]
+        public async Task<IActionResult> Erase(Guid id, CancellationToken ct)
+        {
+            var d = await _db.WorkDocs.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (d == null) return NotFound(new { message = "That document isn't here any more." });
+            if (d.DeletedAt == null) return BadRequest(new { message = "Move it to the Bin first." });
+            if (!CanErase(User.IsAdmin(), Me, d.CreatedBy)) return StatusCode(403, new { message = "Only an admin or the person who wrote it can delete it for ever." });
+            var key = d.FileKey;
+            var title = d.Title;
+            var cardId = d.CardId;
+            _db.WorkDocRevisions.RemoveRange(await _db.WorkDocRevisions.Where(r => r.DocId == id).ToListAsync(ct));
+            _db.WorkDocs.Remove(d);
+            if (cardId != null) _db.WorkNotes.Add(new WorkNote { CardId = cardId.Value, Kind = "activity", AgentId = Me, Text = $"deleted \"{title}\" for ever" });
+            await _db.SaveChangesAsync(ct);
+            // The row is gone first: if the stored file cannot be removed now, nothing points to it any more.
+            var fileGone = key == null || await _files.DeleteAsync(key, ct);
+            return Ok(new { deleted = true, fileGone });
+        }
+
+        /// <summary>Uploads a document (PDF, Word, Excel, PowerPoint, text or a picture) to sit beside the plans.</summary>
+        [HttpPost("upload")]
+        [RequestSizeLimit(MaxFileBytes + 1_000_000)]
+        [RequestFormLimits(MultipartBodyLengthLimit = MaxFileBytes + 1_000_000)]
+        public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] string? title, [FromForm] Guid? cardId, CancellationToken ct)
+        {
+            if (file == null || file.Length == 0) return BadRequest(new { message = "Choose a file." });
+            if (file.Length > MaxFileBytes) return BadRequest(new { message = "Files can be up to 25 MB." });
+            var ext = Path.GetExtension(file.FileName ?? "").ToLowerInvariant();
+            if (!Uploads.TryGetValue(ext, out var mime))
+                return BadRequest(new { message = "Upload a PDF, Word, Excel, PowerPoint, text or CSV file, or a picture." });
+            if (cardId is Guid cid && cid != Guid.Empty && !await _db.WorkCards.AnyAsync(c => c.Id == cid, ct)) return BadRequest(new { message = "That card isn't on the board any more." });
+
+            await using var s = file.OpenReadStream();
+            var head = new byte[Math.Min(512, (int)Math.Min(file.Length, 512))];
+            var read = 0;
+            while (read < head.Length) { var n = await s.ReadAsync(head.AsMemory(read), ct); if (n == 0) break; read += n; }
+            if (!LooksLike(ext, head[..read])) return BadRequest(new { message = "This file isn't what its name says. Save it again in its own program and upload that." });
+            s.Position = 0;
+
+            var name = Path.GetFileName(file.FileName ?? $"file{ext}");
+            if (name.Length > 150) name = name[^150..];
+            var key = await _files.SaveAsync("work-docs", name, s, mime, ct);
+            var t = Clip(title, 200) ?? Path.GetFileNameWithoutExtension(name);
+            var d = new WorkDoc
+            {
+                Title = string.IsNullOrWhiteSpace(t) ? "Uploaded file" : t, Kind = FileKind,
+                ContentJson = "{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\"}]}", PlainText = name,
+                CardId = cardId is Guid g && g != Guid.Empty ? g : null,
+                FileKey = key, FileName = name, FileMime = mime, FileSize = file.Length,
+                CreatedBy = Me, UpdatedBy = Me,
+            };
+            _db.WorkDocs.Add(d);
+            if (d.CardId != null) _db.WorkNotes.Add(new WorkNote { CardId = d.CardId.Value, Kind = "activity", AgentId = Me, Text = $"uploaded a file: \"{d.Title}\"" });
+            await _db.SaveChangesAsync(ct);
+            await _live.PublishAsync(new LiveEvent { Kind = "work", Text = $"File uploaded: {d.Title}", RefId = d.Id.ToString() });
+            return Ok(Row(d, await CardsAsync(new[] { d.CardId }, ct)));
+        }
+
+        /// <summary>The uploaded file itself. Pictures and PDFs can open in the page; everything else is sent as a download.</summary>
+        [HttpGet("{id:guid}/file")]
+        public async Task<IActionResult> FileOf(Guid id, [FromQuery] bool download, CancellationToken ct)
+        {
+            var d = await _db.WorkDocs.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (d?.FileKey == null) return NotFound(new { message = "That file isn't here any more." });
+            var f = await _files.OpenAsync(d.FileKey, ct);
+            if (f == null) return NotFound(new { message = "The file is no longer in storage." });
+            var mime = d.FileMime ?? "application/octet-stream";
+            Response.Headers["X-Content-Type-Options"] = "nosniff";
+            Response.Headers["Cache-Control"] = "private, no-store";
+            var inline = !download && (mime.StartsWith("image/") || mime == "application/pdf" || mime.StartsWith("text/"));
+            Response.Headers["Content-Disposition"] = $"{(inline ? "inline" : "attachment")}; filename*=UTF-8''{Uri.EscapeDataString(d.FileName ?? "file")}";
+            return File(f.Value.Content, mime == "text/csv" ? "text/plain; charset=utf-8" : mime);
         }
 
         /// <summary>Earlier versions, newest first.</summary>

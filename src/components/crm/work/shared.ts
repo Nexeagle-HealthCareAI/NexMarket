@@ -13,10 +13,19 @@ export interface Card {
   parentId?: string | null; parent?: { id: string; number: number; title: string } | null; subTotal: number; subDone: number;
 }
 export interface DocRow {
-  id: string; title: string; kind: 'plan' | 'doc' | 'notes'; project?: string | null; cardId?: string | null; card?: { number: number; title: string } | null;
+  id: string; title: string; kind: 'plan' | 'doc' | 'notes' | 'file'; project?: string | null; cardId?: string | null; card?: { number: number; title: string } | null;
   pinned: boolean; archived: boolean; createdBy: string; createdAt: string; updatedBy: string; updatedAt: string; preview: string; words: number; version: number;
+  /** In the Bin. */
+  deleted?: boolean; deletedAt?: string | null; deletedBy?: string | null;
+  /** An uploaded document. */
+  file?: { name: string; mime: string; size: number } | null;
+  /** This person may delete it for ever (an admin, or whoever wrote it). */
+  canErase?: boolean;
 }
-export const DOC_KIND: Record<DocRow['kind'], string> = { plan: 'Plan', doc: 'Document', notes: 'Meeting notes' };
+export const DOC_KIND: Record<DocRow['kind'], string> = { plan: 'Plan', doc: 'Document', notes: 'Meeting notes', file: 'File' };
+export const MAX_UPLOAD_MB = 25;
+export const UPLOAD_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.webp,.gif';
+export const fileSize = (bytes: number) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 export interface Person { agentId: string; name: string; role: string; photo?: string | null }
 export interface BoardRes {
   me: string; isAdmin: boolean;

@@ -3814,6 +3814,24 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileKey")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileMime")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileName")
+                        .HasColumnType("text");
+
+                    b.Property<long?>("FileSize")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasColumnType("text");

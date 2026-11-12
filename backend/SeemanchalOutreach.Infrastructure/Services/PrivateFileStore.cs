@@ -97,5 +97,22 @@ namespace SeemanchalOutreach.Infrastructure.Services
             if (!File.Exists(path)) return null;
             return (File.OpenRead(path), "application/octet-stream");
         }
+
+        public async Task<bool> DeleteAsync(string key, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(key) || key.Contains("..") || !OrgKeys.OwnsFile(key)) return false;
+            try
+            {
+                if (_s3 != null) { await _s3.DeleteObjectAsync(_bucket, key, ct); return true; }
+                var path = Path.Combine(_localRoot, key.Replace('/', Path.DirectorySeparatorChar));
+                if (File.Exists(path)) File.Delete(path);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not delete stored file {Key}", key);
+                return false;
+            }
+        }
     }
 }
