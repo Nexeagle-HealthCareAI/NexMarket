@@ -2536,12 +2536,24 @@ div.wk-stat { cursor: default; }
 .wk-tb-btn:hover:not(:disabled) { background: #eef1f6; }
 .wk-tb-btn[aria-pressed='true'] { background: #e1edfb; color: #0a4e94; }
 .wk-tb-btn:disabled { opacity: .35; cursor: default; }
+.wk-tb-btn.is-wide { width: auto; padding: 0 5px 0 8px; display: inline-flex; align-items: center; gap: 2px; }
+.wk-tb-btn:focus-visible, .wk-tb-select:focus-visible, .wk-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wk-tb-ink { display: inline-grid; place-items: center; border-bottom: 3px solid #1d2433; padding-bottom: 1px; line-height: 0; }
+.wk-tb-select { height: 34px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: #344054; font: inherit; font-size: 13px; padding: 0 6px; max-width: 108px; cursor: pointer; }
+.wk-tb-select.is-font { width: 108px; }
+.wk-tb-pop { position: relative; display: inline-flex; }
+.wk-tb-swatches { position: absolute; top: 38px; left: 0; z-index: 6; display: grid; grid-template-columns: repeat(5, 30px); gap: 6px; padding: 10px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 28px -12px rgba(15, 23, 42, 0.35); }
+.wk-tb-swatches.is-left { left: auto; right: 0; }
+.wk-swatch { width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(15, 23, 42, 0.18); cursor: pointer; display: inline-grid; place-items: center; color: #fff; padding: 0; }
+.wk-swatch.is-none { background: #fff linear-gradient(135deg, transparent 46%, #c0271e 46%, #c0271e 54%, transparent 54%); color: #1d2433; }
+.wk-swatch[aria-pressed='true'] { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #0a72d6; }
+.wk-tb-swatches[aria-label='Highlight colour'] .wk-swatch { color: #1d2433; }
 .wk-tb-sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
 .wk-tb-table { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 6px; }
 .wk-tb-table button { height: 30px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--line); background: #fff; font: inherit; font-size: 12px; cursor: pointer; }
 .wk-tb-link { display: flex; gap: 6px; flex-basis: 100%; padding-top: 6px; }
 .wk-tb-link .crm-input { flex: 1; }
-.wk-doc-body { padding: 6px 2px; }
+.wk-doc-body { padding: 6px 2px; cursor: text; min-height: 380px; }
 .wk-prose { min-height: 360px; outline: none; font-size: 15.5px; line-height: 1.65; color: #1d2433; }
 .wk-prose > * + * { margin-top: .6em; }
 .wk-prose h1 { font-size: 1.75em; font-weight: 800; margin: 1em 0 .3em; line-height: 1.25; }

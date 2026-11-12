@@ -170,8 +170,35 @@ function DocEditor({ id, board, toast, openCard, onClose, onSaved, dirtyRef }: {
   const nameOf = (a: string) => board.people.find((p) => p.agentId === a)?.name ?? a;
   const setDirty = useCallback((v: boolean) => { dirtyRef.current = v; setDirtyState(v); }, [dirtyRef]);
 
-  const editor = useDocEditor(null, () => { if (!loading.current) setDirty(true); });
+  // Typing must never wait for, or be undone by, anything else on the page. So everything saving needs is kept in
+  // refs: the page can redraw (the list, the board, a toast) without the document being fetched again or the
+  // editor being touched.
+  const AUTOSAVE_MS = 2500;
+  const rowRef = useRef<DocRow | null>(null);
+  const titleRef = useRef('');
+  const changes = useRef(0);                    // goes up with every edit
+  const savingRef = useRef(false);
+  const conflictRef = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
+  const out = useRef({ toast, onClose, onSaved });
+  useEffect(() => { out.current = { toast, onClose, onSaved }; });
+  const putRow = useCallback((d: DocRow) => { rowRef.current = d; setRow(d); }, []);
+  const later = useCallback((ms: number) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => { timer.current = null; void saveRef.current(); }, ms);
+  }, []);
+  /** Something changed: mark it, and save once the person pauses. Each new change restarts the wait. */
+  const touched = useCallback(() => {
+    if (loading.current) return;
+    changes.current += 1;
+    setDirty(true);
+    if (!conflictRef.current) later(AUTOSAVE_MS);
+  }, [setDirty, later]);
 
+  const editor = useDocEditor(null, touched);
+
+  // Load once per document. (Not again when the page around it redraws: that used to replace what was being typed.)
   useEffect(() => {
     if (!editor) return;
     let alive = true;
@@ -181,69 +208,81 @@ function DocEditor({ id, board, toast, openCard, onClose, onSaved, dirtyRef }: {
       editor.commands.setContent(r.content?.type === 'doc' ? r.content : { type: 'doc', content: [{ type: 'paragraph' }] }, { emitUpdate: false });
       loading.current = false;
       version.current = r.doc.version;
-      setRow(r.doc); setTitle(r.doc.title); setWords(editor.getText().split(/\s+/).filter(Boolean).length);
-    }).catch((e) => { toast(friendlyError(e)); onClose(); });
+      titleRef.current = r.doc.title;
+      putRow(r.doc); setTitle(r.doc.title); setWords(editor.getText().split(/\s+/).filter(Boolean).length);
+    }).catch((e) => { out.current.toast(friendlyError(e)); out.current.onClose(); });
     return () => { alive = false; };
-  }, [editor, id, toast, onClose]);
+  }, [editor, id, putRow]);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   const save = useCallback(async (force = false) => {
-    if (!editor || !row) return;
+    const row = rowRef.current;
+    if (!editor || !row || savingRef.current) return;   // a save already running picks up later edits when it ends
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    savingRef.current = true;
     setSaving(true);
+    const at = changes.current;
     try {
       const plain = editor.getText({ blockSeparator: '\n' });
       const d = await crm.put<DocRow>(`/api/v1/work/docs/${row.id}${force ? '?force=true' : ''}`, {
-        title: title.trim() || 'Untitled plan', content: editor.getJSON(), text: plain, version: version.current,
+        title: titleRef.current.trim() || 'Untitled plan', content: editor.getJSON(), text: plain, version: version.current,
       });
       version.current = d.version;
-      setRow(d); setDirty(false); setConflict(null); onSaved(d);
+      conflictRef.current = false;
+      putRow(d); setConflict(null); out.current.onSaved(d);
+      // Typed while it was saving? Those words are not saved yet: keep "Unsaved changes" and save again after a pause.
+      if (changes.current === at) setDirty(false); else later(AUTOSAVE_MS);
     } catch (e) {
       const m = String((e as Error)?.message ?? '');
       if (m.includes('→ 409')) {
+        conflictRef.current = true;
         try { const j = JSON.parse(m.slice(m.indexOf(': ') + 2)); setConflict({ by: j.updatedBy ?? '', at: j.updatedAt ?? '' }); } catch { setConflict({ by: '', at: '' }); }
-      } else toast(friendlyError(e));
-    } finally { setSaving(false); }
-  }, [editor, row, title, onSaved, setDirty, toast]);
+      } else {
+        out.current.toast(friendlyError(e));
+        later(15000);   // no connection or a server hiccup: try again by itself
+      }
+    } finally { savingRef.current = false; setSaving(false); }
+  }, [editor, putRow, setDirty, later]);
+  useEffect(() => { saveRef.current = save; });
 
-  // Save by itself 4 seconds after the last change.
-  useEffect(() => {
-    if (!dirty || conflict) return;
-    const t = setTimeout(() => void save(), 4000);
-    return () => clearTimeout(t);
-  }, [dirty, conflict, save, title]);
-  // Word count and Ctrl+S.
+  // Word count: after a pause, not on every key (counting a long plan on each keystroke made typing lag).
   useEffect(() => {
     if (!editor) return;
-    const count = () => setWords(editor.getText().split(/\s+/).filter(Boolean).length);
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const count = () => { if (t) clearTimeout(t); t = setTimeout(() => setWords(editor.getText().split(/\s+/).filter(Boolean).length), 600); };
     editor.on('update', count);
-    return () => { editor.off('update', count); };
+    return () => { editor.off('update', count); if (t) clearTimeout(t); };
   }, [editor]);
+  // Ctrl+S, and a warning before closing the tab with unsaved changes.
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void save(); } };
+    const k = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void saveRef.current(); } };
     const leave = (e: BeforeUnloadEvent) => { if (dirtyRef.current) e.preventDefault(); };
     window.addEventListener('keydown', k);
     window.addEventListener('beforeunload', leave);
     return () => { window.removeEventListener('keydown', k); window.removeEventListener('beforeunload', leave); };
-  }, [save, dirtyRef]);
+  }, [dirtyRef]);
 
   const flag = async (what: 'pin' | 'archive', undo: boolean) => {
     if (!row) return;
-    try { const d = await crm.post<DocRow>(`/api/v1/work/docs/${row.id}/${what}${undo ? '?undo=true' : ''}`); setRow(d); onSaved(d); if (what === 'archive') toast(undo ? 'Back in the list.' : 'Archived. Find it under “Archive”.'); }
+    try { const d = await crm.post<DocRow>(`/api/v1/work/docs/${row.id}/${what}${undo ? '?undo=true' : ''}`); putRow(d); onSaved(d); if (what === 'archive') toast(undo ? 'Back in the list.' : 'Archived. Find it under “Archive”.'); }
     catch (e) { toast(friendlyError(e)); }
   };
   const reloadTheirs = async () => {
     if (!editor) return;
     const r = await crm.get<DocRes>(`/api/v1/work/docs/${id}`);
     loading.current = true; editor.commands.setContent(r.content, { emitUpdate: false }); loading.current = false;
-    version.current = r.doc.version; setRow(r.doc); setTitle(r.doc.title); setDirty(false); setConflict(null);
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    conflictRef.current = false; titleRef.current = r.doc.title;
+    version.current = r.doc.version; putRow(r.doc); setTitle(r.doc.title); setDirty(false); setConflict(null);
   };
   const setKind = async (k: DocRow['kind']) => {
     if (!row || !editor) return;
-    try { const d = await crm.put<DocRow>(`/api/v1/work/docs/${row.id}`, { kind: k, version: version.current }); version.current = d.version; setRow(d); onSaved(d); }
+    try { const d = await crm.put<DocRow>(`/api/v1/work/docs/${row.id}`, { kind: k, version: version.current }); version.current = d.version; putRow(d); onSaved(d); }
     catch (e) { toast(friendlyError(e)); }
   };
   const unlink = async () => {
     if (!row) return;
-    try { const d = await crm.put<DocRow>(`/api/v1/work/docs/${row.id}`, { cardId: '00000000-0000-0000-0000-000000000000', version: version.current }); version.current = d.version; setRow(d); onSaved(d); }
+    try { const d = await crm.put<DocRow>(`/api/v1/work/docs/${row.id}`, { cardId: '00000000-0000-0000-0000-000000000000', version: version.current }); version.current = d.version; putRow(d); onSaved(d); }
     catch (e) { toast(friendlyError(e)); }
   };
 
@@ -280,12 +319,15 @@ function DocEditor({ id, board, toast, openCard, onClose, onSaved, dirtyRef }: {
           </span>
         </div>
       )}
-      <input className="wk-doc-title" value={title} maxLength={200} onChange={(e) => { setTitle(e.target.value); setDirty(true); }} placeholder="Title" aria-label="Title" />
+      <input className="wk-doc-title" value={title} maxLength={200} onChange={(e) => { setTitle(e.target.value); titleRef.current = e.target.value; touched(); }} placeholder="Title" aria-label="Title" />
       <span className="crm-sub wk-doc-sub">Started by {nameOf(row.createdBy)} · {when(row.createdAt)} · {words} words</span>
       <Toolbar editor={editor} />
-      <div className="wk-doc-body"><EditorContent editor={editor} /></div>
+      {/* A click on the empty space under the text puts the cursor at the end, like paper. */}
+      <div className="wk-doc-body" onMouseDown={(e) => { if (!(e.target as HTMLElement).closest('.ProseMirror')) { e.preventDefault(); editor.commands.focus('end'); } }}>
+        <EditorContent editor={editor} />
+      </div>
       {histOpen && <HistoryModal id={row.id} nameOf={nameOf} onClose={() => setHistOpen(false)} onRestore={(c, t) => {
-        editor.commands.setContent(c); setTitle(t); setDirty(true); setHistOpen(false); toast('Earlier version put back. It saves in a moment (the current one stays in History).');
+        titleRef.current = t; setTitle(t); editor.commands.setContent(c); touched(); setHistOpen(false); toast('Earlier version put back. It saves in a moment (the current one stays in History).');
       }} />}
     </article>
   );
