@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { hasOpd } from '@/lib/crm/access';
 
 // ─── Formatting ─────────────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ export type Tone = 'neutral' | 'accent' | 'ok' | 'warn' | 'bad' | 'info';
 export const STAGES: { key: string; label: string; tone: Tone }[] = [
   { key: 'pending', label: 'Referred', tone: 'accent' },
   { key: 'arrived', label: 'Arrived', tone: 'info' },
-  { key: 'opd', label: 'Seen in OPD', tone: 'info' },
+  { key: 'opd', label: hasOpd() ? 'Seen in OPD' : 'Seen', tone: 'info' },
   { key: 'admitted', label: 'Admitted', tone: 'ok' },
   { key: 'procedure', label: 'Procedure done', tone: 'ok' },
   { key: 'discharged', label: 'Discharged', tone: 'ok' },

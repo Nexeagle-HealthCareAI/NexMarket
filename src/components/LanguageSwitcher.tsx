@@ -10,7 +10,9 @@ export default function LanguageSwitcher() {
   useEffect(() => {
     const match = document.cookie.match(new RegExp('(^| )NEXT_LOCALE=([^;]+)'));
     if (match) {
-      setCurrentLang(match[2]);
+      const lang = match[2];
+      const t = setTimeout(() => setCurrentLang(lang), 0);
+      return () => clearTimeout(t);
     }
   }, []);
 

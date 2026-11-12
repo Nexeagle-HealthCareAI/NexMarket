@@ -5,6 +5,7 @@ import { AlertTriangle, Hospital } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { friendlyError, Modal } from '@/components/crm/ui';
 import type { CampOptions, CampPatient } from './shared';
+import { place } from '@/lib/crm/access';
 
 type Mode = 'book' | 'register' | 'screen';
 
@@ -134,10 +135,10 @@ export function PatientForm({ campId, patient, mode, options, departments, onClo
           <div className="crm-chips cp-codes">
             {(options?.conditions ?? []).map((c) => <button key={c.code} type="button" className="crm-chip is-soft" aria-pressed={conditions.includes(c.code)} onClick={() => toggle(conditions, setConditions, c.code)}>{label(c.code, 'c')}</button>)}
           </div>
-          <label className="crm-field">Advice given<textarea className="crm-textarea" rows={2} value={f.advice} onChange={set('advice')} maxLength={1000} placeholder="Medicines, tests, diet, when to come to the hospital" /></label>
+          <label className="crm-field">Advice given<textarea className="crm-textarea" rows={2} value={f.advice} onChange={set('advice')} maxLength={1000} placeholder={`Medicines, tests, diet, when to come to the ${place()}`} /></label>
 
           <div className={`cp-refer${refer ? ' is-on' : ''}`}>
-            <label className="wau-switch"><input type="checkbox" checked={refer} onChange={(e) => setRefer(e.target.checked)} /> <Hospital size={16} aria-hidden /> Needs to come to the hospital</label>
+            <label className="wau-switch"><input type="checkbox" checked={refer} onChange={(e) => setRefer(e.target.checked)} /> <Hospital size={16} aria-hidden /> Needs to come to the {place()}</label>
             {refer && (
               <div className="cp-two" style={{ alignItems: 'end' }}>
                 <label className="crm-field">Department
@@ -154,7 +155,7 @@ export function PatientForm({ campId, patient, mode, options, departments, onClo
 
       <label className="cp-consent">
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-        <span><strong>They agree</strong> to the hospital keeping these details and contacting them about their health. <span className="crm-sub">Ask before noting health details. मरीज़ की सहमति लें।</span></span>
+        <span><strong>They agree</strong> to the {place()} keeping these details and contacting them about their health. <span className="crm-sub">Ask before noting health details. मरीज़ की सहमति लें।</span></span>
       </label>
       {screening && refer && !consent && <span className="wl-err">Without consent they won&apos;t be added to the Leads inbox.</span>}
       {error && <div className="crm-error" role="alert">{error}</div>}

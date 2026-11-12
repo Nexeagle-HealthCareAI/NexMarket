@@ -44,6 +44,8 @@ export function useGeolocation(options?: {
     }
   }, []);
 
+  // Left as written: this is the GPS tracker for the browser app, which can only be tested on a phone outdoors.
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const startWatching = useCallback(() => {
     if (!('geolocation' in navigator)) {
       setPermission('unavailable');
@@ -102,6 +104,7 @@ export function useGeolocation(options?: {
   }, [options?.record, options?.shiftId, options?.visitId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see the note on startWatching
     startWatching();
     return stopWatching;
   }, [startWatching, stopWatching]);

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BadgeCheck, Banknote, Camera, FileImage, HandCoins, MapPin, Upload } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { fmt, friendlyError, Modal, rupees } from '@/components/crm/ui';
+import { place } from '@/lib/crm/access';
 
 /** What the server says about a payment's proof and whether the partner got it. */
 export interface ProofInfo {
@@ -13,7 +14,7 @@ export interface ProofInfo {
 }
 
 const METHODS = [
-  { k: 'upi', l: 'UPI' }, { k: 'bank', l: 'Bank transfer' }, { k: 'cheque', l: 'Cheque' }, { k: 'cash', l: 'Cash at the hospital' },
+  { k: 'upi', l: 'UPI' }, { k: 'bank', l: 'Bank transfer' }, { k: 'cheque', l: 'Cheque' }, { k: 'cash', l: `Cash at the ${place()}` },
 ] as const;
 
 const errText = (e: unknown) => {

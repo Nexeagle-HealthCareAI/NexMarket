@@ -19,6 +19,8 @@ export default function VisitDetailClient({ clientId }: { clientId: string }) {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // When this screen was opened: "minutes so far" for a visit still going on is counted up to then.
+  const [openedAt] = useState(() => Date.now());
 
   const { position, permission } = useGeolocation({
     visitId: clientId,
@@ -81,7 +83,7 @@ export default function VisitDetailClient({ clientId }: { clientId: string }) {
   const isCheckedOut = !!visit.checkOutAt;
   const durationMin = isCheckedOut
     ? Math.round((new Date(visit.checkOutAt!).getTime() - new Date(visit.checkInAt).getTime()) / 60000)
-    : Math.round((Date.now() - new Date(visit.checkInAt).getTime()) / 60000);
+    : Math.round((openedAt - new Date(visit.checkInAt).getTime()) / 60000);
 
   return (
     <div>

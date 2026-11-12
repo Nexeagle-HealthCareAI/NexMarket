@@ -6,6 +6,7 @@ import { crm } from '@/lib/sync/api-client';
 import { ErrorBox, friendlyError, Skeleton } from '@/components/crm/ui';
 import FieldMap from './FieldMap';
 import { newId, Q_LABEL, roleLabel, type Defaults, type FQuestion, type QType } from './shared';
+import { place } from '@/lib/crm/access';
 
 export interface EditorValue {
   title: string; instructions: string; dueDate: string; area: [number, number][];
@@ -119,7 +120,7 @@ export function SurveyEditor({ id, onDone, onCancel, toast }: { id: string | nul
           <h2 className="crm-h2" style={{ margin: 0 }}>Questions <span className="crm-sub">(optional, answered once in the app, separately from the map)</span></h2>
           <button type="button" className="crm-btn is-secondary is-sm" onClick={() => set({ questions: [...v.questions, { id: newId(), text: '', type: 'text', options: null, required: false }] })}><Plus size={14} aria-hidden /> Add question</button>
         </div>
-        {v.questions.length === 0 && <p className="crm-sub" style={{ margin: 0 }}>No questions. Add some if the agent should also report something about the area, e.g. &ldquo;Which hospital&apos;s banners are already up here?&rdquo;</p>}
+        {v.questions.length === 0 && <p className="crm-sub" style={{ margin: 0 }}>No questions. Add some if the agent should also report something about the area, e.g. &ldquo;Which {place()}&apos;s banners are already up here?&rdquo;</p>}
         {v.questions.map((qn, i) => (
           <div key={qn.id} className="fs-q">
             <span className="fs-q-n">{i + 1}</span>

@@ -22,7 +22,7 @@ export default function AgentErrorBoundary({
       </div>
       <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.75rem' }}>Oops! Something went wrong.</h2>
       <p style={{ color: '#64748b', marginBottom: '2rem', fontSize: '0.95rem' }}>
-        Don't worry, your unsynced offline data is safe. Please try refreshing.
+        Don&rsquo;t worry, your unsynced offline data is safe. Please try refreshing.
       </p>
       <button 
         onClick={() => reset()}

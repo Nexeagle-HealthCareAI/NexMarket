@@ -6,6 +6,7 @@ import { crm } from '@/lib/sync/api-client';
 import { friendlyError } from '@/components/crm/ui';
 import type { ActionRow, AgentRow, GuardRes, Lesson, Limits, Settings } from './shared';
 import { CHANNELS, needsCheck, STATUS_LABEL, when } from './shared';
+import { Place, place } from '@/lib/crm/access';
 
 // ─── Activity ──────────────────────────────────────────────────────────────
 
@@ -307,15 +308,15 @@ export function PolicyPanel({ settings, canEdit, onSaved }: { settings: Settings
         <label className="ai-field"><span>Facts</span><textarea rows={9} value={facts} disabled={!canEdit} onChange={(e) => setFacts(e.target.value)}
           placeholder={'Departments: …\nOPD: Monday to Saturday, 9 am to 5 pm\nEmergency: 24 hours\nAddress: …'} /></label>
         <div className="ai-row2">
-          <label className="ai-field"><span>Hospital phone numbers (one per line)</span><textarea rows={3} value={phones} disabled={!canEdit} onChange={(e) => setPhones(e.target.value)} /></label>
-          <label className="ai-field"><span>Hospital websites (one per line)</span><textarea rows={3} value={domains} disabled={!canEdit} onChange={(e) => setDomains(e.target.value)} placeholder="example.in" /></label>
+          <label className="ai-field"><span>{Place()} phone numbers (one per line)</span><textarea rows={3} value={phones} disabled={!canEdit} onChange={(e) => setPhones(e.target.value)} /></label>
+          <label className="ai-field"><span>{Place()} websites (one per line)</span><textarea rows={3} value={domains} disabled={!canEdit} onChange={(e) => setDomains(e.target.value)} placeholder="example.in" /></label>
         </div>
         {canEdit && <div className="ai-save"><span className="ai-muted">{m.facts?.updatedBy ? `Last changed by ${m.facts.updatedBy}` : 'Not filled in yet'}</span>
           <button type="button" className="crm-btn" disabled={busy !== null} onClick={() => void save('facts')}>{busy === 'facts' ? 'Saving…' : 'Save facts pack'}</button></div>}
       </div>
       <div className="ai-card">
         <h3>Marketing policy {settings.policy.isDefault && <span className="ai-pill is-shadow">Default</span>}</h3>
-        <p className="ai-muted">What the Compliance Guard checks every message against, on top of its fixed rules. Replace it with the hospital&apos;s own policy when you have one.</p>
+        <p className="ai-muted">What the Compliance Guard checks every message against, on top of its fixed rules. Replace it with the {place()}&apos;s own policy when you have one.</p>
         <label className="ai-field"><span>Policy</span><textarea rows={14} value={policy} disabled={!canEdit} onChange={(e) => setPolicy(e.target.value)} /></label>
         {canEdit && <div className="ai-save"><span className="ai-muted">{m.policy?.updatedBy ? `Last changed by ${m.policy.updatedBy}` : 'Using the safe default'}</span>
           <button type="button" className="crm-btn" disabled={busy !== null || policy.trim().length < 80} onClick={() => void save('policy')}>{busy === 'policy' ? 'Saving…' : 'Save policy'}</button></div>}

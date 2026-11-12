@@ -5,6 +5,7 @@ import { CheckCircle2, ChevronDown, Copy, ExternalLink, KeyRound, LogIn, Refresh
 import { crm } from '@/lib/sync/api-client';
 import { ErrorBox, friendlyError, Skeleton } from '@/components/crm/ui';
 import { when, type SourceRun } from './shared';
+import { place } from '@/lib/crm/access';
 
 interface Picked { id: string; name?: string | null; account?: string | null; login?: string | null; currency?: string | null }
 interface Data {
@@ -122,18 +123,18 @@ export function GoogleSetup({ onSaved, toast }: { onSaved: () => void; toast: (m
   return (
     <div className="gg-setup">
       <section className="crm-card so-card">
-        <p style={{ margin: 0 }}><strong>NexMarket reads the hospital&apos;s Google accounts directly.</strong> No Windsor.ai or other paid connector: Google&apos;s own APIs are free for this use. Set it up once, with the hospital&apos;s Google account (not a staff member&apos;s personal one), and the numbers come in every morning.</p>
+        <p style={{ margin: 0 }}><strong>NexMarket reads the {place()}&apos;s Google accounts directly.</strong> No Windsor.ai or other paid connector: Google&apos;s own APIs are free for this use. Set it up once, with the {place()}&apos;s Google account (not a staff member&apos;s personal one), and the numbers come in every morning.</p>
       </section>
 
       {/* Step 1 */}
       <section className="crm-card so-card">
-        <h2 className="crm-h2 gg-step"><span className={`gg-n${data.hasClient ? ' is-done' : ''}`}>{data.hasClient ? <CheckCircle2 size={16} aria-hidden /> : 1}</span> The hospital&apos;s Google Cloud key</h2>
+        <h2 className="crm-h2 gg-step"><span className={`gg-n${data.hasClient ? ' is-done' : ''}`}>{data.hasClient ? <CheckCircle2 size={16} aria-hidden /> : 1}</span> The {place()}&apos;s Google Cloud key</h2>
         <button type="button" className="wa-link gg-guide-btn" aria-expanded={guide} onClick={() => setGuide((g) => !g)}>How to make it (about 15 minutes, once) <ChevronDown size={14} aria-hidden style={{ transform: guide ? 'rotate(180deg)' : undefined }} /></button>
         {guide && (
           <ol className="gg-guide">
-            <li>Signed in as the hospital&apos;s Google account, open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noreferrer">Google Cloud <ExternalLink size={12} aria-hidden /></a> and create a project called <em>NexMarket</em>.</li>
+            <li>Signed in as the {place()}&apos;s Google account, open <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noreferrer">Google Cloud <ExternalLink size={12} aria-hidden /></a> and create a project called <em>NexMarket</em>.</li>
             <li>In <strong>APIs &amp; Services → Library</strong>, turn on each of these: <span className="gg-apis">{APIS.map((a) => <code key={a}>{a}</code>)}</span></li>
-            <li>In <strong>Google Auth Platform → Branding / Audience</strong>: app name <em>NexMarket</em>, the hospital&apos;s email. Audience: <strong>Internal</strong> if the hospital uses Google Workspace; otherwise <strong>External</strong> and press <strong>Publish app</strong> (&ldquo;In production&rdquo;). In testing mode Google cuts the connection every 7 days. Google will show an &ldquo;unverified app&rdquo; notice when you sign in; that is expected for the hospital&apos;s own private tool.</li>
+            <li>In <strong>Google Auth Platform → Branding / Audience</strong>: app name <em>NexMarket</em>, the {place()}&apos;s email. Audience: <strong>Internal</strong> if the {place()} uses Google Workspace; otherwise <strong>External</strong> and press <strong>Publish app</strong> (&ldquo;In production&rdquo;). In testing mode Google cuts the connection every 7 days. Google will show an &ldquo;unverified app&rdquo; notice when you sign in; that is expected for the {place()}&apos;s own private tool.</li>
             <li>In <strong>Clients → Create client</strong>: type <strong>Web application</strong>. Under <em>Authorised redirect URIs</em> add exactly:
               <span className="gg-copy"><code>{data.redirectUri}</code><button type="button" className="crm-btn is-secondary is-sm" onClick={() => void copy(data.redirectUri)}><Copy size={13} aria-hidden /> Copy</button></span>
               Create, then copy the <strong>Client ID</strong> and <strong>Client secret</strong> into the boxes below.</li>
@@ -149,7 +150,7 @@ export function GoogleSetup({ onSaved, toast }: { onSaved: () => void; toast: (m
             <input className="crm-input" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={data.clientSecret ? 'Leave empty to keep the saved one' : 'GOCSPX-…'} autoComplete="new-password" spellCheck={false} />
           </label>
           <label className="crm-field">Google Ads developer token <span className="crm-sub">(optional){data.adsDeveloperToken ? ` · saved ${data.adsDeveloperToken}` : ''}</span>
-            <input className="crm-input" type="password" value={devToken} onChange={(e) => setDevToken(e.target.value)} placeholder={data.adsDeveloperToken ? 'Leave empty to keep the saved one' : 'Only if the hospital runs Google ads'} autoComplete="new-password" spellCheck={false} />
+            <input className="crm-input" type="password" value={devToken} onChange={(e) => setDevToken(e.target.value)} placeholder={data.adsDeveloperToken ? 'Leave empty to keep the saved one' : `Only if the ${place()} runs Google ads`} autoComplete="new-password" spellCheck={false} />
           </label>
           <label className="crm-field">Google Ads API version
             <input className="crm-input" value={adsVersion} onChange={(e) => setAdsVersion(e.target.value)} style={{ maxWidth: 120 }} />
@@ -161,10 +162,10 @@ export function GoogleSetup({ onSaved, toast }: { onSaved: () => void; toast: (m
 
       {/* Step 2 */}
       <section className="crm-card so-card">
-        <h2 className="crm-h2 gg-step"><span className={`gg-n${data.connected ? ' is-done' : ''}`}>{data.connected ? <CheckCircle2 size={16} aria-hidden /> : 2}</span> Sign in with the hospital&apos;s Google account</h2>
+        <h2 className="crm-h2 gg-step"><span className={`gg-n${data.connected ? ' is-done' : ''}`}>{data.connected ? <CheckCircle2 size={16} aria-hidden /> : 2}</span> Sign in with the {place()}&apos;s Google account</h2>
         {data.connected ? (
           <>
-            <p style={{ margin: 0 }}>Connected as <strong>{data.email ?? 'the hospital’s Google account'}</strong>{data.connectedAt ? ` since ${when(data.connectedAt)}` : ''}.</p>
+            <p style={{ margin: 0 }}>Connected as <strong>{data.email ?? `the ${place()}’s Google account`}</strong>{data.connectedAt ? ` since ${when(data.connectedAt)}` : ''}.</p>
             {data.missingScopes.length > 0 && (
               <div className="ld-banner"><span><strong>Some permissions were left unticked on Google&apos;s screen:</strong> {data.missingScopes.join('; ')}. Connect again and tick every box.</span></div>
             )}
@@ -175,7 +176,7 @@ export function GoogleSetup({ onSaved, toast }: { onSaved: () => void; toast: (m
           </>
         ) : (
           <>
-            <p className="crm-sub" style={{ margin: 0 }}>Google will ask the hospital&apos;s account to allow NexMarket to read:</p>
+            <p className="crm-sub" style={{ margin: 0 }}>Google will ask the {place()}&apos;s account to allow NexMarket to read:</p>
             <ul className="gg-scopes">{data.scopes.map((s) => <li key={s.scope}>{s.for}</li>)}</ul>
             <button type="button" className="crm-btn is-sm" style={{ alignSelf: 'flex-start' }} disabled={!data.hasClient || connecting} onClick={() => void connect()}><LogIn size={14} aria-hidden /> {connecting ? 'Opening Google…' : 'Sign in with Google'}</button>
             {!data.hasClient && <span className="crm-sub">Save the client ID and secret first.</span>}

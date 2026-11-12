@@ -8,6 +8,7 @@ import { useContact, usePanchayats, useReferrals, useActiveVisit, db, useContact
 import { addToOutbox } from '@/lib/sync/outbox';
 import { compressImage, compressDocumentImage } from '@/lib/image/compressImage';
 import type { ReferralStatus, LocalReferral, ContactRole, LocalContactDocument } from '@/lib/db/schema';
+import { Place } from '@/lib/crm/access';
 
 const STATUS_LABELS: Record<ReferralStatus, { label: string; badgeClass: string; icon: string }> = {
   pending: { label: 'Pending Review', badgeClass: 'badge-pending', icon: '⏳' },
@@ -246,7 +247,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '0.75rem' }}>
             <input value={editName} onChange={e => setEditName(e.target.value)} className="field-input" placeholder="Name" />
             <input value={editPhone} onChange={e => setEditPhone(e.target.value)} className="field-input" placeholder="Phone (10 digits)" type="tel" maxLength={10} />
-            <select value={editRole} onChange={e => setEditRole(e.target.value as any)} className="field-input">
+            <select value={editRole} onChange={e => setEditRole(e.target.value as ContactRole)} className="field-input">
               <option value="asha_worker">ASHA Worker</option>
               <option value="rmp_doctor">RMP Doctor</option>
               <option value="ward_member">Ward Member</option>
@@ -256,7 +257,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
               <option value="lab">Lab/Pathology</option>
               <option value="nursing_home">Nursing Home</option>
               <option value="independent_doctor">Independent Doctor</option>
-              <option value="hospital">Hospital</option>
+              <option value="hospital">{Place()}</option>
               <option value="other">Other</option>
             </select>
             <select value={editPanchayatId} onChange={e => setEditPanchayatId(e.target.value)} className="field-input">
@@ -361,7 +362,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <select 
                     value={newStatus} 
-                    onChange={e => setNewStatus(e.target.value as any)}
+                    onChange={e => setNewStatus(e.target.value as 'Lead' | 'Contacted' | 'Interested' | 'Converted' | 'Rejected')}
                     style={{ padding: '0.2rem', borderRadius: '4px', border: '1px solid #cbd5e1' }}
                   >
                     <option value="Lead">Lead</option>

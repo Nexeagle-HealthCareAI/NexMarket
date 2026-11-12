@@ -21,7 +21,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { useTranslations } from '@/i18n/I18nProvider';
 
-const navItems = (t: any) => [
+const navItems = (t: Record<string, string>) => [
   {
     href: '/home',
     label: t.navHome,
@@ -100,12 +100,13 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
-    setIsOnline(navigator.onLine);
+    const first = setTimeout(() => setIsOnline(navigator.onLine), 0);
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
+      clearTimeout(first);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
@@ -183,7 +184,8 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
 
   // Close drawer on path change
   useEffect(() => {
-    setIsDrawerOpen(false);
+    const t = setTimeout(() => setIsDrawerOpen(false), 0);
+    return () => clearTimeout(t);
   }, [pathname]);
 
   // Before hydration finishes, agentId/name/role are all momentarily null even
@@ -382,7 +384,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem', padding: '0 0.5rem', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <div>
-                <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.02em' }}>NexEagle</div>
+                <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#0f172a', letterSpacing: '-0.02em' }}>NexMarket</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--color-primary-600)', fontWeight: 600 }}>{t.outreachPortal}</div>
               </div>
             </div>

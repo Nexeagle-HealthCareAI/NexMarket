@@ -6,7 +6,7 @@ using System.Threading;
 namespace SeemanchalOutreach.Application.Interfaces
 {
     /// <summary>One organisation (a hospital, lab, pharmacy… with its branches). Each has its own database.</summary>
-    public sealed record OrgInfo(string Key, string Name, string? Database);
+    public sealed record OrgInfo(string Key, string Name, string? Database, string? Kinds = null);
 
     /// <summary>
     /// Which organisation the current piece of work belongs to. A web request sets it from the signed-in person's token;
@@ -32,6 +32,54 @@ namespace SeemanchalOutreach.Application.Interfaces
             public Leave(OrgInfo? before) { _before = before; }
             public void Dispose() { if (_done) return; _done = true; _current.Value = _before; }
         }
+    }
+
+    /// <summary>
+    /// Wording that names the organisation. The first organisation keeps the exact words it always had; every other
+    /// organisation gets its own name in their place.
+    /// </summary>
+    public static class OrgText
+    {
+        /// <summary>The first organisation's full name, unless the server sets Platform:DefaultOrgName.</summary>
+        public const string FirstName = "Glisan Akbari SuperSpeciality Hospital";
+
+        public static bool IsFirst => OrgScope.Current?.Database == null;
+
+        /// <summary>The organisation's name as people know it.</summary>
+        public static string Name => OrgScope.Current?.Name ?? FirstName;
+
+        /// <summary>The first organisation's own wording, or this organisation's name.</summary>
+        public static string For(string firstOrgWording) => IsFirst ? firstOrgWording : OrgScope.Current!.Name;
+
+        /// <summary>
+        /// The everyday word for this kind of organisation: "hospital", "clinic", "lab"… from what was ticked at sign-up
+        /// (comma-separated). A hospital with a lab and a pharmacy is a hospital; several kinds with no hospital is a "centre".
+        /// </summary>
+        public static string PlaceOf(string? kinds)
+        {
+            var list = (kinds ?? "").Split(',', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries)
+                .Select(k => k.ToLowerInvariant()).Distinct().ToList();
+            if (list.Count == 0 || list.Contains("hospital")) return "hospital";
+            if (list.Count > 1) return "centre";
+            return list[0] switch
+            {
+                "clinic" => "clinic", "diagnostic" => "diagnostic centre", "lab" => "lab",
+                "pharmacy" => "pharmacy", "dialysis" => "dialysis centre", _ => "centre",
+            };
+        }
+
+        public static string Kinds => OrgScope.Current?.Kinds ?? "hospital";
+        public static string Place => PlaceOf(OrgScope.Current?.Kinds);
+
+        /// <summary>
+        /// One sentence for the AI helpers when the organisation is not a hospital, so they use its own word.
+        /// Nothing for a hospital.
+        /// </summary>
+        public static string KindNote => Place == "hospital" ? ""
+            : $" This organisation is a {Place}, not a hospital: wherever these instructions say \"hospital\", read \"the {Place}\", and use that word in your answers.";
+
+        /// <summary>Words that only fit the first organisation (its region, its districts); nothing for the others.</summary>
+        public static string OnlyFirst(string firstOrgWording) => IsFirst ? firstOrgWording : "";
     }
 
     public static class OrgNames

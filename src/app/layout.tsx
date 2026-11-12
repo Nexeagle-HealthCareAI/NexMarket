@@ -7,9 +7,9 @@ import { I18nProvider } from '@/i18n/I18nProvider';
 import { Providers } from '@/components/Providers';
 
 export const metadata: Metadata = {
-  title: 'NexEagle | Glisan Akbari SuperSpeciality Hospital',
+  title: 'NexEagle | Healthcare outreach and CRM',
   description:
-    'NexEagle hospital marketing CRM and field agent platform for Glisan Akbari SuperSpeciality Hospital.',
+    'NexEagle hospital marketing CRM and field agent platform for hospitals, clinics, labs and pharmacies.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

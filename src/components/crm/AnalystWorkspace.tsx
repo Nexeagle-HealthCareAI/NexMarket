@@ -5,6 +5,7 @@ import { AtSign, BarChart3, Bot, ClipboardList, Globe, MessageCircle, History, I
 import { crm } from '@/lib/sync/api-client';
 import { ErrorBox, fmt, Skeleton, useLoader } from '@/components/crm/ui';
 import AnalystPanel, { type AnalystView } from '@/components/crm/AnalystPanel';
+import { place } from '@/lib/crm/access';
 
 interface AreaRow {
   key: string; label: string; autoEveryDays: number; latestAt?: string | null; health?: string | null; summary?: string | null;
@@ -23,7 +24,7 @@ const INTRO: Record<string, string> = {
   surveys: 'What the community survey says each area needs, and how well the survey is being done.',
   social: 'The Facebook Page and Instagram: which posts work, lead forms, ad spend per patient and how fast messages are answered.',
   whatsapp: 'WhatsApp: reply speed, busy hours, broadcasts that get read, opt-outs, and WhatsApp and QR-code leads that come in.',
-  google: 'How patients find the hospital on Google: listing calls and directions, search terms, website, YouTube, Google Ads and reviews, against the leads and patients they bring.',
+  google: `How patients find the ${place()} on Google: listing calls and directions, search terms, website, YouTube, Google Ads and reviews, against the leads and patients they bring.`,
 };
 
 const SUGGEST: Record<string, string[]> = {
@@ -45,7 +46,7 @@ const SUGGEST: Record<string, string[]> = {
   health: [
     'Which diseases are most common in each block, and where should the next camps go?',
     'What seasonal patterns does the disease register show?',
-    'Which hospital services would meet the biggest unmet demand?',
+    `Which ${place()} services would meet the biggest unmet demand?`,
   ],
   business: [
     'Which block lost the most admissions this month, and why?',

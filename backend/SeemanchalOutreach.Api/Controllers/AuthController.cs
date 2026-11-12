@@ -172,6 +172,9 @@ namespace SeemanchalOutreach.Api.Controllers
                 signedOutElsewhere = replaced.Count,
                 profileCompleted = agent.ProfileCompleted,
                 mustChangePassword = agent.MustChangePassword,
+                orgName = OrgText.Name,
+                orgFirst = OrgText.IsFirst,
+                orgPlace = OrgText.Place,
                 // The phone app has no cookie jar it can trust across restarts: it keeps both
                 // tokens in the device keystore and sends "Authorization: Bearer". Browsers
                 // never get them in the body.
@@ -251,6 +254,9 @@ namespace SeemanchalOutreach.Api.Controllers
                 block = agent.Block,
                 profileCompleted = agent.ProfileCompleted,
                 mustChangePassword = agent.MustChangePassword,
+                orgName = OrgText.Name,
+                orgFirst = OrgText.IsFirst,
+                orgPlace = OrgText.Place,
             });
         }
 

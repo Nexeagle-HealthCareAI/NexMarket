@@ -51,7 +51,8 @@ export default function ReportsClient() {
   }, [agentId, districtFilter]);
 
   useEffect(() => {
-    void load();
+    const t = setTimeout(() => void load(), 0);
+    return () => clearTimeout(t);
   }, [load]);
 
   // Data for Funnel Chart
@@ -191,7 +192,7 @@ export default function ReportsClient() {
 
             {/* Time-Series Trends */}
             <div className="card" style={{ padding: '1.25rem', gridColumn: '1 / -1' }}>
-              <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '1rem' }}>📈 Today's Hourly Trends (System-wide)</h3>
+              <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '1rem' }}>📈 Today&rsquo;s Hourly Trends (System-wide)</h3>
               {!syncAnalytics || syncAnalytics.hourlyBreakdown.length === 0 ? (
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '2rem' }}>
                   No hourly data available yet.

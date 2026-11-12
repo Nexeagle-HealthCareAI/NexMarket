@@ -26,6 +26,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<Microsoft.Extensions.Caching.Memory.IMemoryCache>(_ =>
     new OrgMemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())));
 builder.Services.AddSingleton<OrgDirectory>();
+builder.Services.AddSingleton<EmailSender>();
+builder.Services.AddScoped<CodeSender>();
 builder.Services.AddScoped<IOrgDatabase, OrgDatabaseSetup>();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -312,5 +314,10 @@ app.MapHub<LiveHub>("/hubs/live").RequireAuthorization();
 // Deploy-pipeline health check — intentionally anonymous, no DB round-trip
 // (keep it cheap so it can't false-negative on a slow query under load).
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
+
+// For monitoring: also checks that the database answers. 503 when it does not, so an alert can fire.
+app.MapGet("/health/ready", async (MarketingDbContext db, CancellationToken ct) =>
+    await db.Database.CanConnectAsync(ct) ? Results.Ok(new { status = "ok", database = "ok" }) : Results.Json(new { status = "down", database = "unreachable" }, statusCode: 503))
+    .AllowAnonymous();
 
 app.Run();

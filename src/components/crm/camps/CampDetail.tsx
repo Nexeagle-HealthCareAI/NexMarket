@@ -16,6 +16,7 @@ import {
   CAMP_STATUS, campDate, daysTo, PATIENT_STATUS, pct, PHASES, SOURCE_LABEL,
   type CampDetail as Detail, type CampOptions, type CampPatient, type ChecklistItem, type CountRow,
 } from './shared';
+import { place } from '@/lib/crm/access';
 
 interface PatientsRes { items: CampPatient[]; total: number; counts: Record<string, number>; referred: number }
 
@@ -64,9 +65,9 @@ export function CampDetail({ id, options, canEdit, onBack, toast }: { id: string
       <section className="ld-kpis" aria-label="Camp numbers">
         <Kpi label="Booked / registered" value={s.booked} sub={`${pct(s.booked, c.capacity)}% of ${c.capacity} slots · ${s.prebooked} pre-booked`} />
         <Kpi label="Seen" value={s.attended} sub={`Target ${c.targetRegistrations}${s.noShow ? ` · ${s.noShow} didn't come` : ''}`} tone={s.attended >= c.targetRegistrations && s.attended > 0 ? 'ok' : undefined} />
-        <Kpi label="Sent to hospital" value={s.referred} sub={`Target ${c.targetReferrals} · ${pct(s.referred, s.attended)}% of seen`} />
-        <Kpi label="Came to hospital" value={s.arrived} sub={`${pct(s.arrived, s.referred)}% of referred`} tone={s.arrived > 0 ? 'ok' : undefined} />
-        <Kpi label="Spent" value={rupees(c.spent)} sub={s.costPerArrival ? `${rupees(s.costPerArrival)} per hospital visit` : c.budget ? `Budget ${rupees(c.budget)}` : undefined} />
+        <Kpi label={`Sent to ${place()}`} value={s.referred} sub={`Target ${c.targetReferrals} · ${pct(s.referred, s.attended)}% of seen`} />
+        <Kpi label={`Came to ${place()}`} value={s.arrived} sub={`${pct(s.arrived, s.referred)}% of referred`} tone={s.arrived > 0 ? 'ok' : undefined} />
+        <Kpi label="Spent" value={rupees(c.spent)} sub={s.costPerArrival ? `${rupees(s.costPerArrival)} per ${place()} visit` : c.budget ? `Budget ${rupees(c.budget)}` : undefined} />
       </section>
 
       <PageTabs label="Camp views" value={tab} onChange={setTab} tabs={[
@@ -108,7 +109,7 @@ function Checklist({ campId, items, canEdit, onSaved, toast }: { campId: string;
   return (
     <div className="cp-plan">
       <div className="cp-progress"><span style={{ width: `${pct(done, list.length)}%` }} /></div>
-      <span className="crm-sub" style={{ marginTop: -6 }}>{done} of {list.length} done. The steps that bring people in and turn them into hospital visits.</span>
+      <span className="crm-sub" style={{ marginTop: -6 }}>{done} of {list.length} done. The steps that bring people in and turn them into {place()} visits.</span>
       <div className="cp-phases">
         {PHASES.map((ph) => {
           const rows = list.filter((i) => i.phase === ph.key);
@@ -140,7 +141,7 @@ function Checklist({ campId, items, canEdit, onSaved, toast }: { campId: string;
   );
 }
 
-const FILTERS = [{ key: '', label: 'Everyone' }, { key: 'booked', label: 'Booked' }, { key: 'attended', label: 'Seen' }, { key: 'referred', label: 'To hospital' }, { key: 'no_show', label: "Didn't come" }] as const;
+const FILTERS = [{ key: '', label: 'Everyone' }, { key: 'booked', label: 'Booked' }, { key: 'attended', label: 'Seen' }, { key: 'referred', label: `To ${place()}` }, { key: 'no_show', label: "Didn't come" }] as const;
 
 function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; options: CampOptions | null; canEdit: boolean; onChanged: () => void; toast: (m: string) => void }) {
   const [filter, setFilter] = useState('');

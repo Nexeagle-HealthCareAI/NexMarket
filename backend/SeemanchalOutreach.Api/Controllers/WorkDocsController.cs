@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
 
@@ -32,6 +33,7 @@ namespace SeemanchalOutreach.Api.Controllers
     [ApiController]
     [Route("api/v1/work/docs")]
     [Authorize]
+    [PageAccess(Pages.Work)]
     public class WorkDocsController : ControllerBase
     {
         private static readonly string[] Kinds = { "plan", "doc", "notes" };

@@ -7,6 +7,7 @@ import {
 import { crm } from '@/lib/sync/api-client';
 import { ErrorBox, friendlyError, Pill, Skeleton } from '@/components/crm/ui';
 import { when } from './shared';
+import { place } from '@/lib/crm/access';
 
 interface SecretInfo { set: boolean; hint?: string | null; unreadable: boolean }
 interface Data {
@@ -119,7 +120,7 @@ export function SocialSetup({ onSaved, toast }: { onSaved: () => void; toast: (m
       <details className="crm-card wa-guide">
         <summary><ShieldCheck size={18} aria-hidden /> <strong>Before you start (about 30 minutes, once)</strong><ChevronDown size={16} aria-hidden className="wa-chev" /></summary>
         <ol>
-          <li>The hospital&apos;s Facebook Page and Instagram professional account must be in the same <a href="https://business.facebook.com/settings" target="_blank" rel="noreferrer">Meta Business</a> account, and the Instagram account linked to the Page (Page settings → Linked accounts).</li>
+          <li>The {place()}&apos;s Facebook Page and Instagram professional account must be in the same <a href="https://business.facebook.com/settings" target="_blank" rel="noreferrer">Meta Business</a> account, and the Instagram account linked to the Page (Page settings → Linked accounts).</li>
           <li>At <a href="https://developers.facebook.com/apps" target="_blank" rel="noreferrer">developers.facebook.com</a>, use the same Business app as WhatsApp (or create one) and add <em>Webhooks</em>, <em>Messenger</em> and <em>Instagram</em>. Copy the App ID and App secret (App settings → Basic) into step 1.</li>
           <li>In Business settings → <em>System users</em>, give the system user the Page, the Instagram account and the ad account (full control), then <em>Generate token</em> for this app with the permissions listed in step 1, set to never expire.</li>
           <li>Page settings → <em>Leads access</em>: allow this app (and the CRM&apos;s system user) to receive leads.</li>
@@ -243,7 +244,7 @@ export function SocialSetup({ onSaved, toast }: { onSaved: () => void; toast: (m
           <span className="so-auto-icon" aria-hidden><MessageCircle size={18} /></span>
           <div>
             <strong>Instant WhatsApp thank-you</strong>
-            <p className="crm-sub">Every new form lead gets a WhatsApp message within seconds, so they know the hospital will call and can reply straight away.</p>
+            <p className="crm-sub">Every new form lead gets a WhatsApp message within seconds, so they know the {place()} will call and can reply straight away.</p>
             {data.instantWhatsApp.template
               ? <span className="wa-ok"><CheckCircle2 size={15} aria-hidden /> On · sends <code>{data.instantWhatsApp.template}</code></span>
               : <span className="wa-wait"><AlertTriangle size={15} aria-hidden /> Off. In <a href="/admin/whatsapp?tab=setup">WhatsApp → Setup</a>, pick an approved template for &ldquo;Facebook/Instagram form: instant thank-you&rdquo; (the NexEagle set has <code>nx_form_thanks</code>).</span>}

@@ -88,7 +88,8 @@ export default function MyTaskPage() {
   // Fix Ghost Selection Bug
   useEffect(() => {
     if (selectedPanchayatId && !visible.find((p) => p.panchayatId === selectedPanchayatId)) {
-      setSelectedPanchayatId(null);
+      const t = setTimeout(() => setSelectedPanchayatId(null), 0);
+      return () => clearTimeout(t);
     }
   }, [visible, selectedPanchayatId]);
 

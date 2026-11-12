@@ -157,7 +157,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
         })
       );
 
-      const surveyRecord: any = {
+      const surveyRecord: Omit<import('@/lib/db/schema').LocalSurveyResponse, 'localId'> = {
         clientId,
         deviceId,
         agentId,
@@ -238,7 +238,7 @@ export default function SurveyClient({ contactId: initialContactId, onClose }: {
         <span style={{ fontSize: '3rem', marginBottom: '1rem' }}>📋</span>
         <h2 style={{ color: 'white', marginBottom: '0.5rem' }}>Survey not yet synced</h2>
         <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '2rem', maxWidth: 280 }}>
-          Questions haven't synced to this device yet. Make sure you have internet access, then tap <strong>Retry</strong>.
+          Questions haven&rsquo;t synced to this device yet. Make sure you have internet access, then tap <strong>Retry</strong>.
         </p>
         <button
           onClick={() => { import('@/lib/sync/seeder').then(m => m.refreshReferenceData()); }}

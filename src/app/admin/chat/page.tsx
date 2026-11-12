@@ -11,7 +11,7 @@ import { crm } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
 import { EMOJI } from '@/lib/crm/emoji';
 import { lastSeenText, liveText, type Live } from '@/lib/crm/presence';
-import { canAssignBlocks, useAccess } from '@/lib/crm/access';
+import { canAssignBlocks, useAccess, place } from '@/lib/crm/access';
 import { digest, loadChatAi, needsEnglish, saveChatAi, suggestReplies, summarise, taskIdea, translateMessages, useChatAi, type ChatSummary, type Digest, type TaskIdea } from '@/lib/crm/chatAi';
 import { callNoteText, inCallCount, joinCall, live as callLive, startCall, useCalls, type Call, type CallNote } from '@/lib/crm/calls';
 import { contactTypeLabel, ErrorBox, friendlyError, initials, Modal, PageHead, Skeleton, useToast } from '@/components/crm/ui';
@@ -284,7 +284,7 @@ function ChatPage() {
             <div className="ch-empty">
               <Lock size={22} aria-hidden />
               <strong>Pick a conversation</strong>
-              <span>Messages and files are private to the people in each chat and are kept on the hospital&apos;s server.</span>
+              <span>Messages and files are private to the people in each chat and are kept on the {place()}&apos;s server.</span>
               <span className="ch-tips">Drop photos straight into a chat · type <kbd>/</kbd> for quick replies · hover a message to react, pin or make it a task</span>
             </div>
           )}

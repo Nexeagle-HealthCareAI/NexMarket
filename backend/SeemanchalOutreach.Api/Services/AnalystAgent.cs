@@ -529,9 +529,9 @@ namespace SeemanchalOutreach.Api.Services
         public bool Configured => _groq.Configured;
         public string Model => _groq.Model;
 
-        private const string Context =
-            "You are the business analyst for Glisan Akbari SuperSpeciality Hospital's outreach programme in Seemanchal, Bihar " +
-            "(Kishanganj, Purnia, Araria and Katihar districts). Field agents visit panchayats and sign up partners: ASHA workers, " +
+        private static string Context =>
+            $"You are the business analyst for {OrgText.Name}'s outreach programme{OrgText.OnlyFirst(" in Seemanchal, Bihar (Kishanganj, Purnia, Araria and Katihar districts)")}.{OrgText.KindNote} " +
+            "Field agents visit panchayats and sign up partners: ASHA workers, " +
             "RMPs (rural medical practitioners), independent doctors, chemists, nursing homes, mukhiyas and ward members. " +
             "Partners refer patients to the hospital. A referral moves: referred → arrived → seen in OPD → admitted → procedure → discharged, " +
             "or 'lost' if the patient never came. The hospital pays some partners (payouts). Agents also ask every new partner six survey " +

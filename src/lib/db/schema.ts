@@ -235,6 +235,7 @@ export interface SyncState {
 
 export interface LocalDraft {
   id: string;            // unique identifier (e.g. 'new-contact')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- each form saves its own shape here
   data: any;             // the full form object, including base64 images
   updatedAt: string;     // ISO timestamp
 }
@@ -245,6 +246,7 @@ export interface LocalNotification {
   id: string;
   title: string;
   body: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- whatever the notification carried
   data?: any;            // Optional extra data (e.g., target clientId)
   isRead: boolean;
   timestamp: string;     // ISO timestamp

@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, Bot, Inbox, ListChecks, Megaphone, Pause, Play, ScrollText, Settings2, Wallet, Workflow } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { canView, useAccess } from '@/lib/crm/access';
+import { canView, useAccess, place } from '@/lib/crm/access';
 import { friendlyError, PageHead, Pill, Skeleton, useToast } from '@/components/crm/ui';
 import { WaInbox } from '@/components/crm/wa/WaInbox';
 import { WaLog } from '@/components/crm/wa/WaLog';
@@ -140,11 +140,11 @@ function WhatsAppHub() {
       {tab === 'billing' && status?.canManage && <WaBilling isAdmin={!!status.isAdmin} toast={showToast} />}
       {tab === 'ai' && (
         <AnalystPanel scope="whatsapp"
-          intro="The analyst reads WhatsApp as counts only (no phone numbers or names): people writing in, how fast staff reply, busy hours, opt-outs, broadcasts and how many WhatsApp and QR-code leads came to the hospital, and turns them into actions for the desk and marketing. It writes a new briefing every week."
+          intro={`The analyst reads WhatsApp as counts only (no phone numbers or names): people writing in, how fast staff reply, busy hours, opt-outs, broadcasts and how many WhatsApp and QR-code leads came to the ${place()}, and turns them into actions for the desk and marketing. It writes a new briefing every week.`}
           suggestions={[
             'How fast does the desk reply on WhatsApp, and at which hours do we need more people?',
             'Which broadcasts get read and replied to, and which should we stop?',
-            'Where do WhatsApp leads stall before coming to the hospital?',
+            `Where do WhatsApp leads stall before coming to the ${place()}?`,
             'Are opt-outs going up, and what is causing them?',
           ]} />
       )}

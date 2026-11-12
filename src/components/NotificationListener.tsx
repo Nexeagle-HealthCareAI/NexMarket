@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAgentStore } from '@/store/agent-store';
 import { getPushToken } from '@/lib/sync/api-client';
 
@@ -21,16 +21,18 @@ function urlBase64ToUint8Array(base64String: string) {
 
 export default function NotificationListener() {
   const [permission, setPermission] = useState<NotificationPermission>('default');
-  const agentId = useAgentStore((state: any) => state.agentId);
+  const agentId = useAgentStore((state) => state.agentId);
 
+  // The newest subscribe function, so the effect below can call it without being re-run for it.
+  const subscribeRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
+    let first: ReturnType<typeof setTimeout> | null = null;
     if ('Notification' in window) {
-      setPermission(Notification.permission);
-      
-      // Auto-subscribe if permission was already granted
-      if (Notification.permission === 'granted' && agentId) {
-        subscribeToPush();
-      }
+      first = setTimeout(() => {
+        setPermission(Notification.permission);
+        // Auto-subscribe if permission was already granted
+        if (Notification.permission === 'granted' && agentId) void subscribeRef.current();
+      }, 0);
     }
 
     const channel = new BroadcastChannel('nexmarket-notifications');
@@ -41,7 +43,7 @@ export default function NotificationListener() {
       }
     };
 
-    return () => channel.close();
+    return () => { if (first) clearTimeout(first); channel.close(); };
   }, [agentId]);
 
   const subscribeToPush = async () => {
@@ -81,6 +83,7 @@ export default function NotificationListener() {
       console.error('Failed to subscribe to web push:', err);
     }
   };
+  useEffect(() => { subscribeRef.current = subscribeToPush; });
 
   const requestPermission = async () => {
     if (!('Notification' in window)) return;

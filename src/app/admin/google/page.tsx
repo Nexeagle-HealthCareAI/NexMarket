@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Bot, Globe, LayoutDashboard, Search, Settings2, Star } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit, canView, useAccess } from '@/lib/crm/access';
+import { canEdit, canView, useAccess, place } from '@/lib/crm/access';
 import AnalystPanel from '@/components/crm/AnalystPanel';
 import { PageHead, Pill, Skeleton, useToast } from '@/components/crm/ui';
 import { DateRangeBar, type DateRangeKey, type DateRangeValue } from '@/components/crm/DateRange';
@@ -85,7 +85,7 @@ function GooglePage() {
 
   return (
     <main className="crm-page wh-page">
-      <PageHead title="Google" sub="The hospital on Google Search and Maps, its website, YouTube and Google Ads, read directly from Google."
+      <PageHead title="Google" sub={`The ${place()} on Google Search and Maps, its website, YouTube and Google Ads, read directly from Google.`}
         badge={status ? (status.connected ? <Pill tone="ok" dot>Connected</Pill> : <Pill tone="warn" dot>Not connected</Pill>) : undefined} />
 
       <div className="wh-top">

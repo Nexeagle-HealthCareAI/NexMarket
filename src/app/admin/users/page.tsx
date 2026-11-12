@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Copy, History, KeyRound, Pencil, Laptop, Lock, MessageCircle, MessageSquare, Plus, Send, Smartphone, Tablet, UserCog, UserPlus, X } from 'lucide-react';
 import Link from 'next/link';
 import { crm } from '@/lib/sync/api-client';
-import { useAccess, type PageKey } from '@/lib/crm/access';
+import { useAccess, type PageKey, place } from '@/lib/crm/access';
 import { Empty, ErrorBox, fmt, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { Pager, usePaged } from '@/components/crm/Pager';
 import { EditPerson, PhotoPicker } from '@/components/crm/EditPerson';
@@ -19,7 +19,7 @@ const DEV = { desktop: { label: 'Laptop', icon: Laptop }, tablet: { label: 'Tabl
 const PAGE_LABELS: Record<PageKey, string> = {
   dashboard: 'Command centre', calls: 'Daily calls', desk: 'Referral desk', pipeline: 'Referral pipeline', partners: 'Partners',
   whatsapp: 'WhatsApp broadcasts', field: 'Field force & map', payments: 'Payments', targets: 'Targets', analytics: 'Analytics & surveys',
-  camps: 'Health camps', social: 'Facebook & Instagram', departments: 'Departments & doctors', users: 'Users & roles', hoardings: 'Hoardings & rent',
+  camps: 'Health camps', social: 'Facebook & Instagram', departments: 'Departments & doctors', users: 'Users & roles', hoardings: 'Hoardings & rent', work: 'Team board & plans',
 };
 const HIDDEN_PAGES: PageKey[] = ['targets']; // not built yet
 
@@ -161,7 +161,7 @@ export default function UsersPage() {
                 <RoleCard key={r.role} short={initials(r.label)} name={r.label} tone={ROLE_TONE[r.role] ?? 'accent'} members={membersOf(r.role)}
                   desc={r.role === 'Admin' ? 'Full control of every page, setting and user. Approves payments.'
                     : r.role === 'MarketingManager' ? 'Runs the field team, calls, broadcasts and targets.'
-                    : 'Front desk and hospital staff: referral arrivals, doctor lists.'}
+                    : `Front desk and ${place()} staff: referral arrivals, doctor lists.`}
                   where={r.role === 'Admin' ? `All ${pages.length} pages` : `${count} of ${pages.length} pages`}
                   onView={() => showPeople(r.role, 'dashboard')}
                   action={isAdmin ? { label: 'Invite', icon: UserPlus, onClick: () => setInviting({ kind: 'dashboard', role: r.role }) } : undefined} />

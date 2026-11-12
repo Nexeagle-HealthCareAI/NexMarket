@@ -10,6 +10,7 @@ import { useLiveEvents, useNow } from '@/lib/crm/live';
 import { Pager } from '@/components/crm/Pager';
 import { Empty, ErrorBox, friendlyError, initials, Pill, Skeleton } from '@/components/crm/ui';
 import { dayLabel, istDay, istTime, showPhone, sourceLabel, TemplateSender, when, type WaStatus } from './shared';
+import { place } from '@/lib/crm/access';
 
 interface Conv {
   phone: string; name: string; status: string; unread: number; optOut: boolean; lastMessage?: string | null; lastDirection?: string | null;
@@ -84,7 +85,7 @@ export function WaInbox({ status, selected, onSelect, onChanged, toast }: {
             })}
           </div>
           {!list ? <div style={{ padding: 12 }}><Skeleton h={320} /></div> : list.items.length === 0 ? (
-            <div style={{ padding: 16 }}><Empty title={qd ? 'No conversation matches' : 'Nothing here'}><span className="crm-sub">Messages to the hospital&apos;s WhatsApp number appear here as they arrive.</span></Empty></div>
+            <div style={{ padding: 16 }}><Empty title={qd ? 'No conversation matches' : 'Nothing here'}><span className="crm-sub">Messages to the {place()}&apos;s WhatsApp number appear here as they arrive.</span></Empty></div>
           ) : (
             <ul className="ld-rows">
               {list.items.map((c) => (
@@ -118,7 +119,7 @@ export function WaInbox({ status, selected, onSelect, onChanged, toast }: {
             <div className="ch-empty">
               <Inbox size={22} aria-hidden />
               <strong>Pick a conversation</strong>
-              <span>Every message to the hospital&apos;s WhatsApp number: patients, partners and anyone else. Reply, assign it to someone, or turn it into a lead.</span>
+              <span>Every message to the {place()}&apos;s WhatsApp number: patients, partners and anyone else. Reply, assign it to someone, or turn it into a lead.</span>
             </div>
           )}
         </section>
@@ -233,7 +234,7 @@ function Conversation({ phone, ping, status, onBack, onChanged, toast }: {
       </div>
 
       <div className="ch-body ld-body" role="log" aria-live="polite" ref={bodyRef}>
-        <div className="ch-secure"><Lock size={12} aria-hidden /> Messages with the hospital&apos;s WhatsApp number. Everyone on the desk can see this conversation.</div>
+        <div className="ch-secure"><Lock size={12} aria-hidden /> Messages with the {place()}&apos;s WhatsApp number. Everyone on the desk can see this conversation.</div>
         {rows.map((r, i) => 'day' in r ? <div key={`d${i}`} className="ch-day"><span>{dayLabel(r.day)}</span></div> : <Bubble key={r.id} m={r} />)}
       </div>
 

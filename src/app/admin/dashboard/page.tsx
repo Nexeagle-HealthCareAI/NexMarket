@@ -7,7 +7,7 @@ import {
   ArrowRight, AtSign, CalendarCheck, CheckCircle2, ChevronRight, ClipboardList, Columns3, Inbox, LayoutDashboard, MessageCircle, PhoneCall, RefreshCw, Sparkles, Star, Tent, UserPlus, Users, Wallet,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { canView, useAccess } from '@/lib/crm/access';
+import { canView, useAccess, place, hasOpd } from '@/lib/crm/access';
 import { timeAgo, useLiveEvents, useNow, type LiveEvent } from '@/lib/crm/live';
 import { Pager, usePaged } from '@/components/crm/Pager';
 import { PageTabs, usePageTab, type PageTab } from '@/components/crm/PageTabs';
@@ -63,7 +63,7 @@ const KIND_STYLE: Record<string, { tag: string; tone: string }> = {
   visit: { tag: 'VIS', tone: 'accent' },
   referral: { tag: 'REF', tone: 'warn' },
   arrived: { tag: 'ARR', tone: 'info' },
-  opd: { tag: 'OPD', tone: 'info' },
+  opd: { tag: hasOpd() ? 'OPD' : 'Seen', tone: 'info' },
   admit: { tag: 'ADM', tone: 'ok' },
   discharged: { tag: 'DIS', tone: 'ok' },
   lost: { tag: 'LOST', tone: 'neutral' },
@@ -296,8 +296,8 @@ function CommandCentre() {
               })}
               <div className="crm-sub" style={{ fontSize: 13, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
                 {referredTotal - arrivedCount > 0
-                  ? <>Biggest drop: <strong style={{ color: 'var(--text)' }}>referred → arrived ({Math.round(((referredTotal - arrivedCount) / referredTotal) * 100)}% haven&apos;t reached the hospital)</strong></>
-                  : 'Every referred patient has reached the hospital.'}
+                  ? <>Biggest drop: <strong style={{ color: 'var(--text)' }}>referred → arrived ({Math.round(((referredTotal - arrivedCount) / referredTotal) * 100)}% haven&apos;t reached the {place()})</strong></>
+                  : `Every referred patient has reached the ${place()}.`}
                 {data.lost > 0 && <> · {data.lost} did not come</>}
               </div>
             </div>
@@ -579,7 +579,7 @@ function Sources({ rows }: { rows: Overview['leads']['sources'] }) {
             <span className="cc-src-n">{r.count}</span>
           </span>
           <span className="crm-bar"><span style={{ width: `${Math.max(3, Math.round((r.count / max) * 100))}%`, background: r.source === 'field' ? 'var(--warn)' : 'var(--accent)' }} /></span>
-          <span className="cc-src-sub">{r.won} reached the hospital{r.count > 0 ? ` · ${Math.round((r.won / r.count) * 100)}%` : ''}</span>
+          <span className="cc-src-sub">{r.won} reached the {place()}{r.count > 0 ? ` · ${Math.round((r.won / r.count) * 100)}%` : ''}</span>
         </li>
       ))}
     </ul>
@@ -620,7 +620,7 @@ function LeadStats({ l }: { l: Overview['leads'] }) {
     <div className="cc-leadstats">
       <Mini value={l.month} label="new leads" />
       <Mini value={pct(l.appointments)} label="got an appointment" />
-      <Mini value={pct(l.won)} label="reached the hospital" />
+      <Mini value={pct(l.won)} label={`reached the ${place()}`} />
       <Mini value={l.medianReplyMinutes == null ? '—' : l.medianReplyMinutes < 60 ? `${l.medianReplyMinutes} min` : `${Math.round(l.medianReplyMinutes / 60)} h`} label={`typical first reply (target ${l.targetMinutes} min)`} />
       {l.lost > 0 && <span className="crm-sub" style={{ fontSize: 12, gridColumn: '1 / -1' }}>{l.lost} marked lost this month</span>}
     </div>
@@ -962,7 +962,7 @@ function UpcomingCamps({ camps }: { camps: Overview['camps'] }) {
           })}
         </ul>
       )}
-      {camps.doneThisMonth > 0 && <p className="crm-sub" style={{ margin: 0, fontSize: 12 }}>This month: {camps.doneThisMonth} held · {camps.attendedThisMonth} people seen · {camps.referredThisMonth} referred to the hospital</p>}
+      {camps.doneThisMonth > 0 && <p className="crm-sub" style={{ margin: 0, fontSize: 12 }}>This month: {camps.doneThisMonth} held · {camps.attendedThisMonth} people seen · {camps.referredThisMonth} referred to the {place()}</p>}
     </section>
   );
 }

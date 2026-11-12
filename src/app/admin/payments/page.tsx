@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Download, Plus, Search, UserRound, Wallet } from 'lucide-react';
 import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit, useAccess } from '@/lib/crm/access';
+import { canEdit, useAccess, place } from '@/lib/crm/access';
 import { Pager, usePaged } from '@/components/crm/Pager';
 import {
   contactTypeLabel, Empty, ErrorBox, fmt, friendlyError, initials, Modal, PageHead, Pill, rupees, Skeleton, useLoader, useToast,
@@ -81,7 +81,7 @@ function PartnerPaymentsView({ tab, setTab, access }: { tab: PayTab; setTab: (t:
 
   return (
     <main className="crm-page">
-      <PageHead title="Payments" sub="What the hospital owes partners for their services — approved by an admin, then marked paid with a reference.">
+      <PageHead title="Payments" sub={`What the ${place()} owes partners for their services — approved by an admin, then marked paid with a reference.`}>
         <button type="button" className="crm-btn is-secondary" onClick={() => crm.download(`/api/v1/payments/export?status=${filter}`, `partner-payments.csv`).catch((e) => showToast(friendlyError(e)))}>
           <Download size={16} aria-hidden /> Export for accounts
         </button>
@@ -170,7 +170,7 @@ function PartnerPaymentsView({ tab, setTab, access }: { tab: PayTab; setTab: (t:
 
       <p className="crm-note">
         Record payments for services partners provide (camp support, travel with patients, ambulance coordination). Indian medical ethics rules bar
-        registered doctors from taking payment for referring patients — check with the hospital&apos;s legal advisor before paying any doctor.
+        registered doctors from taking payment for referring patients — check with the {place()}&apos;s legal advisor before paying any doctor.
       </p>
 
       {adding && <AddPayment onClose={() => setAdding(false)} onSaved={() => { setAdding(false); showToast('Sent for approval.'); refresh(); }} />}
@@ -305,7 +305,7 @@ function IncentivesView({ tab, setTab }: { tab: PayTab; setTab: (t: PayTab) => v
   const s = data.data?.summary;
   return (
     <main className="crm-page">
-      <PageHead title="Payments" sub="What the hospital pays field agents for patients they bring: added by the rule below or by hand, approved by an admin, then marked paid. Agents see each one in their app." />
+      <PageHead title="Payments" sub={`What the ${place()} pays field agents for patients they bring: added by the rule below or by hand, approved by an admin, then marked paid. Agents see each one in their app.`} />
       <PayTabs tab={tab} setTab={setTab} />
       {data.error && <ErrorBox message={data.error} onRetry={data.reload} />}
       <section aria-label="Totals" className="crm-kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>

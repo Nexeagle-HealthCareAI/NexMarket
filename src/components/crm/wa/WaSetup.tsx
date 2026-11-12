@@ -6,7 +6,7 @@ import {
   AlertTriangle, CheckCircle2, ChevronDown, Copy, Eye, EyeOff, KeyRound, Link2, MessageCircle, RefreshCw, Send, ShieldCheck, Webhook, XCircle,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { useAccess } from '@/lib/crm/access';
+import { useAccess, Place, place } from '@/lib/crm/access';
 import { ErrorBox, friendlyError, Pill, Skeleton, useToast } from '@/components/crm/ui';
 
 type Source = 'crm' | 'server' | 'none';
@@ -133,9 +133,9 @@ export function WaSetup({ onSaved }: { onSaved?: () => void }) {
       <details className="crm-card wa-guide">
         <summary><ShieldCheck size={18} aria-hidden /> <strong>Before you start (about 20 minutes, once)</strong><ChevronDown size={16} aria-hidden className="wa-chev" /></summary>
         <ol>
-          <li>Open <a href="https://business.facebook.com" target="_blank" rel="noreferrer">Meta Business Suite</a> with the hospital&apos;s business account and verify the business (GST or registration certificate).</li>
+          <li>Open <a href="https://business.facebook.com" target="_blank" rel="noreferrer">Meta Business Suite</a> with the {place()}&apos;s business account and verify the business (GST or registration certificate).</li>
           <li>At <a href="https://developers.facebook.com/apps" target="_blank" rel="noreferrer">developers.facebook.com</a>, create an app of type <em>Business</em> and add the <em>WhatsApp</em> product.</li>
-          <li>In WhatsApp → <em>API setup</em>, add the hospital&apos;s phone number (one that isn&apos;t already on the WhatsApp app) and verify it by SMS. Copy the <em>Phone number ID</em> and <em>WhatsApp Business Account ID</em> into step 1.</li>
+          <li>In WhatsApp → <em>API setup</em>, add the {place()}&apos;s phone number (one that isn&apos;t already on the WhatsApp app) and verify it by SMS. Copy the <em>Phone number ID</em> and <em>WhatsApp Business Account ID</em> into step 1.</li>
           <li>In Business settings → <em>System users</em>, add a system user (Admin), give it the app and the WhatsApp account, and generate a token with <code>whatsapp_business_messaging</code> and <code>whatsapp_business_management</code>, set to never expire. Paste it as the access token.</li>
           <li>In WhatsApp Manager → <em>Message templates</em>, create the templates listed in step 3 and wait for approval (usually minutes to a day).</li>
           <li>Add a payment method in WhatsApp Manager. Meta charges per template message; replies within 24 hours of a patient&apos;s message are free.</li>
@@ -154,7 +154,7 @@ export function WaSetup({ onSaved }: { onSaved?: () => void }) {
           </Field>
           <SecretField label="Permanent access token" info={data.secrets.accessToken} value={secrets.accessToken}
             onChange={(v) => setSecrets((s) => ({ ...s, accessToken: v }))} placeholder="EAAG…" />
-          <Field label="Hospital's WhatsApp number" hint="Shown on QR posters; patients message this number" server={fromServer('displayPhone')}>
+          <Field label={`${Place()}'s WhatsApp number`} hint="Shown on QR posters; patients message this number" server={fromServer('displayPhone')}>
             <input className="crm-input" value={form.displayPhone} onChange={set('displayPhone')} inputMode="tel" placeholder="10-digit mobile" />
           </Field>
         </div>
@@ -191,14 +191,14 @@ export function WaSetup({ onSaved }: { onSaved?: () => void }) {
             <span className="wa-label">Status</span>
             {data.activity.lastInboundAt
               ? <span className="wa-ok"><CheckCircle2 size={16} aria-hidden /> Working · last message {when(data.activity.lastInboundAt)}</span>
-              : <span className="wa-wait"><Webhook size={16} aria-hidden /> Waiting for the first message. After saving in Meta, tick <em>messages</em> under Webhook fields, then send any message to the hospital number.</span>}
+              : <span className="wa-wait"><Webhook size={16} aria-hidden /> Waiting for the first message. After saving in Meta, tick <em>messages</em> under Webhook fields, then send any message to the {place()} number.</span>}
           </div>
         </div>
       </section>
 
       {/* 3. Templates */}
       <section className="crm-card wa-step">
-        <StepHead n={3} done={step3Done} title="Message templates" sub="WhatsApp only allows approved templates when the hospital writes first (broadcasts, or a follow-up after 24 hours). Pick the template for each use. Values are filled in the order shown." />
+        <StepHead n={3} done={step3Done} title="Message templates" sub={`WhatsApp only allows approved templates when the ${place()} writes first (broadcasts, or a follow-up after 24 hours). Pick the template for each use. Values are filled in the order shown.`} />
         <div className="wa-actions">
           <button type="button" className="crm-btn is-secondary" onClick={() => void loadTemplates()}><RefreshCw size={16} aria-hidden /> {templates ? 'Reload from Meta' : 'Load templates from Meta'}</button>
           {templates && <span className="crm-sub">{approved.length} approved of {templates.length}</span>}
@@ -249,9 +249,9 @@ export function WaSetup({ onSaved }: { onSaved?: () => void }) {
 
       {/* 4. Messages */}
       <section className="crm-card wa-step">
-        <StepHead n={4} done={!!form.hospitalName} title="Automatic messages and QR codes" sub="What patients see. Hindi and English together work well across Seemanchal." />
+        <StepHead n={4} done={!!form.hospitalName} title="Automatic messages and QR codes" sub="What patients see. Your patients' language and English together work well." />
         <div className="wa-grid">
-          <Field label="Hospital name" hint="Used in templates and on QR posters" server={fromServer('hospitalName')}>
+          <Field label={`${Place()} name`} hint="Used in templates and on QR posters" server={fromServer('hospitalName')}>
             <input className="crm-input" value={form.hospitalName} onChange={set('hospitalName')} />
           </Field>
           <div />

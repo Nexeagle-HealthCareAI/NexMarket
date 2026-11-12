@@ -11,7 +11,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
 import {
   LayoutDashboard, PhoneCall, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
-  Wallet, BarChart3, ListChecks, Building2, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
+  Wallet, BarChart3, ListChecks, Building2, Landmark, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
   PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus, Tent,
   AtSign, Search, Route, Signpost, KanbanSquare,
 } from 'lucide-react';
@@ -19,7 +19,7 @@ import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/a
 import { useLiveEvents } from '@/lib/crm/live';
 import { usePresenceBeat } from '@/lib/crm/presence';
 import { useAgentStore } from '@/store/agent-store';
-import { canView, clearAccess, isDashboardRole, ROLE_LABELS, useAccess, type PageKey } from '@/lib/crm/access';
+import { canView, clearAccess, isDashboardRole, orgName, ROLE_LABELS, useAccess, type PageKey } from '@/lib/crm/access';
 import { initials } from '@/components/crm/ui';
 
 type IconType = ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidden'?: boolean }>;
@@ -27,7 +27,7 @@ type IconType = ComponentType<{ size?: number; strokeWidth?: number; 'aria-hidde
 interface NavItem {
   href: string;
   label: string;
-  page: PageKey | 'admin' | 'chat' | 'leads' | 'wa' | 'referrals' | 'everyone' | 'ai';
+  page: PageKey | 'admin' | 'chat' | 'leads' | 'wa' | 'referrals' | 'everyone' | 'ai' | 'platform';
   icon: IconType;
   /** extra paths that should highlight this item */
   match?: string[];
@@ -45,7 +45,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Overview',
     items: [
       { href: '/admin/dashboard', label: 'Command centre', page: 'dashboard', icon: LayoutDashboard, phone: true },
-      { href: '/admin/work', label: 'Team board', page: 'everyone', icon: KanbanSquare },
+      { href: '/admin/work', label: 'Team board', page: 'work', icon: KanbanSquare },
       { href: '/admin/ai-agents', label: 'Vita marketing agents', page: 'ai', icon: VitaIcon },
       { href: '/admin/leads', label: 'Leads inbox', page: 'leads', icon: UserPlus, phone: true },
       { href: '/admin/calls', label: 'Daily calls', page: 'calls', icon: PhoneCall, phone: true },
@@ -91,6 +91,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/admin/users', label: 'Users & roles', page: 'users', icon: ShieldCheck },
       { href: '/admin/audit', label: 'Activity log', page: 'admin', icon: History },
       { href: '/admin/sync', label: 'Sync health', page: 'admin', icon: RefreshCw },
+      { href: '/admin/platform', label: 'Organisations', page: 'platform', icon: Landmark },
     ],
   },
 ];
@@ -190,9 +191,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const groups = useMemo(() => NAV.map((g) => ({
     group: g.group,
     // Chat: everyone who signs in to the CRM (Team and one-to-one chats; the office chats need field access, decided by the API).
-    // Team board: everyone who signs in to the CRM.
+    // Team board: office roles by default; an admin can change it in Users & roles.
     // Vita marketing autonomous agents: admins and marketing managers (same rule as the API).
-    items: g.items.filter((i) => (i.page === 'everyone' ? !!access : i.page === 'admin' ? !!access?.isAdmin
+    items: g.items.filter((i) => (i.page === 'everyone' ? !!access : i.page === 'platform' ? !!access?.isPlatformOwner : i.page === 'admin' ? !!access?.isAdmin
       : i.page === 'ai' ? !!access && (access.isAdmin || access.role === 'MarketingManager')
       : i.page === 'chat' ? !!access
         // Leads: whoever works the Referral desk or WhatsApp (same rule as the API).
@@ -301,7 +302,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Image src="/brand/nexeagle-mark.png" alt="" width={40} height={40} className="crm-brand-mark" priority unoptimized />
           <div className="crm-brand-text">
             <span className="crm-brand-name">NexEagle</span>
-            <span className="crm-brand-sub">Glisan Akbari SuperSpeciality Hospital</span>
+            <span className="crm-brand-sub">{orgName('full')}</span>
           </div>
           <button type="button" className="crm-icon-btn crm-collapse-btn" onClick={toggleSidebar}
             aria-label="Collapse or expand sidebar" title="Collapse or expand sidebar">
@@ -372,7 +373,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="crm-topbar">
           <Image src="/brand/nexeagle-mark.png" alt="NexEagle" width={34} height={34} className="crm-brand-mark" style={{ width: 34, height: 34 }} priority unoptimized />
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <span style={{ fontSize: 12, color: '#aeb7ca', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>NexEagle · Glisan Akbari SuperSpeciality</span>
+            <span style={{ fontSize: 12, color: '#aeb7ca', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>NexEagle · {access?.orgFirst === false ? orgName() : 'Glisan Akbari SuperSpeciality'}</span>
             <span style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 700, fontSize: 16 }}>{current?.label ?? 'Dashboard'}</span>
           </div>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }} className="crm-top-bell">

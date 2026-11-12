@@ -8,6 +8,7 @@ import { crm } from '@/lib/sync/api-client';
 import AnalystWorkspace from '@/components/crm/AnalystWorkspace';
 import { contactTypeLabel, Empty, ErrorBox, fmt, PageHead, rupees, Skeleton, useLoader } from '@/components/crm/ui';
 import { Pager, usePaged } from '@/components/crm/Pager';
+import { place } from '@/lib/crm/access';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface Funnel { referred: number; arrived: number; admitted: number; discharged: number; lost: number; waiting: number; urgent: number }
@@ -49,7 +50,7 @@ function AnalyticsPage() {
 
   return (
     <main className="crm-page">
-      <PageHead title="Analytics" sub="What outreach brings the hospital, and an AI analyst that reads the numbers every day and keeps track of what needs doing.">
+      <PageHead title="Analytics" sub={`What outreach brings the ${place()}, and an AI analyst that reads the numbers every day and keeps track of what needs doing.`}>
         {tab !== 'ai' && (
           <div className="crm-chips" role="group" aria-label="Period">
             {PERIODS.map((p) => <button key={p.d} type="button" className="crm-chip" aria-pressed={days === p.d} onClick={() => setDays(p.d)}>{p.l}</button>)}
@@ -84,7 +85,7 @@ function Business({ days, view }: { days: number; view: 'overview' | 'sources' |
   const n = o.now, p = o.previous;
   const maxMonth = Math.max(1, ...o.months.map((m) => m.referred));
   const funnel: [string, number, string][] = [
-    ['Referred', n.referred, '#c7cbf5'], ['Arrived at hospital', n.arrived, '#8e94f2'], ['Admitted', n.admitted, 'var(--accent)'], ['Discharged', n.discharged, 'var(--accent-ink)'],
+    ['Referred', n.referred, '#c7cbf5'], [`Arrived at ${place()}`, n.arrived, '#8e94f2'], ['Admitted', n.admitted, 'var(--accent)'], ['Discharged', n.discharged, 'var(--accent-ink)'],
   ];
   const maxDept = Math.max(1, ...d.departments.map((x) => x.admitted));
 

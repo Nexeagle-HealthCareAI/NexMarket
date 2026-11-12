@@ -6,6 +6,7 @@ import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Skeleton } from '@/components/crm/ui';
 import { addRange, type DateRangeValue } from '@/components/crm/DateRange';
 import { n0, n1, type GoogleStatus } from './shared';
+import { place } from '@/lib/crm/access';
 
 interface Res {
   status: GoogleStatus;
@@ -44,7 +45,7 @@ export function GoogleSearch({ range }: { range: DateRangeValue }) {
       <div className="gg-two">
         <section className="crm-card so-card">
           <h2 className="crm-h2" style={{ margin: 0 }}>Searches that showed the Google listing</h2>
-          <p className="crm-sub" style={{ margin: 0 }}>What people typed into Google Search or Maps when the hospital&apos;s listing appeared{months.length ? ` (${months.length === 1 ? months[0] : `${months[0]} – ${months[months.length - 1]}`}; Google gives these by month)` : ''}.</p>
+          <p className="crm-sub" style={{ margin: 0 }}>What people typed into Google Search or Maps when the {place()}&apos;s listing appeared{months.length ? ` (${months.length === 1 ? months[0] : `${months[0]} – ${months[months.length - 1]}`}; Google gives these by month)` : ''}.</p>
           {!data.status.sources.gbp ? <p className="crm-sub">Pick the Business Profile in Setup to see these.</p> : data.listing.keywords.length === 0 ? <Empty title={qd ? 'No term matches' : 'Nothing yet'} /> : (
             <div className="crm-table-wrap">
               <table className="crm-table">

@@ -151,6 +151,9 @@ export default function TaskMap({ panchayats, selectedPanchayatId, onSelectPanch
 
   useEffect(() => {
     if (!selected || !position) {
+      // Clears the drawn route at once when nothing is selected. Left as written: this is live navigation code
+      // that can only be tested on a phone outdoors.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRoute(null);
       setRouteIsFallback(false);
       lastRouteFetchRef.current = null;

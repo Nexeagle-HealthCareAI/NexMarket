@@ -1,6 +1,6 @@
 'use client';
 
-import { isDashboardRole } from '@/lib/crm/access';
+import { isDashboardRole, rememberPlace } from '@/lib/crm/access';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -197,6 +197,8 @@ export default function LoginPage() {
         }
       }
 
+      rememberPlace(auth.orgPlace);   // the organisation's own wording, right from the first screen
+
       if (auth.mustChangePassword) {
         router.push('/change-password');
       } else if (isDashboardRole(auth.role)) {
@@ -315,7 +317,7 @@ export default function LoginPage() {
               </button>
 
               <p className="lg-help">New here? <Link href="/signup">Create an account for your organisation</Link></p>
-              <p className="lg-help">Forgot your password? Ask your admin to reset it. Never share your password, even with the NexEagle team.</p>
+              <p className="lg-help"><Link href={`/forgot${org.trim() ? `?org=${encodeURIComponent(org.trim().toLowerCase())}` : ''}`}>Forgot your password?</Link> Never share your password, even with the NexEagle team.</p>
             </form>
           )}
         </div>

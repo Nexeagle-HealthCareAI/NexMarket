@@ -6,7 +6,7 @@ import { ArrowLeft, CalendarDays, FileText, Image as ImageIcon, MapPin, MessageC
 import { QrPosterModal, type QrPosterInfo } from '@/components/crm/QrPoster';
 import Link from 'next/link';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit, useAccess } from '@/lib/crm/access';
+import { canEdit, useAccess, place } from '@/lib/crm/access';
 import { Empty, ErrorBox, contactTypeLabel, fmt, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast, type Tone } from '@/components/crm/ui';
 import { Pager } from '@/components/crm/Pager';
 
@@ -424,7 +424,7 @@ function Profile({ id, editable, showToast, onBack, onChange }: {
       {qr && (
         <QrPosterModal info={qr} onClose={() => setQr(null)} intro={
           <p className="crm-sub" style={{ margin: 0 }}>
-            Give {c.name} this poster or link. Patients who scan it message the hospital on WhatsApp and land in the Leads inbox already credited to {c.name}
+            Give {c.name} this poster or link. Patients who scan it message the {place()} on WhatsApp and land in the Leads inbox already credited to {c.name}
             {qr.leads > 0 ? <> · <strong>{qr.leads}</strong> {qr.leads === 1 ? 'lead' : 'leads'} so far, <strong>{qr.arrived}</strong> arrived.</> : '.'}
           </p>
         } />

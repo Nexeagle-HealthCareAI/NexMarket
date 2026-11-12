@@ -2,8 +2,11 @@
 
 import React, { useEffect, useState } from 'react';
 
+/** Chrome's "can be installed" event: not in the standard type list. */
+type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
+
 export default function PwaInstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<InstallEvent | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isIosPrompt, setIsIosPrompt] = useState(false);
 
@@ -11,18 +14,15 @@ export default function PwaInstallPrompt() {
     // Detect iOS
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIos = /iphone|ipad|ipod/.test(userAgent);
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || ('standalone' in window.navigator && (window.navigator as any).standalone);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || ('standalone' in window.navigator && (window.navigator as Navigator & { standalone?: boolean }).standalone);
 
-    if (isIos && !isStandalone) {
-      setIsIosPrompt(true);
-      setIsVisible(true);
-    }
+    const first = isIos && !isStandalone ? setTimeout(() => { setIsIosPrompt(true); setIsVisible(true); }, 0) : null;
 
     const handleBeforeInstallPrompt = (e: Event) => {
       // Prevent the mini-infobar from appearing on mobile
       e.preventDefault();
       // Stash the event so it can be triggered later.
-      setDeferredPrompt(e);
+      setDeferredPrompt(e as InstallEvent);
       // Update UI to show the install button
       setIsVisible(true);
     };
@@ -30,6 +30,7 @@ export default function PwaInstallPrompt() {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     return () => {
+      if (first) clearTimeout(first);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, []);
@@ -38,7 +39,7 @@ export default function PwaInstallPrompt() {
     if (!deferredPrompt) return;
 
     // Show the install prompt
-    deferredPrompt.prompt();
+    void deferredPrompt.prompt();
 
     // Wait for the user to respond to the prompt
     const { outcome } = await deferredPrompt.userChoice;

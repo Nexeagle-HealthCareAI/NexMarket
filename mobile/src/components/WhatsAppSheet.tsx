@@ -5,7 +5,7 @@ import { Icon } from './Icon';
 import { useSession } from '../lib/session';
 import { openWhatsApp } from '../lib/links';
 import { departments } from '../lib/sync';
-import type { StringKey } from '../i18n';
+import { orgDisplayName, type StringKey } from '../i18n';
 import { C } from '../theme';
 
 const TEMPLATES: { key: string; label: StringKey; text: StringKey }[] = [
@@ -25,7 +25,7 @@ export function WhatsAppSheet({ visible, onClose, name, phone, template = 'intro
   const fill = (k: StringKey) => t(k, {
     partner: name.trim(),
     agent: agent?.name?.trim() ?? '',
-    hospital: 'Glisan Akbari SuperSpeciality Hospital',
+    hospital: orgDisplayName(),
     departments: departments().slice(0, 8).join(', ') || '—',
   });
   useEffect(() => {

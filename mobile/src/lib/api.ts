@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { Dimensions } from 'react-native';
 import { API_URL } from './config';
+import { setOrgPlace, setOrgWording } from '../i18n';
 
 /**
  * Talks to the NexMarket API. Tokens live in the phone's secure keystore, never in
@@ -12,6 +13,8 @@ const K_REFRESH = 'nx_refresh';
 const K_AGENT = 'nx_agent';
 const K_DEVICE = 'nx_device';
 const K_ORG = 'nx_org';
+const K_ORG_NAME = 'nx_org_name';
+const K_ORG_PLACE = 'nx_org_place';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -47,13 +50,25 @@ export function setSignedOutHandler(fn: (() => void) | null) {
 let org = '';
 export const getOrg = () => org;
 export async function setOrg(key: string) {
-  org = key.trim().toLowerCase();
+  const next = key.trim().toLowerCase();
+  if (next !== org) await setOrgName(null); // a different organisation: its name arrives with the sign-in
+  org = next;
   if (org) await SecureStore.setItemAsync(K_ORG, org); else await SecureStore.deleteItemAsync(K_ORG);
+}
+
+/** Keeps the organisation's own name for the app's wording. Null for the first organisation. */
+async function setOrgName(name: string | null, place: string | null = null) {
+  setOrgWording(name);
+  setOrgPlace(place);
+  if (name) await SecureStore.setItemAsync(K_ORG_NAME, name); else await SecureStore.deleteItemAsync(K_ORG_NAME);
+  if (place && place !== 'hospital') await SecureStore.setItemAsync(K_ORG_PLACE, place); else await SecureStore.deleteItemAsync(K_ORG_PLACE);
 }
 
 export async function loadTokens(): Promise<{ agentId: string | null; deviceId: string | null }> {
   access = await SecureStore.getItemAsync(K_ACCESS);
   org = (await SecureStore.getItemAsync(K_ORG)) ?? '';
+  setOrgWording(await SecureStore.getItemAsync(K_ORG_NAME));
+  setOrgPlace(await SecureStore.getItemAsync(K_ORG_PLACE));
   return { agentId: await SecureStore.getItemAsync(K_AGENT), deviceId: await SecureStore.getItemAsync(K_DEVICE) };
 }
 
@@ -166,6 +181,11 @@ export interface LoginResult {
   deviceId: string;
   profileCompleted: boolean;
   mustChangePassword: boolean;
+  /** The organisation's name, and whether it is the first one (which keeps the app's own wording). */
+  orgName?: string;
+  orgFirst?: boolean;
+  /** Its everyday word: hospital, clinic, lab, pharmacy… */
+  orgPlace?: string;
   accessToken?: string;
   refreshToken?: string;
 }
@@ -189,9 +209,28 @@ export async function login(userId: string, password: string, deviceId: string):
   pending = j.mustChangePassword ? password : null;
   endedReason = null;
   await saveTokens(j.accessToken, j.refreshToken);
+  await setOrgName(j.orgFirst === false && j.orgName ? j.orgName : null, j.orgPlace ?? null);
   await SecureStore.setItemAsync(K_AGENT, j.agentId);
   await SecureStore.setItemAsync(K_DEVICE, j.deviceId || deviceId);
   return j;
+}
+
+// ─── Forgot password ──────────────────────────────────────────────────────────
+// A code goes to the email and WhatsApp number saved on the account. The server never says whether an account exists.
+
+/** Which ways this server can send a code. Both false: codes can't be sent yet. */
+export async function recoveryOptions(): Promise<{ email: boolean; whatsapp: boolean }> {
+  const res = await raw('/api/v1/auth/recovery/options', { timeoutMs: 15000 });
+  if (!res.ok) throw new ApiError(res.status, await readError(res));
+  return res.json();
+}
+export async function forgotPassword(userId: string): Promise<void> {
+  const res = await raw('/api/v1/auth/forgot', { method: 'POST', body: JSON.stringify({ userId: userId.trim() }) });
+  if (!res.ok) throw new ApiError(res.status, await readError(res));
+}
+export async function resetPasswordWithCode(userId: string, code: string, newPassword: string): Promise<void> {
+  const res = await raw('/api/v1/auth/reset', { method: 'POST', body: JSON.stringify({ userId: userId.trim(), code, newPassword }) });
+  if (!res.ok) throw new ApiError(res.status, await readError(res));
 }
 
 export async function logoutRemote() {

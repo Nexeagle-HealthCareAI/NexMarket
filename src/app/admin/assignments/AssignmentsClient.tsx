@@ -59,7 +59,8 @@ export default function AssignmentsClient() {
   }, [agentId]);
 
   useEffect(() => {
-    void loadAll();
+    const t = setTimeout(() => void loadAll(), 0);
+    return () => clearTimeout(t);
   }, [loadAll]);
 
   const uniqueDistricts = useMemo(
@@ -135,7 +136,7 @@ export default function AssignmentsClient() {
           Task & Block Assignments
         </h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem' }}>
-          Assign a block to a field agent — they'll see it and a panchayat-by-panchayat visit checklist in the app.
+          Assign a block to a field agent — they&rsquo;ll see it and a panchayat-by-panchayat visit checklist in the app.
         </p>
       </div>
 
@@ -208,7 +209,7 @@ export default function AssignmentsClient() {
             {creating ? 'Assigning…' : '⚡ Assign Block'}
           </button>
           <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
-            Assigning a new block automatically marks the agent's previous active assignment as Completed.
+            Assigning a new block automatically marks the agent&rsquo;s previous active assignment as Completed.
           </p>
         </form>
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import NexMarketLogo from '@/components/NexMarketLogo';
-import { checkOrgKey, getSignupOptions, signUp, SignupError, type SignupOptions } from '@/lib/sync/api-client';
+import { checkOrgKey, getSignupOptions, sendSignupCode, signUp, SignupError, type SignupOptions } from '@/lib/sync/api-client';
 
 const FALLBACK_KINDS = [
   { key: 'hospital', label: 'Hospital' }, { key: 'clinic', label: 'Clinic' }, { key: 'diagnostic', label: 'Diagnostic centre' },
@@ -35,6 +35,11 @@ export default function SignupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
+  // The code step: where the code went, and what the person typed.
+  const [sentTo, setSentTo] = useState<{ email: boolean; whatsapp: boolean; minutes: number } | null>(null);
+  const [code, setCode] = useState('');
+  const [sending, setSending] = useState(false);
+  const [resent, setResent] = useState(false);
   const [done, setDone] = useState<{ key: string; name: string; userId: string } | null>(null);
 
   useEffect(() => {
@@ -69,15 +74,44 @@ export default function SignupPage() {
     if (name.trim().length < 2) bad.name = 'Enter your name.';
     if (phone.replace(/\D/g, '').slice(-10).length !== 10) bad.phone = 'Enter a 10-digit mobile number.';
     if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) bad.email = 'This email address doesn’t look right.';
+    else if (!email.trim() && emailNeeded) bad.email = 'Enter your email: the code is sent there.';
     if (password.length < 8) bad.password = 'Use a password of at least 8 characters.';
     else if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) bad.password = 'Use at least one letter and one number in the password.';
     if (!agree) bad.agree = 'Please confirm this before you continue.';
     return bad;
   }
 
+  const details = () => ({ orgName: orgName.trim(), orgKey: key, kinds, city: city.trim() || undefined, name: name.trim(), phone, email: email.trim() || undefined, password });
+
+  // Field errors other than the code belong to the first step: go back there so the person can see them.
+  function failed(err: unknown) {
+    if (err instanceof SignupError) {
+      setError(err.message); setFields(err.fields);
+      if (Object.keys(err.fields).some((k) => k !== 'code')) setSentTo(null);
+    } else setError('Something went wrong. Please try again.');
+  }
+
+  /** Asks the server to send the code. False when no code is needed or it could not be sent. */
+  async function sendCode(): Promise<boolean> {
+    setSending(true);
+    try {
+      const r = await sendSignupCode({ phone, email: email.trim() || undefined, orgName: orgName.trim() });
+      if (!r.needed) return false;
+      setSentTo({ email: !!r.email, whatsapp: !!r.whatsapp, minutes: r.minutes ?? 10 });
+      return true;
+    } finally { setSending(false); }
+  }
+
+  async function create(withCode?: string) {
+    setBusy(true);
+    try { setDone(await signUp({ ...details(), code: withCode })); }
+    catch (err) { failed(err); }
+    finally { setBusy(false); }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (busy) return;
+    if (busy || sending) return;
     const bad = checkForm();
     setFields(bad);
     setError('');
@@ -86,16 +120,32 @@ export default function SignupPage() {
       document.getElementById(`su-${Object.keys(bad)[0]}`)?.focus();
       return;
     }
-    setBusy(true);
-    try {
-      setDone(await signUp({ orgName: orgName.trim(), orgKey: key, kinds, city: city.trim() || undefined, name: name.trim(), phone, email: email.trim() || undefined, password }));
-    } catch (err) {
-      if (err instanceof SignupError) { setError(err.message); setFields(err.fields); }
-      else setError('Something went wrong. Please try again.');
-    } finally {
-      setBusy(false);
+    if (keyState && !keyState.ok) { setFields({ orgKey: keyState.text }); setError('Please check the marked fields.'); document.getElementById('su-orgKey')?.focus(); return; }
+    if (options?.verify) {
+      setCode(''); setResent(false);
+      try { if (await sendCode()) return; } catch (err) { failed(err); return; }
     }
+    await create();
   }
+
+  async function submitCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    const digits = code.replace(/\D/g, '');
+    if (digits.length !== 6) { setFields({ code: 'Enter the 6-digit code.' }); return; }
+    setFields({}); setError('');
+    await create(digits);
+  }
+
+  async function sendAgain() {
+    if (sending) return;
+    setError(''); setFields({}); setResent(false);
+    try { if (await sendCode()) setResent(true); } catch (err) { failed(err); }
+  }
+
+  const emailNeeded = !!options?.verify && !options.verifyWhatsApp;
+  const phoneEnd = phone.replace(/\D/g, '').slice(-4);
+  const where = sentTo ? [sentTo.whatsapp ? `WhatsApp on the number ending ${phoneEnd}` : null, sentTo.email ? email.trim() : null].filter(Boolean).join(' and ') : '';
 
   const err = (k: string) => (fields[k] ? <span className="lg-hint is-bad" role="alert">{fields[k]}</span> : null);
   const kindList = options?.kinds?.length ? options.kinds : FALLBACK_KINDS;
@@ -123,7 +173,7 @@ export default function SignupPage() {
           <div className="lg-head">
             <span className="lg-mark is-sm"><NexMarketLogo size={28} /></span>
             <div>
-              <h2>{done ? 'Your organisation is ready' : 'Create your organisation'}</h2>
+              <h2>{done ? 'Your organisation is ready' : sentTo && !busy ? 'Enter your code' : 'Create your organisation'}</h2>
               <p>NexEagle</p>
             </div>
           </div>
@@ -152,6 +202,25 @@ export default function SignupPage() {
               <strong>Setting up {orgName.trim()}…</strong>
               <span>Creating your own database. This can take up to a minute. Please keep this page open.</span>
             </div>
+          ) : sentTo ? (
+            <form onSubmit={submitCode} className="lg-form" noValidate>
+              <div className="lg-note is-good" role="status">
+                {resent ? 'A new code is on its way. ' : ''}We sent a 6-digit code to {where}. It works for {sentTo.minutes} minutes.
+              </div>
+              <label className="lg-field">
+                <span>6-digit code</span>
+                <input id="su-code" type="text" inputMode="numeric" autoComplete="one-time-code" value={code} autoFocus
+                  onChange={(e) => { fixed('code'); setCode(e.target.value.replace(/[^\d\s]/g, '')); }} placeholder="123456" required />
+                {err('code')}
+              </label>
+              {error && !fields.code && <div className="lg-note is-bad" role="alert">{error}</div>}
+              <button type="submit" className="lg-submit">Create {orgName.trim()}</button>
+              <p className="lg-help">
+                Nothing arrived? <button type="button" className="lg-linkbtn" onClick={sendAgain} disabled={sending}>{sending ? 'Sending…' : 'Send it again'}</button>
+                {' · '}
+                <button type="button" className="lg-linkbtn" onClick={() => { setSentTo(null); setError(''); setFields({}); }}>Change my details</button>
+              </p>
+            </form>
           ) : (
             <form onSubmit={submit} className="lg-form" noValidate>
               <label className="lg-field">
@@ -203,7 +272,7 @@ export default function SignupPage() {
                   {err('phone')}
                 </label>
                 <label className="lg-field">
-                  <span>Email <em>optional</em></span>
+                  <span>Email {emailNeeded ? null : <em>optional</em>}</span>
                   <input id="su-email" type="email" value={email} onChange={(e) => { fixed('email'); setEmail(e.target.value); }} autoComplete="email" autoCapitalize="none" spellCheck={false} maxLength={120} />
                   {err('email')}
                 </label>
@@ -225,7 +294,10 @@ export default function SignupPage() {
 
               {error && <div className="lg-note is-bad" role="alert">{error}</div>}
 
-              <button type="submit" className="lg-submit">Create organisation</button>
+              {options?.verify && (
+                <p className="lg-help">Next, we send a code to your {options.verifyWhatsApp ? (options.verifyEmail ? 'WhatsApp number and email' : 'WhatsApp number') : 'email'} to check it is really you.</p>
+              )}
+              <button type="submit" className="lg-submit" disabled={sending}>{sending ? 'Sending your code…' : options?.verify ? 'Continue' : 'Create organisation'}</button>
               <p className="lg-help">Already have an account? <Link href="/login">Sign in</Link></p>
             </form>
           )}

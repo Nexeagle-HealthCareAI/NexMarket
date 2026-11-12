@@ -5,6 +5,7 @@ import { ExternalLink, RefreshCw } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Skeleton } from '@/components/crm/ui';
 import { moneyFmt } from './shared';
+import { place } from '@/lib/crm/access';
 
 interface Row {
   id: string; name: string; spend: number; impressions: number; reach: number; clicks: number; metaLeads: number; chats: number;
@@ -52,7 +53,7 @@ export function SocialAds({ hasAds, isAdmin, onSetup }: { hasAds: boolean; isAdm
     return (
       <section className="crm-card">
         <Empty title="No ad account connected">
-          <span className="crm-sub">Connect the hospital&apos;s Meta ad account to see what each campaign spent, how many leads it brought and how many of them came to the hospital.</span>
+          <span className="crm-sub">Connect the {place()}&apos;s Meta ad account to see what each campaign spent, how many leads it brought and how many of them came to the {place()}.</span>
           {isAdmin && <button type="button" className="crm-btn is-sm" onClick={onSetup}>Open Setup</button>}
         </Empty>
       </section>
@@ -79,7 +80,7 @@ export function SocialAds({ hasAds, isAdmin, onSetup }: { hasAds: boolean; isAdm
             <div className="crm-card crm-kpi"><span className="crm-kpi-label">Spent</span><span className="crm-kpi-value">{money0.format(t.spend)}</span><span className="crm-sub">{n0.format(t.impressions)} views · {n0.format(t.clicks)} clicks</span></div>
             <div className="crm-card crm-kpi"><span className="crm-kpi-label">Leads</span><span className="crm-kpi-value">{n0.format(Math.max(t.metaLeads, t.crmLeads))}</span><span className="crm-sub">{n0.format(t.crmLeads)} reached the CRM{t.chats ? ` · ${n0.format(t.chats)} chats started` : ''}</span></div>
             <div className="crm-card crm-kpi"><span className="crm-kpi-label">Cost per lead</span><span className="crm-kpi-value">{data.costPerLead != null ? money.format(data.costPerLead) : '—'}</span><span className="crm-sub">Spend ÷ leads</span></div>
-            <div className="crm-card crm-kpi"><span className="crm-kpi-label">Came to the hospital</span><span className="crm-kpi-value">{n0.format(t.arrived)}</span><span className="crm-sub">{data.costPerArrival != null ? `${money.format(data.costPerArrival)} per patient` : 'From form leads marked arrived or admitted'}</span></div>
+            <div className="crm-card crm-kpi"><span className="crm-kpi-label">Came to the {place()}</span><span className="crm-kpi-value">{n0.format(t.arrived)}</span><span className="crm-sub">{data.costPerArrival != null ? `${money.format(data.costPerArrival)} per patient` : 'From form leads marked arrived or admitted'}</span></div>
           </div>
 
           <section className="crm-card so-card">

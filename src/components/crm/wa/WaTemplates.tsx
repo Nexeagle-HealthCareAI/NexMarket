@@ -5,6 +5,7 @@ import { CheckCircle2, Clock, Package, Pencil, Plus, RefreshCw, Trash2, XCircle 
 import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Modal, Pill, Skeleton, type Tone } from '@/components/crm/ui';
 import { TemplateBubble, type WaButton, type WaTemplate } from './shared';
+import { place, places } from '@/lib/crm/access';
 
 interface PackItem { name: string; category: string; header?: string | null; body: string; footer?: string | null; examples: string[]; use?: string | null; installed?: string | null }
 
@@ -49,7 +50,7 @@ export function WaTemplates({ canManage, toast }: { canManage: boolean; toast: (
       {error && <ErrorBox message={error} onRetry={load} />}
       {!list && !error ? <Skeleton h={320} /> : list && shown.length === 0 ? (
         <Empty title={list.length ? 'No templates match' : 'No templates yet'}>
-          <span className="crm-sub">Start with the NexEagle set: seven ready-written Hindi templates for follow-ups, broadcasts and appointments, with your hospital&apos;s name filled in.</span>
+          <span className="crm-sub">Start with the NexEagle set: seven ready-written Hindi templates for follow-ups, broadcasts and appointments, with your {place()}&apos;s name filled in.</span>
         </Empty>
       ) : (
         <div className="wt-grid">
@@ -130,7 +131,7 @@ function Editor({ t, onClose, onSaved }: { t: WaTemplate | null; onClose: () => 
             <span className="crm-sub" style={{ fontWeight: 400, fontSize: 12 }}>Utility: about something the person asked for (appointment, report). Marketing: offers, camps, news. Meta may change the type when reviewing.</span>
           </div>
           <label className="crm-field">Heading (optional)
-            <input className="crm-input" value={header} onChange={(e) => setHeader(e.target.value)} maxLength={60} placeholder="e.g. the hospital's name" />
+            <input className="crm-input" value={header} onChange={(e) => setHeader(e.target.value)} maxLength={60} placeholder={`e.g. the ${place()}'s name`} />
           </label>
           <label className="crm-field">
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>Message <button type="button" className="nt-link" onClick={addBlank}>+ Add a blank {`{{${blanks + 1}}}`}</button></span>
@@ -200,7 +201,7 @@ function PackModal({ onClose, onDone }: { onClose: () => void; onDone: (m: strin
           <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
           <button type="button" className="crm-btn" disabled={busy || !items || missing === 0} onClick={() => void install()}>{busy ? 'Installing…' : missing ? `Install ${missing} ${missing === 1 ? 'template' : 'templates'}` : 'All installed'}</button>
         </>}>
-      <p className="crm-sub" style={{ margin: 0 }}>Ready-written Hindi templates for hospitals, with your hospital&apos;s name filled in. They&apos;re created in your own WhatsApp account and reviewed by Meta, then used automatically for follow-ups and broadcasts (unless an admin chose others).</p>
+      <p className="crm-sub" style={{ margin: 0 }}>Ready-written Hindi templates for {places()}, with your {place()}&apos;s name filled in. They&apos;re created in your own WhatsApp account and reviewed by Meta, then used automatically for follow-ups and broadcasts (unless an admin chose others).</p>
       {error && <div className="crm-error" role="alert">{error}</div>}
       {results ? (
         <ul className="wt-results">
