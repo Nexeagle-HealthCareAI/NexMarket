@@ -86,7 +86,7 @@ async def review_counts(days: int = 30) -> dict[str, dict[str, int]]:
 async def waiting_review(agent_id: str | None = None) -> dict[str, int]:
     """Shadow drafts from the last 7 days nobody has looked at yet, per agent."""
     rows = await db.fetch(
-        "SELECT agent_id, count(*) AS n FROM agents.actions WHERE status = 'shadow' AND reviewed_at IS NULL AND detail ? 'text' "
+        "SELECT agent_id, count(*) AS n FROM agents.actions WHERE status IN ('shadow', 'held') AND reviewed_at IS NULL AND detail ? 'text' "
         "AND created_at > now() - interval '7 days' GROUP BY agent_id")
     return {r["agent_id"]: int(r["n"]) for r in rows if not agent_id or r["agent_id"] == agent_id}
 

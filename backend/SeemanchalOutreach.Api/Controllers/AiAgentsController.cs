@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -475,6 +476,153 @@ namespace SeemanchalOutreach.Api.Controllers
             var a = Encoding.UTF8.GetBytes(given);
             var b = Encoding.UTF8.GetBytes(secret);
             return a.Length == b.Length && CryptographicOperations.FixedTimeEquals(a, b);
+        }
+
+        // ─── Reputation: Google reviews ────────────────────────────────────
+
+        private static string ScriptOf(string? text)
+        {
+            foreach (var ch in text ?? "")
+            {
+                if (ch >= 0x0980 && ch <= 0x09FF) return "bn";
+                if (ch >= 0x0900 && ch <= 0x097F) return "hi";
+            }
+            return string.IsNullOrWhiteSpace(text) ? "hi" : "en";
+        }
+
+        /// <summary>
+        /// Google reviews from the last 30 days that have no reply. Only the stars, the date and which script the review
+        /// is written in: the reviewer's name and words are not given out.
+        /// </summary>
+        [HttpGet("reviews/unanswered")]
+        public async Task<IActionResult> ReviewsUnanswered(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var since = DateTime.UtcNow.AddDays(-30);
+            var rows = await _db.GoogleReviews.AsNoTracking().Where(r => r.RepliedAt == null && r.ReplyText == null && r.PostedAt >= since)
+                .OrderBy(r => r.PostedAt).Take(100).Select(r => new { r.Id, r.Stars, r.PostedAt, r.Comment }).ToListAsync(ct);
+            return Ok(new { items = rows.Select(r => new { id = r.Id, stars = r.Stars, postedAt = r.PostedAt, hasComment = !string.IsNullOrWhiteSpace(r.Comment), language = ScriptOf(r.Comment) }) });
+        }
+
+        /// <summary>Posts the hospital's reply to a review on Google. Refused when the review already has a reply.</summary>
+        [HttpPost("reviews/{id:guid}/reply")]
+        public async Task<IActionResult> ReviewReply(Guid id, [FromBody] AgentLeadReplyDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var text = (d.Text ?? "").Trim();
+            if (text.Length == 0 || text.Length > 1500) return BadRequest(new { message = "bad_text" });
+            var review = await _db.GoogleReviews.FirstOrDefaultAsync(r => r.Id == id, ct);
+            if (review == null) return NotFound();
+            if (review.RepliedAt != null || review.ReplyText != null) return Conflict(new { message = "already_replied" });
+            var sync = HttpContext.RequestServices.GetRequiredService<GoogleSyncService>();
+            var err = await sync.ReplyAsync(review, text, "ai:" + d.AgentId, ct);
+            if (err != null) return Conflict(new { message = "google_refused", error = err });
+            return Ok(new { status = "replied" });
+        }
+
+        // ─── Social Publisher: a post on the hospital's Facebook page ─────────
+
+        /// <summary>
+        /// Publishes a text post on the connected Facebook page and adds it to the Social page. Needs the page connection in
+        /// Marketing settings to allow publishing; Facebook's own reason is passed back when it refuses.
+        /// </summary>
+        [HttpPost("social/publish")]
+        public async Task<IActionResult> SocialPublish([FromBody] AgentLeadReplyDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var text = (d.Text ?? "").Trim();
+            if (text.Length < 20 || text.Length > 3000) return BadRequest(new { message = "bad_text" });
+            var meta = MetaConfig.Load(HttpContext.RequestServices.GetRequiredService<IAppSettings>());
+            if (!meta.PageConnected) return Conflict(new { message = "page_not_connected" });
+            var graph = HttpContext.RequestServices.GetRequiredService<MetaGraph>();
+            var r = await graph.PostAsync(meta.ApiVersion, $"{meta.PageId}/feed", meta.PageToken, new { message = text }, ct);
+            if (!r.Ok || r.Doc == null) return Conflict(new { message = "facebook_refused", error = r.Error });
+            string? postId;
+            using (r.Doc) postId = r.Doc.RootElement.TryGetProperty("id", out var pid) ? pid.GetString() : null;
+            var post = new SocialPost
+            {
+                Channel = "facebook", ExternalId = postId, Source = "manual", Text = text, MediaType = "text", PostedAt = DateTime.UtcNow,
+                Permalink = postId != null ? $"https://www.facebook.com/{postId}" : null, CreatedBy = "ai:" + d.AgentId, Note = "Published by Vita",
+            };
+            _db.SocialPosts.Add(post);
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { status = "published", id = post.Id, permalink = post.Permalink });
+        }
+
+        // ─── Broadcast Manager: a camp invitation to the partners of its block ─────
+
+        private static string CampDate(HealthCamp c) => c.Date.ToString("d MMM (dddd)", System.Globalization.CultureInfo.InvariantCulture);
+
+        /// <summary>
+        /// Camps 2 to 5 days away that have had no invitation broadcast yet, with how many partners in the camp's block would
+        /// get it (opted-out and wrong numbers already left out), and whether that block had any broadcast in the last 7 days.
+        /// </summary>
+        [HttpGet("broadcasts/camp-candidates")]
+        public async Task<IActionResult> CampCandidates(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var today = AttendanceService.TodayIst;
+            var camps = await _db.HealthCamps.AsNoTracking().Where(c => c.Date >= today.AddDays(2) && c.Date <= today.AddDays(5) && (c.Status == "planned" || c.Status == "confirmed") && c.Block != null && c.Block != "")
+                .OrderBy(c => c.Date).Take(10).ToListAsync(ct);
+            var recent = await _db.Broadcasts.AsNoTracking().Where(b => b.CreatedAt > DateTime.UtcNow.AddDays(-30) && b.Status != "cancelled" && b.Status != "failed")
+                .Select(b => new { b.Kind, b.ParamsJson, b.AudienceJson, At = b.ScheduledAt ?? b.CreatedAt }).ToListAsync(ct);
+            var items = new List<object>();
+            foreach (var c in camps)
+            {
+                if (recent.Any(b => b.ParamsJson.Contains(c.Id.ToString()))) continue;
+                var audience = new BroadcastAudience { Blocks = new() { c.Block! } };
+                var count = await BroadcastComposer.Audience(_db, audience).CountAsync(ct);
+                var blockBusy = recent.Any(b => b.At > DateTime.UtcNow.AddDays(-7) && (b.AudienceJson.Contains($"\"{c.Block}\"") || b.AudienceJson.Contains("\"Blocks\":[]")));
+                var p = CampParams(c);
+                items.Add(new
+                {
+                    campId = c.Id, title = c.Title, date = c.Date, block = c.Block, recipients = count, blockHadBroadcastThisWeek = blockBusy,
+                    preview = BroadcastComposer.Preview("camp_invite", "hi", p, ""),
+                    facts = new { place = p["place"], date = p["date"], start = c.StartTime, end = c.EndTime, venue = c.Venue, block = c.Block },
+                });
+            }
+            return Ok(new { connected = _outbox.Config.IsConfigured, paused = _outbox.Rules.Paused, items });
+        }
+
+        private static Dictionary<string, string> CampParams(HealthCamp c) => new()
+        {
+            ["place"] = string.IsNullOrWhiteSpace(c.Venue) ? c.Block ?? "" : $"{c.Venue}, {c.Block}",
+            ["date"] = CampDate(c),
+            ["details"] = $"{c.Title}. समय: {c.StartTime} से {c.EndTime}.",
+            ["campId"] = c.Id.ToString(),
+        };
+
+        /// <summary>
+        /// Schedules the camp invitation (the approved camp template) to the partners of the camp's block, now. Refused when
+        /// the camp already has one, when the block had a broadcast in the last 7 days, or when nobody would receive it.
+        /// </summary>
+        [HttpPost("broadcasts/camp/{campId:guid}")]
+        public async Task<IActionResult> CampBroadcast(Guid campId, [FromBody] AgentIdDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var c = await _db.HealthCamps.AsNoTracking().FirstOrDefaultAsync(x => x.Id == campId, ct);
+            if (c == null) return NotFound();
+            var today = AttendanceService.TodayIst;
+            if (c.Date < today || c.Status == "cancelled" || c.Status == "done" || string.IsNullOrWhiteSpace(c.Block)) return Conflict(new { message = "camp_not_open" });
+            if (!_outbox.Config.IsConfigured) return Conflict(new { message = "whatsapp_not_connected" });
+            if (_outbox.Rules.Paused) return Conflict(new { message = "whatsapp_paused" });
+            var recent = await _db.Broadcasts.AsNoTracking().Where(b => b.CreatedAt > DateTime.UtcNow.AddDays(-30) && b.Status != "cancelled" && b.Status != "failed")
+                .Select(b => new { b.ParamsJson, b.AudienceJson, At = b.ScheduledAt ?? b.CreatedAt }).ToListAsync(ct);
+            if (recent.Any(b => b.ParamsJson.Contains(c.Id.ToString()))) return Conflict(new { message = "already_sent" });
+            if (recent.Any(b => b.At > DateTime.UtcNow.AddDays(-7) && (b.AudienceJson.Contains($"\"{c.Block}\"") || b.AudienceJson.Contains("\"Blocks\":[]")))) return Conflict(new { message = "block_had_broadcast_this_week" });
+            var audience = new BroadcastAudience { Blocks = new() { c.Block! } };
+            var count = await BroadcastComposer.Audience(_db, audience).CountAsync(ct);
+            if (count == 0) return Conflict(new { message = "nobody" });
+            var p = CampParams(c);
+            var b = new Broadcast
+            {
+                Kind = "camp_invite", Language = "hi", Title = BroadcastComposer.TitleFor("camp_invite", p), ParamsJson = JsonSerializer.Serialize(p),
+                AudienceJson = JsonSerializer.Serialize(audience), PreviewText = BroadcastComposer.Preview("camp_invite", "hi", p, ""), RecipientCount = count,
+                ScheduledAt = DateTime.UtcNow, Status = "scheduled", CreatedBy = "ai:" + d.AgentId, CreatedAt = DateTime.UtcNow,
+            };
+            _db.Broadcasts.Add(b);
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { status = "scheduled", id = b.Id, recipients = count });
         }
 
         // ─── Numbers for the Data Watcher, the Chief of Staff and the Reporter ─────────────────

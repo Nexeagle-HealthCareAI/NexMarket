@@ -17,7 +17,12 @@ const VERDICT = { good: 'Good', edited: 'Edited', wrong: 'Wrong' } as const;
  */
 function ReviewBox({ row, onDone }: { row: ActionRow; onDone: (msg: string) => void }) {
   const draft = String(row.detail?.text ?? '');
-  const canSend = row.kind === 'lead_reply' && row.subject_type === 'lead';
+  // A lead reply drafted in practice can go to the lead; a camp invitation held for approval can be scheduled.
+  const canSend = (row.kind === 'lead_reply' && row.status === 'shadow') || (row.kind === 'camp_broadcast' && row.status === 'held');
+  const canEdit = row.kind === 'lead_reply' || row.kind === 'content_draft';
+  const isDraft = row.kind === 'content_draft';
+  const live = row.status === 'held';
+  const recipients = typeof row.detail?.recipients === 'number' ? row.detail.recipients : null;
   const [text, setText] = useState(draft);
   const [note, setNote] = useState('');
   const [remember, setRemember] = useState(false);
@@ -30,23 +35,27 @@ function ReviewBox({ row, onDone }: { row: ActionRow; onDone: (msg: string) => v
     try {
       const r = await crm.post<{ sent?: boolean; reason?: string }>(`/api/v1/ai-agents/actions/${row.id}/review`,
         { verdict, text: verdict === 'edited' ? text.trim() : null, note: note.trim() || null, send: andSend, remember });
-      onDone(verdict === 'wrong' ? 'Marked wrong. Nothing was sent.' : r.sent ? 'Sent to the lead.' : andSend ? `Checked, but not sent: ${r.reason ?? 'NexMarket refused it.'}` : 'Checked.');
+      onDone(verdict === 'wrong' ? 'Marked wrong. Nothing was sent.' : r.sent ? (row.kind === 'camp_broadcast' ? 'The invitation is scheduled.' : 'Sent to the lead.')
+        : andSend ? `Checked, but not sent: ${r.reason ?? 'NexMarket refused it.'}` : isDraft && live ? 'Approved. It will be posted at the next slot.' : 'Checked.');
     } catch (e) { setErr(friendlyError(e)); setBusy(false); }
   };
   return (
     <div className="ai-review">
-      <strong>Check this message</strong>
-      {canSend ? <textarea value={text} rows={4} maxLength={2000} aria-label="The message" onChange={(e) => setText(e.target.value)} /> : <blockquote>{draft}</blockquote>}
+      <strong>{row.kind === 'camp_broadcast' ? `Camp invitation${recipients != null ? ` to ${recipients} partners` : ''}` : isDraft ? 'Check this draft post' : 'Check this message'}</strong>
+      {canEdit ? <textarea value={text} rows={isDraft ? 6 : 4} maxLength={2000} aria-label="The message" onChange={(e) => setText(e.target.value)} /> : <blockquote>{draft}</blockquote>}
       <input value={note} maxLength={400} placeholder="What should it do differently? (optional)" aria-label="Note" onChange={(e) => setNote(e.target.value)} />
       <label className="ai-check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Teach this to the agent (it reads the note on every run)</label>
       <div className="ai-review-btns">
         {canSend && !edited && <button type="button" className="crm-btn is-ok is-sm" disabled={busy} onClick={() => void send('good', true)}><Send size={14} aria-hidden /> Good, send it</button>}
         {canSend && edited && <button type="button" className="crm-btn is-sm" disabled={busy || !text.trim()} onClick={() => void send('edited', true)}><Send size={14} aria-hidden /> Send my version</button>}
-        {!canSend && <button type="button" className="crm-btn is-ok is-sm" disabled={busy} onClick={() => void send('good', false)}><Check size={14} aria-hidden /> Good</button>}
-        <button type="button" className="crm-btn is-secondary is-sm" disabled={busy} onClick={() => void send(edited && canSend ? 'edited' : 'good', false)}>{edited && canSend ? 'Save my version, don’t send' : canSend ? 'Good, but don’t send' : ''}</button>
+        {!canSend && !edited && <button type="button" className="crm-btn is-ok is-sm" disabled={busy} onClick={() => void send('good', false)}><Check size={14} aria-hidden /> {isDraft && live ? 'Good, it can be posted' : 'Good'}</button>}
+        {!canSend && edited && <button type="button" className="crm-btn is-sm" disabled={busy || !text.trim()} onClick={() => void send('edited', false)}><Check size={14} aria-hidden /> {isDraft && live ? 'Post my version' : 'Save my version'}</button>}
+        {canSend && <button type="button" className="crm-btn is-secondary is-sm" disabled={busy} onClick={() => void send(edited ? 'edited' : 'good', false)}>{edited ? 'Save my version, don’t send' : 'Good, but don’t send'}</button>}
         <button type="button" className="crm-btn is-danger is-sm" disabled={busy} onClick={() => void send('wrong', false)}><X size={14} aria-hidden /> Wrong</button>
       </div>
-      {canSend && <span className="ai-muted">Sending checks the text against the fixed rules first, and NexMarket refuses it if the desk already replied or 24 hours have passed.</span>}
+      {row.kind === 'lead_reply' && canSend && <span className="ai-muted">Sending checks the text against the fixed rules first, and NexMarket refuses it if the desk already replied or 24 hours have passed.</span>}
+      {row.kind === 'camp_broadcast' && <span className="ai-muted">{canSend ? 'Sending schedules the approved camp template now, to the partners of this block who have not opted out.' : 'A practice run: nothing can be sent from it.'}</span>}
+      {isDraft && <span className="ai-muted">{live ? 'A draft you mark good is posted on the Facebook page by the Social Publisher at 10 am or 6 pm, when that agent is live.' : 'A practice draft: it is never posted.'}</span>}
       {err && <div className="crm-error" role="alert">{err}</div>}
     </div>
   );

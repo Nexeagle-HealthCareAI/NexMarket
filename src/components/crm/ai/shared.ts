@@ -30,8 +30,12 @@ export const RUN_JOB: Record<string, { job: string; label: string }[]> = {
   chief_of_staff: [{ job: 'chief_plan', label: 'Plan the day now' }, { job: 'chief_check', label: 'Run the check now' }],
   reporter_coach: [{ job: 'evening_report', label: 'Write the report now' }, { job: 'coach', label: 'Suggest lessons now' }],
   lead_follow_up: [{ job: 'lead_follow_up', label: 'Look for quiet leads now' }],
+  reputation: [{ job: 'reputation', label: 'Check Google reviews now' }],
+  content_writer: [{ job: 'content_writer', label: 'Write today’s drafts now' }],
+  social_publisher: [{ job: 'social_publisher', label: 'Publish the next approved post now' }],
+  broadcast_manager: [{ job: 'broadcast_manager', label: 'Look for camps to invite for now' }],
 };
-export const needsCheck = (r: ActionRow) => r.status === 'shadow' && typeof r.detail?.text === 'string' && !r.reviewed_at;
+export const needsCheck = (r: ActionRow) => (r.status === 'shadow' || r.status === 'held') && typeof r.detail?.text === 'string' && !r.reviewed_at;
 export interface GuardIssue { rule: string; severity: 'block' | 'fix'; message: string; match?: string | null; fixable: boolean }
 export interface GuardRes {
   outcome: 'pass' | 'fix' | 'block' | 'held'; text: string; rewritten: boolean; issues: GuardIssue[];

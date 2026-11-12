@@ -111,3 +111,28 @@ async def numbers() -> dict[str, Any]:
 async def lead_outcomes(days: int = 7) -> dict[str, Any]:
     """What happened to leads after Vita or the desk wrote to them, as counts."""
     return await _get(f"/api/v1/internal/agent-tools/lead-outcomes?days={days}")
+
+
+# ─── Reputation, Social Publisher, Broadcast Manager ─────────────────────────
+
+async def reviews_unanswered() -> dict[str, Any]:
+    """Google reviews without a reply: stars, date, and the script they are written in. Never the reviewer or their words."""
+    return await _get("/api/v1/internal/agent-tools/reviews/unanswered")
+
+
+async def review_reply(review_id: str, text: str, *, agent_id: str) -> dict[str, Any]:
+    return await _post(f"/api/v1/internal/agent-tools/reviews/{review_id}/reply", {"text": text, "agentId": agent_id})
+
+
+async def social_publish(text: str, *, agent_id: str) -> dict[str, Any]:
+    """A text post on the hospital's Facebook page."""
+    return await _post("/api/v1/internal/agent-tools/social/publish", {"text": text, "agentId": agent_id})
+
+
+async def camp_candidates() -> dict[str, Any]:
+    """Camps 2–5 days away with no invitation broadcast yet, and how many partners of the block would get it."""
+    return await _get("/api/v1/internal/agent-tools/broadcasts/camp-candidates")
+
+
+async def broadcast_camp(camp_id: str, *, agent_id: str) -> dict[str, Any]:
+    return await _post(f"/api/v1/internal/agent-tools/broadcasts/camp/{camp_id}", {"agentId": agent_id})

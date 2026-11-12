@@ -20,10 +20,18 @@ REFUSED = {
     "desk_replied": "Someone at the desk has already replied to this lead.",
     "opted_out": "They asked not to get WhatsApp messages.",
     "whatsapp_paused": "WhatsApp sending is paused (WhatsApp → Automation).",
+    "already_sent": "This camp already has an invitation broadcast.",
+    "block_had_broadcast_this_week": "The partners of this block already got a broadcast in the last 7 days.",
+    "camp_not_open": "The camp is over or cancelled.",
+    "nobody": "Nobody in this block can receive WhatsApp broadcasts.",
+    "whatsapp_not_connected": "WhatsApp is not connected yet.",
 }
 VERDICTS = ("good", "edited", "wrong")
-# Kinds whose text can be sent to the lead from a review.
-SENDABLE = {"lead_reply"}
+# What "send" does for each kind a person can release from a review, and in which state the entry must be:
+# a lead reply drafted in shadow goes to the lead; a camp broadcast held for approval is scheduled.
+SENDABLE = {"lead_reply": ("lead", "shadow"), "camp_broadcast": ("camp", "held")}
+# Kinds whose wording a person may change (the others are approved templates).
+EDITABLE = {"lead_reply", "content_draft"}
 
 
 class ReviewError(Exception):
@@ -47,16 +55,19 @@ async def review(action_id: str, *, by: str, verdict: str, text: str | None = No
     final = (text or "").strip() if verdict == "edited" else draft
     if verdict == "edited" and (not final or final == draft):
         raise ReviewError("Write the better version first.")
+    if verdict == "edited" and a["kind"] not in EDITABLE:
+        raise ReviewError("This wording is an approved template and can't be changed here.")
     note = (note or "").strip()[:400] or None
     if remember and not note:
         raise ReviewError("Write the lesson to remember, in one sentence.")
 
     result: dict[str, Any] = {"sent": False}
     if send and verdict != "wrong":
-        if a["kind"] not in SENDABLE or a.get("subject_type") != "lead" or not final:
+        subject_type, state = SENDABLE.get(a["kind"], ("", ""))
+        if not subject_type or a.get("subject_type") != subject_type or not final:
             raise ReviewError("This entry can't be sent from here.")
-        if a["status"] != "shadow":
-            raise ReviewError("Only a draft that wasn't sent can be sent from here.")
+        if a["status"] != state:
+            raise ReviewError("This was a practice run, so it can't be sent from here." if a["status"] == "shadow" else "Only something that wasn't sent yet can be sent from here.")
         if (await limits.stop_all_state()).get("on"):
             raise ReviewError("All agents are stopped. Resume them first, or reply from the lead yourself.")
         # A person owns this text, so only the fixed rules are checked (numbers, links, claims, times against the records).
@@ -64,14 +75,19 @@ async def review(action_id: str, *, by: str, verdict: str, text: str | None = No
                                      rules_only=True, allow_rewrite=False))
         if g.outcome != "pass":
             raise ReviewError("The Compliance Guard stopped this text: " + "; ".join(str(i.get("message")) for i in g.issues[:3]), 422, g.issues)
-        lead_id = str(a["subject_id"])
+        subject_id = str(a["subject_id"])
         try:
-            sent = await nexmarket.lead_reply(lead_id, final, agent_id=a["agent_id"])
+            if a["kind"] == "camp_broadcast":
+                sent = await nexmarket.broadcast_camp(subject_id, agent_id=a["agent_id"])
+                summary = f"Camp invitation scheduled to {sent.get('recipients', '?')} partners after {by} approved it"
+            else:
+                sent = await nexmarket.lead_reply(subject_id, final, agent_id=a["agent_id"])
+                summary = f"Sent after {by} checked it" + (" and edited it" if verdict == "edited" else "")
             result = {"sent": True, "status": sent.get("status")}
-            await actions.record(a["agent_id"], a["kind"], "done", f"Sent after {by} checked it" + (" and edited it" if verdict == "edited" else ""),
-                                 subject=("lead", lead_id), channel=a.get("channel"), detail={"text": final, "reviewOf": str(a["id"])}, sources=a.get("sources") or [])
+            await actions.record(a["agent_id"], a["kind"], "done", summary, subject=(subject_type, subject_id), channel=a.get("channel"),
+                                 detail={"text": final, "reviewOf": str(a["id"])}, sources=a.get("sources") or [])
         except nexmarket.NexMarketError as e:
-            reason = next((v for k, v in REFUSED.items() if k in str(e)), "NexMarket didn't accept the message. Reply from the lead instead.")
+            reason = next((v for k, v in REFUSED.items() if k in str(e)), "NexMarket didn't accept it. Do it from the CRM page instead.")
             result = {"sent": False, "reason": reason}
 
     lesson = None
