@@ -25,7 +25,14 @@ namespace SeemanchalOutreach.Infrastructure.Services
         private readonly ILogger<AppSettingsStore> _logger;
         private readonly byte[] _key;
         private readonly object _gate = new();
-        private Snapshot? _snap;
+        // One set of settings per organisation: each is read from that organisation's own database.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Snapshot> _snaps = new();
+        private static string Org => OrgScope.Current?.Key ?? "";
+        private Snapshot? _snap
+        {
+            get => _snaps.TryGetValue(Org, out var s) ? s : null;
+            set { if (value == null) _snaps.TryRemove(Org, out _); else _snaps[Org] = value; }
+        }
 
         private sealed class Snapshot
         {

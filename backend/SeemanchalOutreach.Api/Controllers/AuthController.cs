@@ -390,6 +390,15 @@ namespace SeemanchalOutreach.Api.Controllers
                 Expires = DateTimeOffset.UtcNow.AddHours(expiryHours),
             });
 
+            // Not a secret: only remembers which organisation this browser signs in to, for the sign-in page and for
+            // renewing the session. A signed-in request never uses it; the token decides.
+            if (OrgScope.Current != null)
+                Response.Cookies.Append(OrgDirectory.Cookie, OrgScope.Current.Key, new CookieOptions
+                {
+                    HttpOnly = true, Secure = Request.IsHttps, SameSite = SameSiteMode.Lax, Path = "/",
+                    Expires = DateTimeOffset.UtcNow.AddDays(400),
+                });
+
             Response.Cookies.Append(AuthCookies.RefreshToken, refreshToken, new CookieOptions
             {
                 HttpOnly = true,
@@ -426,6 +435,8 @@ namespace SeemanchalOutreach.Api.Controllers
                 new Claim("sid", session.Id.ToString()),
                 new Claim("did", session.DeviceId),
                 new Claim("dtype", session.DeviceType ?? DeviceKinds.Desktop),
+                // Which organisation this person belongs to: every request with this token goes to that organisation's database.
+                new Claim(OrgDirectory.Claim, OrgScope.Current?.Key ?? ""),
             };
 
             var token = new JwtSecurityToken(

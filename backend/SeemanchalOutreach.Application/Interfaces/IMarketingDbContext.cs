@@ -1,4 +1,4 @@
-﻿using System.Threading;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -59,6 +59,7 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<Hoarding> Hoardings { get; }
         DbSet<HoardingOwner> HoardingOwners { get; }
         DbSet<HoardingPhoto> HoardingPhotos { get; }
+        DbSet<Organisation> Organisations { get; }
         DbSet<ChatReaction> ChatReactions { get; }
         DbSet<ChatPin> ChatPins { get; }
         DbSet<FieldRole> FieldRoles { get; }

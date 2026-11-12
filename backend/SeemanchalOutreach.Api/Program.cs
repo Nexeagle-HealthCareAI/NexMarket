@@ -22,6 +22,10 @@ using SeemanchalOutreach.Infrastructure.Persistence;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add Clean Architecture layers
+// Organisations: each has its own database; the server's short-lived memory is kept apart per organisation too.
+builder.Services.AddSingleton<Microsoft.Extensions.Caching.Memory.IMemoryCache>(_ =>
+    new OrgMemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())));
+builder.Services.AddSingleton<OrgDirectory>();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 // Activity log: every saved change is stamped with the signed-in person and their device.
@@ -140,9 +144,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             // Tokens issued before sessions were tracked carry no "sid" and keep working until they expire.
             OnTokenValidated = async context =>
             {
+                var sp = context.HttpContext.RequestServices;
+                // This check reads the database before OrgMiddleware runs, and the database connection made here is
+                // the one the whole request keeps. So the token's organisation is chosen first.
+                var tokenOrg = sp.GetRequiredService<OrgDirectory>().Find(context.Principal?.FindFirst(OrgDirectory.Claim)?.Value);
+                if (tokenOrg == null) { context.Fail("This organisation is no longer active."); return; }
+                using var inOrg = OrgScope.Enter(tokenOrg);
                 var sid = context.Principal?.FindFirst("sid")?.Value;
                 if (string.IsNullOrEmpty(sid)) return;
-                var sp = context.HttpContext.RequestServices;
                 var reason = await SeemanchalOutreach.Api.Services.SessionGuard.EndedReasonAsync(
                     sp.GetRequiredService<SeemanchalOutreach.Application.Interfaces.IMarketingDbContext>(),
                     sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
@@ -258,6 +267,25 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// Every other organisation's database gets the same updates. A new organisation's database is created here on its
+// first start. One that fails does not stop the others.
+foreach (var org in app.Services.GetRequiredService<OrgDirectory>().All().Where(o => o.Database != null))
+{
+    try
+    {
+        using var enter = OrgScope.Enter(org);
+        using var orgScope = app.Services.CreateScope();
+        var orgDb = orgScope.ServiceProvider.GetRequiredService<MarketingDbContext>();
+        orgDb.Database.Migrate();
+        await PanchayatSeeder.SyncAsync(orgDb, app.Environment.ContentRootPath);
+        await SurveyQuestionSeeder.SeedIfEmptyAsync(orgDb);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Could not update the database of organisation {Org}", org.Key);
+    }
+}
+
 // Gated on an explicit config flag, not IsDevelopment() — the Dev VM deployment
 // runs with ASPNETCORE_ENVIRONMENT=Development (it's the "Dev" environment, not
 // a local machine), which made this true there too and left the full API schema
@@ -275,6 +303,8 @@ app.UseExceptionHandler();
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();
 app.UseAuthentication();
+// After sign-in is known, before anything reads data: choose the organisation's database for this request.
+app.UseMiddleware<OrgMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

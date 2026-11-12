@@ -21,7 +21,8 @@ namespace SeemanchalOutreach.Infrastructure
             services.AddScoped<AuditSaveChangesInterceptor>();
 
             services.AddDbContext<MarketingDbContext>((sp, options) =>
-                options.UseNpgsql(connectionString, npgsqlOptions =>
+                // Each organisation has its own database on the same server: the one in charge of this piece of work decides.
+                options.UseNpgsql(OrgNames.Connection(connectionString, OrgScope.Current?.Database), npgsqlOptions =>
                 {
                     npgsqlOptions.UseNetTopologySuite();
                     npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "marketing");
