@@ -24,6 +24,13 @@ export interface ActionRow {
   reviewed_at?: string | null; reviewed_by?: string | null;
 }
 /** A practice (shadow) message a person can still check: it has the text and nobody has judged it yet. */
+/** The daily job an admin can run by hand from an agent's card. */
+export const RUN_JOB: Record<string, { job: string; label: string }[]> = {
+  data_watcher: [{ job: 'data_watcher', label: 'Check the numbers now' }],
+  chief_of_staff: [{ job: 'chief_plan', label: 'Plan the day now' }, { job: 'chief_check', label: 'Run the check now' }],
+  reporter_coach: [{ job: 'evening_report', label: 'Write the report now' }, { job: 'coach', label: 'Suggest lessons now' }],
+  lead_follow_up: [{ job: 'lead_follow_up', label: 'Look for quiet leads now' }],
+};
 export const needsCheck = (r: ActionRow) => r.status === 'shadow' && typeof r.detail?.text === 'string' && !r.reviewed_at;
 export interface GuardIssue { rule: string; severity: 'block' | 'fix'; message: string; match?: string | null; fixable: boolean }
 export interface GuardRes {
@@ -49,7 +56,7 @@ export interface Settings {
   recipients: { roles: string[]; whatsapp: boolean };
   meta: Record<string, { updatedAt?: string; updatedBy?: string }>;
 }
-export interface Lesson { agentId: string; key: string; text: string; status?: 'trial' | 'kept' | 'dropped'; episodes?: number; score?: number; by?: string; at?: string }
+export interface Lesson { agentId: string; key: string; text: string; status?: 'trial' | 'kept' | 'dropped' | 'proposed'; episodes?: number; score?: number; by?: string; at?: string }
 
 const V = '/brand/vita/';
 export const POSE = {

@@ -2864,3 +2864,6 @@ div.wk-stat { cursor: default; }
 .ai-to-check { color: var(--accent-ink); font-weight: 700; }
 .ai-lesson-add { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
 .ai-lesson-add select { width: auto; }
+.ai-suggested { border: 1px solid #f5d9a8; background: #fffaf0; }
+.ai-suggested h3 { margin: 0 0 10px; font-size: 15px; }
+.ai-lessons li.is-proposed { align-items: center; border-color: #f5d9a8; }

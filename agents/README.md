@@ -19,8 +19,9 @@ next to the .NET API and works only through it. Design: *NexMarket Autonomous Ag
 | Tools that call NexMarket (alerts, Team board cards) | `nexagents/nexmarket.py` |
 | Lead Responder (answers WhatsApp questions) and Lead Follow-up (nudges quiet leads) | `nexagents/agents/lead_responder.py`, `lead_follow_up.py` |
 | A person checking an agent's drafts: verdicts, sending, lessons | `nexagents/review.py` |
+| The day: numbers → signals → plan → report → suggested lessons | `nexagents/agents/data_watcher.py`, `chief_of_staff.py`, `reporter_coach.py` |
 
-Built so far: Compliance Guard, Lead Responder, Lead Follow-up (`docs/`). The other agents appear on the Agents page with the phase they
+Built so far: Compliance Guard, Lead Responder, Lead Follow-up, Data Watcher, Chief of Staff, Reporter & Coach (`docs/`). The other agents appear on the Agents page with the phase they
 arrive in, and can't be switched on until their code ships (each starts in shadow mode).
 
 ## Run it

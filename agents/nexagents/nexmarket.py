@@ -99,3 +99,15 @@ async def lead_follow_up(lead_id: str, *, agent_id: str) -> dict[str, Any]:
 async def lead_close_quiet(lead_id: str, *, agent_id: str) -> dict[str, Any]:
     """Closes a lead as lost (no response). NexMarket refuses (409) unless all follow-ups were sent and none in the last 3 days."""
     return await _post(f"/api/v1/internal/agent-tools/leads/{lead_id}/close-quiet", {"agentId": agent_id})
+
+
+# ─── Data Watcher, Chief of Staff, Reporter & Coach ──────────────────────────
+
+async def numbers() -> dict[str, Any]:
+    """Today's totals next to what is usual (leads, WhatsApp, referrals, field, reviews, hoardings). Counts only."""
+    return await _get("/api/v1/internal/agent-tools/numbers")
+
+
+async def lead_outcomes(days: int = 7) -> dict[str, Any]:
+    """What happened to leads after Vita or the desk wrote to them, as counts."""
+    return await _get(f"/api/v1/internal/agent-tools/lead-outcomes?days={days}")

@@ -177,7 +177,8 @@ function AiAgents() {
                 onPause={() => void act(() => crm.post(`/api/v1/ai-agents/agents/${selected.id}/pause`, { reason: null }), `${selected.name} paused.`)}
                 onResume={() => void act(() => crm.post(`/api/v1/ai-agents/agents/${selected.id}/resume`), `${selected.name} resumed.`)}
                 onMode={(m: Mode) => void act(() => crm.put(`/api/v1/ai-agents/agents/${selected.id}/mode`, { mode: m }), `${selected.name} is now ${m}.`)}
-                onCheck={() => router.replace('/admin/ai-agents?tab=activity&show=check', { scroll: false })} />
+                onCheck={() => router.replace('/admin/ai-agents?tab=activity&show=check', { scroll: false })}
+                onRun={(job, label) => void act(() => crm.post('/api/v1/ai-agents/run', { job }), `Done: ${label.replace(/ now$/, '').toLowerCase()}. See Activity for what it found.`)} />
             )}
           </div>
           <p className="ai-foot"><ShieldCheck size={15} aria-hidden /> Every message to patients, partners or the public passes the Compliance Guard first. Agents only act through NexMarket, and no patient details go to the AI.</p>

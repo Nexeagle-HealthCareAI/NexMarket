@@ -25,14 +25,17 @@ class AgentDef:
 
 
 AGENTS: tuple[AgentDef, ...] = (
-    AgentDef("chief_of_staff", "Chief of Staff", "Plans the day, hands work to agents, checks they finished", "command", 2, "big",
-             "7 am, 2 pm; any agent asking for help", "Create and assign Team board cards; start other agents", "Cannot send anything outside",
-             ("*",)),
+    AgentDef("chief_of_staff", "Chief of Staff", "Turns the morning's numbers into the day's plan, and checks on it", "command", 2, "big",
+             "7:15 am (the plan) and 2 pm (a check; silent when all is well)",
+             "Send the plan to the managers; add Team board cards for people; hand work to other agents",
+             "Sends nothing outside the hospital; at most 5 priorities and 3 cards a day; every priority must come from a signal, with the signal's own numbers",
+             ("*",), built=True),
     AgentDef("compliance_guard", "Compliance Guard", "Checks every outgoing message, post and reply before it leaves", "command", 1, "safeguard",
              "Every outgoing action", "Block, or ask for a rewrite", "Cannot be switched off for outgoing actions",
              ("content_writer", "broadcast_manager", "social_publisher", "reputation", "lead_responder"), start_mode="live", built=True),
     AgentDef("data_watcher", "Data Watcher", "Reads the numbers and spots changes worth acting on", "command", 2, "small",
-             "6:30 am, hourly", "Raise alerts for other agents", "Read only; totals only, never patient details", ("chief_of_staff", "reporter_coach")),
+             "6:30 am, then every hour from 8 am to 8 pm", "Raise signals for the Chief of Staff; tell the managers at once about a serious one (once a day each)",
+             "Read only; totals only, never patient details; fixed rules, no AI", ("chief_of_staff", "reporter_coach"), built=True),
     AgentDef("lead_responder", "Lead Responder", "Answers what a new lead asked on WhatsApp, from live records", "leads", 2, "small",
              "A lead writes on WhatsApp (after 3 minutes in office hours, so the desk can answer first)", "Reply inside the 24-hour window; set the department; hand to a person; emergency alert",
              "Answers only from doctor, OPD and camp records; never prices, complaints, reports or medical questions; 1 reply per lead per hour",
@@ -63,8 +66,9 @@ AGENTS: tuple[AgentDef, ...] = (
              ("compliance_guard", "reporter_coach")),
     AgentDef("ads_optimiser", "Ads Optimiser", "Reads ad results against patients who came, and suggests changes to you", "growth", 5, "big",
              "5 pm daily", "Suggestions only (you run Google and Meta ads yourself)", "Read only", ("chief_of_staff", "data_watcher")),
-    AgentDef("reporter_coach", "Reporter & Coach", "Evening report; writes lessons from results", "growth", 2, "big",
-             "8 pm, 11 pm", "Report to admins and marketing managers; save checked lessons", "Cannot change other agents' limits", ("*",)),
+    AgentDef("reporter_coach", "Reporter & Coach", "Evening report; suggests lessons from the day's corrections", "growth", 2, "big",
+             "8 pm (report) and 8:30 pm (lessons)", "Report to the managers; suggest lessons, which an agent reads only after a person keeps them",
+             "Sends nothing outside; a report line with a number it wasn't given is dropped; cannot change other agents' limits", ("*",), built=True),
 )
 
 BY_ID = {a.id: a for a in AGENTS}

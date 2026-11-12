@@ -359,6 +359,23 @@ namespace SeemanchalOutreach.Api.Controllers
             return Change(HttpMethod.Post, "v1/lessons", new { by = By, agent = d.Agent, text = text.Length > 400 ? text[..400] : text }, "Create", d.Agent, $"Gave Vita agent {d.Agent} a lesson", ct);
         }
 
+        /// <summary>A lesson the Coach suggested is kept: the agent reads it from its next run.</summary>
+        [HttpPost("lessons/{agent}/{key}/keep")]
+        public Task<IActionResult> KeepLesson(string agent, string key, CancellationToken ct)
+        {
+            if (!CanView) return Task.FromResult<IActionResult>(Forbid());
+            return Change(HttpMethod.Post, $"v1/lessons/{Uri.EscapeDataString(agent)}/{Uri.EscapeDataString(key)}/keep", new { by = By }, "Update", agent, $"Kept a suggested lesson for Vita agent {agent}", ct);
+        }
+
+        /// <summary>Runs one of the agents' daily jobs now instead of at its hour (the agent's own mode and limits still apply).</summary>
+        [HttpPost("run")]
+        public Task<IActionResult> RunNow([FromBody] AiRunDto d, CancellationToken ct)
+        {
+            if (!IsAdmin) return Task.FromResult<IActionResult>(StatusCode(403, new { message = "Only an admin can run an agent's job by hand." }));
+            if (d.Job is not ("data_watcher" or "chief_plan" or "chief_check" or "evening_report" or "coach" or "lead_follow_up")) return Task.FromResult<IActionResult>(NotFound());
+            return Change(HttpMethod.Post, "v1/run", new { by = By, job = d.Job }, "Update", d.Job, $"Ran the Vita job {d.Job} by hand", ct);
+        }
+
         [HttpPost("lessons/{agent}/{key}/drop")]
         public Task<IActionResult> DropLesson(string agent, string key, CancellationToken ct)
         {
@@ -399,6 +416,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public bool Send { get; set; }
         public bool Remember { get; set; }
     }
+    public class AiRunDto { public string Job { get; set; } = ""; }
     public class AiLessonDto { public string Agent { get; set; } = ""; public string? Text { get; set; } }
     public class AgentIdDto { public string AgentId { get; set; } = ""; }
 
@@ -457,6 +475,150 @@ namespace SeemanchalOutreach.Api.Controllers
             var a = Encoding.UTF8.GetBytes(given);
             var b = Encoding.UTF8.GetBytes(secret);
             return a.Length == b.Length && CryptographicOperations.FixedTimeEquals(a, b);
+        }
+
+        // ─── Numbers for the Data Watcher, the Chief of Staff and the Reporter ─────────────────
+
+        /// <summary>
+        /// Today's totals next to what is usual, for the Data Watcher. Counts only: no names, no phone numbers, no message
+        /// text. "usualByNow" is the average of the last 7 days up to this time of day, so a morning is compared with mornings.
+        /// </summary>
+        [HttpGet("numbers")]
+        public async Task<IActionResult> Numbers(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var now = DateTime.UtcNow;
+            var day0 = IstClock.TodayStartUtc;
+            var into = now - day0;                         // how far into the India day we are
+            var week0 = day0.AddDays(-7);
+            var weekStart = day0.AddDays(-6);              // this week = today and the 6 days before
+            var prevWeekStart = weekStart.AddDays(-7);
+            double Usual(IEnumerable<DateTime> times) => Math.Round(times.Count(t => t >= week0 && t < day0 && (t - day0.AddDays(Math.Floor((t - day0).TotalDays))) <= into) / 7.0, 1);
+
+            // Leads
+            var leads = await _db.Leads.AsNoTracking().Where(l => l.CreatedAt >= prevWeekStart).Select(l => new { l.CreatedAt, l.Source, l.Status, l.FirstResponseAt, l.ClosedAt }).ToListAsync(ct);
+            var leadsToday = leads.Where(l => l.CreatedAt >= day0).ToList();
+            var sources = leads.Where(l => l.CreatedAt >= week0).GroupBy(l => l.Source).Select(g => new
+            {
+                source = g.Key, today = g.Count(l => l.CreatedAt >= day0), usualByNow = Usual(g.Select(l => l.CreatedAt)), last7 = g.Count(l => l.CreatedAt < day0),
+            }).OrderByDescending(x => x.last7).ToList();
+            var waiting = await _db.Leads.AsNoTracking().Where(l => l.Status == "new" && l.FirstResponseAt == null && !l.OptOut && l.CreatedAt > now.AddDays(-3) && l.CreatedAt < now.AddMinutes(-30))
+                .Select(l => l.CreatedAt).ToListAsync(ct);
+            var openIdle = await _db.Leads.AsNoTracking().CountAsync(l => (l.Status == "new" || l.Status == "contacted") && l.ClosedAt == null && l.LastActivityAt < now.AddDays(-3), ct);
+            var moved = await _db.LeadActivities.AsNoTracking().Where(a => a.Kind == "status" && a.CreatedAt >= prevWeekStart).Select(a => new { a.CreatedAt, a.Text }).ToListAsync(ct);
+            int Moved(string to, DateTime from, DateTime until) => moved.Count(m => m.CreatedAt >= from && m.CreatedAt < until && m.Text.Contains("→ " + LeadInbox.StatusLabel(to)));
+
+            // WhatsApp
+            var wa = await _db.WaMessages.AsNoTracking().Where(m => m.CreatedAt >= week0).Select(m => new { m.CreatedAt, m.Direction, m.Status }).ToListAsync(ct);
+            var waOutToday = wa.Where(m => m.Direction == "out" && m.CreatedAt >= day0).ToList();
+            var waOutWeek = wa.Where(m => m.Direction == "out" && m.CreatedAt < day0).ToList();
+
+            // Referrals from partners
+            var refs = await _db.Referrals.AsNoTracking().Where(r => r.CreatedAt >= prevWeekStart).Select(r => new { r.CreatedAt, r.ArrivedAt }).ToListAsync(ct);
+            var arrived = await _db.Referrals.AsNoTracking().Where(r => r.ArrivedAt != null && r.ArrivedAt >= prevWeekStart).Select(r => r.ArrivedAt!.Value).ToListAsync(ct);
+
+            // Field work
+            var visits = await _db.Visits.AsNoTracking().Where(v => v.CheckInAt >= week0).Select(v => v.CheckInAt).ToListAsync(ct);
+            var onShift = await _db.Shifts.AsNoTracking().Where(x => x.StartTime >= day0).Select(x => x.AgentId).Distinct().CountAsync(ct);
+            var shiftsWeek = await _db.Shifts.AsNoTracking().Where(x => x.StartTime >= week0 && x.StartTime < day0).Select(x => new { x.AgentId, x.StartTime }).ToListAsync(ct);
+            var usualOnShift = Math.Round(shiftsWeek.GroupBy(x => (int)Math.Floor((x.StartTime - week0).TotalDays)).Select(g => g.Select(x => x.AgentId).Distinct().Count()).DefaultIfEmpty(0).Average(), 1);
+
+            var today = AttendanceService.TodayIst;
+            var overdue = await _db.AgentTasks.AsNoTracking().CountAsync(t => t.Status == "open" && t.DueDate != null && t.DueDate < today, ct);
+            var reviews = await _db.GoogleReviews.AsNoTracking().Where(r => r.PostedAt >= now.AddDays(-30)).Select(r => new { r.PostedAt, r.Stars, r.RepliedAt }).ToListAsync(ct);
+            var hoard = await _db.Hoardings.AsNoTracking().Where(h => h.Status != "ended" && h.Status != "rejected").ToListAsync(ct);
+
+            var brief = await _db.AiBriefings.AsNoTracking().Where(b => b.Status == "ok" && b.Scope == "business").OrderByDescending(b => b.CreatedAt)
+                .Select(b => new { b.CreatedAt, b.Health, b.Summary }).FirstOrDefaultAsync(ct);
+            var items = await _db.AiItems.AsNoTracking().Where(i => (i.Status == "open" || i.Status == "in_progress") && i.Scope == "business")
+                .OrderBy(i => i.Severity == "high" ? 0 : i.Severity == "medium" ? 1 : 2).ThenByDescending(i => i.UpdatedAt).Take(6)
+                .Select(i => new { i.Kind, i.Title, i.Area, i.Metric, i.Severity, i.Trend, i.Owner, due = i.DueDate }).ToListAsync(ct);
+
+            return Ok(new
+            {
+                asOf = now, istHour = IstClock.NowIst.Hour, weekday = IstClock.NowIst.DayOfWeek.ToString(),
+                leads = new
+                {
+                    today = leadsToday.Count, usualByNow = Usual(leads.Select(l => l.CreatedAt)),
+                    yesterday = leads.Count(l => l.CreatedAt >= day0.AddDays(-1) && l.CreatedAt < day0),
+                    last7 = leads.Count(l => l.CreatedAt >= week0 && l.CreatedAt < day0),
+                    bySource = sources,
+                    waitingNoReply = waiting.Count,
+                    oldestWaitingMinutes = waiting.Count == 0 ? 0 : (int)(now - waiting.Min()).TotalMinutes,
+                    openIdle3Days = openIdle,
+                    appointmentsThisWeek = Moved("appointment", weekStart, now), appointmentsPrevWeek = Moved("appointment", prevWeekStart, weekStart),
+                    arrivedThisWeek = Moved("arrived", weekStart, now), arrivedPrevWeek = Moved("arrived", prevWeekStart, weekStart),
+                    lostThisWeek = Moved("lost", weekStart, now), lostPrevWeek = Moved("lost", prevWeekStart, weekStart),
+                },
+                whatsapp = new
+                {
+                    paused = _outbox.Rules.Paused, configured = _outbox.Config.IsConfigured,
+                    sentToday = waOutToday.Count, failedToday = waOutToday.Count(m => m.Status == "failed"),
+                    sentLast7 = waOutWeek.Count, failedLast7 = waOutWeek.Count(m => m.Status == "failed"),
+                    inboundToday = wa.Count(m => m.Direction == "in" && m.CreatedAt >= day0), inboundUsualByNow = Usual(wa.Where(m => m.Direction == "in").Select(m => m.CreatedAt)),
+                },
+                referrals = new
+                {
+                    today = refs.Count(r => r.CreatedAt >= day0), usualByNow = Usual(refs.Select(r => r.CreatedAt)),
+                    thisWeek = refs.Count(r => r.CreatedAt >= weekStart), prevWeek = refs.Count(r => r.CreatedAt >= prevWeekStart && r.CreatedAt < weekStart),
+                    arrivedThisWeek = arrived.Count(t => t >= weekStart), arrivedPrevWeek = arrived.Count(t => t >= prevWeekStart && t < weekStart),
+                },
+                field = new
+                {
+                    visitsToday = visits.Count(v => v >= day0), visitsUsualByNow = Usual(visits),
+                    agentsOnShiftToday = onShift, agentsOnShiftUsual = usualOnShift, tasksOverdue = overdue,
+                },
+                reviews = new
+                {
+                    newThisWeek = reviews.Count(r => r.PostedAt >= weekStart), unanswered = reviews.Count(r => r.RepliedAt == null),
+                    lowUnanswered = reviews.Count(r => r.RepliedAt == null && r.Stars <= 3),
+                },
+                hoardings = new
+                {
+                    waiting = hoard.Count(h => h.Status == "suggested"),
+                    endingSoon = hoard.Count(h => Hoardings.Stage(h, today) == "ending"),
+                    rentMissing = hoard.Count(h => (h.Status == "approved" || Hoardings.Running(h)) && h.MonthlyRent == null),
+                },
+                analyst = new { lastBriefingAt = brief?.CreatedAt, health = brief?.Health, summary = brief?.Summary, openItems = items },
+            });
+        }
+
+        /// <summary>
+        /// What happened to leads after Vita or the desk wrote to them, as counts, for the Reporter & Coach: did they write
+        /// back, did they get an appointment, did they come. No names, numbers or message text.
+        /// </summary>
+        [HttpGet("lead-outcomes")]
+        public async Task<IActionResult> LeadOutcomes([FromQuery] int days = 7, CancellationToken ct = default)
+        {
+            if (!Allowed()) return Unauthorized();
+            days = Math.Clamp(days, 1, 60);
+            var from = IstClock.TodayStartUtc.AddDays(-days + 1);
+            var outs = await _db.WaMessages.AsNoTracking()
+                .Where(m => m.Direction == "out" && m.CreatedAt >= from && m.LeadId != null && !NotSent.Contains(m.Status) && m.SentBy != null
+                    && (m.SentBy.StartsWith("ai:") || HumanSources.Contains(m.Source)))
+                .Select(m => new { LeadId = m.LeadId!.Value, m.SentBy, m.Source, m.CreatedAt }).ToListAsync(ct);
+            var ids = outs.Select(o => o.LeadId).Distinct().ToList();
+            var leads = ids.Count == 0 ? new() : (await _db.Leads.AsNoTracking().Where(l => ids.Contains(l.Id)).Select(l => new { l.Id, l.Status, l.LastInboundAt }).ToListAsync(ct)).ToDictionary(l => l.Id);
+            object Group(Func<string, string, bool> pick)
+            {
+                var first = outs.Where(o => pick(o.SentBy!, o.Source)).GroupBy(o => o.LeadId).Select(g => new { g.Key, At = g.Min(o => o.CreatedAt) }).Where(x => leads.ContainsKey(x.Key)).ToList();
+                var rows = first.Select(x => new { L = leads[x.Key], x.At }).ToList();
+                return new
+                {
+                    leads = rows.Count,
+                    wroteBack = rows.Count(r => r.L.LastInboundAt != null && r.L.LastInboundAt > r.At),
+                    appointmentOrCame = rows.Count(r => r.L.Status is "appointment" or "arrived" or "admitted"),
+                    came = rows.Count(r => r.L.Status is "arrived" or "admitted"),
+                    lost = rows.Count(r => r.L.Status == "lost"),
+                };
+            }
+            return Ok(new
+            {
+                days,
+                answeredByVita = Group((by, src) => by == "ai:lead_responder"),
+                answeredByDesk = Group((by, src) => !by.StartsWith("ai:")),
+                followedUp = Group((by, src) => src == "followup"),
+            });
         }
 
         [HttpPost("notify")]

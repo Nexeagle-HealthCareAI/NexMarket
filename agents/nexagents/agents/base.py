@@ -109,6 +109,21 @@ class Runtime:
                                                             "at": datetime.now(timezone.utc).isoformat()})
         return key
 
+    async def propose_lesson(self, agent_id: str, text: str, *, cases: int = 0) -> str:
+        """A lesson the Coach suggests. The agent does not read it until a person keeps it."""
+        from datetime import datetime, timezone
+        key = str(db.new_id())
+        await self.store.aput(("lessons", agent_id), key, {"text": text.strip()[:400], "status": "proposed", "score": 0, "by": "Vita's Coach", "source": "coach",
+                                                            "episodes": cases, "at": datetime.now(timezone.utc).isoformat()})
+        return key
+
+    async def keep_lesson(self, agent_id: str, key: str, by: str) -> bool:
+        item = await self.store.aget(("lessons", agent_id), key)
+        if item is None:
+            return False
+        await self.store.aput(("lessons", agent_id), key, {**item.value, "status": "kept", "score": 1, "keptBy": by})
+        return True
+
     async def drop_lesson(self, agent_id: str, key: str, by: str) -> bool:
         item = await self.store.aget(("lessons", agent_id), key)
         if item is None:

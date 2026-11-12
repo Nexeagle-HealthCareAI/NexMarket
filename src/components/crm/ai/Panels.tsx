@@ -325,7 +325,13 @@ export function LessonsPanel({ lessons, agents, onChanged }: { lessons: Lesson[]
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const kept = lessons.filter((l) => l.status !== 'dropped');
+  const kept = lessons.filter((l) => l.status !== 'dropped' && l.status !== 'proposed');
+  const suggested = lessons.filter((l) => l.status === 'proposed');
+  const keep = async (l: Lesson) => {
+    setBusy(true);
+    try { await crm.post(`/api/v1/ai-agents/lessons/${l.agentId}/${l.key}/keep`); onChanged?.('Kept. The agent reads it from its next run.'); }
+    catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); }
+  };
   const add = async () => {
     if (text.trim().length < 8) { setErr('Write the lesson in one sentence.'); return; }
     setBusy(true); setErr(null);
@@ -345,9 +351,9 @@ export function LessonsPanel({ lessons, agents, onChanged }: { lessons: Lesson[]
           <li><b>Check</b> their practice messages in Activity: good, your better version, or wrong.</li>
           <li><b>Teach</b>: tick “Teach this” on a correction, or write a lesson here.</li>
           <li><b>Read</b>: the agent is given its lessons (up to 8) on every run.</li>
+          <li><b>Suggested</b>: each evening the Coach reads the week’s corrections and suggests lessons. An agent reads one only after you keep it.</li>
           <li><b>Remove</b> a lesson that no longer holds.</li>
         </ol>
-        <span className="ai-muted">Lessons written by the agents themselves from results arrive with the Reporter &amp; Coach.</span>
       </div>
       {onChanged && built.length > 0 && (
         <div className="ai-card ai-lesson-add">
@@ -359,6 +365,23 @@ export function LessonsPanel({ lessons, agents, onChanged }: { lessons: Lesson[]
           </label>
           <button type="button" className="crm-btn is-sm" disabled={busy} onClick={() => void add()}>Add lesson</button>
           {err && <div className="crm-error" role="alert" style={{ flexBasis: '100%' }}>{err}</div>}
+        </div>
+      )}
+      {suggested.length > 0 && (
+        <div className="ai-card ai-suggested">
+          <h3>Suggested by the Coach ({suggested.length})</h3>
+          <ul className="ai-lessons">
+            {suggested.map((l) => (
+              <li key={l.agentId + l.key} className="is-proposed">
+                <Lightbulb size={16} aria-hidden />
+                <div style={{ flex: 1 }}><strong>{l.text}</strong><span>For {name(l.agentId)}{l.episodes ? ` · from ${l.episodes} corrections` : ''}{l.at ? ` · ${when(l.at)}` : ''}</span></div>
+                {onChanged && <>
+                  <button type="button" className="crm-btn is-ok is-sm" disabled={busy} onClick={() => void keep(l)}>Keep</button>
+                  <button type="button" className="crm-btn is-ghost is-sm" disabled={busy} onClick={() => void drop(l)}>Drop</button>
+                </>}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       {kept.length === 0 ? (

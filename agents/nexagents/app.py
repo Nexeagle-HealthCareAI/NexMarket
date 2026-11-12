@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from . import __version__, actions, blackboard, db, limits, nexmarket, review as reviews
 from .act import guard, log_guard
-from .agents import lead_follow_up, lead_responder
+from .agents import chief_of_staff, data_watcher, lead_follow_up, lead_responder, reporter_coach
 from .agents.base import runtime
 from .agents.registry import AGENTS, BY_ID, WINGS
 from .auth import require_secret
@@ -103,6 +103,19 @@ async def follow_up_leads() -> None:
         log.exception("lead follow-up failed")
 
 
+def _job(name: str, fn: Any) -> Any:
+    """A scheduled run that never takes the scheduler down with it."""
+    async def run() -> None:
+        try:
+            r = await fn()
+            if r and any(r.values()):
+                log.info("%s: %s", name, r)
+        except Exception:
+            log.exception("%s failed", name)
+    run.__name__ = name
+    return run
+
+
 async def work_leads() -> None:
     try:
         await lead_responder.tick()
@@ -122,6 +135,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     sched.add_job(catch_up_leads, "interval", minutes=3, id="lead_catch_up", max_instances=1, coalesce=True)
     # Follow-ups go out in the working day only: every hour from 10 am to 6 pm India time.
     sched.add_job(follow_up_leads, "cron", hour="10-18", minute=20, id="lead_follow_up", max_instances=1, coalesce=True)
+    # The day, in India time: numbers → plan → check → report → lessons. A run missed by up to an hour (a restart) still happens.
+    late = {"max_instances": 1, "coalesce": True, "misfire_grace_time": 3600}
+    sched.add_job(_job("data_watcher", data_watcher.tick), "cron", hour=6, minute=30, id="data_watcher_early", **late)
+    sched.add_job(_job("data_watcher", data_watcher.tick), "cron", hour="8-20", minute=5, id="data_watcher", **late)
+    sched.add_job(_job("chief_plan", chief_of_staff.plan_day), "cron", hour=7, minute=15, id="chief_plan", **late)
+    sched.add_job(_job("chief_check", chief_of_staff.check_day), "cron", hour=14, minute=10, id="chief_check", **late)
+    sched.add_job(_job("evening_report", reporter_coach.report), "cron", hour=20, minute=10, id="evening_report", **late)
+    sched.add_job(_job("coach", reporter_coach.coach), "cron", hour=20, minute=30, id="coach", **late)
     sched.start()
     log.info("NexMarket Agents %s started (Groq %s)", __version__, "ready" if config.groq_ready else "NOT configured")
     try:
@@ -348,6 +369,29 @@ async def add_lesson(body: LessonBody) -> dict[str, Any]:
     key = await runtime.add_lesson(a.id, body.text, body.by)
     await actions.record(a.id, "lesson", "done", f"New lesson from {body.by}: {body.text[:200]}")
     return {"ok": True, "key": key}
+
+
+@app.post("/v1/lessons/{agent_id}/{key}/keep", dependencies=secured)
+async def keep_lesson(agent_id: str, key: str, body: By) -> dict[str, Any]:
+    a = _agent(agent_id)
+    if not await runtime.keep_lesson(a.id, key, body.by):
+        raise HTTPException(404, "No such lesson.")
+    await actions.record(a.id, "lesson", "done", f"Suggested lesson kept by {body.by}")
+    return {"ok": True}
+
+
+class RunBody(By):
+    job: str
+
+
+@app.post("/v1/run", dependencies=secured)
+async def run_now(body: RunBody) -> dict[str, Any]:
+    """Runs one of the daily jobs now (the button on an agent's card), instead of waiting for its hour."""
+    jobs = {"data_watcher": data_watcher.tick, "chief_plan": chief_of_staff.plan_day, "chief_check": chief_of_staff.check_day,
+            "evening_report": reporter_coach.report, "coach": reporter_coach.coach, "lead_follow_up": lead_follow_up.tick}
+    if body.job not in jobs:
+        raise HTTPException(404, "No such job.")
+    return {"ok": True, "result": await jobs[body.job]()}
 
 
 @app.post("/v1/lessons/{agent_id}/{key}/drop", dependencies=secured)
