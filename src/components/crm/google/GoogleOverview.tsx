@@ -7,6 +7,7 @@ import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Skeleton } from '@/components/crm/ui';
 import { addRange, type DateRangeValue } from '@/components/crm/DateRange';
 import { change, dayLabel, money, n0, n1, SOURCE_COLOR, type GoogleStatus } from './shared';
+import { place } from '@/lib/crm/access';
 
 interface Metric { key: string; label: string; format: 'n' | 'money' | 'pos'; value: number | null; prev: number | null }
 interface Card { source: string; label: string; metrics: Metric[]; note?: string | null }
@@ -71,8 +72,8 @@ export function GoogleOverview({ range, onTab, onSynced, toast }: {
         <Empty title={data.status.connected ? 'No numbers from Google yet' : 'Google isn’t connected yet'}>
           <span className="crm-sub">
             {data.status.connected
-              ? 'Pick the hospital’s Google accounts in Setup, then fetch. The first fetch brings up to 16 months of history.'
-              : 'Connect the hospital’s own Google account once. NexMarket then reads the Google listing, website, YouTube and Google Ads numbers directly from Google every morning, with no outside service and no monthly fee.'}
+              ? `Pick the ${place()}’s Google accounts in Setup, then fetch. The first fetch brings up to 16 months of history.`
+              : `Connect the ${place()}’s own Google account once. NexMarket then reads the Google listing, website, YouTube and Google Ads numbers directly from Google every morning, with no outside service and no monthly fee.`}
           </span>
           <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
             {data.status.isAdmin && <button type="button" className="crm-btn is-sm" onClick={() => onTab('setup')}>Open Setup</button>}
@@ -148,7 +149,7 @@ export function GoogleOverview({ range, onTab, onSynced, toast }: {
       <div className="gg-two">
         <section className="crm-card so-card">
           <h2 className="crm-h2" style={{ margin: 0 }}>Patients Google brought</h2>
-          <div className="gg-big"><strong>{n0.format(googleLeads)}</strong> leads <ArrowRight size={16} aria-hidden /> <strong>{n0.format(googleArrived)}</strong> came to the hospital</div>
+          <div className="gg-big"><strong>{n0.format(googleLeads)}</strong> leads <ArrowRight size={16} aria-hidden /> <strong>{n0.format(googleArrived)}</strong> came to the {place()}</div>
           <ul className="gg-list">
             {data.crm.map((c) => (
               <li key={c.source}><span>{c.label}</span><span className="crm-sub">{n0.format(c.leads)} leads · {n0.format(c.arrived)} came</span></li>

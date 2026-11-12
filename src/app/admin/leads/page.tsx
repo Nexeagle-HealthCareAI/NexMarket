@@ -8,7 +8,7 @@ import {
   StickyNote, UserPlus, X,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit, orgName, useAccess } from '@/lib/crm/access';
+import { canEdit, orgName, useAccess, place } from '@/lib/crm/access';
 import { useLiveEvents, useNow } from '@/lib/crm/live';
 import { useAgentStore } from '@/store/agent-store';
 import { Pager } from '@/components/crm/Pager';
@@ -163,7 +163,7 @@ function LeadsPage() {
       {list && !list.whatsappConfigured && (
         <div className="ld-banner">
           <MessageCircle size={18} aria-hidden />
-          <span><strong>WhatsApp isn&apos;t connected yet.</strong> Add calls, walk-ins and camp sign-ups here now. Once the hospital&apos;s WhatsApp Business number is connected, every message to it lands here too, and you can reply from this page.
+          <span><strong>WhatsApp isn&apos;t connected yet.</strong> Add calls, walk-ins and camp sign-ups here now. Once the {place()}&apos;s WhatsApp Business number is connected, every message to it lands here too, and you can reply from this page.
             {access?.isAdmin ? <> <Link href="/admin/whatsapp?tab=setup" style={{ fontWeight: 700 }}>Set up WhatsApp →</Link></> : ' An admin can connect it in WhatsApp → Setup.'}</span>
         </div>
       )}
@@ -265,7 +265,7 @@ function LeadsPage() {
             <div className="ch-empty">
               <Inbox size={22} aria-hidden />
               <strong>Pick a lead</strong>
-              <span>See their WhatsApp messages, reply, give them an owner and move them along until they arrive at the hospital.</span>
+              <span>See their WhatsApp messages, reply, give them an owner and move them along until they arrive at the {place()}.</span>
             </div>
           )}
         </section>
@@ -441,7 +441,7 @@ function LeadPane({ id, ping, editable, onBack, onChanged, toast }: {
       </div>
 
       <div className="ch-body ld-body" role="log" aria-live="polite" ref={bodyRef}>
-        <div className="ch-secure"><Lock size={12} aria-hidden /> {l.optOut ? 'They asked not to get WhatsApp messages. Call them instead.' : d.whatsappConfigured ? 'WhatsApp messages with the hospital’s number. Everyone on the desk sees this conversation.' : 'Notes and calls about this lead. WhatsApp messages will show here once it’s connected.'}</div>
+        <div className="ch-secure"><Lock size={12} aria-hidden /> {l.optOut ? 'They asked not to get WhatsApp messages. Call them instead.' : d.whatsappConfigured ? `WhatsApp messages with the ${place()}’s number. Everyone on the desk sees this conversation.` : 'Notes and calls about this lead. WhatsApp messages will show here once it’s connected.'}</div>
         {rows.map((r, i) => 'day' in r ? <div key={`d${i}`} className="ch-day"><span>{dayLabelOf(r.day)}</span></div>
           : r.type === 'message' ? <WaBubble key={r.id} m={r} /> : <ActivityLine key={r.id} a={r} />)}
       </div>
@@ -690,7 +690,7 @@ function CampQr({ onClose }: { onClose: () => void }) {
         <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
         <button type="button" className="crm-btn" onClick={() => void make()}>Make QR code</button>
       </>}>
-      <p className="crm-sub" style={{ margin: 0 }}>People scan it and WhatsApp opens with a message to the hospital already typed. For a partner&apos;s own code, open the partner and choose “WhatsApp QR”.</p>
+      <p className="crm-sub" style={{ margin: 0 }}>People scan it and WhatsApp opens with a message to the {place()} already typed. For a partner&apos;s own code, open the partner and choose “WhatsApp QR”.</p>
       <label className="crm-field">Camp or poster name (optional)
         <input className="crm-input" value={camp} onChange={(e) => setCamp(e.target.value)} maxLength={60} placeholder="e.g. Kasba camp 12 Nov" />
       </label>

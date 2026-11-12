@@ -91,7 +91,7 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         private static OrgInfo? InfoOf(Organisation? row) =>
-            row == null || string.IsNullOrWhiteSpace(row.Database) ? null : new OrgInfo(row.Key, row.Name, row.Database);
+            row == null || string.IsNullOrWhiteSpace(row.Database) ? null : new OrgInfo(row.Key, row.Name, row.Database, row.Kinds);
 
         /// <summary>How many people use an organisation, when someone was last active, and who its admins are.</summary>
         [HttpGet("orgs/{key}")]

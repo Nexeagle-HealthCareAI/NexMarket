@@ -94,7 +94,10 @@ export default function Login() {
             ) : null}
             {error ? <T style={{ color: C.bad, fontWeight: '600' }}>{error}</T> : null}
             <Btn label={busy ? t('firstSync') : t('continue')} onPress={submit} loading={busy} disabled={!userId.trim() || !password} />
-            <T style={{ color: C.text2, fontSize: 13, textAlign: 'center' }}>{t('forgotPassword')}</T>
+            <Pressable onPress={async () => { await setOrg(org); router.push({ pathname: '/forgot', params: { user: userId.trim() } }); }} accessibilityRole="link" hitSlop={8}
+              style={{ minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+              <T style={{ color: C.blue, fontSize: 15, fontWeight: '700', textDecorationLine: 'underline' }}>{t('fpLink')}</T>
+            </Pressable>
           </View>
 
           <T style={{ color: C.sideText, fontSize: 12, textAlign: 'center', marginTop: 'auto' }}>

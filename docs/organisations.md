@@ -59,6 +59,17 @@ region); every other organisation sees the name it signed up with. `Platform:Def
 organisation's name. The rule is in one place: `OrgText` on the server, `orgName()` in the web app and
 `setOrgWording` in the phone app.
 
+## The organisation's everyday word
+
+What was ticked at sign-up decides one word: hospital, clinic, lab, pharmacy, diagnostic centre, dialysis centre, or
+"centre" when several kinds are ticked without a hospital. Screens and the phone app (in all four languages) use that
+word wherever they used to say "hospital" ("the lab's WhatsApp number"), a few "OPD" labels become plain ("Timing",
+"Seen") for organisations that are not a hospital or clinic, and the AI helpers are told the word in one sentence.
+The first organisation is a hospital unless `Platform:DefaultOrgKinds` says otherwise. The rule: `OrgText.PlaceOf` on
+the server, `place()` / `Place()` / `places()` / `hasOpd()` in the web app, `setOrgPlace` in the phone app. A partner
+of type "Hospital" stays a hospital for everyone. Example texts and placeholders that mention OPD are unchanged, and
+features built around departments, doctors and referrals still appear for every kind.
+
 ## Running the platform
 
 - **Organisations screen** (`/admin/platform`): only admins of the first organisation see it. It lists every

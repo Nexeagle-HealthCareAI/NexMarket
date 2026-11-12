@@ -6,6 +6,7 @@ import { Crosshair, MapPin, Navigation, Phone, Star, X } from 'lucide-react';
 import { geo, SOURCE_LABEL, STATUS_META, type PanchayatDetail, type PanchayatPerson } from '@/lib/crm/geo';
 import { crm } from '@/lib/sync/api-client';
 import { contactTypeLabel, Empty, ErrorBox, fmt, friendlyError, Pill, Skeleton, stageTone, useLoader } from '@/components/crm/ui';
+import { place } from '@/lib/crm/access';
 
 type Tab = 'people' | 'snapshot' | 'visits' | 'referrals' | 'record';
 
@@ -111,7 +112,7 @@ export default function PanchayatPanel({ id, from, to, canEditPartners, canEditF
           )}
           {tab === 'visits' && <Visits d={d} />}
           {tab === 'referrals' && (
-            d.referrals.length === 0 ? <Empty title="No referrals yet">Nobody from this panchayat has been referred to the hospital.</Empty> : (
+            d.referrals.length === 0 ? <Empty title="No referrals yet">Nobody from this panchayat has been referred to the {place()}.</Empty> : (
               <ul className="crm-list">
                 {d.referrals.map((r) => (
                   <li key={r.clientId}>

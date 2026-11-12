@@ -35,7 +35,8 @@ namespace SeemanchalOutreach.Api.Services
         {
             _scopes = scopes;
             _logger = logger;
-            Default = new OrgInfo(OrgNames.Key(config["Platform:DefaultOrg"]) ?? "main", config["Platform:DefaultOrgName"] ?? OrgText.FirstName, null);
+            Default = new OrgInfo(OrgNames.Key(config["Platform:DefaultOrg"]) ?? "main", config["Platform:DefaultOrgName"] ?? OrgText.FirstName, null,
+                string.IsNullOrWhiteSpace(config["Platform:DefaultOrgKinds"]) ? "hospital" : config["Platform:DefaultOrgKinds"]);
         }
 
         private List<OrgInfo> Others()
@@ -51,7 +52,9 @@ namespace SeemanchalOutreach.Api.Services
                     using var scope = _scopes.CreateScope();
                     var db = scope.ServiceProvider.GetRequiredService<IMarketingDbContext>();
                     var rows = db.Organisations.AsNoTracking().Where(o => o.Status == "active").ToList();
-                    _others = Pick(rows.Select(o => (o.Key, o.Name, o.Database)), Default.Key);
+                    var kinds = rows.GroupBy(o => o.Key).ToDictionary(g => g.Key, g => g.First().Kinds);
+                    _others = Pick(rows.Select(o => (o.Key, o.Name, o.Database)), Default.Key)
+                        .Select(o => o with { Kinds = kinds.TryGetValue(o.Key, out var k) ? k : null }).ToList();
                 }
                 catch (Exception ex)
                 {

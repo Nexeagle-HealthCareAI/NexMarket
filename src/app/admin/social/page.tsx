@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BarChart3, Bot, ClipboardList, Inbox, Newspaper, Settings2 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { canView, useAccess } from '@/lib/crm/access';
+import { canView, useAccess, place } from '@/lib/crm/access';
 import AnalystPanel from '@/components/crm/AnalystPanel';
 import { PageHead, Pill, Skeleton, useToast } from '@/components/crm/ui';
 import { SocialInbox } from '@/components/crm/social/SocialInbox';
@@ -64,7 +64,7 @@ function Social() {
 
   return (
     <main className={`crm-page wh-page${tab === 'inbox' && selected ? ' ld-page has-sel' : ''}`}>
-      <PageHead title={tab === 'posts' ? 'Social posts' : 'Facebook & Instagram'} sub={accounts || 'Messages, Lead Ads form entries and ad results from the hospital’s Facebook Page and Instagram account.'}
+      <PageHead title={tab === 'posts' ? 'Social posts' : 'Facebook & Instagram'} sub={accounts || `Messages, Lead Ads form entries and ad results from the ${place()}’s Facebook Page and Instagram account.`}
         badge={status ? (status.connected ? <Pill tone="ok" dot>Connected</Pill> : <Pill tone="warn" dot>Not connected</Pill>) : undefined}>
         {status && status.formsToday > 0 && <span className="crm-sub"><strong style={{ color: 'var(--text)' }}>{status.formsToday}</strong> form {status.formsToday === 1 ? 'entry' : 'entries'} today</span>}
       </PageHead>

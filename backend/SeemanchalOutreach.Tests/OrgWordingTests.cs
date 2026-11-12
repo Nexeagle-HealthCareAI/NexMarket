@@ -34,6 +34,34 @@ namespace SeemanchalOutreach.Tests
             }
         }
 
+        [Theory]
+        [InlineData(null, "hospital")]
+        [InlineData("", "hospital")]
+        [InlineData("hospital,lab,pharmacy", "hospital")]
+        [InlineData("clinic", "clinic")]
+        [InlineData("LAB", "lab")]
+        [InlineData("diagnostic", "diagnostic centre")]
+        [InlineData("pharmacy", "pharmacy")]
+        [InlineData("dialysis", "dialysis centre")]
+        [InlineData("other", "centre")]
+        [InlineData("lab, diagnostic", "centre")]
+        public void Each_kind_of_organisation_has_its_everyday_word(string? kinds, string word)
+        {
+            Assert.Equal(word, OrgText.PlaceOf(kinds));
+        }
+
+        [Fact]
+        public void The_AI_helpers_are_told_the_word_only_when_it_is_not_a_hospital()
+        {
+            using (OrgScope.Enter(null)) Assert.Equal("", OrgText.KindNote);
+            using (OrgScope.Enter(new OrgInfo("care", "Care Hospital", "nm_care", "hospital,lab"))) Assert.Equal("", OrgText.KindNote);
+            using (OrgScope.Enter(new OrgInfo("citylab", "City Lab", "nm_citylab", "lab")))
+            {
+                Assert.Equal("lab", OrgText.Place);
+                Assert.Contains("read \"the lab\"", OrgText.KindNote);
+            }
+        }
+
         [Fact]
         public void A_sign_up_code_fits_only_the_phone_and_email_it_was_sent_to()
         {

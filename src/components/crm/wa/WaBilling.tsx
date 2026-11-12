@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, CreditCard, ExternalLink, RefreshCw, Walle
 import { crm } from '@/lib/sync/api-client';
 import { ErrorBox, friendlyError, Skeleton } from '@/components/crm/ui';
 import { showPhone } from './shared';
+import { place } from '@/lib/crm/access';
 
 interface Row { key: string; label: string; cost: number; messages: number }
 interface Report {
@@ -156,7 +157,7 @@ export function WaBilling({ isAdmin, toast }: { isAdmin: boolean; toast: (m: str
           <div className="wb-split">
             <SplitTable title="By message type" rows={r.categories} fmt={fmt} total={r.total} empty="No charged messages this month." />
             <SplitTable title="By sending number" rows={r.numbers.map((n) => ({ ...n, label: s.numberLabels[n.key] ?? (/^\d+$/.test(n.key) ? showPhone(n.key) : n.label) }))}
-              fmt={fmt} total={r.total} empty="No numbers have sent yet." hint="Name each number below to see the cost per hospital." />
+              fmt={fmt} total={r.total} empty="No numbers have sent yet." hint={`Name each number below to see the cost per ${place()}.`} />
           </div>
         </>
       )}

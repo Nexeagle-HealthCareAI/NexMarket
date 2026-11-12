@@ -53,7 +53,8 @@ function Gate() {
     });
     return () => sub.remove();
   }, []);
-  const onLogin = segments[0] === 'login';
+  // Signed-out screens: sign-in and forgot password.
+  const onLogin = segments[0] === 'login' || segments[0] === 'forgot';
   const inTabs = segments[0] === '(tabs)';
 
   // Signing in or out clears the kv table: keep this phone's Easy to use settings.
@@ -128,6 +129,7 @@ function Gate() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg }, animation: light ? 'none' : 'slide_from_right', animationDuration: 220, freezeOnBlur: true }}>
         <Stack.Screen name="index" options={{ animation: 'none' }} />
         <Stack.Screen name="login" options={{ animation: 'fade' }} />
+        <Stack.Screen name="forgot" options={{ animation: 'fade' }} />
         <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
         <Stack.Screen name="set-password" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="add" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />

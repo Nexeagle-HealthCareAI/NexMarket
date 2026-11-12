@@ -8,6 +8,7 @@ import { useLiveEvents, useNow } from '@/lib/crm/live';
 import { Pager } from '@/components/crm/Pager';
 import { Empty, ErrorBox, friendlyError, initials, Modal, Pill, Skeleton } from '@/components/crm/ui';
 import { CHANNEL_LABEL, dayLabel, istDay, istTime, LEAD_LABEL, showPhone, when, type SocialStatus } from './shared';
+import { place } from '@/lib/crm/access';
 
 interface Conv {
   id: string; channel: string; name: string; username?: string | null; phone?: string | null; status: string; unread: number;
@@ -83,7 +84,7 @@ export function SocialInbox({ status, selected, onSelect, onChanged, toast }: {
             })}
           </div>
           {!list ? <div style={{ padding: 12 }}><Skeleton h={320} /></div> : list.items.length === 0 ? (
-            <div style={{ padding: 16 }}><Empty title={qd ? 'No conversation matches' : 'Nothing here'}><span className="crm-sub">Messages to the hospital&apos;s Facebook Page and Instagram account appear here as they arrive.</span></Empty></div>
+            <div style={{ padding: 16 }}><Empty title={qd ? 'No conversation matches' : 'Nothing here'}><span className="crm-sub">Messages to the {place()}&apos;s Facebook Page and Instagram account appear here as they arrive.</span></Empty></div>
           ) : (
             <ul className="ld-rows">
               {list.items.map((c) => (
@@ -116,7 +117,7 @@ export function SocialInbox({ status, selected, onSelect, onChanged, toast }: {
             <div className="ch-empty">
               <Inbox size={22} aria-hidden />
               <strong>Pick a conversation</strong>
-              <span>Messages to the hospital&apos;s Facebook Page and Instagram account. Reply within 24 hours of their message, assign it, and make it a lead once they share a number.</span>
+              <span>Messages to the {place()}&apos;s Facebook Page and Instagram account. Reply within 24 hours of their message, assign it, and make it a lead once they share a number.</span>
             </div>
           )}
         </section>
@@ -221,7 +222,7 @@ function Conversation({ id, ping, status, onBack, onChanged, toast }: {
       </div>
 
       <div className="ch-body ld-body" role="log" aria-live="polite" ref={bodyRef}>
-        <div className="ch-secure"><Lock size={12} aria-hidden /> {where} messages to the hospital. A phone number they write here makes them a lead automatically.</div>
+        <div className="ch-secure"><Lock size={12} aria-hidden /> {where} messages to the {place()}. A phone number they write here makes them a lead automatically.</div>
         {rows.map((r, i) => 'day' in r ? <div key={`d${i}`} className="ch-day"><span>{dayLabel(r.day)}</span></div> : <Bubble key={r.id} m={r} />)}
       </div>
 

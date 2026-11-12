@@ -4,7 +4,7 @@ import { Suspense, useState } from 'react';
 import { Building2, Pencil, Plus, Stethoscope } from 'lucide-react';
 import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit, orgName, useAccess } from '@/lib/crm/access';
+import { canEdit, orgName, useAccess, place, hasOpd } from '@/lib/crm/access';
 import { Empty, ErrorBox, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { Pager, usePaged } from '@/components/crm/Pager';
 
@@ -48,7 +48,7 @@ function DepartmentsPage() {
             {editable && <button type="button" className="crm-btn is-sm" onClick={() => setEditDept('new')}><Plus size={14} aria-hidden /> Add</button>}
           </div>
           {depts.error && <ErrorBox message={depts.error} onRetry={depts.reload} />}
-          {!depts.data ? <Skeleton h={200} /> : depts.data.length === 0 ? <Empty title="No departments yet">{editable ? 'Add the hospital’s departments to get started.' : ''}</Empty> : (
+          {!depts.data ? <Skeleton h={200} /> : depts.data.length === 0 ? <Empty title="No departments yet">{editable ? `Add the ${place()}’s departments to get started.` : ''}</Empty> : (
             <ul className="crm-list">
               {deptPg.rows.map((d) => (
                 <li key={d.id}>
@@ -81,7 +81,7 @@ function DepartmentsPage() {
           {!doctors.data ? <div style={{ padding: '0 22px 16px' }}><Skeleton h={200} /></div> : list.length === 0 ? <Empty title="No doctors yet" /> : (
             <><div className="crm-table-wrap">
               <table className="crm-table" style={{ minWidth: 620 }}>
-                <thead><tr><th>Doctor</th><th>Department</th><th>OPD</th><th></th></tr></thead>
+                <thead><tr><th>Doctor</th><th>Department</th><th>{hasOpd() ? 'OPD' : 'Timing'}</th><th></th></tr></thead>
                 <tbody>
                   {pg.rows.map((d) => (
                     <tr key={d.id} style={d.isActive ? undefined : { opacity: 0.55 }}>
@@ -164,10 +164,10 @@ function DoctorModal({ doctor, departments, onClose, onSaved }: { doctor: Doctor
             {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         </label>
-        <label className="crm-field">OPD timing<input className="crm-input" value={form.opdTimings} onChange={(e) => setForm({ ...form, opdTimings: e.target.value })} placeholder="e.g. 10 am – 2 pm" /></label>
+        <label className="crm-field">{hasOpd() ? 'OPD timing' : 'Timing'}<input className="crm-input" value={form.opdTimings} onChange={(e) => setForm({ ...form, opdTimings: e.target.value })} placeholder="e.g. 10 am – 2 pm" /></label>
       </div>
       <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
-        <legend style={{ fontSize: 13, fontWeight: 600, paddingBottom: 8 }}>OPD days</legend>
+        <legend style={{ fontSize: 13, fontWeight: 600, paddingBottom: 8 }}>{hasOpd() ? 'OPD days' : 'Days'}</legend>
         <div className="crm-chips">
           {DAYS.map((d) => <button key={d} type="button" className="crm-chip is-soft" aria-pressed={days.includes(d)} onClick={() => setDays((x) => (x.includes(d) ? x.filter((y) => y !== d) : [...x, d]))}>{d}</button>)}
         </div>

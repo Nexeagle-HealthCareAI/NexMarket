@@ -1,6 +1,6 @@
 'use client';
 
-import { isDashboardRole } from '@/lib/crm/access';
+import { isDashboardRole, rememberPlace } from '@/lib/crm/access';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -196,6 +196,8 @@ export default function LoginPage() {
           console.warn('Reinstall recovery pull failed — continuing with an empty local DB:', pullErr);
         }
       }
+
+      rememberPlace(auth.orgPlace);   // the organisation's own wording, right from the first screen
 
       if (auth.mustChangePassword) {
         router.push('/change-password');

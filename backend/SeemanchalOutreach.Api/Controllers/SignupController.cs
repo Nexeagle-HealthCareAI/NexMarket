@@ -229,7 +229,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 return BadRequest(new { message = codeProblem, fields = new Dictionary<string, string> { ["code"] = codeProblem } });
 
             var orgName = dto!.OrgName!.Trim();
-            var org = new OrgInfo(key, orgName, OrgNames.DatabaseFor(key));
+            var org = new OrgInfo(key, orgName, OrgNames.DatabaseFor(key), string.Join(",", (dto.Kinds ?? new()).Select(k => (k ?? "").Trim().ToLowerInvariant()).Distinct()));
 
             if (!await OneAtATime.WaitAsync(TimeSpan.FromSeconds(45), ct))
                 return StatusCode(503, new { message = "Many people are signing up right now. Please try again in a minute." });

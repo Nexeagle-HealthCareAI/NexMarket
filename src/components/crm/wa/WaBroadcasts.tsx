@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Send } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit, orgName, useAccess } from '@/lib/crm/access';
+import { canEdit, orgName, useAccess, hasOpd } from '@/lib/crm/access';
 import { CONTACT_TYPES, Empty, ErrorBox, fmt, friendlyError, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { Pager, usePaged } from '@/components/crm/Pager';
 
@@ -15,8 +15,8 @@ interface BroadcastRow {
 }
 
 const KINDS = [
-  { key: 'doctor_availability', name: 'Doctor availability', sub: 'Which doctor is in OPD, and when' },
-  { key: 'schedule_change', name: 'OPD or schedule change', sub: 'Doctor on leave, new timings' },
+  { key: 'doctor_availability', name: 'Doctor availability', sub: hasOpd() ? 'Which doctor is in OPD, and when' : 'Which doctor is in, and when' },
+  { key: 'schedule_change', name: hasOpd() ? 'OPD or schedule change' : 'Schedule change', sub: 'Doctor on leave, new timings' },
   { key: 'camp_invite', name: 'Health camp invite', sub: 'Date, place and what is free' },
   { key: 'general_update', name: 'General update', sub: 'New service, package, news' },
 ];
@@ -171,7 +171,7 @@ export function WaBroadcasts() {
               {(kind === 'doctor_availability' || kind === 'schedule_change') && field('doctorName', 'Doctor name as it should appear', 'e.g. Dr. A. Kumar')}
               {(kind === 'doctor_availability' || kind === 'schedule_change') && field('department', 'Department', 'e.g. Obstetrics & Gynaecology')}
               {kind === 'doctor_availability' && field('date', 'Date', 'e.g. Fri, 30 Oct')}
-              {kind === 'doctor_availability' && field('timing', 'OPD timing', 'e.g. 10 am – 2 pm')}
+              {kind === 'doctor_availability' && field('timing', hasOpd() ? 'OPD timing' : 'Timing', 'e.g. 10 am – 2 pm')}
               {kind === 'camp_invite' && field('place', 'Place', 'e.g. Bahadurganj panchayat bhawan')}
               {kind === 'camp_invite' && field('date', 'Date', 'e.g. Sun, 8 Nov, 9 am')}
             </div>

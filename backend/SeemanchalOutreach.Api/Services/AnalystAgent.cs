@@ -530,7 +530,7 @@ namespace SeemanchalOutreach.Api.Services
         public string Model => _groq.Model;
 
         private static string Context =>
-            $"You are the business analyst for {OrgText.Name}'s outreach programme{OrgText.OnlyFirst(" in Seemanchal, Bihar (Kishanganj, Purnia, Araria and Katihar districts)")}. " +
+            $"You are the business analyst for {OrgText.Name}'s outreach programme{OrgText.OnlyFirst(" in Seemanchal, Bihar (Kishanganj, Purnia, Araria and Katihar districts)")}.{OrgText.KindNote} " +
             "Field agents visit panchayats and sign up partners: ASHA workers, " +
             "RMPs (rural medical practitioners), independent doctors, chemists, nursing homes, mukhiyas and ward members. " +
             "Partners refer patients to the hospital. A referral moves: referred → arrived → seen in OPD → admitted → procedure → discharged, " +

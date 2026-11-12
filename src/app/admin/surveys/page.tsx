@@ -10,6 +10,7 @@ import AnalystPanel from '@/components/crm/AnalystPanel';
 import { contactTypeLabel, Empty, ErrorBox, fmt, friendlyError, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { Pager } from '@/components/crm/Pager';
 import { addRange, DateRangeBar, rangeLabel, type DateRangeKey, type DateRangeValue } from '@/components/crm/DateRange';
+import { place } from '@/lib/crm/access';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface QMeta { id: string; questionId: string; title: string; text: string; type: string; options: { full: string; label: string }[] }
@@ -94,7 +95,7 @@ function SurveysPage() {
       {tab === 'questions' && <Questions showToast={showToast} />}
       {tab === 'ai' && (
         <AnalystPanel scope="surveys"
-          intro="The analyst reads every survey answer, matches the needs to the hospital's departments and admissions, and checks whether the survey is being done properly. It writes a new survey briefing every week."
+          intro={`The analyst reads every survey answer, matches the needs to the ${place()}'s departments and admissions, and checks whether the survey is being done properly. It writes a new survey briefing every week.`}
           suggestions={[
             'Which block should get our next health camp, and for which specialty?',
             'Where are we losing patients to Siliguri or Purnea, and why?',
@@ -246,11 +247,11 @@ function Tells({ u, d }: { u: Unit; d: InsightsRes }) {
   const lines: string[] = [];
   const top = (qid: string) => { const e = Object.entries(u.counts[qid] ?? {})[0]; const n = u.answered[qid] ?? 0; return e ? { label: shortLabel(e[0]), c: e[1], n } : null; };
   const spec = top('specialist_deficit');
-  if (spec) lines.push(`${spec.label} is the specialist people miss most (${spec.c} of ${spec.n})${u.topSpecialistWeHave ? ', and the hospital has that department.' : '. Check whether the hospital offers it.'}`);
+  if (spec) lines.push(`${spec.label} is the specialist people miss most (${spec.c} of ${spec.n})${u.topSpecialistWeHave ? `, and the ${place()} has that department.` : `. Check whether the ${place()} offers it.`}`);
   const dest = top('treatment_destination');
   if (dest) lines.push(`For serious cases most go to ${dest.label} today (${dest.c} of ${dest.n}).`);
   const dec = top('referral_decision_maker');
-  if (dec) lines.push(`${dec.label} usually decides the hospital, so start there.`);
+  if (dec) lines.push(`${dec.label} usually decides the ${place()}, so start there.`);
   const pay = top('payment_funding_source');
   if (pay) lines.push(`Most families pay by ${pay.label.toLowerCase()} (${pay.c} of ${pay.n}).`);
   if (u.responses < 5) lines.push(`Only ${u.responses} answer${u.responses === 1 ? '' : 's'} so far, so treat this as a first look.`);
@@ -259,7 +260,7 @@ function Tells({ u, d }: { u: Unit; d: InsightsRes }) {
     <div className="crm-note" style={{ background: 'var(--accent-tint)', color: 'var(--text)', display: 'flex', flexDirection: 'column', gap: 4 }}>
       <strong style={{ color: 'var(--accent-ink)' }}>What this tells us</strong>
       {lines.map((l) => <span key={l}>• {l}</span>)}
-      {d.departments.length === 0 && <span className="crm-cell-sub">Add departments under Departments &amp; doctors so this can match needs to what the hospital offers.</span>}
+      {d.departments.length === 0 && <span className="crm-cell-sub">Add departments under Departments &amp; doctors so this can match needs to what the {place()} offers.</span>}
     </div>
   );
 }

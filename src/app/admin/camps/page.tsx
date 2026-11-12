@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Activity, BarChart3, BookOpen, CalendarDays, History, MapPin, Plus, Search, Tent } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { canEdit as canEditPage, useAccess } from '@/lib/crm/access';
+import { canEdit as canEditPage, useAccess, place } from '@/lib/crm/access';
 import { Pager } from '@/components/crm/Pager';
 import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 import { Empty, ErrorBox, friendlyError, PageHead, Pill, rupees, Skeleton, useToast } from '@/components/crm/ui';
@@ -42,7 +42,7 @@ function CampsPage() {
 
   return (
     <main className="crm-page">
-      <PageHead title="Health camps" sub="Plan camps, pre-book people, record what each person came with and what the doctors found, and follow up everyone who needs the hospital.">
+      <PageHead title="Health camps" sub={`Plan camps, pre-book people, record what each person came with and what the doctors found, and follow up everyone who needs the ${place()}.`}>
         {editable && !openId && <button type="button" className="crm-btn" onClick={() => setPlanning(true)}><Plus size={16} aria-hidden /> Plan a camp</button>}
       </PageHead>
 
@@ -110,13 +110,13 @@ function CampList({ when, onOpen, onCounts, canPlan, onPlan }: { when: 'upcoming
                 <span className="cp-card-nums">
                   <span><strong>{c.booked}</strong> {when === 'upcoming' ? `booked of ${c.capacity}` : 'registered'}</span>
                   <span><strong>{c.attended}</strong> seen</span>
-                  <span><strong>{c.referred}</strong> to hospital</span>
+                  <span><strong>{c.referred}</strong> to {place()}</span>
                   <span><strong>{c.arrived}</strong> came</span>
                 </span>
                 {when === 'upcoming' ? (
                   <span className="cp-card-plan"><span className="cp-progress"><span style={{ width: `${pct(c.checklistDone, c.checklistTotal)}%` }} /></span>Plan {c.checklistDone}/{c.checklistTotal}</span>
                 ) : (
-                  <span className="cp-card-plan">{c.spent ? `${rupees(c.spent)} spent${c.arrived ? ` · ${rupees(Math.round(c.spent / c.arrived))} per hospital visit` : ''}` : 'Cost not recorded'}</span>
+                  <span className="cp-card-plan">{c.spent ? `${rupees(c.spent)} spent${c.arrived ? ` · ${rupees(Math.round(c.spent / c.arrived))} per ${place()} visit` : ''}` : 'Cost not recorded'}</span>
                 )}
               </button>
             );
@@ -163,9 +163,9 @@ function InsightsView() {
           <section className="ld-kpis">
             <div className="crm-card ld-kpi"><span className="crm-kpi-label">Camps</span><span className="ld-kpi-value">{d.camps}</span></div>
             <div className="crm-card ld-kpi"><span className="crm-kpi-label">People seen</span><span className="ld-kpi-value">{d.attended}</span><span className="ld-kpi-sub">{d.prebookedShare}% pre-booked</span></div>
-            <div className="crm-card ld-kpi"><span className="crm-kpi-label">Sent to hospital</span><span className="ld-kpi-value">{d.referred}</span><span className="ld-kpi-sub">{pct(d.referred, d.attended)}% of seen</span></div>
-            <div className="crm-card ld-kpi is-ok"><span className="crm-kpi-label">Came to hospital</span><span className="ld-kpi-value">{d.arrived}</span><span className="ld-kpi-sub">{pct(d.arrived, d.referred)}% of referred</span></div>
-            <div className="crm-card ld-kpi"><span className="crm-kpi-label">Cost per hospital visit</span><span className="ld-kpi-value">{d.arrived ? rupees(Math.round(d.spent / d.arrived)) : '—'}</span><span className="ld-kpi-sub">{rupees(d.spent)} spent</span></div>
+            <div className="crm-card ld-kpi"><span className="crm-kpi-label">Sent to {place()}</span><span className="ld-kpi-value">{d.referred}</span><span className="ld-kpi-sub">{pct(d.referred, d.attended)}% of seen</span></div>
+            <div className="crm-card ld-kpi is-ok"><span className="crm-kpi-label">Came to {place()}</span><span className="ld-kpi-value">{d.arrived}</span><span className="ld-kpi-sub">{pct(d.arrived, d.referred)}% of referred</span></div>
+            <div className="crm-card ld-kpi"><span className="crm-kpi-label">Cost per {place()} visit</span><span className="ld-kpi-value">{d.arrived ? rupees(Math.round(d.spent / d.arrived)) : '—'}</span><span className="ld-kpi-sub">{rupees(d.spent)} spent</span></div>
           </section>
           <div className="crm-row">
             <section className="crm-card grow-1" style={{ flexBasis: 380 }}>
@@ -182,7 +182,7 @@ function InsightsView() {
               <div className="crm-card-head"><h2 className="crm-h2">Which camps bring patients</h2></div>
               {d.byType.length === 0 ? <span className="crm-cell-sub">No camps yet.</span> : (
                 <div className="crm-table-wrap"><table className="crm-table">
-                  <thead><tr><th>Type</th><th style={{ textAlign: 'right' }}>Camps</th><th style={{ textAlign: 'right' }}>Seen</th><th style={{ textAlign: 'right' }}>To hospital</th><th style={{ textAlign: 'right' }}>Came</th><th style={{ textAlign: 'right' }}>₹ per visit</th></tr></thead>
+                  <thead><tr><th>Type</th><th style={{ textAlign: 'right' }}>Camps</th><th style={{ textAlign: 'right' }}>Seen</th><th style={{ textAlign: 'right' }}>To {place()}</th><th style={{ textAlign: 'right' }}>Came</th><th style={{ textAlign: 'right' }}>₹ per visit</th></tr></thead>
                   <tbody>{d.byType.map((t) => (
                     <tr key={t.type}><td><strong>{t.label}</strong></td><td className="num" style={{ textAlign: 'right' }}>{t.camps}</td><td className="num" style={{ textAlign: 'right' }}>{t.attended}</td>
                       <td className="num" style={{ textAlign: 'right' }}>{t.referred}</td><td className="num" style={{ textAlign: 'right', fontWeight: 700 }}>{t.arrived}</td>
@@ -215,7 +215,7 @@ const PLAYBOOK: { title: string; points: string[] }[] = [
     'Match the camp to a department with free OPD slots in the following week, so referred patients can be seen quickly.',
   ] },
   { title: 'Build demand before the day', points: [
-    'Partner with the local mukhiya, ASHA workers and RMP doctors. Ask each ASHA to bring 10 people who need a check-up; credit them for those who come to the hospital.',
+    `Partner with the local mukhiya, ASHA workers and RMP doctors. Ask each ASHA to bring 10 people who need a check-up; credit them for those who come to the ${place()}.`,
     'QR posters with the camp code at the PHC, chemists, schools and the haat. Scanning books a token on WhatsApp.',
     'WhatsApp broadcast to all partners in the block a week before, a reminder 2 days before, and a mic or e-rickshaw announcement the day before.',
     'Aim for at least half the slots pre-booked. Pre-booked people come with old reports and usually need care.',
@@ -223,17 +223,17 @@ const PLAYBOOK: { title: string; points: string[] }[] = [
   { title: 'Make the day count', points: [
     'One registration desk with token numbers, then screening (BP, sugar, SpO2, weight), then the doctor. Record symptoms and findings for everyone.',
     'Ask for consent before writing health details. It builds trust and is needed for follow-up.',
-    'Give each referred patient a hospital slip: department, date to come, desk number and any camp discount.',
+    `Give each referred patient a ${place()} slip: department, date to come, desk number and any camp discount.`,
     'Take photos and a 30-second video (with permission) for WhatsApp status and social media.',
   ] },
-  { title: 'Turn findings into hospital visits', points: [
+  { title: `Turn findings into ${place()} visits`, points: [
     'Everyone the doctor refers lands in the Leads inbox. Call within 2 days and book the visit; reply-time matters most.',
     'Offer a clear reason to come: free consultation, a discounted test, or the same doctor from the camp.',
-    'Track who came (Came to hospital) and the cost per hospital visit for each camp type and block.',
+    `Track who came (Came to ${place()}) and the cost per ${place()} visit for each camp type and block.`,
   ] },
   { title: 'Keep partners and the village engaged', points: [
     'Thank-you WhatsApp to partners with how many people they brought, and credit referral payments promptly.',
-    'Share a short update in the village: “120 people screened, 18 helped at the hospital”.',
+    `Share a short update in the village: “120 people screened, 18 helped at the ${place()}”.`,
     'Repeat successful camps every 3–4 months in the same place; people come back with family.',
   ] },
 ];

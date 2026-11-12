@@ -79,6 +79,8 @@ export interface AuthResponse {
   block?: string;
   deviceId: string; // echoed back from the request — the client owns this id, not the server
   mustChangePassword?: boolean;
+  /** The organisation's name and its everyday word (hospital, clinic, lab…). */
+  orgName?: string; orgFirst?: boolean; orgPlace?: string;
   profileCompleted?: boolean;
 }
 

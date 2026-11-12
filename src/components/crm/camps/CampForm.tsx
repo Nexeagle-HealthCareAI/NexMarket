@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { crm } from '@/lib/sync/api-client';
 import { friendlyError, Modal } from '@/components/crm/ui';
 import type { CampDetail, CampOptions } from './shared';
+import { place } from '@/lib/crm/access';
 
 interface PartnerHit { clientId: string; name: string; type: string; panchayat?: string | null }
 
@@ -107,7 +108,7 @@ export function CampForm({ camp, options, onClose, onSaved }: {
         <div className="cp-three cp-span2">
           <label className="crm-field">Booking slots<input type="number" min={0} className="crm-input" value={f.capacity} onChange={set('capacity')} /></label>
           <label className="crm-field">Target: people seen<input type="number" min={0} className="crm-input" value={f.targetRegistrations} onChange={set('targetRegistrations')} /></label>
-          <label className="crm-field">Target: to hospital<input type="number" min={0} className="crm-input" value={f.targetReferrals} onChange={set('targetReferrals')} /></label>
+          <label className="crm-field">Target: to {place()}<input type="number" min={0} className="crm-input" value={f.targetReferrals} onChange={set('targetReferrals')} /></label>
         </div>
         <div className="cp-two cp-span2">
           <label className="crm-field">Budget (₹)<input type="number" min={0} className="crm-input" value={f.budget} onChange={set('budget')} /></label>

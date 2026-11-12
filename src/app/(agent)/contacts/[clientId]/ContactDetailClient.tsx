@@ -8,6 +8,7 @@ import { useContact, usePanchayats, useReferrals, useActiveVisit, db, useContact
 import { addToOutbox } from '@/lib/sync/outbox';
 import { compressImage, compressDocumentImage } from '@/lib/image/compressImage';
 import type { ReferralStatus, LocalReferral, ContactRole, LocalContactDocument } from '@/lib/db/schema';
+import { Place } from '@/lib/crm/access';
 
 const STATUS_LABELS: Record<ReferralStatus, { label: string; badgeClass: string; icon: string }> = {
   pending: { label: 'Pending Review', badgeClass: 'badge-pending', icon: '⏳' },
@@ -256,7 +257,7 @@ export default function ContactDetailClient({ clientId }: { clientId: string }) 
               <option value="lab">Lab/Pathology</option>
               <option value="nursing_home">Nursing Home</option>
               <option value="independent_doctor">Independent Doctor</option>
-              <option value="hospital">Hospital</option>
+              <option value="hospital">{Place()}</option>
               <option value="other">Other</option>
             </select>
             <select value={editPanchayatId} onChange={e => setEditPanchayatId(e.target.value)} className="field-input">

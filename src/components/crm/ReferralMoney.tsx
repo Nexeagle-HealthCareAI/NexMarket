@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { canEdit, useAccess } from '@/lib/crm/access';
+import { canEdit, useAccess, Place, hasOpd } from '@/lib/crm/access';
 import { PayWithProof, ProofLine, type ProofInfo } from '@/components/crm/PaymentProof';
 import { IndianRupee, Receipt, Wallet } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
@@ -23,7 +23,7 @@ interface Money {
   incentives: Incentive[]; purposes: string[];
 }
 
-const KINDS: [string, string][] = [['opd', 'OPD'], ['ipd', 'Admission (IPD)'], ['procedure', 'Procedure / surgery'], ['pharmacy', 'Pharmacy'], ['lab', 'Lab / tests'], ['other', 'Other']];
+const KINDS: [string, string][] = [['opd', hasOpd() ? 'OPD' : 'Visit'], ['ipd', 'Admission (IPD)'], ['procedure', 'Procedure / surgery'], ['pharmacy', 'Pharmacy'], ['lab', 'Lab / tests'], ['other', 'Other']];
 const SCHEMES: [string, string][] = [['cash', 'Cash / UPI'], ['ayushman', 'Ayushman Bharat'], ['insurance', 'Insurance'], ['govt_scheme', 'Other government scheme'], ['other', 'Other']];
 
 export function statusPill(status: string, overdue?: boolean) {
@@ -92,7 +92,7 @@ export function ReferralMoney({ clientId, partnerName, editable, isAdmin, onChan
           {form === 'bill' && <BillForm clientId={clientId} onDone={() => done('Bill saved.')} onCancel={() => setForm(null)} />}
           {form === 'payout' && <PayoutForm clientId={clientId} partnerName={partnerName} purposes={data.purposes} onDone={() => done(`Sent to Payments for an admin's approval.`)} onCancel={() => setForm(null)} />}
 
-          <h4 className="rm-sub">Hospital bills</h4>
+          <h4 className="rm-sub">{Place()} bills</h4>
           {data.bills.length === 0 ? <p className="crm-sub rm-empty">No bill recorded yet.{editable ? ' Add the OPD, admission or procedure bill when it is raised.' : ''}</p> : (
             <ul className="rm-list">
               {data.bills.map((b) => <BillRow key={b.id} b={b} editable={editable} onChanged={() => { void reload(); onChanged?.(); }} />)}
