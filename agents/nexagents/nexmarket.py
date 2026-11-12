@@ -136,3 +136,31 @@ async def camp_candidates() -> dict[str, Any]:
 
 async def broadcast_camp(camp_id: str, *, agent_id: str) -> dict[str, Any]:
     return await _post(f"/api/v1/internal/agent-tools/broadcasts/camp/{camp_id}", {"agentId": agent_id})
+
+
+# ─── Partner Network, Field Coordinator, Camp Planner, Ads Optimiser ─────────
+
+async def partners_watch() -> dict[str, Any]:
+    """Partners who went quiet, and partners whose patients came this week. Ids only."""
+    return await _get("/api/v1/internal/agent-tools/partners/watch")
+
+
+async def field_coverage() -> dict[str, Any]:
+    """Per field agent: their block's panchayats, how many were visited lately, and the ones longest without a visit."""
+    return await _get("/api/v1/internal/agent-tools/field/coverage")
+
+
+async def make_task(kind: str, *, for_agent: str, agent_id: str, contact: str | None = None, count: int = 0, panchayats: list[str] | None = None) -> dict[str, Any]:
+    """A task on a field agent's phone. NexMarket writes the wording (and the partner's name) and refuses (409) when the agent has enough."""
+    return await _post("/api/v1/internal/agent-tools/tasks", {"agentId": agent_id, "forAgent": for_agent, "kind": kind, "contactClientId": contact,
+                                                              "count": count, "panchayatIds": panchayats or []})
+
+
+async def camp_demand() -> dict[str, Any]:
+    """Per block: referrals in 90 days and for which departments, partners, last and next camp. Counts only."""
+    return await _get("/api/v1/internal/agent-tools/camps/demand")
+
+
+async def ads_results() -> dict[str, Any]:
+    """The last 14 days of Meta and Google ads per campaign: money spent, leads, and who came."""
+    return await _get("/api/v1/internal/agent-tools/ads/results")

@@ -21,8 +21,9 @@ next to the .NET API and works only through it. Design: *NexMarket Autonomous Ag
 | A person checking an agent's drafts: verdicts, sending, lessons | `nexagents/review.py` |
 | The day: numbers → signals → plan → report → suggested lessons | `nexagents/agents/data_watcher.py`, `chief_of_staff.py`, `reporter_coach.py` |
 | The studio: reviews, drafts, posts, camp invitations | `nexagents/agents/reputation.py`, `content_writer.py`, `social_publisher.py`, `broadcast_manager.py` |
+| The field, camps and ads: tasks for agents and cards for people, no AI | `nexagents/agents/partner_network.py`, `field_coordinator.py`, `camp_planner.py`, `ads_optimiser.py` |
 
-Built so far (10 of 14): Compliance Guard, Lead Responder, Lead Follow-up, Data Watcher, Chief of Staff, Reporter & Coach, Reputation, Content Writer, Social Publisher, Broadcast Manager (`docs/`). The other agents appear on the Agents page with the phase they
+All 14 agents are built: see `docs/` for what each one does and when.
 arrive in, and can't be switched on until their code ships (each starts in shadow mode).
 
 ## Run it

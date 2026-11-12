@@ -16,8 +16,8 @@ from pydantic import BaseModel, Field
 
 from . import __version__, actions, blackboard, db, limits, nexmarket, review as reviews
 from .act import guard, log_guard
-from .agents import (broadcast_manager, chief_of_staff, content_writer, data_watcher, lead_follow_up, lead_responder, reporter_coach, reputation,
-                     social_publisher)
+from .agents import (ads_optimiser, broadcast_manager, camp_planner, chief_of_staff, content_writer, data_watcher, field_coordinator, lead_follow_up,
+                     lead_responder, partner_network, reporter_coach, reputation, social_publisher)
 from .agents.base import runtime
 from .agents.registry import AGENTS, BY_ID, WINGS
 from .auth import require_secret
@@ -149,6 +149,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     sched.add_job(_job("content_writer", content_writer.tick), "cron", hour=9, minute=30, id="content_writer", **late)
     sched.add_job(_job("social_publisher", social_publisher.tick), "cron", hour="10,18", minute=0, id="social_publisher", **late)
     sched.add_job(_job("broadcast_manager", broadcast_manager.tick), "cron", hour="11,16", minute=0, id="broadcast_manager", **late)
+    # The field, camps and ads.
+    sched.add_job(_job("partner_network", partner_network.tick), "cron", hour=9, minute=0, id="partner_network", **late)
+    sched.add_job(_job("field_coordinator", field_coordinator.tick), "cron", hour=9, minute=10, id="field_coordinator", **late)
+    sched.add_job(_job("camp_planner", camp_planner.tick), "cron", day_of_week="mon", hour=10, minute=0, id="camp_planner", **late)
+    sched.add_job(_job("ads_optimiser", ads_optimiser.tick), "cron", hour=17, minute=0, id="ads_optimiser", **late)
     sched.start()
     log.info("NexMarket Agents %s started (Groq %s)", __version__, "ready" if config.groq_ready else "NOT configured")
     try:
@@ -395,7 +400,8 @@ async def run_now(body: RunBody) -> dict[str, Any]:
     """Runs one of the daily jobs now (the button on an agent's card), instead of waiting for its hour."""
     jobs = {"data_watcher": data_watcher.tick, "chief_plan": chief_of_staff.plan_day, "chief_check": chief_of_staff.check_day,
             "evening_report": reporter_coach.report, "coach": reporter_coach.coach, "lead_follow_up": lead_follow_up.tick,
-            "reputation": reputation.tick, "content_writer": content_writer.tick, "social_publisher": social_publisher.tick, "broadcast_manager": broadcast_manager.tick}
+            "reputation": reputation.tick, "content_writer": content_writer.tick, "social_publisher": social_publisher.tick, "broadcast_manager": broadcast_manager.tick,
+            "partner_network": partner_network.tick, "field_coordinator": field_coordinator.tick, "camp_planner": camp_planner.tick, "ads_optimiser": ads_optimiser.tick}
     if body.job not in jobs:
         raise HTTPException(404, "No such job.")
     return {"ok": True, "result": await jobs[body.job]()}

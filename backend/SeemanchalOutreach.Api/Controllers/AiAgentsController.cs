@@ -369,11 +369,17 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         /// <summary>Runs one of the agents' daily jobs now instead of at its hour (the agent's own mode and limits still apply).</summary>
+        private static readonly HashSet<string> RunJobs = new()
+        {
+            "data_watcher", "chief_plan", "chief_check", "evening_report", "coach", "lead_follow_up", "reputation", "content_writer", "social_publisher",
+            "broadcast_manager", "partner_network", "field_coordinator", "camp_planner", "ads_optimiser",
+        };
+
         [HttpPost("run")]
         public Task<IActionResult> RunNow([FromBody] AiRunDto d, CancellationToken ct)
         {
             if (!IsAdmin) return Task.FromResult<IActionResult>(StatusCode(403, new { message = "Only an admin can run an agent's job by hand." }));
-            if (d.Job is not ("data_watcher" or "chief_plan" or "chief_check" or "evening_report" or "coach" or "lead_follow_up")) return Task.FromResult<IActionResult>(NotFound());
+            if (!RunJobs.Contains(d.Job)) return Task.FromResult<IActionResult>(NotFound());
             return Change(HttpMethod.Post, "v1/run", new { by = By, job = d.Job }, "Update", d.Job, $"Ran the Vita job {d.Job} by hand", ct);
         }
 
@@ -416,6 +422,15 @@ namespace SeemanchalOutreach.Api.Controllers
         public string? Note { get; set; }
         public bool Send { get; set; }
         public bool Remember { get; set; }
+    }
+    public class AgentTaskDto
+    {
+        public string AgentId { get; set; } = "";       // the Vita agent making the task
+        public string ForAgent { get; set; } = "";      // the field agent it is for
+        public string Kind { get; set; } = "";          // revive | thank | coverage
+        public string? ContactClientId { get; set; }
+        public int Count { get; set; }
+        public List<string>? PanchayatIds { get; set; }
     }
     public class AiRunDto { public string Job { get; set; } = ""; }
     public class AiLessonDto { public string Agent { get; set; } = ""; public string? Text { get; set; } }
@@ -623,6 +638,197 @@ namespace SeemanchalOutreach.Api.Controllers
             _db.Broadcasts.Add(b);
             await _db.SaveChangesAsync(ct);
             return Ok(new { status = "scheduled", id = b.Id, recipients = count });
+        }
+
+        // ─── Field wing: partners, coverage, tasks for agents ────────────────────────────
+
+        private static readonly string[] RoleWords = { "asha_worker:ASHA", "rmp_doctor:RMP doctor", "medicine_shop:chemist", "ward_member:ward member", "anganwadi_worker:Anganwadi worker" };
+        private static string RoleWord(string role) => RoleWords.Select(x => x.Split(':')).FirstOrDefault(x => x[0] == role)?[1] ?? "partner";
+
+        /// <summary>
+        /// Partners worth a visit, for the Partner Network agent. "quiet": referred at least twice in the 60 days before,
+        /// nothing in the last 30. "thank": a patient of theirs came to the hospital in the last 7 days. Ids only, no names.
+        /// </summary>
+        [HttpGet("partners/watch")]
+        public async Task<IActionResult> PartnersWatch(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var now = DateTime.UtcNow;
+            var refs = await _db.Referrals.AsNoTracking().Where(r => r.CreatedAt > now.AddDays(-90)).Select(r => new { r.ContactId, r.CreatedAt, r.ArrivedAt }).ToListAsync(ct);
+            var byContact = refs.GroupBy(r => r.ContactId).ToDictionary(g => g.Key, g => g.ToList());
+            var ids = byContact.Keys.ToList();
+            var contacts = ids.Count == 0 ? new() : (await _db.Contacts.AsNoTracking().Where(c => ids.Contains(c.ClientId) && !c.IsMerged && c.Status != "Closed")
+                .Select(c => new { c.ClientId, c.AgentId, c.Role }).ToListAsync(ct));
+            var activeAgents = (await _db.Agents.AsNoTracking().Where(a => a.IsActive).Select(a => a.AgentId).ToListAsync(ct)).ToHashSet();
+            var quiet = new List<object>(); var thank = new List<object>();
+            foreach (var c in contacts.Where(c => activeAgents.Contains(c.AgentId)))
+            {
+                var mine = byContact[c.ClientId];
+                var last30 = mine.Count(r => r.CreatedAt > now.AddDays(-30));
+                var before = mine.Count(r => r.CreatedAt <= now.AddDays(-30));
+                if (last30 == 0 && before >= 2)
+                    quiet.Add(new { contactClientId = c.ClientId, agentId = c.AgentId, role = c.Role, before, daysSinceLast = (int)(now - mine.Max(r => r.CreatedAt)).TotalDays });
+                var came = mine.Count(r => r.ArrivedAt != null && r.ArrivedAt > now.AddDays(-7));
+                if (came >= 1) thank.Add(new { contactClientId = c.ClientId, agentId = c.AgentId, role = c.Role, came });
+            }
+            return Ok(new { quiet = quiet.Take(40), thank = thank.Take(40) });
+        }
+
+        /// <summary>
+        /// How well each field agent's block is covered: active panchayats, how many were visited in the last 21 days, and
+        /// the ones longest without a visit. Panchayat names only; nothing about people.
+        /// </summary>
+        [HttpGet("field/coverage")]
+        public async Task<IActionResult> FieldCoverage(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var now = DateTime.UtcNow;
+            var agents = (await _db.Agents.AsNoTracking().Where(a => a.IsActive && a.Block != "").Select(a => new { a.AgentId, a.Role, a.Block, a.District }).ToListAsync(ct))
+                .Where(a => !RoleChecks.IsDashboardRole(a.Role)).ToList();
+            var blocks = agents.Select(a => a.Block).Distinct().ToList();
+            var panchayats = await _db.Panchayats.AsNoTracking().Where(p => p.IsActiveForMarketing && blocks.Contains(p.Block)).Select(p => new { p.PanchayatId, p.Name, p.Block }).ToListAsync(ct);
+            var pids = panchayats.Select(p => p.PanchayatId).ToList();
+            var lastVisit = (await _db.Visits.AsNoTracking().Where(v => pids.Contains(v.PanchayatId) && v.CheckInAt > now.AddDays(-120))
+                .GroupBy(v => v.PanchayatId).Select(g => new { g.Key, At = g.Max(v => v.CheckInAt) }).ToListAsync(ct)).ToDictionary(x => x.Key, x => x.At);
+            var shifts = await _db.Shifts.AsNoTracking().Where(x => x.StartTime > now.AddDays(-7)).Select(x => x.AgentId).ToListAsync(ct);
+            var openAi = (await _db.AgentTasks.AsNoTracking().Where(t => t.Status == "open" && t.CreatedBy.StartsWith("ai:")).Select(t => t.AgentId).ToListAsync(ct)).GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
+            var perBlock = agents.GroupBy(a => a.Block).ToDictionary(g => g.Key, g => g.Count());
+            return Ok(new
+            {
+                agents = agents.Select(a =>
+                {
+                    var mine = panchayats.Where(p => p.Block == a.Block).ToList();
+                    var stale = mine.Select(p => new { p.PanchayatId, p.Name, days = lastVisit.TryGetValue(p.PanchayatId, out var at) ? (int?)(now - at).TotalDays : null })
+                        .Where(p => p.days == null || p.days >= 21).OrderByDescending(p => p.days ?? 999).ToList();
+                    return new
+                    {
+                        agentId = a.AgentId, block = a.Block, district = a.District, agentsInBlock = perBlock[a.Block], panchayats = mine.Count, visitedIn21Days = mine.Count - stale.Count,
+                        shiftsLast7Days = shifts.Count(x => x == a.AgentId), openAiTasks = openAi.GetValueOrDefault(a.AgentId),
+                        stale = stale.Take(6).Select(p => new { id = p.PanchayatId, name = p.Name, daysSinceVisit = p.days }),
+                    };
+                }),
+            });
+        }
+
+        /// <summary>
+        /// A task on a field agent's phone, made by a Vita agent. Kinds: "revive" and "thank" (about one partner; the
+        /// partner's name is filled in here, so it never leaves NexMarket) and "coverage" (panchayats to visit).
+        /// Refused when the agent already has 5 open Vita tasks, got 2 today, or has the same one open.
+        /// </summary>
+        [HttpPost("tasks")]
+        public async Task<IActionResult> MakeTask([FromBody] AgentTaskDto d, CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var agent = await _db.Agents.AsNoTracking().FirstOrDefaultAsync(a => a.AgentId == d.ForAgent && a.IsActive, ct);
+            if (agent == null || RoleChecks.IsDashboardRole(agent.Role)) return Conflict(new { message = "no_such_field_agent" });
+            var by = "ai:" + (d.AgentId.Length > 40 ? d.AgentId[..40] : d.AgentId);
+            var open = await _db.AgentTasks.AsNoTracking().Where(t => t.AgentId == agent.AgentId && t.CreatedBy.StartsWith("ai:") && (t.Status == "open" || t.CreatedAt > IstClock.TodayStartUtc))
+                .Select(t => new { t.Status, t.CreatedAt, t.ContactClientId, t.CreatedBy, t.PanchayatIdsJson }).ToListAsync(ct);
+            if (open.Count(t => t.Status == "open") >= 5) return Conflict(new { message = "agent_has_enough" });
+            if (open.Count(t => t.CreatedAt > IstClock.TodayStartUtc) >= 2) return Conflict(new { message = "two_today" });
+
+            var today = AttendanceService.TodayIst;
+            var task = new AgentTask { GroupId = Guid.NewGuid(), AgentId = agent.AgentId, CreatedBy = by, Priority = "normal", District = agent.District, Block = agent.Block };
+            if (d.Kind is "revive" or "thank")
+            {
+                var c = await _db.Contacts.AsNoTracking().FirstOrDefaultAsync(x => x.ClientId == d.ContactClientId && !x.IsMerged, ct);
+                if (c == null) return Conflict(new { message = "no_such_partner" });
+                if (c.AgentId != agent.AgentId) return Conflict(new { message = "not_their_partner" });
+                if (open.Any(t => t.Status == "open" && t.ContactClientId == c.ClientId)) return Conflict(new { message = "already_open" });
+                var n = Math.Clamp(d.Count, 0, 999);
+                task.ContactClientId = c.ClientId;
+                task.Title = d.Kind == "revive" ? $"Visit {c.Name} ({RoleWord(c.Role)}): no referral for {n} days" : $"Thank {c.Name} ({RoleWord(c.Role)}): {n} of their patients came this week";
+                task.Detail = d.Kind == "revive"
+                    ? "They used to send patients and have stopped. Ask how things are, whether something went wrong with a patient, and leave a card. Do not offer money or any commission."
+                    : "Tell them their patients reached the hospital and were seen. A thank-you in person keeps a good partner. Do not offer money or any commission.";
+                task.DueDate = today.AddDays(d.Kind == "revive" ? 5 : 3);
+            }
+            else if (d.Kind == "coverage")
+            {
+                var want = (d.PanchayatIds ?? new()).Distinct().Take(6).ToList();
+                var found = await _db.Panchayats.AsNoTracking().Where(p => want.Contains(p.PanchayatId) && p.Block == agent.Block && p.IsActiveForMarketing).Select(p => new { p.PanchayatId, p.Name }).ToListAsync(ct);
+                if (found.Count == 0) return Conflict(new { message = "no_panchayats_in_their_block" });
+                if (open.Any(t => t.Status == "open" && t.CreatedBy == by && t.PanchayatIdsJson != null)) return Conflict(new { message = "already_open" });
+                task.PanchayatIdsJson = JsonSerializer.Serialize(found.Select(p => p.PanchayatId));
+                task.Title = $"Visit these panchayats this week: {string.Join(", ", found.Select(p => p.Name))}";
+                if (task.Title.Length > 200) task.Title = task.Title[..197] + "…";
+                task.Detail = "Nobody has checked in at these panchayats for three weeks or more. Meet the ASHA, the RMP and the chemist in each, and add any new partner you find.";
+                task.DueDate = today.AddDays(6);
+            }
+            else return BadRequest(new { message = "unknown_kind" });
+
+            _db.AgentTasks.Add(task);
+            await _db.SaveChangesAsync(ct);
+            await _live.PublishAsync(new LiveEvent { Kind = "task", Text = $"Vita gave {agent.Name} a task: {task.Title}", RefId = task.GroupId.ToString() });
+            _notifier.Notify(new NotifyJob { To = new() { agent.AgentId }, Kind = "task", Title = $"New task: {task.Title}", Body = $"{task.Detail} Due {task.DueDate:d MMM}.", Link = "tasks", RefId = task.GroupId.ToString() });
+            return Ok(new { status = "created", id = task.Id, title = task.Title });
+        }
+
+        // ─── Camp Planner: where a camp would be worth holding ──────────────────
+
+        /// <summary>
+        /// Per block, the last 90 days: referrals (and for which departments), partners, and when a camp was last held or is
+        /// next planned. Counts only.
+        /// </summary>
+        [HttpGet("camps/demand")]
+        public async Task<IActionResult> CampDemand(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var now = DateTime.UtcNow;
+            var today = AttendanceService.TodayIst;
+            var blockOf = (await _db.Panchayats.AsNoTracking().Where(p => p.IsActiveForMarketing).Select(p => new { p.PanchayatId, p.Block }).ToListAsync(ct)).ToDictionary(p => p.PanchayatId, p => p.Block);
+            var contacts = await _db.Contacts.AsNoTracking().Where(c => !c.IsMerged).Select(c => new { c.ClientId, c.PanchayatId, c.Phone, c.WhatsappOptOut, c.PhoneInvalid }).ToListAsync(ct);
+            var contactBlock = contacts.Where(c => blockOf.ContainsKey(c.PanchayatId)).ToDictionary(c => c.ClientId, c => blockOf[c.PanchayatId]);
+            var refs = await _db.Referrals.AsNoTracking().Where(r => r.CreatedAt > now.AddDays(-90)).Select(r => new { r.ContactId, r.Department }).ToListAsync(ct);
+            var camps = await _db.HealthCamps.AsNoTracking().Where(c => c.Status != "cancelled" && c.Block != null).Select(c => new { c.Block, c.Date }).ToListAsync(ct);
+            var blocks = blockOf.Values.Distinct().OrderBy(b => b).ToList();
+            return Ok(new
+            {
+                blocks = blocks.Select(b =>
+                {
+                    var mine = refs.Where(r => contactBlock.TryGetValue(r.ContactId, out var cb) && cb == b).ToList();
+                    var deps = mine.Where(r => !string.IsNullOrWhiteSpace(r.Department)).GroupBy(r => r.Department).OrderByDescending(g => g.Count()).Take(3).Select(g => new { department = g.Key, referrals = g.Count() });
+                    var past = camps.Where(c => c.Block == b && c.Date < today).Select(c => c.Date).ToList();
+                    var next = camps.Where(c => c.Block == b && c.Date >= today).Select(c => c.Date).ToList();
+                    return new
+                    {
+                        block = b, referrals90Days = mine.Count, topDepartments = deps,
+                        partners = contacts.Count(c => contactBlock.TryGetValue(c.ClientId, out var cb) && cb == b),
+                        partnersReachable = contacts.Count(c => contactBlock.TryGetValue(c.ClientId, out var cb) && cb == b && !string.IsNullOrEmpty(c.Phone) && !c.WhatsappOptOut && !c.PhoneInvalid),
+                        lastCamp = past.Count > 0 ? past.Max().ToString("yyyy-MM-dd") : null, daysSinceCamp = past.Count > 0 ? today.DayNumber - past.Max().DayNumber : (int?)null,
+                        nextCamp = next.Count > 0 ? next.Min().ToString("yyyy-MM-dd") : null,
+                    };
+                }),
+            });
+        }
+
+        // ─── Ads Optimiser: what the ads cost against who came ────────────────────
+
+        /// <summary>
+        /// The last 14 days of ads, per campaign: Meta (spend, leads that reached the CRM, how many came) and Google Ads
+        /// (cost, clicks, conversions). Read only: you run the ads yourself.
+        /// </summary>
+        [HttpGet("ads/results")]
+        public async Task<IActionResult> AdsResults(CancellationToken ct)
+        {
+            if (!Allowed()) return Unauthorized();
+            var today = AttendanceService.TodayIst;
+            var from = today.AddDays(-13);
+            var meta = HttpContext.RequestServices.GetRequiredService<MetaService>();
+            var (rows, currency, error) = await meta.AdsAsync(from, today, ct);
+            var g = await _db.ChannelMetrics.AsNoTracking().Where(m => m.Source == "google_ads" && m.Date >= from && m.Dimension.StartsWith("campaign:"))
+                .GroupBy(m => new { m.Dimension, m.Metric }).Select(x => new { x.Key.Dimension, x.Key.Metric, Label = x.Max(m => m.Label), Value = x.Sum(m => m.Value) }).ToListAsync(ct);
+            decimal G(string dim, string metric) => g.Where(x => x.Dimension == dim && x.Metric == metric).Select(x => x.Value).FirstOrDefault();
+            return Ok(new
+            {
+                days = 14, currency = currency ?? "INR", metaError = error,
+                meta = rows.Where(r => r.Spend > 0 || r.CrmLeads > 0).Select(r => new { id = r.Id, name = r.Name, status = r.Status, spend = Math.Round(r.Spend), leads = r.CrmLeads, came = r.Arrived, clicks = r.Clicks }),
+                google = g.Select(x => x.Dimension).Distinct().Select(dim => new
+                {
+                    id = dim, name = g.First(x => x.Dimension == dim).Label ?? dim, cost = Math.Round(G(dim, "cost")), clicks = (long)G(dim, "clicks"),
+                    conversions = Math.Round(G(dim, "conversions"), 1), calls = (long)G(dim, "phone_calls"),
+                }).Where(x => x.cost > 0),
+            });
         }
 
         // ─── Numbers for the Data Watcher, the Chief of Staff and the Reporter ─────────────────

@@ -34,6 +34,10 @@ export const RUN_JOB: Record<string, { job: string; label: string }[]> = {
   content_writer: [{ job: 'content_writer', label: 'Write today’s drafts now' }],
   social_publisher: [{ job: 'social_publisher', label: 'Publish the next approved post now' }],
   broadcast_manager: [{ job: 'broadcast_manager', label: 'Look for camps to invite for now' }],
+  partner_network: [{ job: 'partner_network', label: 'Look for partners to visit now' }],
+  field_coordinator: [{ job: 'field_coordinator', label: 'Check coverage now' }],
+  camp_planner: [{ job: 'camp_planner', label: 'Look for camp ideas now' }],
+  ads_optimiser: [{ job: 'ads_optimiser', label: 'Read the ads now' }],
 };
 export const needsCheck = (r: ActionRow) => (r.status === 'shadow' || r.status === 'held') && typeof r.detail?.text === 'string' && !r.reviewed_at;
 export interface GuardIssue { rule: string; severity: 'block' | 'fix'; message: string; match?: string | null; fixable: boolean }
