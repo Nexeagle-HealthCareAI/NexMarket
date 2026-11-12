@@ -11,6 +11,7 @@ const K_ACCESS = 'nx_access';
 const K_REFRESH = 'nx_refresh';
 const K_AGENT = 'nx_agent';
 const K_DEVICE = 'nx_device';
+const K_ORG = 'nx_org';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -41,8 +42,18 @@ export function setSignedOutHandler(fn: (() => void) | null) {
   onSignedOut = fn;
 }
 
+// Which organisation this phone signs in to (its short name). Empty = the first organisation on the server.
+// Sent with every request; the server uses it only for sign-in and renewing the session, the token decides the rest.
+let org = '';
+export const getOrg = () => org;
+export async function setOrg(key: string) {
+  org = key.trim().toLowerCase();
+  if (org) await SecureStore.setItemAsync(K_ORG, org); else await SecureStore.deleteItemAsync(K_ORG);
+}
+
 export async function loadTokens(): Promise<{ agentId: string | null; deviceId: string | null }> {
   access = await SecureStore.getItemAsync(K_ACCESS);
+  org = (await SecureStore.getItemAsync(K_ORG)) ?? '';
   return { agentId: await SecureStore.getItemAsync(K_AGENT), deviceId: await SecureStore.getItemAsync(K_DEVICE) };
 }
 
@@ -79,6 +90,7 @@ async function raw(path: string, init: RequestInit & { timeoutMs?: number } = {}
         Accept: 'application/json',
         'X-Client': 'mobile',
         'X-Device-Type': deviceKind(),
+        ...(org ? { 'X-Org': org } : {}),
         ...(init.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
         ...(access ? { Authorization: `Bearer ${access}` } : {}),
         ...(init.headers ?? {}),

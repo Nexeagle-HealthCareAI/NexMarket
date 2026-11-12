@@ -48,6 +48,9 @@ const en = {
   // Login
   login: 'Sign in',
   agentId: 'Agent ID',
+  organisation: 'Organisation',
+  organisationHint: 'The short name your organisation chose. Leave empty if you were not given one.',
+  orgUnknown: "We don't know this organisation. Check the name and try again.",
   password: 'Password',
   continue: 'Continue',
   forgotPassword: 'Forgot your password? Call your supervisor.',

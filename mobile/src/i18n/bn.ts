@@ -45,6 +45,9 @@ const bn: Strings = {
 
   login: 'লগ ইন করুন',
   agentId: 'এজেন্ট ID',
+  organisation: 'সংস্থা',
+  organisationHint: 'আপনার সংস্থার ছোট নাম। কোনো নাম দেওয়া না হলে ফাঁকা রাখুন।',
+  orgUnknown: 'আমরা এই সংস্থাটি চিনি না। নাম দেখে আবার চেষ্টা করুন।',
   password: 'পাসওয়ার্ড',
   continue: 'এগিয়ে যান',
   forgotPassword: 'পাসওয়ার্ড ভুলে গেছেন? সুপারভাইজারকে কল করুন।',

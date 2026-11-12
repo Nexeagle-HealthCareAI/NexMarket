@@ -26,6 +26,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<Microsoft.Extensions.Caching.Memory.IMemoryCache>(_ =>
     new OrgMemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())));
 builder.Services.AddSingleton<OrgDirectory>();
+builder.Services.AddScoped<IOrgDatabase, OrgDatabaseSetup>();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 // Activity log: every saved change is stamped with the signed-in person and their device.
@@ -275,10 +276,7 @@ foreach (var org in app.Services.GetRequiredService<OrgDirectory>().All().Where(
     {
         using var enter = OrgScope.Enter(org);
         using var orgScope = app.Services.CreateScope();
-        var orgDb = orgScope.ServiceProvider.GetRequiredService<MarketingDbContext>();
-        orgDb.Database.Migrate();
-        await PanchayatSeeder.SyncAsync(orgDb, app.Environment.ContentRootPath);
-        await SurveyQuestionSeeder.SeedIfEmptyAsync(orgDb);
+        await orgScope.ServiceProvider.GetRequiredService<IOrgDatabase>().SetUpAsync();
     }
     catch (Exception ex)
     {

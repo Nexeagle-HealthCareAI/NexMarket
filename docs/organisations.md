@@ -33,22 +33,26 @@ settings and the in-memory cache follow it. Background work uses `OrgDirectory.F
 - **Webhooks and public forms:** add `?org=<key>` to the address (Meta webhook, web lead form). Google sign-in comes
   back through the browser, which carries the `nx_org` cookie.
 
+## Sign-up and sign-in
+
+- **Sign-up** (`/signup`, `POST api/v1/signup`): anyone can create an organisation. It reserves the short sign-in
+  name, creates the database `nm_<name>`, and makes the person the admin (User ID `admin`, or their mobile number).
+- **Limits:** 5 tries per 10 minutes per network, one sign-up at a time, and `Platform:MaxSignupsPerDay` (default 10)
+  new organisations a day. `Platform:SignUpOpen=false` closes sign-up.
+- **Not verified:** the phone number and email are not checked yet. There is no email or SMS sender on the server.
+- **Sign-in:** the web page and the phone app have an Organisation field. Empty = the first organisation.
+- **The database user needs the CREATEDB right**, and PostGIS must be installable in new databases.
+- A browser or phone that holds field work from one organisation will not sign in to another (web), or starts
+  clean (phone app), so two organisations' work never mixes.
+
 ## What is NOT separated yet
 
 - **Vita agents service:** knows only the first organisation. Other organisations get "not available yet" on the
   Agents page and their events are not sent to it.
-- **No sign-up**, and the sign-in page and the phone app do not send the organisation yet (`X-Org`).
 - **Setup screens** still show the webhook address without `?org=`.
+- **New organisations start with no geography** (the Bihar panchayat list belongs to the first organisation), no
+  branches, and the first organisation's wording on many screens.
 - **Shared by all organisations on the server:** the Groq key and its daily allowance, Firebase (one phone app),
-  LiveKit, Mapbox, and the Bihar panchayat list that is loaded into every new database.
+  LiveKit and Mapbox.
 - **Scale:** each organisation adds its own database connections and its own pass of every background job. Fine for
   tens of organisations; hundreds will need pooling (PgBouncer) and staggered jobs.
-
-## Trying a second organisation on a test server
-
-Insert a row in the first database and restart the API; the database is created and updated on start:
-
-    insert into marketing.organisations ("Id","Key","Name","Database","Status","CreatedAt")
-    values (gen_random_uuid(), 'testlab', 'Test Lab', 'nm_testlab', 'active', now());
-
-It has no users until sign-up is built.

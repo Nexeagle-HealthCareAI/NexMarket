@@ -44,6 +44,9 @@ const hinglish: Strings = {
 
   login: 'Login karein',
   agentId: 'Agent ID',
+  organisation: 'Organisation',
+  organisationHint: 'Aapki organisation ka chhota naam. Agar koi naam nahi diya gaya hai to khali chhodein.',
+  orgUnknown: 'Hum is organisation ko nahi jaante. Naam check karke phir try karein.',
   password: 'Password',
   continue: 'Aage badhein',
   forgotPassword: 'Password bhool gaye? Supervisor ko call karein.',

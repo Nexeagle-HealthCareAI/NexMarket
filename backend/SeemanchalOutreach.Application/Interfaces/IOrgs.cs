@@ -91,3 +91,12 @@ namespace SeemanchalOutreach.Application.Interfaces
         }
     }
 }
+
+namespace SeemanchalOutreach.Application.Interfaces
+{
+    /// <summary>Creates the database of the organisation in charge (if it isn't there) and brings it up to date.</summary>
+    public interface IOrgDatabase
+    {
+        System.Threading.Tasks.Task SetUpAsync(System.Threading.CancellationToken ct = default);
+    }
+}
