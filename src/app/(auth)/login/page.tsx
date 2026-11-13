@@ -230,19 +230,12 @@ export default function LoginPage() {
 
   return (
     <div className="lg-shell">
-      <aside className="lg-side" aria-hidden="true">
+      <aside className="lg-side" aria-label="The NexEagle Android app for field agents">
         <div className="lg-side-top">
           <span className="lg-mark"><NexMarketLogo size={34} /></span>
           <span className="lg-brand">NexEagle</span>
         </div>
-        <div className="lg-side-body">
-          <h1>Every lead, partner and patient in one place.</h1>
-          <ul>
-            <li><strong>Leads inbox</strong> WhatsApp, Facebook, Instagram, camps and partner referrals, followed up to the hospital door.</li>
-            <li><strong>Field team</strong> Shifts, visits and routes from the agents&rsquo; phones, even without signal.</li>
-            <li><strong>Results</strong> What each campaign and partner brought in, as patients.</li>
-          </ul>
-        </div>
+        <AppShowcase />
         <div className="lg-side-foot">For hospitals, clinics, diagnostic centres, labs, pharmacies and dialysis centres</div>
       </aside>
 
@@ -323,6 +316,54 @@ export default function LoginPage() {
         </div>
         <p className="lg-foot">Secured sign-in · sessions end on other devices of the same kind when you sign in here</p>
       </main>
+    </div>
+  );
+}
+
+// ─── The Android app, shown beside the sign-in form ──────────────────────
+
+const APP_SLIDES = [
+  { img: '/appshots/today.webp', title: 'Every day planned', line: 'Agents open the app and see where to go next.', alt: 'The app’s Today screen: the next panchayat to check in at, a call that is overdue, and today’s numbers.' },
+  { img: '/appshots/partners.webp', title: 'No follow-up missed', line: 'Late and due partners come first. One tap to call.', alt: 'The app’s Partners screen: follow-ups due today and overdue, each with Call, WhatsApp, Route and Later buttons.' },
+  { img: '/appshots/patients.webp', title: 'Every patient tracked', line: 'From the village to your door, step by step.', alt: 'The app’s My patients screen: each referred patient with a five-step progress bar from on the way to admitted.' },
+  { img: '/appshots/partner.webp', title: 'Visits with proof', line: 'Each visit is saved with its time and place, even with no signal.', alt: 'One partner’s screen in the app: call, WhatsApp, the follow-up due, patients sent, and Visit done and Refer patient buttons.' },
+];
+
+/**
+ * Four screens of the field agents' Android app, one at a time and large, each with a few words on what it gives the
+ * manager. It moves on by itself every six seconds; it stops while the pointer or keyboard is on it, and never moves
+ * for people who have asked their device for less motion.
+ */
+function AppShowcase() {
+  const [at, setAt] = useState(0);
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    if (held) return;
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const t = setInterval(() => setAt((n) => (n + 1) % APP_SLIDES.length), 6000);
+    return () => clearInterval(t);
+  }, [held]);
+  const slide = APP_SLIDES[at];
+  return (
+    <div className="lg-show" onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)} onFocus={() => setHeld(true)} onBlur={() => setHeld(false)}>
+      <div className="lg-phone">
+        {APP_SLIDES.map((s, i) => (
+          // eslint-disable-next-line @next/next/no-img-element -- four small local pictures, cross-faded
+          <img key={s.img} src={s.img} alt={i === at ? s.alt : ''} aria-hidden={i !== at} className={i === at ? 'is-on' : ''} width={640} height={1385} loading={i === 0 ? 'eager' : 'lazy'} decoding="async" />
+        ))}
+      </div>
+      <div className="lg-show-text">
+        <p className="lg-kicker">Android app for your field team</p>
+        <h1>{slide.title}</h1>
+        <p className="lg-show-line" aria-live="polite">{slide.line}</p>
+        <div className="lg-show-tabs" role="group" aria-label="App screens">
+          {APP_SLIDES.map((s, i) => (
+            <button key={s.img} type="button" className={i === at ? 'is-on' : ''} aria-pressed={i === at} onClick={() => { setAt(i); setHeld(true); }}>
+              <span aria-hidden="true">{i + 1}</span>{s.title}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

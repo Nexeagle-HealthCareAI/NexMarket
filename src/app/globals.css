@@ -878,6 +878,24 @@ textarea.field-input { resize: none; min-height: 80px; }
   .lg-side-body li { font-size: 15px; line-height: 1.55; color: #c8d1e3; padding-left: 16px; border-left: 2px solid #22c39a; }
   .lg-side-body li strong { display: block; color: #fff; font-size: 16px; margin-bottom: 2px; }
   .lg-side-foot { font-size: 13px; color: #8f9bb3; }
+  /* The Android app beside the form: one large phone, a few words, four buttons. */
+  .lg-show { display: flex; align-items: center; gap: clamp(24px, 3.2vw, 48px); min-height: 0; padding: 24px 0; }
+  .lg-phone { position: relative; flex: none; height: min(66vh, 640px); aspect-ratio: 640 / 1385; border: 9px solid #1a2236; border-radius: 34px; background: #1a2236; overflow: hidden; box-shadow: 0 30px 60px -24px rgba(0, 0, 0, .7), 0 0 0 1px #2f3a55; }
+  .lg-phone img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; opacity: 0; transition: opacity .5s ease; }
+  .lg-phone img.is-on { opacity: 1; }
+  .lg-show-text { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .lg-kicker { margin: 0; font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #38f6a9; }
+  .lg-show-text h1 { margin: 0; font-size: clamp(30px, 3.1vw, 46px); line-height: 1.08; font-weight: 800; letter-spacing: -0.02em; text-wrap: balance; }
+  .lg-show-line { margin: 0; font-size: 17px; line-height: 1.5; color: #c8d1e3; max-width: 340px; min-height: 3em; }
+  .lg-show-tabs { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .lg-show-tabs button { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 0 14px 0 8px; border: 1px solid #2f3a55; border-radius: 12px; background: transparent; color: #c8d1e3; font: inherit; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+  .lg-show-tabs button span { width: 30px; height: 30px; border-radius: 9px; background: #1a2236; color: #c8d1e3; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; flex: none; }
+  .lg-show-tabs button:hover { border-color: #4a5878; color: #fff; }
+  .lg-show-tabs button.is-on { background: #16233b; border-color: #38f6a9; color: #fff; }
+  .lg-show-tabs button.is-on span { background: #38f6a9; color: #0e1525; }
+  .lg-show-tabs button:focus-visible { outline: 3px solid #7fb8f5; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { .lg-phone img { transition: none; } }
+  @media (max-height: 640px) { .lg-phone { height: 60vh; } .lg-show-tabs { display: none; } }
   .lg-head .lg-mark { display: none; }
 }
 .lg-linkbtn { border: 0; background: none; padding: 0; font: inherit; color: #0a72d6; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
