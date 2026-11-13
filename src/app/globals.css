@@ -870,6 +870,9 @@ textarea.field-input { resize: none; min-height: 80px; }
 .lg-spinner { width: 40px; height: 40px; border: 3px solid #e3e8f0; border-top-color: #0a72d6; border-radius: 50%; margin-bottom: 10px; }
 @media (min-width: 1024px) {
   .lg-shell { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+  /* Sign-in: the banner takes two thirds of the page and the form one third (never narrower than the form needs). */
+  .lg-shell.is-banner { grid-template-columns: minmax(0, 2fr) minmax(360px, 1fr); }
+  .lg-shell.is-banner .lg-side { padding: 48px clamp(40px, 5vw, 88px); }
   .lg-side { display: flex; flex-direction: column; justify-content: space-between; padding: 48px 56px; background: #0e1525; color: #fff; }
   .lg-side-top { display: flex; align-items: center; gap: 12px; }
   .lg-brand { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
@@ -879,19 +882,19 @@ textarea.field-input { resize: none; min-height: 80px; }
   .lg-side-body li strong { display: block; color: #fff; font-size: 16px; margin-bottom: 2px; }
   .lg-side-foot { font-size: 13px; color: #8f9bb3; }
   /* The Android app beside the form: one large phone, a few words, four buttons. */
-  .lg-show { display: flex; align-items: center; gap: clamp(24px, 3.2vw, 48px); min-height: 0; padding: 24px 0; }
-  .lg-phone { position: relative; flex: none; height: min(66vh, 640px); aspect-ratio: 640 / 1385; border: 9px solid #1a2236; border-radius: 34px; background: #1a2236; overflow: hidden; box-shadow: 0 30px 60px -24px rgba(0, 0, 0, .7), 0 0 0 1px #2f3a55; }
+  .lg-show { display: flex; align-items: center; gap: clamp(24px, 4vw, 72px); min-height: 0; padding: 24px 0; }
+  .lg-phone { position: relative; flex: none; height: min(70vh, 720px); aspect-ratio: 640 / 1385; border: 9px solid #1a2236; border-radius: 34px; background: #1a2236; overflow: hidden; box-shadow: 0 30px 60px -24px rgba(0, 0, 0, .7), 0 0 0 1px #2f3a55; }
   .lg-phone img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; opacity: 0; transition: opacity .5s ease; }
   .lg-phone img.is-on { opacity: 1; }
   .lg-show-text { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
   .lg-kicker { margin: 0; font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #38f6a9; }
-  .lg-show-text h1 { margin: 0; font-size: clamp(30px, 3.1vw, 46px); line-height: 1.08; font-weight: 800; letter-spacing: -0.02em; text-wrap: balance; }
-  .lg-show-line { margin: 0; font-size: 17px; line-height: 1.5; color: #c8d1e3; max-width: 340px; min-height: 3em; }
+  .lg-show-text h1 { margin: 0; font-size: clamp(30px, 3.6vw, 54px); line-height: 1.08; font-weight: 800; letter-spacing: -0.02em; text-wrap: balance; }
+  .lg-show-line { margin: 0; font-size: 19px; line-height: 1.5; color: #c8d1e3; max-width: 400px; min-height: 3em; }
   .lg-show-tabs { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
   /* "Why NexEagle" comes first: no phone, wider words, and the buttons in a row underneath. */
   .lg-phone[hidden] { display: none; }
-  .lg-show.is-why .lg-show-text { max-width: 560px; }
-  .lg-show.is-why h1 { font-size: clamp(34px, 3.4vw, 50px); }
+  .lg-show.is-why .lg-show-text { max-width: 720px; }
+  .lg-show.is-why h1 { font-size: clamp(34px, 4vw, 60px); }
   .lg-why { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 18px; }
   .lg-why li { font-size: 16px; line-height: 1.5; color: #c8d1e3; padding-left: 16px; border-left: 3px solid #38f6a9; }
   .lg-why li strong { display: block; color: #fff; font-size: 20px; font-weight: 800; margin-bottom: 2px; }

@@ -229,11 +229,11 @@ export default function LoginPage() {
   const mmss = `${Math.floor(lockLeft / 60)}:${String(lockLeft % 60).padStart(2, '0')}`;
 
   return (
-    <div className="lg-shell">
-      <aside className="lg-side" aria-label="The NexEagle Android app for field agents">
+    <div className="lg-shell is-banner">
+      <aside className="lg-side" aria-label="The NexMarket Android app for field agents">
         <div className="lg-side-top">
           <span className="lg-mark"><NexMarketLogo size={34} /></span>
-          <span className="lg-brand">NexEagle</span>
+          <span className="lg-brand">NexMarket</span>
         </div>
         <AppShowcase />
         <div className="lg-side-foot">For hospitals, clinics, diagnostic centres, labs, pharmacies and dialysis centres</div>
@@ -245,7 +245,7 @@ export default function LoginPage() {
             <span className="lg-mark is-sm"><NexMarketLogo size={28} /></span>
             <div>
               <h2>Sign in</h2>
-              <p>{orgFound ? `NexEagle · ${orgFound.name}` : 'NexEagle'}</p>
+              <p>{orgFound ? `NexMarket · ${orgFound.name}` : 'NexMarket'}</p>
             </div>
           </div>
           <PwaInstallPrompt />
@@ -310,7 +310,7 @@ export default function LoginPage() {
               </button>
 
               <p className="lg-help">New here? <Link href="/signup">Create an account for your organisation</Link></p>
-              <p className="lg-help"><Link href={`/forgot${org.trim() ? `?org=${encodeURIComponent(org.trim().toLowerCase())}` : ''}`}>Forgot your password?</Link> Never share your password, even with the NexEagle team.</p>
+              <p className="lg-help"><Link href={`/forgot${org.trim() ? `?org=${encodeURIComponent(org.trim().toLowerCase())}` : ''}`}>Forgot your password?</Link> Never share your password, even with the NexMarket team.</p>
             </form>
           )}
         </div>
@@ -334,10 +334,10 @@ const WHY = [
   { title: 'A field team you can see', line: 'Shifts, visits and routes from the agents’ phones, even without signal.' },
   { title: 'Results as patients', line: 'What each campaign and partner really brought in.' },
 ];
-const TABS = ['Why NexEagle', ...APP_SLIDES.map((s) => s.title)];
+const TABS = ['Why NexMarket', ...APP_SLIDES.map((s) => s.title)];
 
 /**
- * Beside the sign-in form: first why NexEagle (three short points), then four screens of the field agents' Android
+ * Beside the sign-in form: first why NexMarket (three short points), then four screens of the field agents' Android
  * app, one at a time and large, each with a few words on what it gives the manager. It moves on by itself (the
  * first one stays a little longer); it stops while the pointer or keyboard is on it, and never moves for people who
  * have asked their device for less motion.
@@ -362,7 +362,7 @@ function AppShowcase() {
         ))}
       </div>
       <div className="lg-show-text">
-        <p className="lg-kicker">{slide ? 'Android app for your field team' : 'Why NexEagle'}</p>
+        <p className="lg-kicker">{slide ? 'Android app for your field team' : 'Why NexMarket'}</p>
         <h1>{slide ? slide.title : 'Every lead, partner and patient in one place.'}</h1>
         {slide ? <p className="lg-show-line" aria-live="polite">{slide.line}</p> : (
           <ul className="lg-why">

@@ -61,7 +61,7 @@ export default function ForgotPage() {
       <aside className="lg-side" aria-hidden="true">
         <div className="lg-side-top">
           <span className="lg-mark"><NexMarketLogo size={34} /></span>
-          <span className="lg-brand">NexEagle</span>
+          <span className="lg-brand">NexMarket</span>
         </div>
         <div className="lg-side-body">
           <h1>Back in, in two steps.</h1>
@@ -71,7 +71,7 @@ export default function ForgotPage() {
             <li><strong>Everything else signs out</strong> A new password signs out every other device.</li>
           </ul>
         </div>
-        <div className="lg-side-foot">Never share a code or password, even with the NexEagle team</div>
+        <div className="lg-side-foot">Never share a code or password, even with the NexMarket team</div>
       </aside>
 
       <main className="lg-main">
@@ -80,7 +80,7 @@ export default function ForgotPage() {
             <span className="lg-mark is-sm"><NexMarketLogo size={28} /></span>
             <div>
               <h2>{step === 'done' ? 'Password changed' : 'Forgot your password?'}</h2>
-              <p>NexEagle</p>
+              <p>NexMarket</p>
             </div>
           </div>
 

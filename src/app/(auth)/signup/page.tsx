@@ -155,7 +155,7 @@ export default function SignupPage() {
       <aside className="lg-side" aria-hidden="true">
         <div className="lg-side-top">
           <span className="lg-mark"><NexMarketLogo size={34} /></span>
-          <span className="lg-brand">NexEagle</span>
+          <span className="lg-brand">NexMarket</span>
         </div>
         <div className="lg-side-body">
           <h1>Your own space for leads, partners and patients.</h1>
@@ -174,7 +174,7 @@ export default function SignupPage() {
             <span className="lg-mark is-sm"><NexMarketLogo size={28} /></span>
             <div>
               <h2>{done ? 'Your organisation is ready' : sentTo && !busy ? 'Enter your code' : 'Create your organisation'}</h2>
-              <p>NexEagle</p>
+              <p>NexMarket</p>
             </div>
           </div>
 
