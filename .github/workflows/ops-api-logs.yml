@@ -15,12 +15,20 @@ jobs:
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           command_timeout: 2m
           script: |
-            docker ps --filter name=nexmarket --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
-            echo "=== failures (last 3h)"
-            docker logs --since 3h nexmarket-api-dev 2>&1 | grep -n -E -A30 "^fail:|Unhandled|Exception:" | grep -v -i "password\|secret\|token=" | tail -200
-            echo "=== /calls requests"
-            docker logs --since 3h nexmarket-api-dev 2>&1 | grep -n -E "api/v1/calls|CallsController" | tail -40
-            echo "=== env has LiveKit keys (names only)"
-            docker inspect nexmarket-api-dev --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -i '^LiveKit' | sed -E 's/=(.{0,0}).*/=<set>/' 
-            echo "=== livekit"
-            docker logs --since 3h nexmarket-livekit 2>&1 | tail -30
+            echo "=== livekit container"
+            docker ps --filter name=nexmarket-livekit --format '{{.Names}} {{.Status}}'
+            echo "=== livekit logs (last 2h, filtered)"
+            docker logs --since 2h nexmarket-livekit 2>&1 | grep -v -i "secret\|token" | grep -i -E "external|ip|starting|room|participant|ice|turn|error|warn|fail|udp|tcp" | tail -80
+            echo "=== listening sockets for LiveKit"
+            (ss -tulnp 2>/dev/null || netstat -tulnp) | grep -E ":(7880|7881|3478|5349|5000[0-9]|500[1-9][0-9]|50100) " | head -20
+            echo "=== whoami / sudo"
+            id; sudo -n true 2>/dev/null && echo "sudo: yes" || echo "sudo: no"
+            echo "=== ufw"
+            sudo -n ufw status verbose 2>&1 | head -30
+            echo "=== iptables INPUT"
+            sudo -n iptables -S INPUT 2>&1 | head -40
+            echo "=== public IP seen by VM"
+            curl -s -m 5 https://api.ipify.org; echo
+            echo "=== cloud metadata (who hosts this VM)"
+            curl -s -m 3 -H "Authorization: Bearer Oracle" http://169.254.169.254/opc/v2/instance/ 2>/dev/null | head -c 300; echo
+            curl -s -m 3 -H "Metadata: true" "http://169.254.169.254/metadata/instance?api-version=2021-02-01" 2>/dev/null | head -c 300; echo
