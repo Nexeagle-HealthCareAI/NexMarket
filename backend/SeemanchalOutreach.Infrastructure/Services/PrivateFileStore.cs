@@ -98,6 +98,26 @@ namespace SeemanchalOutreach.Infrastructure.Services
             return (File.OpenRead(path), "application/octet-stream");
         }
 
+        public async Task<(Stream Content, string ContentType, long? Length)?> OpenReleaseAsync(string key, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(key) || key.Contains("..") || !key.StartsWith("app-releases/", StringComparison.Ordinal)) return null;
+            if (_s3 != null)
+            {
+                try
+                {
+                    var o = await _s3.GetObjectAsync(_bucket, key, ct);
+                    return (o.ResponseStream, o.Headers.ContentType ?? "application/octet-stream", o.ContentLength);
+                }
+                catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    return null;
+                }
+            }
+            var path = Path.Combine(_localRoot, key.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(path)) return null;
+            return (File.OpenRead(path), "application/octet-stream", new FileInfo(path).Length);
+        }
+
         public async Task<bool> DeleteAsync(string key, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(key) || key.Contains("..") || !OrgKeys.OwnsFile(key)) return false;

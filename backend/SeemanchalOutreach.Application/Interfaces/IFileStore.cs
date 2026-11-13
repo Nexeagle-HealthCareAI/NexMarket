@@ -15,5 +15,11 @@ namespace SeemanchalOutreach.Application.Interfaces
 
         /// <summary>Removes a stored file for good. Only for a file of the organisation in charge. False when it could not be removed.</summary>
         Task<bool> DeleteAsync(string key, CancellationToken ct = default);
+
+        /// <summary>
+        /// A published app build under "app-releases/" (put there by the Android build, shared by every organisation).
+        /// Null when it isn't there or the key is outside that folder.
+        /// </summary>
+        Task<(Stream Content, string ContentType, long? Length)?> OpenReleaseAsync(string key, CancellationToken ct = default);
     }
 }

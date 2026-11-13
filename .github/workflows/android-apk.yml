@@ -136,6 +136,43 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # The CRM's Field app page downloads the newest develop APK from storage (api/v1/app/android): the APK as
+      # app-releases/android/latest.apk (plus a numbered copy) and latest.json describing it.
+      - name: Publish for the CRM's Field app page (develop)
+        if: github.ref == 'refs/heads/develop'
+        working-directory: dist-android
+        env:
+          S3_SERVICE_URL: ${{ secrets.DEV_S3_SERVICE_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.DEV_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.DEV_S3_SECRET_KEY }}
+          S3_BUCKET: ${{ vars.DEV_S3_BUCKET || 'nexmarket-dev' }}
+          AWS_DEFAULT_REGION: ap-south-1
+          # S3-compatible storage: newer AWS CLIs add checksums that such stores can reject.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          NAME: ${{ steps.out.outputs.name }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          if [ -z "$S3_SERVICE_URL" ] || [ -z "$AWS_ACCESS_KEY_ID" ]; then
+            echo "::warning::DEV_S3_* secrets are not set — the CRM's Field app page won't get this build."
+            exit 0
+          fi
+          # Same as the API (PrivateFileStore): an endpoint that already names the bucket is used without it.
+          host=$(printf '%s' "$S3_SERVICE_URL" | sed -E 's#^https?://##; s#/.*$##')
+          scheme=$(printf '%s' "$S3_SERVICE_URL" | sed -E 's#://.*$##')
+          case "$host" in "$S3_BUCKET".*) S3_SERVICE_URL="$scheme://${host#"$S3_BUCKET".}";; esac
+          aws configure set default.s3.addressing_style path
+          s3() { aws s3 cp --only-show-errors --endpoint-url "$S3_SERVICE_URL" "$@"; }
+          size=$(stat -c %s "$NAME.apk")
+          jq -n --arg version "$VERSION" --argjson build "${{ github.run_number }}" --arg builtAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                --arg commit "${GITHUB_SHA:0:7}" --arg notes "$(git log -1 --format=%s | cut -c1-300)" --argjson size "$size" \
+                '{version: $version, build: $build, builtAt: $builtAt, commit: $commit, notes: $notes, size: $size}' > latest.json
+          s3 "$NAME.apk" "s3://$S3_BUCKET/app-releases/android/$NAME.apk" --content-type application/vnd.android.package-archive
+          s3 "$NAME.apk" "s3://$S3_BUCKET/app-releases/android/latest.apk" --content-type application/vnd.android.package-archive
+          # latest.json last, so the page never describes an APK that isn't there yet.
+          s3 latest.json "s3://$S3_BUCKET/app-releases/android/latest.json" --content-type application/json
+          echo "Published $NAME ($size bytes) for the CRM's Field app page."
+
       - name: GitHub release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
