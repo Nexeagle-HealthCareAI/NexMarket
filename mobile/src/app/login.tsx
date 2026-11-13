@@ -5,7 +5,7 @@ import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Btn, Field, T } from '../components/ui';
-import { LANGS } from '../i18n';
+import { LANGS, hasOrgWording } from '../i18n';
 import { ApiError, OfflineError, getOrg, pendingPasswordChange, setOrg, signedOutReason } from '../lib/api';
 import { APP_VERSION } from '../lib/config';
 import { useSession } from '../lib/session';
@@ -18,6 +18,9 @@ export default function Login() {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
+  const [orgEdit, setOrgEdit] = useState(false);
+  // The name can be shown for the first organisation (nothing typed) or one this phone has signed in to before.
+  const known = org === getOrg() && (!org || hasOrgWording());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Signed out by the server: a newer sign-in on another phone, a password reset, or an admin.
@@ -56,7 +59,7 @@ export default function Login() {
               <Image source={require('../../assets/brand/logo.png')} style={{ width: 34, height: 25 }} resizeMode="contain" />
               <T style={{ color: '#fff', fontSize: 26, fontWeight: '800' }}>NexEagle</T>
             </View>
-            <T style={{ color: C.sideText, fontSize: 14, textAlign: 'center' }}>{org === getOrg() ? t('hospital') : ' '}</T>
+            <T style={{ color: C.sideText, fontSize: 14, textAlign: 'center' }}>{known ? t('hospital') : ' '}</T>
             <T style={{ color: C.mint, fontSize: 14, fontWeight: '700' }}>{t('fieldTeamApp')}</T>
           </View>
 
@@ -75,10 +78,24 @@ export default function Login() {
 
           <View style={{ backgroundColor: C.card, borderRadius: 24, padding: 20, gap: 14 }}>
             <T style={{ fontSize: 20, fontWeight: '800' }}>{t('login')}</T>
-            <Field label={t('organisation')} hint={t('organisationHint')} value={org} onChangeText={(v) => setOrgText(v.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-              autoCapitalize="none" autoCorrect={false} placeholder="citylab" returnKeyType="next" maxLength={30} />
-            <Field label={t('agentId')} value={userId} onChangeText={setUserId} autoCapitalize="characters" autoCorrect={false}
-              placeholder="MKT-1001" returnKeyType="next" textContentType="username" autoComplete="username" />
+            {/* Most agents never change organisation: show which one this phone signs in to, with a way to change it. */}
+            {orgEdit ? (
+              <Field label={t('organisation')} hint={t('organisationHint')} value={org} onChangeText={(v) => setOrgText(v.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                autoCapitalize="none" autoCorrect={false} returnKeyType="next" maxLength={30} autoFocus />
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.bg, borderWidth: 1, borderColor: C.border, borderRadius: 14, paddingLeft: 14, paddingRight: 8, paddingVertical: 8 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <T style={{ fontSize: 12, fontWeight: '700', color: C.text2 }}>{t('organisation')}</T>
+                  <T style={{ fontSize: 15, fontWeight: '800' }} numberOfLines={2}>{known ? t('hospital') : org}</T>
+                </View>
+                <Pressable onPress={() => setOrgEdit(true)} accessibilityRole="button" accessibilityLabel={`${t('change')}: ${t('organisation')}`} hitSlop={4}
+                  style={({ pressed }) => [{ minHeight: 44, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: C.borderStrong, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
+                  <T style={{ color: C.blueInk, fontSize: 14, fontWeight: '700' }}>{t('change')}</T>
+                </Pressable>
+              </View>
+            )}
+            <Field label={t('agentId')} hint={t('loginIdHint')} value={userId} onChangeText={setUserId} autoCapitalize="characters" autoCorrect={false}
+              returnKeyType="next" textContentType="username" autoComplete="username" />
             <View>
               <Field label={t('password')} value={password} onChangeText={setPassword} secureTextEntry={!showPw} returnKeyType="go"
                 onSubmitEditing={submit} textContentType="password" autoComplete="password" autoCapitalize="none" autoCorrect={false} style={{ paddingRight: 52 }} />

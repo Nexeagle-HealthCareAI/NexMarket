@@ -459,6 +459,10 @@ const bn: Strings = {
   noPatients: 'এখনও কোনো রোগী পাঠানো হয়নি।',
 
   me: 'আমি',
+  meWork: "আমার কাজ",
+  meApp: "এই অ্যাপ",
+  loginIdHint: "এটি আপনাকে সুপারভাইজার দিয়েছেন, যেমন MKT-1001।",
+  ptMore: "আরও",
   unsentItems: '{n}টি জিনিস ফোনে সেভ',
   everythingSent: 'সব পাঠানো হয়েছে',
   lastSent: 'শেষ পাঠানো {time}',

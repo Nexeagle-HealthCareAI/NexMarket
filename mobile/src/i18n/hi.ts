@@ -458,6 +458,10 @@ const hi: Strings = {
   noPatients: 'अभी कोई मरीज नहीं भेजा।',
 
   me: 'मैं',
+  meWork: "मेरा काम",
+  meApp: "यह ऐप",
+  loginIdHint: "यह आपको सुपरवाइज़र ने दिया है, जैसे MKT-1001।",
+  ptMore: "और",
   unsentItems: '{n} {n|चीज़|चीज़ें} फ़ोन पर सेव',
   everythingSent: 'सब कुछ भेज दिया',
   lastSent: 'आख़िरी बार भेजा {time}',

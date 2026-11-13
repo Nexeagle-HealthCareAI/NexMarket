@@ -33,6 +33,7 @@ export default function PartnerProfile() {
   const [moveOpen, setMoveOpen] = useState(false);
   const [revisitOpen, setRevisitOpen] = useState(false);
   const [escOpen, setEscOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [composing, setComposing] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -87,10 +88,14 @@ export default function PartnerProfile() {
   const lastNote = d.notes[0];
 
   return (
-    <Screen header={<TopBar title={t('ptPartner')} sub={c.name} explain={t('ptPartnerExplain')} right={
-      <Pressable onPress={photo} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('photo')}
-        style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><Icon name="camera" color={C.text} /></Pressable>
-    } />}>
+    <Screen header={<TopBar title={t('ptPartner')} sub={c.name} explain={t('ptPartnerExplain')} />}
+      footer={(
+        // The two things that finish a meeting stay in reach at the bottom, however far the agent has scrolled.
+        <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border }}>
+          <Btn flex kind="secondary" icon="check" label={t('ptVisitDone')} onPress={() => setRevisitOpen(true)} style={{ borderColor: C.ok, borderWidth: 2 }} />
+          <Btn flex kind="ok" icon="hospital" label={t('referPatient')} onPress={() => router.push({ pathname: '/refer', params: { contactId: c.clientId } })} />
+        </View>
+      )}>
       <Card style={{ borderRadius: 20, padding: 16, gap: 14 }}>
         <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
           <Avatar name={c.name} size={60} bg={champion ? C.star : C.blue} />
@@ -108,21 +113,14 @@ export default function PartnerProfile() {
             </View>
           </View>
         </View>
-        <View style={{ gap: 8 }}>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <ActionTile height={76} tone="primary" icon="phone" label={t('call')} disabled={!c.phone} onPress={() => callNumber(c.phone)} />
-            <ActionTile height={76} tone="wa" icon="whatsapp" label={t('whatsapp')} disabled={!c.phone} onPress={() => setWaOpen(true)} />
-            <ActionTile height={76} tone="soft" icon="hospital" label={t('referPatient')} onPress={() => router.push({ pathname: '/refer', params: { contactId: c.clientId } })} />
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <ActionTile height={76} tone="okOutline" icon="check" label={t('ptVisitDone')} onPress={() => setRevisitOpen(true)} />
-            <ActionTile height={76} icon="calendar" label={t('ptMeetLater')} onPress={() => setMoveOpen(true)} />
-            <ActionTile height={76} tone="danger" icon="flag" label={t('ptGetHelp')} onPress={() => setEscOpen(true)} />
-          </View>
+        {/* One row of quick actions. Meet later, Get help and Photo are under More. */}
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          <ActionTile oneLine tone="primary" icon="phone" label={t('call')} disabled={!c.phone} onPress={() => callNumber(c.phone)} />
+          <ActionTile oneLine tone="wa" icon="whatsapp" label={t('whatsapp')} disabled={!c.phone} onPress={() => setWaOpen(true)} />
+          <ActionTile oneLine icon="nav" label={t('ptRoute')} disabled={c.lat == null || c.lng == null}
+            onPress={() => c.lat != null && c.lng != null && navigateTo({ lat: c.lat, lng: c.lng, name: c.name, panchayatId: c.panchayatId, contactId: c.clientId })} />
+          <ActionTile oneLine icon="settings" label={t('ptMore')} onPress={() => setMoreOpen(true)} />
         </View>
-        {c.lat != null && c.lng != null ? (
-          <Btn small kind="secondary" icon="nav" label={t('navGo')} onPress={() => navigateTo({ lat: c.lat!, lng: c.lng!, name: c.name, panchayatId: c.panchayatId, contactId: c.clientId })} />
-        ) : null}
       </Card>
 
       <EscalationStatus c={c} />
@@ -261,6 +259,11 @@ export default function PartnerProfile() {
         setFollowUp(c.clientId, date); setMoveOpen(false); savedFeedback();
         toast(t('ptMovedTo', { date: dayShort(lang, date) }), { undo: () => setFollowUp(c.clientId, before) });
       }} />
+      <Sheet visible={moreOpen} onClose={() => setMoreOpen(false)} title={c.name}>
+        <Btn kind="secondary" icon="calendar" label={t('ptMeetLater')} onPress={() => { setMoreOpen(false); setMoveOpen(true); }} />
+        <Btn kind="secondary" icon="camera" label={t('photo')} onPress={() => { setMoreOpen(false); void photo(); }} />
+        <Btn kind="danger" icon="flag" label={t('ptGetHelp')} onPress={() => { setMoreOpen(false); setEscOpen(true); }} />
+      </Sheet>
       <EscalateSheet visible={escOpen} onClose={() => setEscOpen(false)} contactId={c.clientId} name={c.name} />
       <RevisitSheet visible={revisitOpen} onClose={() => setRevisitOpen(false)} contactId={c.clientId} name={c.name} />
       <WhatsAppSheet visible={waOpen} onClose={() => setWaOpen(false)} name={c.name} phone={c.phone} />

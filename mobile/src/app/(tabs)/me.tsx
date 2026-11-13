@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { Avatar, Btn, Card, Chip, Screen, Sheet, SpeakButton, Switch, T, TopBar } from '../../components/ui';
+import { Avatar, Btn, Card, Chip, MainHeader, Screen, Sheet, SpeakButton, Switch, T } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 import { LanguageSheet } from '../../components/LanguageSheet';
 import { useDb, useSession, useSync } from '../../lib/session';
@@ -17,6 +17,8 @@ import { myPhotoUrl } from '../../lib/profile';
 import { C } from '../../theme';
 import { oldPhone, setPerfMode, useLite, usePerfMode, type PerfMode } from '../../lib/perf';
 import { savedFeedback, setPrefs, usePrefs, type TextSize } from '../../lib/prefs';
+import { useMoney } from '../../lib/useMoney';
+import { inr } from '../../lib/money';
 
 export default function Me() {
   const lock = useLock();
@@ -25,6 +27,9 @@ export default function Me() {
   const [langOpen, setLangOpen] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   const [perfOpen, setPerfOpen] = useState(false);
+  const [easyOpen, setEasyOpen] = useState(false);
+  const prefs = usePrefs();
+  const money = useMoney();
   const light = useLite();
   const pm = usePerfMode();
 
@@ -60,17 +65,16 @@ export default function Me() {
   const photo = useDb(() => myPhotoUrl());
 
   return (
-    <Screen header={<TopBar title={t('me')} onBack={false} explain={t('uxEasyExplain')} />}>
-      <Card onPress={() => router.push('/profile')} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Avatar name={agent?.name ?? '?'} size={52} uri={photo} />
-        <View style={{ flex: 1 }}>
-          <T style={{ fontSize: 18, fontWeight: '800' }}>{agent?.name}</T>
-          <T style={{ color: C.text2, fontSize: 13 }}>{[agent?.agentId, block, agent?.district].filter(Boolean).join(' · ')}</T>
-          <T style={{ color: C.blueInk, fontSize: 13, fontWeight: '700', marginTop: 2 }}>{t('pfEdit')}</T>
-        </View>
-        <Icon name="chevron" color={C.muted} />
-      </Card>
-
+    <Screen bg={C.ink} contentStyle={{ backgroundColor: C.bg, flexGrow: 1 }} header={(
+      <MainHeader title={agent?.name ?? t('me')} sub={[agent?.agentId, block, agent?.district].filter(Boolean).join(' · ')}
+        left={<Avatar name={agent?.name ?? '?'} size={48} uri={photo} />}
+        right={(
+          <Pressable onPress={() => router.push('/profile')} accessibilityRole="button" accessibilityLabel={t('pfEdit')} hitSlop={4}
+            style={({ pressed }) => [{ height: 44, width: 44, borderRadius: 22, borderWidth: 1, borderColor: C.inkLine, backgroundColor: C.ink2, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
+            <Icon name="pencil" size={20} color="#fff" />
+          </Pressable>
+        )} />
+    )}>
       <Card style={unsent ? { borderColor: '#f5d9a8', backgroundColor: C.warnSoft } : { borderColor: C.okSoft, backgroundColor: C.okSoft }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Icon name={unsent ? (sync.online ? 'upload' : 'cloudOff') : 'check'} color={unsent ? C.warnInk : C.okInk} />
@@ -96,25 +100,45 @@ export default function Me() {
         )) : null}
       </Card>
 
-      <EasyToUse />
-
-      <T style={{ fontSize: 17, fontWeight: '700', marginTop: 4 }}>{t('monthNumbers')} · {monthName(lang, new Date())}</T>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+      {/* This month, in one line of four. */}
+      <View accessible accessibilityLabel={`${t('monthNumbers')} ${monthName(lang, new Date())}`} style={{ flexDirection: 'row', backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.border, paddingVertical: 10 }}>
         <Num n={d.days} label={t('workedDays')} />
         <Num n={d.visits} label={t('visits')} />
         <Num n={d.partners} label={t('newPartners')} />
         <Num n={d.referred} label={t('patientsReferred')} />
       </View>
 
-      <Row icon="chat" label={t('chatTitle')} sub={t('chatPrivate')} onPress={() => router.push('/chat')} />
-      <Row icon="calendar" label={t('attendanceAndLeave')} sub={t('daysWorked', { n: d.days })} onPress={() => router.push('/attendance')} />
-      <Row icon="lock" label={t('quTitle')} sub={lock.pinSet ? `${t('quOn')}${lock.bio ? ' · ' + t('quUseBio') : ''}` : t('quOff')} onPress={() => router.push('/quick-unlock')} />
-      <Row icon="bolt" label={t('perfTitle')} sub={pm === 'auto' ? `${t('perfAuto')} · ${light ? t('perfOn') : t('perfOff')}` : light ? t('perfOn') : t('perfOff')} onPress={() => setPerfOpen(true)} />
-      <Row icon="globe" label={t('language')} sub={LANGS.find((l) => l.code === lang)?.label} onPress={() => setLangOpen(true)} />
-      <Row icon="battery" label={t('batteryLocation')} onPress={openAppSettings} />
-      <Row icon="logout" label={t('logout')} danger onPress={logout} />
+      <Group title={t('meWork')}>
+        <Row icon="calendar" label={t('attendanceAndLeave')} sub={t('daysWorked', { n: d.days })} onPress={() => router.push('/attendance')} />
+        {money ? <Row icon="doc" label={t('moneyCard')} sub={t('moneyCardSub', { paid: inr(money.summary.partnerPaid), waiting: inr(money.summary.partnerWaiting) })} onPress={() => router.push('/money')} /> : null}
+        <Row icon="billboard" label={t('hdTitle')} onPress={() => router.push('/hoardings')} />
+        <Row icon="map" label={t('fsTitle')} onPress={() => router.push('/field-surveys')} last />
+      </Group>
+
+      <Group title={t('meApp')}>
+        <Row icon="globe" label={t('language')} sub={LANGS.find((l) => l.code === lang)?.label} onPress={() => setLangOpen(true)} />
+        <Row icon="volume" label={t('uxEasy')} sub={[t('uxTextSize'), t('uxRead'), t('uxVibrate')].join(' · ')} onPress={() => setEasyOpen(true)} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, minHeight: 60, borderBottomWidth: 1, borderBottomColor: C.line }}>
+          <SunIcon />
+          <View style={{ flex: 1 }}>
+            <T style={{ fontSize: 16, fontWeight: '700' }}>{t('uxSun')}</T>
+            <T style={{ color: C.text2, fontSize: 13 }}>{t('uxSunSub')}</T>
+          </View>
+          <Switch label={t('uxSun')} value={prefs.sunlight} onChange={(v) => setPrefs({ sunlight: v })} />
+        </View>
+        <Row icon="lock" label={t('quTitle')} sub={lock.pinSet ? `${t('quOn')}${lock.bio ? ' · ' + t('quUseBio') : ''}` : t('quOff')} onPress={() => router.push('/quick-unlock')} />
+        <Row icon="bolt" label={t('perfTitle')} sub={pm === 'auto' ? `${t('perfAuto')} · ${light ? t('perfOn') : t('perfOff')}` : light ? t('perfOn') : t('perfOff')} onPress={() => setPerfOpen(true)} />
+        <Row icon="battery" label={t('batteryLocation')} onPress={openAppSettings} />
+        <Row icon="sparkle" label={t('uxTour')} sub={t('uxTourSub')} onPress={() => router.push('/tour')} last />
+      </Group>
+
+      <Btn kind="danger" icon="logout" label={t('logout')} onPress={logout} />
       <T style={{ textAlign: 'center', color: C.muted, fontSize: 12, marginTop: 8 }}>{t('appName')} · {t('version', { v: APP_VERSION })}</T>
       <LanguageSheet visible={langOpen} onClose={() => setLangOpen(false)} />
+      <Sheet visible={easyOpen} onClose={() => setEasyOpen(false)} title={t('uxEasy')}>
+        <EasyToUse />
+        <Btn label={t('fltDone')} onPress={() => setEasyOpen(false)} />
+      </Sheet>
       <Sheet visible={perfOpen} onClose={() => setPerfOpen(false)} title={t('perfTitle')}>
         <T style={{ color: C.text2, lineHeight: 21 }}>{t('perfHelp')}</T>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -132,7 +156,7 @@ export default function Me() {
 
 /** Me → Easy to use: language, text size, sunlight mode, read aloud, vibrate, and the Vita tour. */
 function EasyToUse() {
-  const { t, lang, setLang } = useSession();
+  const { t } = useSession();
   const p = usePrefs();
   const sizes: { code: TextSize; label: string; aa: number }[] = [
     { code: 'normal', label: t('uxSizeNormal'), aa: 16 },
@@ -141,25 +165,10 @@ function EasyToUse() {
   ];
   return (
     <>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
-        <T style={{ flex: 1, fontSize: 20, fontWeight: '800' }}>{t('uxEasy')}</T>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <T style={{ flex: 1, color: C.text2, fontSize: 14, lineHeight: 20 }}>{t('uxEasyExplain')}</T>
         <SpeakButton text={`${t('uxEasy')}. ${t('uxEasyExplain')}`} />
       </View>
-      <Card style={{ padding: 16, gap: 12 }}>
-        <T style={{ fontSize: 17, fontWeight: '800' }}>{t('language')}</T>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {LANGS.map((l) => {
-            const on = l.code === lang;
-            return (
-              <Pressable key={l.code} accessibilityRole="radio" accessibilityState={{ selected: on }} onPress={() => setLang(l.code)}
-                style={{ width: '48.5%', minHeight: 54, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8,
-                  borderWidth: on ? 0 : 1, borderColor: C.borderStrong, backgroundColor: on ? C.blue : C.card }}>
-                <T style={{ fontSize: 18, fontWeight: '700', color: on ? '#fff' : C.text }}>{l.label}</T>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Card>
       <Card style={{ padding: 16, gap: 12 }}>
         <T style={{ fontSize: 17, fontWeight: '800' }}>{t('uxTextSize')}</T>
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -179,14 +188,10 @@ function EasyToUse() {
         </View>
       </Card>
       <Card style={{ padding: 0, gap: 0 }}>
-        <SettingRow icon={<SunIcon />} tint={C.warnSoft} title={t('uxSun')} sub={t('uxSunSub')}
-          right={<Switch label={t('uxSun')} value={p.sunlight} onChange={(v) => setPrefs({ sunlight: v })} />} />
         <SettingRow icon={<Icon name="volume" color={C.blue} />} tint={C.blueSoft} title={t('uxRead')} sub={t('uxReadSub')}
           right={<Switch label={t('uxRead')} value={p.readAloud} onChange={(v) => setPrefs({ readAloud: v })} />} />
         <SettingRow icon={<BuzzIcon />} tint={C.okSoft} title={t('uxVibrate')} sub={t('uxVibrateSub')}
-          right={<Switch label={t('uxVibrate')} value={p.vibrate} onChange={(v) => { setPrefs({ vibrate: v }); if (v) savedFeedback(); }} />} />
-        <SettingRow icon={<Icon name="sparkle" color={C.purple} />} tint={C.purpleSoft} title={t('uxTour')} sub={t('uxTourSub')} last
-          onPress={() => router.push('/tour')} right={<Icon name="chevron" color={C.muted} />} />
+          last right={<Switch label={t('uxVibrate')} value={p.vibrate} onChange={(v) => { setPrefs({ vibrate: v }); if (v) savedFeedback(); }} />} />
       </Card>
     </>
   );
@@ -232,22 +237,34 @@ function BuzzIcon() {
 
 function Num({ n, label }: { n: number; label: string }) {
   return (
-    <View style={{ width: '48.5%', backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.border }}>
-      <T style={{ fontSize: 26, fontWeight: '800' }}>{n}</T>
-      <T style={{ color: C.text2, fontSize: 13 }}>{label}</T>
+    <View style={{ flex: 1, alignItems: 'center', paddingHorizontal: 4, gap: 2 }}>
+      <T style={{ fontSize: 22, fontWeight: '800' }}>{n}</T>
+      <T style={{ color: C.text2, fontSize: 12, textAlign: 'center' }} numberOfLines={2}>{label}</T>
     </View>
   );
 }
 
-function Row({ icon, label, sub, onPress, danger }: { icon: IconName; label: string; sub?: string; onPress: () => void; danger?: boolean }) {
+/** A titled list in one card: short rows instead of a card per setting, so the whole screen fits in about one view. */
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <Card onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-      <Icon name={icon} color={danger ? C.bad : C.blue} />
-      <View style={{ flex: 1 }}>
-        <T style={{ fontWeight: '700', color: danger ? C.bad : C.text }}>{label}</T>
-        {sub ? <T style={{ color: C.text2, fontSize: 13 }}>{sub}</T> : null}
+    <View style={{ gap: 6 }}>
+      <T style={{ fontSize: 13, fontWeight: '800', color: C.text2, letterSpacing: 0.5, textTransform: 'uppercase' }}>{title}</T>
+      <View style={{ backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.border, overflow: 'hidden' }}>{children}</View>
+    </View>
+  );
+}
+
+function Row({ icon, label, sub, onPress, last }: { icon: IconName; label: string; sub?: string; onPress: () => void; last?: boolean }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={sub ? `${label}. ${sub}` : label}
+      style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 8, minHeight: 60,
+        borderBottomWidth: last ? 0 : 1, borderBottomColor: C.line }, pressed && { backgroundColor: C.line }]}>
+      <Icon name={icon} color={C.blue} size={22} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <T style={{ fontSize: 16, fontWeight: '700' }}>{label}</T>
+        {sub ? <T style={{ color: C.text2, fontSize: 13 }} numberOfLines={1}>{sub}</T> : null}
       </View>
-      {!danger ? <Icon name="chevron" color={C.muted} /> : null}
-    </Card>
+      <Icon name="chevron" color={C.muted} size={18} />
+    </Pressable>
   );
 }

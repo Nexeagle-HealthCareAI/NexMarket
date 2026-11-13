@@ -116,6 +116,55 @@ export function SpeakButton({ text, dark, size = 44, label }: { text: string; da
   );
 }
 
+// ─── Dark header for the main screens ───
+/** 44 px round button on a dark header, with an optional count (unread chats, alerts). */
+export function HeadButton({ label, onPress, children, badge = 0 }: { label: string; onPress: () => void; children: React.ReactNode; badge?: number }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={badge > 0 ? `${label}, ${badge}` : label} hitSlop={4}
+      style={({ pressed }) => [{ height: 44, minWidth: 44, borderRadius: 22, borderWidth: 1, borderColor: C.inkLine, backgroundColor: C.ink2,
+        alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
+      {children}
+      {badge > 0 ? (
+        <View style={{ position: 'absolute', top: -4, right: -4, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 4, backgroundColor: C.bad, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.ink }}>
+          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }} allowFontScaling={false}>{badge > 99 ? '99+' : badge}</Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+/** Team chat, one tap from every main screen (it used to be a tab). Shows how many messages are unread. */
+export function ChatHeadButton() {
+  const t = useT();
+  useChatVersion();
+  return (
+    <HeadButton label={t('chatTab')} badge={cachedUnread()} onPress={() => router.push('/chat')}>
+      <Icon name="chat" size={20} color="#fff" />
+    </HeadButton>
+  );
+}
+
+/**
+ * The header of a main (tab) screen: dark like Today, a large title, the chat button, and room underneath for the
+ * screen's own switches (segments, counted filters).
+ */
+export function MainHeader({ title, sub, left, right, children }: { title: string; sub?: string; left?: React.ReactNode; right?: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <View style={{ backgroundColor: C.ink, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, gap: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 }}>
+        {left}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T style={{ color: '#fff', fontSize: 22, fontWeight: '800' }} numberOfLines={1}>{title}</T>
+          {sub ? <T style={{ color: '#c3cbdc', fontSize: 14 }} numberOfLines={1}>{sub}</T> : null}
+        </View>
+        {right}
+        <ChatHeadButton />
+      </View>
+      {children}
+    </View>
+  );
+}
+
 // ─── Buttons ───
 type BtnKind = 'primary' | 'secondary' | 'ghost' | 'danger' | 'ok' | 'dark';
 export function Btn({ label, onPress, kind = 'primary', icon, disabled, loading, small, style, flex }: {
@@ -342,11 +391,10 @@ export function openAddSheet() {
 }
 
 // ─── Bottom navigation with the centre "+" ───
-// Vita sits in the Today header; the team chat (linked to the CRM) has the bottom slot so it's one tap from anywhere.
-const TABS: { path: string; icon: IconName; key: 'tabToday' | 'tabPartners' | 'chatTab' | 'tabPatients' | 'tabMe' }[] = [
+// Two tabs each side of the "+". Vita sits in the Today header, and the team chat is a button in every main screen's header.
+const TABS: { path: string; icon: IconName; key: 'tabToday' | 'tabPartners' | 'tabPatients' | 'tabMe' }[] = [
   { path: '/today', icon: 'home', key: 'tabToday' },
   { path: '/followups', icon: 'users', key: 'tabPartners' },
-  { path: '/chat', icon: 'chat', key: 'chatTab' },
   { path: '/patients', icon: 'patients', key: 'tabPatients' },
   { path: '/me', icon: 'user', key: 'tabMe' },
 ];
@@ -364,23 +412,19 @@ export const BottomNav = React.memo(function BottomNav() {
   }, []);
   // Follow-ups due today or overdue, on the Partners tab, so they're never out of sight.
   const due = useDb(() => db().getFirstSync<{ n: number }>('SELECT COUNT(*) AS n FROM contacts WHERE followUpDate IS NOT NULL AND followUpDate <= ?', ymd())?.n ?? 0);
-  useChatVersion();
-  const chatUnread = cachedUnread();
   if (keyboard) return null;
   const item = (tab: (typeof TABS)[number]) => {
     const active = path.startsWith(tab.path);
-    const isChat = tab.path === '/chat';
-    const badge = tab.path === '/followups' ? due : isChat ? chatUnread : 0;
+    const badge = tab.path === '/followups' ? due : 0;
     return (
       <Pressable key={tab.path} accessibilityRole="tab" accessibilityState={{ selected: active }} style={s.tab}
         accessibilityLabel={badge > 0 ? `${t(tab.key)}, ${badge}` : undefined}
-        // Chat is a stack of screens (list → conversation), so it opens on top and Back returns to where the agent was.
-        onPress={() => { if (active) return; if (isChat) router.push('/chat'); else router.navigate(tab.path as never); }}>
+        onPress={() => { if (!active) router.navigate(tab.path as never); }}>
         {(
           <View>
             <Icon name={tab.icon} size={24} color={active ? C.blue : C.text2} />
             {badge > 0 ? (
-              <View style={{ position: 'absolute', top: -5, right: -10, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: isChat ? C.blue : C.bad, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.card }}>
+              <View style={{ position: 'absolute', top: -5, right: -10, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: C.bad, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.card }}>
                 <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>{badge > 99 ? '99+' : badge}</Text>
               </View>
             ) : null}
@@ -403,7 +447,6 @@ export const BottomNav = React.memo(function BottomNav() {
       </View>
       {item(TABS[2])}
       {item(TABS[3])}
-      {item(TABS[4])}
     </View>
   );
 });

@@ -3,10 +3,9 @@ import { Image, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useIsFocused } from 'expo-router';
 import { Vita, type VitaMood } from '../../components/Vita';
-import { SpeakButton, T, toast } from '../../components/ui';
+import { ChatHeadButton, HeadButton, T, toast } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
-import { LanguageSheet } from '../../components/LanguageSheet';
-import { SyncStrip } from '../../components/SyncStrip';
+import { SyncStrip, useSyncSummary } from '../../components/SyncStrip';
 import { NextStepCard, type StepAction, type StepTone } from '../../components/NextStepCard';
 import { TaskSheet, TasksSection, dueLabel } from '../../components/TaskCard';
 import { useDb, useSession } from '../../lib/session';
@@ -15,7 +14,7 @@ import { assignment } from '../../lib/sync';
 import { resumeTrackingIfNeeded } from '../../lib/shift';
 import { callNumber } from '../../lib/links';
 import { formatDist } from '../../lib/plan';
-import { duration, dayShort, weekday } from '../../lib/format';
+import { duration, dayShort, timeOf, weekday } from '../../lib/format';
 import { refreshTasks, setTaskDone, type Task } from '../../lib/tasks';
 import { cachedNotifyUnread, useNotifyVersion } from '../../lib/notifications';
 import { cachedThreads, cachedUnread, useChatVersion } from '../../lib/chat';
@@ -23,7 +22,7 @@ import { savedFeedback } from '../../lib/prefs';
 import { explainOnce } from '../../lib/speak';
 import { PHASES, phaseOf, readToday, type NextStep, type TodayData } from '../../lib/nextStep';
 import { C } from '../../theme';
-import { LANGS, type Lang, type TFn } from '../../i18n';
+import type { Lang, TFn } from '../../i18n';
 
 const greetingKey = () => {
   const h = new Date().getHours();
@@ -55,7 +54,7 @@ export default function Today() {
   const notifyUnread = cachedNotifyUnread();
   const chatUnread = cachedUnread();
   const here = useHere();
-  const [langOpen, setLangOpen] = useState(false);
+  const sync = useSyncSummary();
   const [taskId, setTaskId] = useState<string | null>(null);
   const [allTasks, setAllTasks] = useState(false);
   const [, tick] = useState(0);
@@ -86,25 +85,20 @@ export default function Today() {
   const shiftLabel = data.shiftStart
     ? t('tdOnShift', { time: duration(t, Date.now() - new Date(data.shiftStart).getTime()) })
     : data.step.kind === 'start' && data.step.doneToday ? t('tdShiftOver') : t('tdNoShift');
-  const langInfo = LANGS.find((l) => l.code === lang) ?? LANGS[3];
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.ink }} edges={['top']}>
-      {/* Header: the full brand name has the row to itself apart from three round buttons (read aloud, alerts, language). */}
+      {/* Header: the brand name, then chat and alerts with their counts. Language and read-aloud live under Me. */}
       <View style={{ backgroundColor: C.ink, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 18, gap: 14 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Image source={require('../../../assets/brand/logo.png')} style={{ width: 30, height: 30 }} resizeMode="contain" accessibilityIgnoresInvertColors />
           <View style={{ flex: 1, minWidth: 0 }}>
             <T style={{ color: '#fff', fontSize: 19, fontWeight: '800' }}>NexEagle</T>
           </View>
-          <SpeakButton text={explain} dark />
-          <HeadBtn label={notifyUnread > 0 ? t('tdNotifNew', { n: notifyUnread }) : t('ntTitle')} onPress={() => router.push('/notifications')}>
+          <ChatHeadButton />
+          <HeadButton label={t('ntTitle')} badge={notifyUnread} onPress={() => router.push('/notifications')}>
             <Icon name="bell" size={20} color="#fff" />
-            {notifyUnread > 0 ? <View style={{ position: 'absolute', top: 7, right: 8, width: 11, height: 11, borderRadius: 6, backgroundColor: '#ff5a4f', borderWidth: 2, borderColor: C.ink2 }} /> : null}
-          </HeadBtn>
-          <HeadBtn label={t('tdLangA11y', { name: langInfo.label })} onPress={() => setLangOpen(true)} wide>
-            <T style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{langInfo.short}</T>
-          </HeadBtn>
+          </HeadButton>
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12 }}>
@@ -118,6 +112,13 @@ export default function Today() {
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: data.onShift ? C.mint : C.sideText }} />
               <T style={{ fontSize: 14, fontWeight: '700', color: data.onShift ? '#7ff5c2' : '#c3cbdc' }}>{shiftLabel}</T>
             </Pressable>
+            {/* All sent: one quiet line here. Anything waiting or no signal: the full strip below, which can be tapped. */}
+            {sync.level === 'ok' ? (
+              <View accessible accessibilityLabel={t('uxSyncOk')} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Icon name="check" size={14} color={C.mint} strokeWidth={3} />
+                <T style={{ fontSize: 13, color: '#c3cbdc' }} numberOfLines={1}>{[t('uxSyncOk'), sync.lastAt ? timeOf(lang, sync.lastAt) : ''].filter(Boolean).join(' · ')}</T>
+              </View>
+            ) : null}
           </View>
           {/* Vita, the AI helper: tap to ask. */}
           <Pressable onPress={() => router.navigate('/assistant')} accessibilityRole="button" accessibilityLabel={t('vitaTop')}
@@ -131,7 +132,7 @@ export default function Today() {
       </View>
 
       <View style={{ flex: 1, backgroundColor: C.bg }}>
-        <SyncStrip />
+        {sync.level !== 'ok' ? <SyncStrip /> : null}
         <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 28 }}>
           <NextStepCard label={phase >= PHASES && data.step.kind === 'start' ? t('tdDayDone') : t('tdStepOf', { i: phase, n: PHASES })}
             filled={phase} total={PHASES} {...card}
@@ -140,7 +141,7 @@ export default function Today() {
           <AlsoToday data={data} chatUnread={chatUnread} t={t} lang={lang} onOpenTask={setTaskId} />
 
           {/* Three numbers instead of the old rings. */}
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+          <View style={{ flexDirection: 'row', backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 16, paddingVertical: 6 }}>
             <Stat n={data.visitsToday} label={t('tdStatVisits', { n: data.visitsToday })} />
             <Stat n={data.partnersToday} label={t('tdStatPartners', { n: data.partnersToday })} />
             <Stat n={data.patientsWeek} label={t('tdStatPatients', { n: data.patientsWeek })} />
@@ -158,7 +159,6 @@ export default function Today() {
         </ScrollView>
       </View>
       <TaskSheet task={currentTask} onClose={() => setTaskId(null)} />
-      <LanguageSheet visible={langOpen} onClose={() => setLangOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -293,7 +293,7 @@ function AlsoToday({ data, chatUnread, t, lang, onOpenTask }: { data: TodayData;
 function Stat({ n, label }: { n: number; label: string }) {
   return (
     <View accessible accessibilityLabel={`${n} ${label}`}
-      style={{ flex: 1, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 10, alignItems: 'center', gap: 2 }}>
+      style={{ flex: 1, paddingVertical: 6, paddingHorizontal: 6, alignItems: 'center', gap: 2 }}>
       <T style={{ fontSize: 22, fontWeight: '800' }}>{n}</T>
       <T style={{ fontSize: 13, color: C.text2, textAlign: 'center' }}>{label}</T>
     </View>
@@ -308,17 +308,6 @@ function LinkRow({ icon, color, label, onPress, top, expanded }: { icon: IconNam
       <Icon name={icon} size={20} color={color} />
       <T style={{ flex: 1, fontSize: 16, fontWeight: '700' }}>{label}</T>
       <Icon name="chevron" size={18} color={C.muted} />
-    </Pressable>
-  );
-}
-
-/** 44 px round button on the dark header. */
-function HeadBtn({ label, onPress, children, wide }: { label: string; onPress: () => void; children: React.ReactNode; wide?: boolean }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={4}
-      style={({ pressed }) => [{ height: 44, minWidth: 44, paddingHorizontal: wide ? 12 : 0, borderRadius: 22, borderWidth: 1, borderColor: C.inkLine, backgroundColor: C.ink2,
-        alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.7 }]}>
-      {children}
     </Pressable>
   );
 }
