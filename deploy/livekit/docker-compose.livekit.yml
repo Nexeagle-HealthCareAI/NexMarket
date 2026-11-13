@@ -10,7 +10,7 @@ services:
     network_mode: host
     command: --config /etc/livekit.yaml
     environment:
-      LIVEKIT_KEYS: ${LIVEKIT_KEYS:?set LIVEKIT_KEYS to "<key>: <secret>"}
+      LIVEKIT_KEYS: ${LIVEKIT_KEYS:?set LIVEKIT_KEYS (key and secret, see README)}
     volumes:
       - ./livekit.active.yaml:/etc/livekit.yaml:ro
       # The Let's Encrypt certificate for turn.nexeagle.com (TURN over TLS on 443); read-only.
