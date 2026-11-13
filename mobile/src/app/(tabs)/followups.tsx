@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
-import { Avatar, Btn, Card, Chip, Empty, Field, Screen, Sheet, T, TopBar, toast } from '../../components/ui';
+import { Avatar, Btn, Card, Chip, Empty, Field, MainHeader, Screen, Sheet, T, toast } from '../../components/ui';
 import { ActionTile } from '../../components/ActionTile';
 import { savedFeedback } from '../../lib/prefs';
 import { Icon } from '../../components/Icon';
@@ -72,11 +72,6 @@ export default function FollowUps() {
 
   const header = (
     <View style={{ gap: 12, paddingBottom: 12 }}>
-      <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: 6, backgroundColor: C.line, padding: 4, borderRadius: 14 }}>
-        <Segment label={dueCount ? t('ptFollowUpsN', { n: dueCount }) : t('followUps')} on={mode === 'followUps'} onPress={() => setMode('followUps')} />
-        <Segment label={t('allPartners')} on={mode === 'all'} onPress={() => setMode('all')} />
-      </View>
-
       {mode === 'followUps' ? (
         <View style={{ flexDirection: 'row', gap: 6 }}>
           <DayCell top={t('ptLateToday')} n={dueCount} on={day === 'due'} warn onPress={() => setDay('due')} />
@@ -123,9 +118,18 @@ export default function FollowUps() {
   );
 
   return (
-    <Screen scroll={false} padded={false} header={<TopBar title={mode === 'followUps' ? t('ptPartners') : t('myPartners', { n: rows.length })} onBack={false} explain={t('ptListExplain')} />}>
+    <Screen scroll={false} padded={false} bg={C.ink} header={(
+      <MainHeader title={t('ptPartners')}>
+        {/* To follow up, or everyone: the switch sits in the header so it stays put while the list scrolls. */}
+        <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: 4, backgroundColor: C.ink2, padding: 4, borderRadius: 14 }}>
+          <Segment label={dueCount ? t('ptFollowUpsN', { n: dueCount }) : t('followUps')} on={mode === 'followUps'} onPress={() => setMode('followUps')} />
+          <Segment label={`${t('allPartners')} · ${rows.length}`} on={mode === 'all'} onPress={() => setMode('all')} />
+        </View>
+      </MainHeader>
+    )}>
       {/* A virtualised list: only the cards on screen are built, so hundreds of partners scroll smoothly. */}
       <FlatList
+        style={{ backgroundColor: C.bg }}
         data={list}
         keyExtractor={(c) => c.clientId}
         renderItem={({ item }) => <PartnerCard c={item} t={t} lang={lang} onWhatsApp={setWa} onMove={setMoving} />}
@@ -264,11 +268,11 @@ const PartnerCard = React.memo(function PartnerCard({ c, t, lang, onWhatsApp, on
         </View>
         <SmallPill label={t(`priority_${c.priority}` as never)} bg={tone.bg} fg={tone.fg} />
       </View>
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <ActionTile tone="primary" icon="phone" label={t('call')} a11y={t('ptA11yCall', { name: c.name })} disabled={!c.phone} onPress={() => callNumber(c.phone)} />
-        <ActionTile tone="wa" icon="whatsapp" label={t('whatsapp')} a11y={t('ptA11yWa', { name: c.name })} disabled={!c.phone} onPress={() => onWhatsApp({ name: c.name, phone: c.phone })} />
-        <ActionTile icon="nav" label={t('ptRoute')} a11y={t('ptA11yRoute', { name: c.name })} disabled={lat == null || lng == null} onPress={() => lat != null && lng != null && openDirections(lat, lng)} />
-        <ActionTile icon="calendar" label={t('ptLater')} a11y={t('ptA11yLater', { name: c.name })} onPress={() => onMove(c.clientId)} />
+      <View style={{ flexDirection: 'row', gap: 6 }}>
+        <ActionTile grow={1.3} tone="primary" icon="phone" label={t('call')} a11y={t('ptA11yCall', { name: c.name })} disabled={!c.phone} onPress={() => callNumber(c.phone)} />
+        <ActionTile oneLine tone="wa" icon="whatsapp" label={t('whatsapp')} a11y={t('ptA11yWa', { name: c.name })} disabled={!c.phone} onPress={() => onWhatsApp({ name: c.name, phone: c.phone })} />
+        <ActionTile oneLine icon="nav" label={t('ptRoute')} a11y={t('ptA11yRoute', { name: c.name })} disabled={lat == null || lng == null} onPress={() => lat != null && lng != null && openDirections(lat, lng)} />
+        <ActionTile oneLine icon="calendar" label={t('ptLater')} a11y={t('ptA11yLater', { name: c.name })} onPress={() => onMove(c.clientId)} />
       </View>
     </Card>
   );
@@ -278,8 +282,8 @@ function Segment({ label, on, onPress }: { label: string; on: boolean; onPress: 
   return (
     <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: on }}
       style={({ pressed }) => [{ flex: 1, minHeight: 48, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6,
-        backgroundColor: on ? C.blue : 'transparent' }, pressed && { opacity: 0.85 }]}>
-      <T style={{ fontSize: 16, fontWeight: on ? '800' : '700', color: on ? '#fff' : C.text3, textAlign: 'center' }}>{label}</T>
+        backgroundColor: on ? '#fff' : 'transparent' }, pressed && { opacity: 0.85 }]}>
+      <T style={{ fontSize: 16, fontWeight: on ? '800' : '700', color: on ? C.ink : '#c3cbdc', textAlign: 'center' }} numberOfLines={2}>{label}</T>
     </Pressable>
   );
 }

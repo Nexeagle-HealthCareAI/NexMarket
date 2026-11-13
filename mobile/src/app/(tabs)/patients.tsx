@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, View } from 'react-native';
+import { FlatList, Pressable, View } from 'react-native';
 import { router } from 'expo-router';
-import { Card, Chip, Empty, Pill, Screen, T, TopBar } from '../../components/ui';
+import { Card, Empty, MainHeader, Pill, Screen, T } from '../../components/ui';
 import { Icon } from '../../components/Icon';
 import { useDb, useSession } from '../../lib/session';
 import { db, type Referral } from '../../lib/db';
 import { dayShort } from '../../lib/format';
 import { WhatsAppSheet } from '../../components/WhatsAppSheet';
-import { stageStep, stageTone } from '../../components/stage';
+import { stageStep } from '../../components/stage';
 import { C } from '../../theme';
 import { useMoney } from '../../lib/useMoney';
 import { inr, statusLine, type MyMoney } from '../../lib/money';
@@ -20,16 +20,22 @@ export default function Patients() {
   const { t, lang } = useSession();
   const [filter, setFilter] = useState<Filter>('all');
   const [thank, setThank] = useState<{ name: string; phone: string } | null>(null);
+  const money = useMoney();
   const rows = useDb(() => db().getAllSync<Row>(
     `SELECT r.*, c.name AS partnerName, c.phone AS partnerPhone,
             EXISTS(SELECT 1 FROM outbox o WHERE o.clientId = r.clientId) AS unsent
        FROM referrals r LEFT JOIN contacts c ON c.clientId = r.contactId ORDER BY r.createdAt DESC`));
-  const list = rows.filter((r) =>
-    filter === 'all' ? true
-      : filter === 'inTransit' ? r.status === 'pending'
-        : filter === 'notCame' ? r.status === 'lost'
-          : !['pending', 'lost'].includes(r.status));
-  const money = useMoney();
+  const inFilter = (r: Row, f: Filter) =>
+    f === 'all' ? true
+      : f === 'inTransit' ? r.status === 'pending'
+        : f === 'notCame' ? r.status === 'lost'
+          : !['pending', 'lost'].includes(r.status);
+  const list = rows.filter((r) => inFilter(r, filter));
+  // Each filter shows how many patients it holds, so the agent sees the whole picture before tapping.
+  const filters: { key: Filter; label: string }[] = [
+    { key: 'all', label: t('all') }, { key: 'inTransit', label: t('inTransit') }, { key: 'arrived', label: t('stage_arrived') }, { key: 'notCame', label: t('notCame') },
+  ];
+  const waitingMoney = money ? money.summary.partnerWaiting : 0;
   // Payments linked to each patient, so the agent sees on the patient card whether the partner was paid.
   const byPatient = useMemo(() => {
     const m = new Map<string, { pays: MyMoney['partnerPayments']; incs: MyMoney['incentives'] }>();
@@ -41,31 +47,37 @@ export default function Patients() {
   const steps = useMemo(() => [t('stepSent'), t('stepArrived'), t('stepOpd'), t('stepAdmitted'), t('stepDischarged')], [t]);
 
   return (
-    <Screen scroll={false} padded={false} header={<TopBar title={t('myPatients')} sub={`${rows.length}`} onBack={false} />}>
+    <Screen scroll={false} padded={false} bg={C.ink} header={(
+      <MainHeader title={t('myPatients')} right={money ? (
+        <Pressable onPress={() => router.push('/money')} accessibilityRole="button"
+          accessibilityLabel={`${t('moneyCard')}. ${t('moneyCardSub', { paid: inr(money.summary.partnerPaid), waiting: inr(money.summary.partnerWaiting) })}`}
+          style={({ pressed }) => [{ height: 44, paddingHorizontal: 12, borderRadius: 22, borderWidth: 1, borderColor: money.summary.partnerOverdue > 0 ? '#ff8a80' : C.inkLine, backgroundColor: C.ink2,
+            flexDirection: 'row', alignItems: 'center', gap: 6 }, pressed && { opacity: 0.7 }]}>
+          <T style={{ color: '#fff', fontSize: 14, fontWeight: '700' }} numberOfLines={1}>{waitingMoney > 0 ? `${t('moneyCard')} · ${inr(waitingMoney)}` : t('moneyCard')}</T>
+          <Icon name="chevron" size={14} color="#fff" />
+        </Pressable>
+      ) : undefined}>
+        <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: 6 }}>
+          {filters.map((f) => {
+            const on = filter === f.key;
+            const n = rows.filter((r) => inFilter(r, f.key)).length;
+            return (
+              <Pressable key={f.key} onPress={() => setFilter(f.key)} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={`${f.label}, ${n}`}
+                style={({ pressed }) => [{ flex: 1, minWidth: 0, minHeight: 58, borderRadius: 12, paddingHorizontal: 2, paddingVertical: 4, alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: on ? '#fff' : C.ink2, borderWidth: 1, borderColor: on ? '#fff' : C.inkLine }, pressed && { opacity: 0.85 }]}>
+                <T style={{ fontSize: 18, fontWeight: '800', color: on ? C.ink : '#fff' }}>{n}</T>
+                <T style={{ fontSize: 12, fontWeight: '700', color: on ? C.ink : '#c3cbdc', textAlign: 'center' }} numberOfLines={2}>{f.label}</T>
+              </Pressable>
+            );
+          })}
+        </View>
+      </MainHeader>
+    )}>
       <FlatList
+        style={{ backgroundColor: C.bg }}
         data={list}
         keyExtractor={(r) => r.clientId}
         renderItem={({ item }) => <PatientCard r={item} t={t} lang={lang} steps={steps} onThank={setThank} money={byPatient.get(item.clientId)} />}
-        ListHeaderComponent={<>
-          {money ? (
-            <Card onPress={() => router.push('/money')} style={{ marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: C.okSoft, alignItems: 'center', justifyContent: 'center' }}>
-                <T style={{ fontSize: 18, fontWeight: '800', color: C.okInk }}>₹</T>
-              </View>
-              <View style={{ flex: 1 }}>
-                <T style={{ fontWeight: '700', fontSize: 15.5 }}>{t('moneyCard')}</T>
-                <T style={{ color: C.text2, fontSize: 13 }}>{t('moneyCardSub', { paid: inr(money.summary.partnerPaid), waiting: inr(money.summary.partnerWaiting) })}</T>
-                {money.summary.partnerOverdue > 0 ? <T style={{ color: C.bad, fontSize: 12.5, fontWeight: '700' }}>{t('moneyOverdue', { n: money.summary.partnerOverdue })}</T> : null}
-              </View>
-              <Icon name="chevron" size={18} color={C.text3} />
-            </Card>
-          ) : null}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ marginBottom: 12, flexGrow: 0 }}>
-            {(['all', 'inTransit', 'arrived', 'notCame'] as Filter[]).map((f) => (
-              <Chip key={f} label={f === 'all' ? t('all') : t(f)} selected={filter === f} onPress={() => setFilter(f)} />
-            ))}
-          </ScrollView>
-        </>}
         ListEmptyComponent={<Empty text={t('noPatients')} icon="patients" />}
         ItemSeparatorComponent={Gap}
         contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
@@ -86,6 +98,13 @@ function lastHospitalNote(notes: string | null): string | null {
   return all.length ? all[all.length - 1][1].trim() : null;
 }
 
+/** The stage in words; a stage this version doesn't know is shown readably instead of as a raw code. */
+function stageText(t: TFn, status: string): string {
+  const key = `stage_${status}`;
+  const v = t(key as never);
+  return v && v !== key ? v : status.replace(/_/g, ' ');
+}
+
 function Gap() {
   return <View style={{ height: 12 }} />;
 }
@@ -98,6 +117,7 @@ const PatientCard = React.memo(function PatientCard({ r, t, lang, steps, onThank
   const lost = r.status === 'lost';
   const waiting = r.status === 'pending' ? Math.floor((Date.now() - new Date(r.createdAt).getTime()) / 86400000) : 0;
   const hospitalNote = lastHospitalNote(r.notes);
+  const statusText = r.status === 'pending' ? t('inTransit') : stageText(t, r.status);
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
@@ -113,25 +133,17 @@ const PatientCard = React.memo(function PatientCard({ r, t, lang, steps, onThank
             </T>
           ) : null}
         </View>
-        <Pill label={t(`stage_${r.status}` as never)} tone={stageTone(r.status)} />
       </View>
 
-      {!lost ? (
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-          {steps.map((s, i) => (
-            <View key={s} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch' }}>
-                <View style={{ flex: 1, height: 3, backgroundColor: i === 0 ? 'transparent' : i <= step ? C.ok : C.line }} />
-                <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: i <= step ? C.ok : C.card, borderWidth: 2, borderColor: i <= step ? C.ok : C.borderStrong, alignItems: 'center', justifyContent: 'center' }}>
-                  {i <= step ? <Icon name="check" size={11} color="#fff" strokeWidth={3.5} /> : null}
-                </View>
-                <View style={{ flex: 1, height: 3, backgroundColor: i === steps.length - 1 ? 'transparent' : i < step ? C.ok : C.line }} />
-              </View>
-              <T style={{ fontSize: 11, color: i <= step ? C.okInk : C.muted, fontWeight: i === step ? '700' : '500', textAlign: 'center' }}>{s}</T>
-            </View>
-          ))}
-        </View>
-      ) : null}
+      {/* Five short bars and one plain line: how far this patient has got. */}
+      <View style={{ gap: 6 }} accessible accessibilityLabel={`${statusText}. ${lost ? '' : `${step + 1} / ${steps.length}`}`}>
+        {!lost ? (
+          <View style={{ flexDirection: 'row', gap: 4 }}>
+            {steps.map((s, i) => <View key={s} style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: i <= step ? (step === 0 ? C.blue : C.ok) : C.border }} />)}
+          </View>
+        ) : null}
+        <T style={{ fontSize: 14.5, fontWeight: '700', color: lost ? C.bad : step === 0 ? C.blueInk : C.okInk }}>{statusText}</T>
+      </View>
 
       {r.arrivedAt || r.admittedAt ? (
         <T style={{ color: C.text2, fontSize: 12.5 }}>

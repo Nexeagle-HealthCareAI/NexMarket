@@ -1,0 +1,128 @@
+# Starts or updates the calls server on the Dev VM. Needs repository secrets:
+#   LIVEKIT_API_KEY      e.g. "nexcalls"   (letters/digits)
+#   LIVEKIT_API_SECRET   at least 32 random characters (e.g. `openssl rand -base64 33`)
+# and the same two values in the API's env (api-deploy.yml; see deploy/livekit/README.md).
+name: Calls server (LiveKit) — deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - 'deploy/livekit/**'
+      - '.github/workflows/livekit-deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy config to the VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
+          source: 'deploy/livekit/livekit.yaml,deploy/livekit/docker-compose.livekit.yml,deploy/livekit/nginx-443-sni.conf'
+          target: /opt/nexmarket-livekit
+          strip_components: 2
+      - name: Start LiveKit
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          LK_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LK_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
+          envs: LK_KEY,LK_SECRET
+          script: |
+            set -e
+            : "${LK_KEY:?LIVEKIT_API_KEY is empty}"
+            : "${LK_SECRET:?LIVEKIT_API_SECRET is empty}"
+            cd /opt/nexmarket-livekit
+            printf 'LIVEKIT_KEYS=%s: %s\n' "$LK_KEY" "$LK_SECRET" > .env
+            chmod 600 .env
+            # TURN over TLS on 443 only once the certificate for turn.nexeagle.com exists (README, "Calls on strict networks").
+            if [ -f /etc/letsencrypt/live/turn.nexeagle.com/fullchain.pem ]; then
+              cp livekit.yaml livekit.active.yaml
+              echo "TURN over 443: on"
+            else
+              grep -v 'tls-only' livekit.yaml > livekit.active.yaml
+              echo "⚠️ TURN over 443 is off: no certificate for turn.nexeagle.com yet (see README)"
+            fi
+            docker compose -f docker-compose.livekit.yml pull
+            docker compose -f docker-compose.livekit.yml up -d
+            sleep 3
+            curl -fsS http://127.0.0.1:7880 >/dev/null && echo "✅ LiveKit is up" || (docker logs --tail 60 nexmarket-livekit; exit 1)
+      # calls.nexeagle.com → 127.0.0.1:7880 on the VM's existing Caddy (Caddy's reverse_proxy upgrades WebSockets by
+      # itself). Same steps as DoctorDekhoWeb's setup-domain.yml: back up, append, validate, restore if rejected, reload.
+      # Re-running is a no-op once the block exists.
+      - name: Caddy → calls.nexeagle.com
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
+          command_timeout: 5m
+          script: |
+            set -e
+            DOMAIN=calls.nexeagle.com
+            UPSTREAM=127.0.0.1:7880
+
+            MODE=""; CFG=""
+            for PID in $(pgrep -x caddy || true); do
+              if ! grep -qE 'docker|containerd|kubepods' "/proc/$PID/cgroup" 2>/dev/null; then
+                MODE=native
+                CFG=$(ps -p "$PID" -o args= | grep -oP '(?<=--config )\S+' || true)
+                [ -z "$CFG" ] && CFG=/etc/caddy/Caddyfile
+                break
+              fi
+            done
+            if [ -z "$MODE" ] && docker ps --format '{{.Names}}' | grep -qx caddy; then
+              MODE=docker
+              CFG=$(docker inspect caddy --format '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}{{end}}{{end}}')
+              [ -z "$CFG" ] && CFG=/opt/caddy/Caddyfile
+              # A Caddy container can only reach 127.0.0.1:7880 when it shares the host network.
+              [ "$(docker inspect caddy --format '{{.HostConfig.NetworkMode}}')" = host ] || UPSTREAM=host.docker.internal:7880
+            fi
+            [ -n "$MODE" ] || { echo "::error::No Caddy found on this VM"; exit 1; }
+            [ -f "$CFG" ] || { echo "::error::Caddyfile not found at $CFG"; exit 1; }
+            echo "Caddy mode: $MODE, Caddyfile: $CFG, upstream: $UPSTREAM"
+
+            if grep -q "^$DOMAIN" "$CFG"; then
+              echo "Block for $DOMAIN already present — leaving as-is."
+              exit 0
+            fi
+
+            BACKUP="$CFG.bak-livekit-$(date +%Y%m%d%H%M%S)"
+            cp "$CFG" "$BACKUP"
+            printf '\n%s {\n    reverse_proxy %s\n}\n' "$DOMAIN" "$UPSTREAM" >> "$CFG"
+
+            validate() {
+              if [ "$MODE" = native ]; then caddy validate --config "$CFG" --adapter caddyfile
+              else docker exec caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; fi
+            }
+            if ! validate; then
+              echo "::error::Caddy rejected the new config — restoring the backup (other sites unaffected)."
+              cat "$BACKUP" > "$CFG"
+              exit 1
+            fi
+            if [ "$MODE" = native ]; then
+              if systemctl is-active --quiet caddy 2>/dev/null; then systemctl reload caddy
+              else caddy reload --config "$CFG" --adapter caddyfile; fi
+            else
+              docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+            fi
+            echo "✅ Caddy reloaded with $DOMAIN → $UPSTREAM"
+      - name: Check https://calls.nexeagle.com
+        run: |
+          for i in 1 2 3 4 5 6 7 8; do
+            B=$(curl -fsS --max-time 10 https://calls.nexeagle.com/ 2>/dev/null || true)
+            echo "Attempt $i: ${B:-no answer}"
+            [ "$B" = "OK" ] && { echo "✅ calls.nexeagle.com answers over HTTPS"; exit 0; }
+            sleep 15
+          done
+          echo "::error::calls.nexeagle.com did not answer OK — check the certificate (Caddy logs) and that the firewall allows 443."
+          exit 1

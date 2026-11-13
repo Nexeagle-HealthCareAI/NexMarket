@@ -475,6 +475,10 @@ const en = {
 
   // Me
   me: 'Me',
+  meWork: "My work",
+  meApp: "This app",
+  loginIdHint: "Your supervisor gave you this, like MKT-1001.",
+  ptMore: "More",
   unsentItems: '{n} {n|item|items} saved on phone',
   everythingSent: 'Everything is sent',
   lastSent: 'Last sent {time}',

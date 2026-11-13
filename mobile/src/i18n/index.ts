@@ -51,6 +51,8 @@ let orgWording: string | null = null;
 /** The organisation's own name, or null for the first organisation (which keeps its wording). */
 export function setOrgWording(name: string | null) { orgWording = name && name.trim() ? name.trim() : null; }
 export const orgDisplayName = () => orgWording ?? FIRST_ORG_WORDING[0];
+/** True once this phone knows another organisation's own name (after a sign-in to it). */
+export const hasOrgWording = () => orgWording != null;
 
 // The organisation's everyday word: a lab's app says "lab" where a hospital's says "hospital".
 const PLACE_WORDS: Record<string, { en: string; hi: string; bn: string }> = {

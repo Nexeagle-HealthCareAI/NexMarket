@@ -458,6 +458,10 @@ const hinglish: Strings = {
   noPatients: 'Abhi koi mareez nahi bheja.',
 
   me: 'Main',
+  meWork: "Mera kaam",
+  meApp: "Yeh app",
+  loginIdHint: "Yeh aapko supervisor ne diya hai, jaise MKT-1001.",
+  ptMore: "Aur",
   unsentItems: '{n} {n|cheez|cheezein} phone par save',
   everythingSent: 'Sab kuch bhej diya',
   lastSent: 'Aakhiri baar bheja {time}',
