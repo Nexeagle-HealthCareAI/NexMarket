@@ -5,12 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useKeepAwake } from 'expo-keep-awake';
 import { AndroidAudioTypePresets, AudioSession, VideoTrack, type TrackReference } from '@livekit/react-native';
-import { AudioPresets, ConnectionQuality, ConnectionState, Room, RoomEvent, Track, VideoPresets, type Participant } from 'livekit-client';
+import { AudioPresets, ConnectionQuality, ConnectionState, Room, RoomEvent, Track, VideoPresets, VideoQuality, type Participant } from 'livekit-client';
 import { Avatar, T, toast } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 import { useSession } from '../../lib/session';
 import { cachedThreads, isOfficeUser } from '../../lib/chat';
-import { callErrorText, callLength, callsStatus, currentCall, fetchCall, isRoom, joinCall, leaveCall, meetingForCall, type Call, type CurrentCall, type Meeting } from '../../lib/calls';
+import { callErrorText, callLength, callsStatus, currentCall, cameraMove, fetchCall, isRoom, joinCall, leaveCall, looksWeak, meetingForCall, networkDelay, type Call, type CurrentCall, type Meeting } from '../../lib/calls';
+import { getPrefs } from '../../lib/prefs';
 import { C } from '../../theme';
 import { holdOverLock } from '../../../modules/lock-screen';
 
@@ -19,6 +20,8 @@ type TFn = ReturnType<typeof useSession>['t'];
 
 /** Weak 2G/3G/4G: video starts small (360p, 15 fps, a 180p layer for weak receivers) and voice uses the speech preset. */
 const VIDEO_360 = { width: 640, height: 360, frameRate: 15 };
+/** Data saver: one small picture (180p, 12 fps, at most 120 kbps) and no second copy. */
+const VIDEO_180 = { width: 320, height: 180, frameRate: 12 };
 
 async function askPermissions(video: boolean): Promise<{ mic: boolean; cam: boolean }> {
   if (Platform.OS !== 'android') return { mic: true, cam: video };
@@ -68,6 +71,13 @@ export default function CallScreen() {
   const [front, setFront] = useState(true);
   const [speaker, setSpeaker] = useState(false);
   const [weak, setWeak] = useState(false);
+  // Why the camera is off although this is a video call: the network (it comes back by itself) or a choice made at the start.
+  const [camNote, setCamNote] = useState<'auto' | 'slowStart' | 'saver' | null>(null);
+  const saver = useRef(getPrefs().dataSaver);
+  const camRes = saver.current ? VIDEO_180 : VIDEO_360;
+  const camOnRef = useRef(false);
+  const autoOff = useRef(false);
+  const qualitySince = useRef<{ poor: boolean; at: number }>({ poor: false, at: Date.now() });
   const [ended, setEnded] = useState<{ why: EndWhy; secs: number } | null>(null);
   const [now, setNow] = useState(Date.now());
   const talkingSince = useRef<number | null>(null);
@@ -146,11 +156,11 @@ export default function CallScreen() {
         disconnectOnPageLeave: false,
         stopLocalTrackOnUnpublish: true,
         audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        videoCaptureDefaults: { resolution: VIDEO_360, facingMode: 'user' },
+        videoCaptureDefaults: { resolution: camRes, facingMode: 'user' },
         publishDefaults: {
           audioPreset: AudioPresets.speech, dtx: true, red: true,
-          videoEncoding: { maxBitrate: 350_000, maxFramerate: 15 },
-          simulcast: true, videoSimulcastLayers: [VideoPresets.h180],
+          videoEncoding: saver.current ? { maxBitrate: 120_000, maxFramerate: 12 } : { maxBitrate: 350_000, maxFramerate: 15 },
+          simulcast: !saver.current, videoSimulcastLayers: [VideoPresets.h180],
           degradationPreference: 'maintain-framerate',
         },
       });
@@ -169,7 +179,11 @@ export default function CallScreen() {
       r.on(RoomEvent.ParticipantConnected, () => { someoneHere(); bump(); })
         .on(RoomEvent.ParticipantDisconnected, () => { remoteGone(); bump(); })
         .on(RoomEvent.ConnectionStateChanged, () => bump())
-        .on(RoomEvent.TrackSubscribed, () => bump())
+        .on(RoomEvent.TrackSubscribed, (_track, pub) => {
+          // Data saver: ask for the smallest copy of everyone else's video.
+          if (saver.current && pub.kind === Track.Kind.Video) pub.setVideoQuality(VideoQuality.LOW);
+          bump();
+        })
         .on(RoomEvent.TrackUnsubscribed, () => bump())
         .on(RoomEvent.TrackMuted, () => bump())
         .on(RoomEvent.TrackUnmuted, () => bump())
@@ -177,11 +191,16 @@ export default function CallScreen() {
         .on(RoomEvent.LocalTrackUnpublished, () => bump())
         .on(RoomEvent.ActiveSpeakersChanged, () => bump())
         .on(RoomEvent.ConnectionQualityChanged, (q, p) => {
-          if (p === r.localParticipant) setWeak(q === ConnectionQuality.Poor || q === ConnectionQuality.Lost);
+          if (p !== r.localParticipant) return;
+          const poor = q === ConnectionQuality.Poor || q === ConnectionQuality.Lost;
+          if (qualitySince.current.poor !== poor) qualitySince.current = { poor, at: Date.now() };
+          setWeak(poor);
         })
         .on(RoomEvent.Disconnected, () => { if (roomRef.current === r) finish('ended'); });
       setRoom(r);
 
+      // A quick look at the network while the call connects: a slow one starts a video call with voice only.
+      const delay = c.video && perm.cam && !saver.current ? networkDelay() : Promise.resolve(0);
       try {
         await r.connect(c.join.url, c.join.token, { autoSubscribe: true, peerConnectionTimeout: 25_000, websocketTimeout: 25_000, maxRetries: 2 });
       } catch {
@@ -189,12 +208,17 @@ export default function CallScreen() {
         return;
       }
       if (!alive || roomRef.current !== r) { void r.disconnect(); return; }
+      qualitySince.current = { poor: false, at: Date.now() };   // the signal is judged from the moment the call is connected
       if (isRoom(c.kind)) talkingSince.current = Date.now();
       someoneHere();
       try { await r.localParticipant.setMicrophoneEnabled(true); } catch { setMicOn(false); toast(t('clMicDenied'), { ms: 4000 }); }
       // Voice calls and huddles without video never publish the camera.
       if (c.video && perm.cam) {
-        try { await r.localParticipant.setCameraEnabled(true, { resolution: VIDEO_360, facingMode: 'user' }); setCamOn(true); } catch { toast(t('clCamDenied'), { ms: 3500 }); }
+        if (saver.current) setCamNote('saver');
+        else if (looksWeak(await delay)) { autoOff.current = true; setCamNote('slowStart'); }
+        else {
+          try { await r.localParticipant.setCameraEnabled(true, { resolution: camRes, facingMode: 'user' }); setCamOn(true); camOnRef.current = true; } catch { toast(t('clCamDenied'), { ms: 3500 }); }
+        }
       }
       setSpeaker(c.video);
       void routeAudio(c.video);
@@ -249,12 +273,30 @@ export default function CallScreen() {
     setMicOn(next);
     lp.setMicrophoneEnabled(next).catch(() => setMicOn(!next));
   };
-  const toggleCam = () => {
+  const setCam = (next: boolean) => {
     if (!lp) return;
-    const next = !camOn;
-    setCamOn(next);
-    lp.setCameraEnabled(next, next ? { resolution: VIDEO_360, facingMode: front ? 'user' : 'environment' } : undefined).then(() => bump()).catch(() => { setCamOn(!next); toast(t('clCamDenied')); });
+    setCamOn(next); camOnRef.current = next;
+    lp.setCameraEnabled(next, next ? { resolution: camRes, facingMode: front ? 'user' : 'environment' } : undefined).then(() => bump())
+      .catch(() => { setCamOn(!next); camOnRef.current = !next; toast(t('clCamDenied')); });
   };
+  // The person's own tap always wins: after it, the app no longer turns the camera on or off for the network.
+  const toggleCam = () => { autoOff.current = false; setCamNote(null); setCam(!camOn); };
+
+  // Weak network: after a few seconds of poor signal the camera turns off by itself so the voice stays clear,
+  // and it comes back once the signal has been good for a while.
+  useEffect(() => {
+    if (!room || ended) return;
+    const timer = setInterval(() => {
+      const q = qualitySince.current;
+      const held = Date.now() - q.at;
+      const move = cameraMove({ camOn: camOnRef.current, autoOff: autoOff.current, poorFor: q.poor ? held : 0, goodFor: q.poor ? 0 : held });
+      if (move === 'off') { autoOff.current = true; setCamNote('auto'); setCam(false); }
+      else if (move === 'on') { autoOff.current = false; setCamNote(null); setCam(true); toast(t('clAutoOn'), { ms: 3000 }); }
+    }, 1000);
+    return () => clearInterval(timer);
+    // setCam and t change every render; the timer only needs the room.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room, ended]);
   const flip = async () => {
     const track = lp?.getTrackPublication(Track.Source.Camera)?.track?.mediaStreamTrack as (MediaStreamTrack & { _switchCamera?: () => void }) | undefined;
     if (!track) return;
@@ -308,6 +350,13 @@ export default function CallScreen() {
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#ff6b4a', marginTop: 5 }} />
               <T style={{ color: '#ffd9c7', fontSize: 14, lineHeight: 19, flexShrink: 1 }}>{t('mtNotesOn')}</T>
             </View>
+          ) : null}
+          {camNote && !camOn && !ended ? (
+            <Pressable onPress={toggleCam} accessibilityRole="button" accessibilityLabel={t(camNote === 'auto' ? 'clAutoOff' : camNote === 'saver' ? 'clSaverOn' : 'clStartVoice')}
+              style={{ marginTop: 6, flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: C.warnSoft, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, minHeight: 44 }}>
+              <Icon name="videoOff" color={C.warnInk} size={18} />
+              <T style={{ color: C.warnInk, fontWeight: '700', fontSize: 14, flexShrink: 1 }}>{t(camNote === 'auto' ? 'clAutoOff' : camNote === 'saver' ? 'clSaverOn' : 'clStartVoice')}</T>
+            </Pressable>
           ) : null}
           {weak && camOn && !ended && !warn ? (
             <Pressable onPress={toggleCam} accessibilityRole="button" accessibilityLabel={t('clWeak')}

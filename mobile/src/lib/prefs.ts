@@ -8,7 +8,11 @@ import { applySunlight } from '../theme';
  * Kept in kv (so they are ready before the first screen draws); components re-render through usePrefs().
  */
 export type TextSize = 'normal' | 'large' | 'xl';
-export interface Prefs { textSize: TextSize; scale: number; sunlight: boolean; readAloud: boolean; vibrate: boolean }
+export interface Prefs {
+  textSize: TextSize; scale: number; sunlight: boolean; readAloud: boolean; vibrate: boolean;
+  /** Calls start with voice only and video stays small: for weak signal and small data packs. */
+  dataSaver: boolean;
+}
 
 export const TEXT_SCALE: Record<TextSize, number> = { normal: 1, large: 1.15, xl: 1.3 };
 
@@ -22,6 +26,7 @@ function read(): Prefs {
     sunlight: get('uxSunlight') === '1',
     readAloud: get('uxReadAloud') === '1',
     vibrate: get('uxVibrate') !== '0', // on unless turned off
+    dataSaver: get('uxDataSaver') === '1',
   };
 }
 
@@ -43,6 +48,7 @@ export function setPrefs(patch: Partial<Omit<Prefs, 'scale'>>) {
     if (patch.sunlight !== undefined) kvSet('uxSunlight', next.sunlight ? '1' : '0');
     if (patch.readAloud !== undefined) kvSet('uxReadAloud', next.readAloud ? '1' : '0');
     if (patch.vibrate !== undefined) kvSet('uxVibrate', next.vibrate ? '1' : '0');
+    if (patch.dataSaver !== undefined) kvSet('uxDataSaver', next.dataSaver ? '1' : '0');
   } catch { /* still applies for this run */ }
   applySunlight(next.sunlight);
   prefs = next;
@@ -50,7 +56,7 @@ export function setPrefs(patch: Partial<Omit<Prefs, 'scale'>>) {
 }
 
 // kv keys that belong to the phone, not the person: they outlive sign-out like the language does.
-const PHONE_KEYS = ['uxTextSize', 'uxSunlight', 'uxReadAloud', 'uxVibrate', 'uxTourSeen'];
+const PHONE_KEYS = ['uxTextSize', 'uxSunlight', 'uxReadAloud', 'uxVibrate', 'uxDataSaver', 'uxTourSeen'];
 
 /** Read before wipeAll(): the phone's own settings and the "tour seen" flag. */
 export function keepPhoneKv(): [string, string][] {

@@ -287,3 +287,34 @@ export async function joinMeeting(id: string): Promise<CurrentCall> {
   catch (e) { throw wrap(e); }
   return joinCall(callId);
 }
+
+// ─── Weak networks ───
+
+/** Above this, a small request to our own server is slow enough that video would stutter. */
+export const SLOW_MS = 1200;
+export const looksWeak = (ms: number | null) => ms == null || ms > SLOW_MS;
+
+/**
+ * A two-second look at the network before a video call: how long one small request to our server takes.
+ * Null when it didn't come back in time. It is only a hint for how to start; the call itself keeps adjusting.
+ */
+export async function networkDelay(timeoutMs = 2500): Promise<number | null> {
+  const started = Date.now();
+  try {
+    const late = new Promise<null>((done) => setTimeout(() => done(null), timeoutMs));
+    const back = await Promise.race([get<unknown>('/api/v1/calls/status').then(() => true), late]);
+    return back ? Date.now() - started : null;
+  } catch { return null; }
+}
+
+/**
+ * When to turn the camera off or back on by itself. Off after the signal has been poor for a few seconds;
+ * back on only after it has been good for longer, and only if the app (not the person) turned it off.
+ */
+export const AUTO_OFF_MS = 4000;
+export const AUTO_ON_MS = 12000;
+export function cameraMove(s: { camOn: boolean; autoOff: boolean; poorFor: number; goodFor: number }): 'off' | 'on' | null {
+  if (s.camOn && s.poorFor >= AUTO_OFF_MS) return 'off';
+  if (!s.camOn && s.autoOff && s.goodFor >= AUTO_ON_MS) return 'on';
+  return null;
+}

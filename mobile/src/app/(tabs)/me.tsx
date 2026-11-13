@@ -126,6 +126,14 @@ export default function Me() {
           </View>
           <Switch label={t('uxSun')} value={prefs.sunlight} onChange={(v) => setPrefs({ sunlight: v })} />
         </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 8, minHeight: 60, borderBottomWidth: 1, borderBottomColor: C.line }}>
+          <Icon name="video" color={C.blue} size={22} />
+          <View style={{ flex: 1 }}>
+            <T style={{ fontSize: 16, fontWeight: '700' }}>{t('clSaver')}</T>
+            <T style={{ color: C.text2, fontSize: 13 }}>{t('clSaverSub')}</T>
+          </View>
+          <Switch label={t('clSaver')} value={prefs.dataSaver} onChange={(v) => setPrefs({ dataSaver: v })} />
+        </View>
         <Row icon="lock" label={t('quTitle')} sub={lock.pinSet ? `${t('quOn')}${lock.bio ? ' · ' + t('quUseBio') : ''}` : t('quOff')} onPress={() => router.push('/quick-unlock')} />
         <Row icon="bolt" label={t('perfTitle')} sub={pm === 'auto' ? `${t('perfAuto')} · ${light ? t('perfOn') : t('perfOff')}` : light ? t('perfOn') : t('perfOff')} onPress={() => setPerfOpen(true)} />
         <Row icon="battery" label={t('batteryLocation')} onPress={openAppSettings} />
