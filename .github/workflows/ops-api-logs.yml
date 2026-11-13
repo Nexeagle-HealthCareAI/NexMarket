@@ -1,0 +1,26 @@
+# Throwaway: prints the Dev API container's recent errors. Lives only on branch ops/api-logs; push to it to run.
+name: Ops — Dev API logs
+on:
+  push:
+    branches: [ops/api-logs]
+jobs:
+  logs:
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
+          command_timeout: 2m
+          script: |
+            docker ps --filter name=nexmarket --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+            echo "=== exceptions / errors (last 3h)"
+            docker logs --since 3h nexmarket-api-dev 2>&1 | grep -n -i -E -A25 "fail:|exception|error" | grep -v -i "password\|secret\|token=" | tail -250
+            echo "=== /calls lines"
+            docker logs --since 3h nexmarket-api-dev 2>&1 | grep -i "api/v1/calls" | tail -40
+            echo "=== env has LiveKit keys (names only)"
+            docker inspect nexmarket-api-dev --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -i '^LiveKit' | sed -E 's/=(.{0,0}).*/=<set>/' 
+            echo "=== livekit"
+            docker logs --since 3h nexmarket-livekit 2>&1 | tail -30
