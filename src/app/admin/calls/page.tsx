@@ -273,7 +273,7 @@ function ContactCallPanel({ clientId, editable, maxAttempts, importantEvery, onS
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await crm.post<{ attempt: number; maxAttempts: number; needsVisit: boolean }>('/api/v1/calls', {
+      const res = await crm.post<{ attempt: number; maxAttempts: number; needsVisit: boolean }>('/api/v1/calls/log', {
         contactClientId: c.clientId,
         outcome,
         responses: outcome === 'connected' ? responses : [],

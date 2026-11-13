@@ -236,7 +236,8 @@ namespace SeemanchalOutreach.Api.Controllers
             });
         }
 
-        [HttpPost]
+        // "log", not the bare route: POST api/v1/calls starts a chat call (Services/Calls.cs).
+        [HttpPost("log")]
         public async Task<IActionResult> Log([FromBody] LogCallDto dto, CancellationToken ct)
         {
             var outcome = (dto.Outcome ?? "").Trim().ToLowerInvariant();
