@@ -25,7 +25,7 @@ import { EMOJI } from '../../lib/emoji';
 import { setOpenChat } from '../../lib/notifications';
 import { dayLong, timeOf } from '../../lib/format';
 import { C } from '../../theme';
-import { CallButtons, CallPill, ChatCallBanner } from '../../components/CallParts';
+import { CallButtons, CallPill, ChatCallBanner, ChatMeetings } from '../../components/CallParts';
 import { useCallsStatus } from '../../lib/calls';
 import { cachedTranslations, chatAiStatus, doneTask, looksDone, refreshChatAi, suggestReplies, translate } from '../../lib/chatAi';
 import { cachedTasks, setTaskDone } from '../../lib/tasks';
@@ -257,6 +257,8 @@ export default function Conversation() {
       </View>
       {/* A huddle or call going on in this chat: Join */}
       <ChatCallBanner threadId={id} />
+      {/* Meetings planned for this chat, with "Start meeting" once the room is open */}
+      <ChatMeetings threadId={id} />
 
       {/* Android draws edge-to-edge (the window no longer shrinks for the keyboard), so pad on both platforms. */}
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: WA.bg }} behavior="padding">

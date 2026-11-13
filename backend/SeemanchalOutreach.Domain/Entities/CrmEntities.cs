@@ -446,6 +446,39 @@ namespace SeemanchalOutreach.Domain.Entities
         public bool Declined { get; set; }
     }
 
+    /// <summary>
+    /// A meeting planned in a chat: a group call at a set time for everyone in that chat. When the organiser turns
+    /// AI notes on, what is said is turned into text as the meeting goes (the sound itself is never kept) and written up
+    /// afterwards as minutes on the Team board.
+    /// </summary>
+    public class Meeting
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid ThreadId { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Agenda { get; set; }
+        public DateTime StartsAt { get; set; }
+        public int Minutes { get; set; } = 30;                    // planned length
+        public bool Video { get; set; }
+        public string Status { get; set; } = "scheduled";         // scheduled | live | done | cancelled | missed
+        public Guid? CallId { get; set; }                          // the call it runs in, once someone has joined
+        public bool AiNotes { get; set; }                          // being listened to for notes right now
+        public string? NotesBy { get; set; }                       // who turned AI notes on
+        public string NotesStatus { get; set; } = "none";         // none | listening | writing | ready | failed
+        public string? NotesError { get; set; }
+        public int NotesTries { get; set; }
+        public string? Transcript { get; set; }                    // what was said, as text; office only
+        public double AudioSeconds { get; set; }                   // how much has been listened to
+        public string? Summary { get; set; }                       // the short version posted in the chat
+        public Guid? DocId { get; set; }                           // the minutes in Plans & docs
+        public DateTime? RemindedAt { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public string CreatedByName { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? StartedAt { get; set; }
+        public DateTime? EndedAt { get; set; }
+    }
+
     /// <summary>How far each person has read a chat (for unread counts and the blue ticks).</summary>
     public class ChatRead
     {

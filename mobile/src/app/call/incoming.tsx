@@ -8,7 +8,7 @@ import { T, toast } from '../../components/ui';
 import { Icon } from '../../components/Icon';
 import { ChatAvatar } from '../../components/ChatAvatar';
 import { useSession } from '../../lib/session';
-import { activeCalls, callErrorText, callsStatus, declineCall, fetchCall, joinCall, markHandled, onAnswerAsked, setIncomingOpen, type Call } from '../../lib/calls';
+import { activeCalls, callErrorText, callsStatus, declineCall, fetchCall, joinCall, isRoom, markHandled, onAnswerAsked, setIncomingOpen, type Call } from '../../lib/calls';
 import { showRing, stopRing } from '../../lib/callRing';
 import { holdOverLock } from '../../../modules/lock-screen';
 import { cachedThreads } from '../../lib/chat';
@@ -44,7 +44,8 @@ export default function Incoming() {
   const pulse = useRef(new Animated.Value(0)).current;
 
   const ringing = !call || (call.kind === 'call' && call.status === 'ringing');
-  const huddle = call?.kind === 'huddle';
+  // A huddle or a meeting: nobody is rung; the screen offers Join.
+  const huddle = isRoom(call?.kind);
 
   const close = () => {
     if (done.current) return;
@@ -94,7 +95,7 @@ export default function Incoming() {
         const c = await fetchCall(id);
         if (!alive || done.current) return;
         setCall(c);
-        if (c.kind === 'huddle' ? c.status === 'ended' : c.status !== 'ringing') {
+        if (isRoom(c.kind) ? c.status === 'ended' : c.status !== 'ringing') {
           if (c.kind === 'call' && c.status === 'active') toast(t('clOtherPhone'));
           close();
         }
@@ -146,8 +147,8 @@ export default function Incoming() {
   };
 
   const thread = call ? cachedThreads().find((x) => x.id === call.threadId) : undefined;
-  const name = huddle ? t('clTeamHuddle') : call?.startedByName ?? '…';
-  const kindLine = huddle ? t('clHuddleStarted', { name: call?.startedByName ?? '' }) : call?.video ? t('clIncomingVideo') : t('clIncomingVoice');
+  const name = call?.kind === 'meeting' ? t('mtMeeting') : huddle ? t('clTeamHuddle') : call?.startedByName ?? '…';
+  const kindLine = call?.kind === 'meeting' ? t('mtOn') : huddle ? t('clHuddleStarted', { name: call?.startedByName ?? '' }) : call?.video ? t('clIncomingVideo') : t('clIncomingVoice');
   const where = thread && thread.kind === 'direct' ? thread.sub : thread?.kind === 'agent' ? t('chatOffice') : null;
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
   const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] });

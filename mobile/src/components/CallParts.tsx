@@ -5,9 +5,11 @@ import { T, toast } from './ui';
 import { Icon, type IconName } from './Icon';
 import { useSession, useSync } from '../lib/session';
 import {
-  callEmoji, callErrorText, callNoteText, cannotCall, joinCall, liveCallIn, openIncoming, peopleIn, refreshActive, refreshCallsStatus, ringingForMe,
-  startCall, useActiveCalls, useCallsStatus, useCurrentCall, type Call, type CallNote,
+  callEmoji, callErrorText, callNoteText, cannotCall, joinCall, joinMeeting, liveCallIn, meetingsIn, openIncoming, peopleIn, refreshActive, refreshCallsStatus, ringingForMe,
+  startCall, useActiveCalls, useCallsStatus, useCurrentCall, type Call, type CallNote, type Meeting,
 } from '../lib/calls';
+import { useChatVersion } from '../lib/chat';
+import { dayShort, timeOf } from '../lib/format';
 import { kvGet } from '../lib/db';
 import { fullScreenAllowed } from '../lib/callRing';
 import { C } from '../theme';
@@ -76,7 +78,7 @@ export function CallBanner({ call, where }: { call: Call; where?: string }) {
   const cur = useCurrentCall();
   const mineNow = cur?.id === call.id;
   const n = Math.max(1, peopleIn(call));
-  const head = call.kind === 'huddle' ? t('clHuddleOn') : t('clCallOn');
+  const head = call.kind === 'meeting' ? t('mtOn') : call.kind === 'huddle' ? t('clHuddleOn') : t('clCallOn');
   const line = [where ? `${head} ${t('clInChat', { name: where })}` : head, t('clPeopleN', { n })].join(' · ');
   const action = mineNow ? t('clBackToCall') : t('clJoin');
   const open = () => {
@@ -88,7 +90,7 @@ export function CallBanner({ call, where }: { call: Call; where?: string }) {
       style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.okSoft, borderColor: '#9fdcbf', borderWidth: 1, borderRadius: 16,
         paddingLeft: 12, paddingRight: 8, paddingVertical: 8, minHeight: 56 }, pressed && { opacity: 0.85 }]}>
       <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: C.ok, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name={call.video ? 'video' : call.kind === 'huddle' ? 'users' : 'phone'} color="#fff" size={18} />
+        <Icon name={call.video ? 'video' : call.kind !== 'call' ? 'users' : 'phone'} color="#fff" size={18} />
       </View>
       <T style={{ flex: 1, color: C.okInk, fontWeight: '700', fontSize: 15 }} numberOfLines={2}>{line}</T>
       <View style={{ minHeight: 44, paddingHorizontal: 16, borderRadius: 22, backgroundColor: C.ok, justifyContent: 'center' }}>
@@ -106,6 +108,65 @@ export function ChatCallBanner({ threadId }: { threadId: string }) {
   return <View style={{ paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#eef1f6' }}><CallBanner call={c} /></View>;
 }
 
+/**
+ * Meetings planned for this chat that haven't started: when they are, and "Start meeting" once the room is open
+ * (15 minutes before). One going on is shown by the call banner above, with Join.
+ */
+export function ChatMeetings({ threadId }: { threadId: string }) {
+  const { t, lang } = useSession();
+  const version = useChatVersion();
+  const status = useCallsStatus();
+  const [rows, setRows] = useState<Meeting[]>([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const load = () => meetingsIn(threadId).then((r) => { if (live) setRows(r); }).catch(() => undefined);
+    void load();
+    const timer = setInterval(load, 60000);
+    return () => { live = false; clearInterval(timer); };
+  }, [threadId, version]);
+  const coming = rows.filter((m) => m.status === 'scheduled').slice(0, 2);
+  if (coming.length === 0) return null;
+  const when = (iso: string) => {
+    const d = new Date(iso); const now = new Date();
+    const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86400000);
+    return `${days === 0 ? t('mtToday') : days === 1 ? t('mtTomorrow') : dayShort(lang, d)}, ${timeOf(lang, iso)}`;
+  };
+  const start = async (m: Meeting) => {
+    if (busy) return;
+    setBusy(true);
+    try { const cur = await joinMeeting(m.id); router.push({ pathname: '/call/[id]', params: { id: cur.id } }); }
+    catch (e) { toast(callErrorText(t, e) || t('mtCantJoin'), { ms: 3500 }); }
+    finally { setBusy(false); }
+  };
+  return (
+    <View style={{ paddingHorizontal: 10, paddingVertical: 8, gap: 8, backgroundColor: '#eef1f6' }}>
+      {coming.map((m) => {
+        const open = m.canJoin && status.on;
+        const line = t('mtComing', { when: when(m.startsAt), n: m.minutes });
+        return (
+          <View key={m.id} accessible={!open} accessibilityLabel={`${m.title}. ${line}. ${open ? '' : t('mtOpens')}`}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.card, borderColor: C.border, borderWidth: 1, borderRadius: 16, paddingLeft: 12, paddingRight: 8, paddingVertical: 8, minHeight: 56 }}>
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: C.blueSoft, alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="calendar" color={C.blue} size={18} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <T style={{ fontWeight: '800', fontSize: 15 }} numberOfLines={1}>{m.title}</T>
+              <T style={{ color: C.text2, fontSize: 13 }} numberOfLines={2}>{open ? line : `${line}. ${t('mtOpens')}`}</T>
+            </View>
+            {open ? (
+              <Pressable onPress={() => void start(m)} disabled={busy} accessibilityRole="button" accessibilityLabel={`${t('mtStart')}: ${m.title}`}
+                style={({ pressed }) => [{ minHeight: 44, paddingHorizontal: 14, borderRadius: 22, backgroundColor: C.ok, justifyContent: 'center' }, (pressed || busy) && { opacity: 0.7 }]}>
+                <T style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>{t('mtStart')}</T>
+              </Pressable>
+            ) : null}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 /** A call in the conversation: centred pill with what happened, and "Call back" for 1:1 calls. */
 export function CallPill({ note, mine, threadId, canCall }: { note: CallNote; mine: boolean; threadId: string; canCall: boolean }) {
   const { t } = useSession();
@@ -117,7 +178,7 @@ export function CallPill({ note, mine, threadId, canCall }: { note: CallNote; mi
     <View style={{ alignSelf: 'center', alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginVertical: 6, paddingLeft: 14, paddingRight: back ? 6 : 14,
       paddingVertical: 6, borderRadius: 22, backgroundColor: missed ? C.badSoft : '#ffffff', borderWidth: 1, borderColor: missed ? '#f3c5c0' : C.border, maxWidth: '94%' }}
       accessible={!back} accessibilityLabel={text}>
-      <Icon name={note.kind === 'huddle' ? 'users' : note.video ? 'video' : 'phone'} size={17} color={missed ? C.bad : C.okInk} />
+      <Icon name={note.kind !== 'call' ? 'users' : note.video ? 'video' : 'phone'} size={17} color={missed ? C.bad : C.okInk} />
       <T style={{ color: missed ? C.bad : C.text3, fontWeight: '700', fontSize: 15, flexShrink: 1 }}>{text}</T>
       {back ? (
         <Pressable onPress={() => void callFromChat(t, threadId, note.video)} accessibilityRole="button" accessibilityLabel={`${t('clCallBack')}: ${note.video ? t('clVideoCall') : t('clVoiceCall')}`}

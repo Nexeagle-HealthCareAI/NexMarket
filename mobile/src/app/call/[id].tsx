@@ -10,7 +10,7 @@ import { Avatar, T, toast } from '../../components/ui';
 import { Icon, type IconName } from '../../components/Icon';
 import { useSession } from '../../lib/session';
 import { cachedThreads, isOfficeUser } from '../../lib/chat';
-import { callErrorText, callLength, callsStatus, currentCall, fetchCall, joinCall, leaveCall, type Call, type CurrentCall } from '../../lib/calls';
+import { callErrorText, callLength, callsStatus, currentCall, fetchCall, isRoom, joinCall, leaveCall, meetingForCall, type Call, type CurrentCall, type Meeting } from '../../lib/calls';
 import { C } from '../../theme';
 import { holdOverLock } from '../../../modules/lock-screen';
 
@@ -78,6 +78,16 @@ export default function CallScreen() {
   const mineRef = useRef(false);
   mineRef.current = (server ?? cur?.call)?.mine ?? false;
   const kind = cur?.kind ?? server?.kind ?? 'call';
+  // A meeting: its name, and whether AI notes are on (everyone in it must be able to see that).
+  const [meeting, setMeeting] = useState<Meeting | null>(null);
+  useEffect(() => {
+    if (kind !== 'meeting' || !id) return;
+    let live = true;
+    const load = () => meetingForCall(id).then((m) => { if (live) setMeeting(m); }).catch(() => undefined);
+    void load();
+    const timer = setInterval(load, 6000);
+    return () => { live = false; clearInterval(timer); };
+  }, [kind, id]);
   const video = cur?.video ?? server?.video ?? false;
 
   const goBack = () => { if (!mounted.current) return; if (router.canGoBack()) router.back(); else router.replace('/chat'); };
@@ -179,7 +189,7 @@ export default function CallScreen() {
         return;
       }
       if (!alive || roomRef.current !== r) { void r.disconnect(); return; }
-      if (c.kind === 'huddle') talkingSince.current = Date.now();
+      if (isRoom(c.kind)) talkingSince.current = Date.now();
       someoneHere();
       try { await r.localParticipant.setMicrophoneEnabled(true); } catch { setMicOn(false); toast(t('clMicDenied'), { ms: 4000 }); }
       // Voice calls and huddles without video never publish the camera.
@@ -263,7 +273,7 @@ export default function CallScreen() {
   const thread = cachedThreads().find((x) => x.id === (cur?.threadId ?? server?.threadId));
   const otherName = remotes[0] ? nameOf(remotes[0])
     : server ? (server.mine ? server.people.find((p) => p.userId !== myId)?.name ?? threadName(t, thread) : server.startedByName) : threadName(t, thread);
-  const title = kind === 'huddle' ? t('clTeamHuddle') : otherName;
+  const title = kind === 'meeting' ? meeting?.title ?? t('mtMeeting') : kind === 'huddle' ? t('clTeamHuddle') : otherName;
   const secs = talkingSince.current ? (now - talkingSince.current) / 1000 : 0;
 
   let line: string;
@@ -271,7 +281,7 @@ export default function CallScreen() {
   else if (!room || state === ConnectionState.Connecting) line = t('clConnecting');
   else if (state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting) line = t('clReconnecting');
   else if (kind === 'call' && remotes.length === 0) line = server?.mine ? (server.status === 'ringing' ? t('clRinging') : t('clCalling')) : t('clConnecting');
-  else if (kind === 'huddle' && remotes.length === 0) line = t('clWaiting');
+  else if (isRoom(kind) && remotes.length === 0) line = t('clWaiting');
   else line = mmss(secs);
   const warn = !ended && (state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting);
 
@@ -292,6 +302,13 @@ export default function CallScreen() {
             {warn ? <Icon name="alert" size={16} color="#ffd38a" /> : null}
             <T style={{ color: warn ? '#ffd38a' : ended ? C.mint : C.sideText, fontSize: 17, fontWeight: '700', textAlign: 'center' }}>{line}</T>
           </View>
+          {meeting?.aiNotes && !ended ? (
+            <View accessible accessibilityRole="alert" accessibilityLabel={t('mtNotesOn')}
+              style={{ marginTop: 6, flexDirection: 'row', gap: 8, alignItems: 'flex-start', backgroundColor: '#3b1d12', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#ff6b4a', marginTop: 5 }} />
+              <T style={{ color: '#ffd9c7', fontSize: 14, lineHeight: 19, flexShrink: 1 }}>{t('mtNotesOn')}</T>
+            </View>
+          ) : null}
           {weak && camOn && !ended && !warn ? (
             <Pressable onPress={toggleCam} accessibilityRole="button" accessibilityLabel={t('clWeak')}
               style={{ marginTop: 6, flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: C.warnSoft, borderRadius: 16, paddingHorizontal: 12, minHeight: 36 }}>
@@ -303,7 +320,7 @@ export default function CallScreen() {
 
         {/* Middle: avatars, or the huddle grid */}
         <View style={{ flex: 1 }}>
-          {kind === 'huddle' && room ? (
+          {isRoom(kind) && room ? (
             <HuddleGrid room={room} remotes={remotes} t={t} camOn={camOn} front={front} />
           ) : !full ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>

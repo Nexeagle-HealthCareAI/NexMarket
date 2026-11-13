@@ -92,7 +92,7 @@ function Gate() {
       if (link.startsWith('referral:') || link.startsWith('money:')) void syncNow(true).catch(() => undefined);
       // Someone is calling while the app is open: straight to the incoming-call screen (huddles just notify).
       const kind = String(n.request.content.data?.kind ?? (n.request.trigger as { remoteMessage?: { data?: Record<string, string> } } | null)?.remoteMessage?.data?.kind ?? '');
-      if (link.startsWith('call:') && kind !== 'huddle') openIncoming(link.slice(5));
+      if (link.startsWith('call:') && kind !== 'huddle' && kind !== 'meeting') openIncoming(link.slice(5));
     });
     // The tap that opened the app from the tray.
     Notifications.getLastNotificationResponseAsync().then((r) => {

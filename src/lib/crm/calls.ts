@@ -7,7 +7,7 @@ import { crm } from '@/lib/sync/api-client';
 
 export interface CallPerson { userId: string; name: string; joinedAt?: string | null; leftAt?: string | null; declined: boolean; inCall: boolean }
 export interface Call {
-  id: string; threadId: string; threadKind: 'agent' | 'team' | 'direct'; kind: 'call' | 'huddle'; video: boolean;
+  id: string; threadId: string; threadKind: 'agent' | 'team' | 'direct'; kind: 'call' | 'huddle' | 'meeting'; video: boolean;
   status: 'ringing' | 'active' | 'ended' | 'missed' | 'declined';
   startedBy: string; startedByName: string; mine: boolean;
   startedAt: string; answeredAt?: string | null; endedAt?: string | null; seconds?: number | null;
@@ -16,7 +16,7 @@ export interface Call {
 export interface JoinInfo { url: string; room: string; token: string }
 export interface CallJoin { call: Call; join: JoinInfo }
 /** What a chat message says about a call that ended (a system message). */
-export interface CallNote { id: string; kind: 'call' | 'huddle'; video: boolean; status: Call['status']; seconds?: number | null }
+export interface CallNote { id: string; kind: 'call' | 'huddle' | 'meeting'; video: boolean; status: Call['status']; seconds?: number | null }
 
 /** The call I'm in (or dialling) in this tab. */
 export interface CallSession { call: Call; join: JoinInfo; video: boolean; threadTitle?: string | null }
@@ -49,6 +49,8 @@ export const callState = () => state;
 
 // ─── Labels ──────────────────────────────────────────────────────────────
 
+/** A huddle or a meeting: people walk in and out, nobody is rung, and it goes on until the last person leaves. */
+export const isRoom = (c: { kind: string }) => c.kind === 'huddle' || c.kind === 'meeting';
 export const live = (c: Call) => c.status === 'ringing' || c.status === 'active';
 export const inCallCount = (c: Call) => c.people.filter((p) => p.inCall).length;
 export function durationText(seconds?: number | null): string {
@@ -65,6 +67,7 @@ export function clock(seconds: number): string {
 }
 /** "Missed video call", "Voice call · 3 min", "Huddle · 12 min", "Call declined". */
 export function callNoteText(n: CallNote, mine?: boolean): string {
+  if (n.kind === 'meeting') return n.seconds ? `Meeting · ${durationText(n.seconds)}` : 'Meeting';
   if (n.kind === 'huddle') return n.seconds ? `Huddle · ${durationText(n.seconds)}` : 'Huddle';
   const what = n.video ? 'video call' : 'voice call';
   if (n.status === 'declined') return 'Call declined';
@@ -164,7 +167,7 @@ export const clearNotice = () => set({ notice: null });
 export async function leaveCall() {
   const s = state.session;
   if (!s) return;
-  set({ session: null, active: s.call.kind === 'call' ? state.active.filter((x) => x.id !== s.call.id) : state.active });
+  set({ session: null, active: !isRoom(s.call) ? state.active.filter((x) => x.id !== s.call.id) : state.active });
   try { await crm.post(`/api/v1/calls/${s.call.id}/leave`, {}); } catch { /* the server ends it when the room empties */ }
   void refreshActive();
 }
@@ -172,6 +175,6 @@ export async function leaveCall() {
 /** The call window closed itself (the call ended elsewhere). */
 export function endSession(id: string) {
   if (state.session?.call.id !== id) return;
-  set({ session: null, active: state.active.filter((x) => x.id !== id || x.kind === 'huddle') });
+  set({ session: null, active: state.active.filter((x) => x.id !== id || isRoom(x)) });
   void refreshActive();
 }

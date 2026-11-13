@@ -2498,6 +2498,97 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.ToTable("leave_requests", "marketing");
                 });
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.Meeting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Agenda")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("AiNotes")
+                        .HasColumnType("boolean");
+
+                    b.Property<double>("AudioSeconds")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid?>("CallId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CreatedByName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("DocId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Minutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NotesBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("NotesError")
+                        .HasColumnType("text");
+
+                    b.Property<string>("NotesStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("NotesTries")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("RemindedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("StartsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ThreadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Transcript")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Video")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CallId");
+
+                    b.HasIndex("Status", "StartsAt");
+
+                    b.HasIndex("ThreadId", "StartsAt");
+
+                    b.ToTable("meetings", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")

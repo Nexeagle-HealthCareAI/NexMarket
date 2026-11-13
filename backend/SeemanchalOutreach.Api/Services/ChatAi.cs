@@ -401,6 +401,75 @@ namespace SeemanchalOutreach.Api.Services
             return s;
         }
 
+        // ─── Meeting minutes ─────────────────────────────────────────────────
+
+        public record ActionItem(string What, string? Who, string? Due);
+        public record Minutes(string Summary, List<string> Points, List<string> Decisions, List<ActionItem> Actions);
+
+        /// <summary>Cuts a long transcript into pieces the AI can read, on line breaks where it can.</summary>
+        public static List<string> Pieces(string text, int max)
+        {
+            var parts = new List<string>();
+            var rest = text ?? "";
+            while (rest.Length > max)
+            {
+                var cut = rest.LastIndexOf('\n', max - 1, max / 2);
+                if (cut <= 0) cut = rest.LastIndexOf(' ', max - 1, max / 2);
+                if (cut <= 0) cut = max;
+                parts.Add(rest[..cut].Trim());
+                rest = rest[cut..];
+            }
+            if (rest.Trim().Length > 0) parts.Add(rest.Trim());
+            return parts;
+        }
+
+        /// <summary>
+        /// Writes minutes from what was said in a meeting. Phones, IDs, emails and patient names are hidden before the
+        /// text goes to the AI and put back in its answer. A long meeting is read in pieces, then pulled together.
+        /// </summary>
+        public async Task<Minutes> MinutesAsync(string who, string title, string? agenda, string transcript, IReadOnlyList<string> people, CancellationToken ct)
+        {
+            Spend(who, ChatAiFeature.Summary);
+            var red = await RedactorAsync(ct);
+            var about = $"Meeting: {red.Hide(title)}." + (string.IsNullOrWhiteSpace(agenda) ? "" : $" Agenda: {red.Hide(agenda)}.")
+                + (people.Count > 0 ? $" People in it: {string.Join(", ", people.Select(p => red.Hide(p)))}." : "");
+            const string rules =
+                "The text is an automatic transcript of a spoken work meeting (often Hindi and English mixed), so words may be misheard and " +
+                "speakers are not marked. Write in clear English. Only use what was said; never guess or add. If something is unclear, leave it out. " +
+                "Each point at most 30 words. An action is something a person agreed to do: say what, who (a name from the meeting, or empty if " +
+                "nobody was named) and by when in the speaker's words (or empty).";
+            var action = Schema(Obj(("what", Str()), ("who", Str()), ("due", Str())), "what", "who", "due");
+            var schema = Schema(Obj(("summary", Str()), ("points", Arr(Str(), 10)), ("decisions", Arr(Str(), 8)), ("actions", Arr(action, 12))), "summary", "points", "decisions", "actions");
+
+            var pieces = Pieces(red.Hide(transcript), 12000);
+            JsonObject json;
+            if (pieces.Count <= 1)
+            {
+                json = await AskJsonAsync(who, $"You write the minutes of a healthcare organisation's team meeting. {about} {rules} " +
+                    "Give a summary of two or three sentences, the main points discussed, the decisions made, and the actions.", pieces.FirstOrDefault() ?? "", "minutes", schema, fast: false, ct);
+            }
+            else
+            {
+                var notes = new StringBuilder();
+                for (var i = 0; i < pieces.Count && i < 12; i++)
+                {
+                    var part = await AskJsonAsync(who, $"You take notes on part {i + 1} of {pieces.Count} of a healthcare organisation's team meeting. {about} {rules} " +
+                        "Give a one-sentence summary of this part, its main points, decisions and actions.", pieces[i], "minutes", schema, fast: true, ct);
+                    notes.Append("Part ").Append(i + 1).Append(": ").Append(part.ToJsonString()).Append('\n');
+                }
+                var all = notes.ToString();
+                json = await AskJsonAsync(who, $"You write the minutes of a healthcare organisation's team meeting from notes on each part of it. {about} {rules} " +
+                    "Merge the parts: no repeats, the order things happened. Give a summary of two or three sentences, the main points, the decisions and the actions.",
+                    all.Length > 13000 ? all[..13000] : all, "minutes", schema, fast: false, ct);
+            }
+            List<string> Take(string key) => (json[key]?.AsArray() ?? new JsonArray()).Select(x => red.Restore(x?.ToString()).Trim()).Where(x => x.Length > 0).ToList();
+            var actions = (json["actions"]?.AsArray() ?? new JsonArray()).Select(a => new ActionItem(
+                red.Restore(a?["what"]?.ToString()).Trim(), Blank(red.Restore(a?["who"]?.ToString())), Blank(red.Restore(a?["due"]?.ToString())))).Where(a => a.What.Length > 0).ToList();
+            return new Minutes(red.Restore(json["summary"]?.ToString()).Trim(), Take("points"), Take("decisions"), actions);
+        }
+
+        private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
         public record DigestChat(string Key, string Name, List<ChatMessage> Messages);
         public record DigestLine(string Key, string Summary, bool Urgent, string? Why);
         public record Digest(string Overview, List<DigestLine> Chats);

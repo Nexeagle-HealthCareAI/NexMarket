@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowDown, ArrowLeft, Check, CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Copy, CornerUpLeft, Download, FileText, Image as ImageIcon,
-  Info, Languages, Lock, MapPin, MessageSquarePlus, Paperclip, Phone, PhoneIncoming, PhoneMissed, Pin, PinOff, Plus, Search, Send, Settings2, SmilePlus, Smile, Sparkles, Tag, Trash2, Upload, Users, Video, X, Zap,
+  Info, Languages, Lock, MapPin, MessageSquarePlus, Paperclip, Phone, PhoneIncoming, PhoneMissed, Pin, PinOff, Plus, Search, Send, Settings2, SmilePlus, Smile, Sparkles, Tag, Trash2, Upload, Users, Video, X, Zap, CalendarPlus,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
@@ -14,6 +14,7 @@ import { lastSeenText, liveText, type Live } from '@/lib/crm/presence';
 import { canAssignBlocks, useAccess, place } from '@/lib/crm/access';
 import { digest, loadChatAi, needsEnglish, saveChatAi, suggestReplies, summarise, taskIdea, translateMessages, useChatAi, type ChatSummary, type Digest, type TaskIdea } from '@/lib/crm/chatAi';
 import { callNoteText, inCallCount, joinCall, live as callLive, startCall, useCalls, type Call, type CallNote } from '@/lib/crm/calls';
+import { MeetingStrip } from '@/components/crm/chat/Meetings';
 import { contactTypeLabel, ErrorBox, friendlyError, initials, Modal, PageHead, Skeleton, useToast } from '@/components/crm/ui';
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -300,8 +301,8 @@ function ChatPage() {
 /** "Huddle · 3" / "In call" next to a chat in the list while a call is going on there. */
 function CallMarker({ c }: { c: Call }) {
   const n = inCallCount(c);
-  const text = c.kind === 'huddle' ? `Huddle${n ? ` · ${n}` : ''}` : c.status === 'ringing' ? 'Calling…' : 'In call';
-  return <span className={`ch-call-mark${c.status === 'ringing' ? ' is-ringing' : ''}`} title={c.kind === 'huddle' ? `Huddle going on · ${n} ${n === 1 ? 'person' : 'people'}` : text}>
+  const text = c.kind === 'meeting' ? `Meeting${n ? ` · ${n}` : ''}` : c.kind === 'huddle' ? `Huddle${n ? ` · ${n}` : ''}` : c.status === 'ringing' ? 'Calling…' : 'In call';
+  return <span className={`ch-call-mark${c.status === 'ringing' ? ' is-ringing' : ''}`} title={c.kind === 'meeting' ? `Meeting going on · ${n} ${n === 1 ? 'person' : 'people'}` : c.kind === 'huddle' ? `Huddle going on · ${n} ${n === 1 ? 'person' : 'people'}` : text}>
     {c.video ? <Video size={11} aria-hidden /> : <Phone size={11} aria-hidden />}{text}</span>;
 }
 
@@ -787,6 +788,8 @@ function Conversation({ thread, office, ping, canTask, callsOn, liveCall, inCall
     finally { setCalling(false); }
   };
   const huddleOn = !!liveCall && liveCall.kind === 'huddle';
+  const [planOpen, setPlanOpen] = useState(false);
+  const inAnyCall = !!useCalls().session;
 
   const insertEmoji = (e: string) => {
     const el = inputRef.current;
@@ -894,6 +897,7 @@ function Conversation({ thread, office, ping, canTask, callsOn, liveCall, inCall
               <button type="button" className="ch-icon" disabled={calling || inCall} onClick={() => void call(true)} aria-label={`Video call ${thread.title}`} title="Video call"><Video size={19} /></button>
             </>
           ))}
+          {office && <button type="button" className="ch-icon" onClick={() => setPlanOpen(true)} aria-label="Plan a meeting in this chat" title="Plan a meeting"><CalendarPlus size={18} /></button>}
           {ai.status.summary && <button type="button" className="ch-icon ch-ai-icon" aria-label="Catch up: sum up this chat" title="Catch up: sum up this chat" aria-pressed={!!summary} onClick={() => (summary ? setSummary(null) : void catchUp())}><Sparkles size={18} /></button>}
           <button type="button" className="ch-icon" aria-label="Search this chat" aria-pressed={searchOpen} onClick={() => setSearchOpen((o) => !o)}><Search size={18} /></button>
           <button type="button" className="ch-icon" aria-label="Chat details and shared files" aria-pressed={infoOpen} onClick={() => setInfoOpen((o) => !o)}><Info size={18} /></button>
@@ -903,7 +907,10 @@ function Conversation({ thread, office, ping, canTask, callsOn, liveCall, inCall
 
         {searchOpen && <ThreadSearch threadId={thread.id} onClose={() => setSearchOpen(false)} onPick={(id) => void jumpTo(id)} />}
 
-        {callsOn && liveCall && <CallBanner c={liveCall} inCall={inCall} busy={calling} onJoin={() => void joinLive()} />}
+        {/* A meeting going on is shown by the meetings strip (with its name), so the plain call banner stays out of the way. */}
+        {callsOn && liveCall && liveCall.kind !== 'meeting' && <CallBanner c={liveCall} inCall={inCall} busy={calling} onJoin={() => void joinLive()} />}
+        <MeetingStrip threadId={thread.id} threadTitle={thread.title} office={office} callsOn={callsOn} inCall={inCall || inAnyCall}
+          ping={ping + (liveCall ? 1 : 0)} planOpen={planOpen} onPlanClose={() => setPlanOpen(false)} showToast={showToast} />
 
         {pinned && (
           <div className="ch-pinned">
@@ -1124,11 +1131,11 @@ function CallPill({ m, note, canCall, team, onCallBack }: { m: ChatMsg; note: Ca
   return (
     <div data-mid={m.id} className={`ch-call-pill${missed && !m.mine ? ' is-missed' : ''}`}>
       <span className="ch-call-pill-body">
-        {missed && !m.mine ? <PhoneMissed size={14} aria-hidden /> : note.video || note.kind === 'huddle' ? <Video size={14} aria-hidden /> : <Phone size={14} aria-hidden />}
+        {missed && !m.mine ? <PhoneMissed size={14} aria-hidden /> : note.video || note.kind !== 'call' ? <Video size={14} aria-hidden /> : <Phone size={14} aria-hidden />}
         <strong>{label}</strong>
-        <span className="ch-call-pill-time">{note.kind !== 'huddle' && !m.mine && m.senderName ? `${m.senderName} · ` : ''}{timeFmt.format(new Date(m.createdAt))}</span>
+        <span className="ch-call-pill-time">{note.kind === 'call' && !m.mine && m.senderName ? `${m.senderName} · ` : ''}{timeFmt.format(new Date(m.createdAt))}</span>
       </span>
-      {canCall && <button type="button" className="ch-call-back" onClick={onCallBack}>{team ? 'Start huddle' : 'Call back'}</button>}
+      {canCall && note.kind !== 'meeting' && <button type="button" className="ch-call-back" onClick={onCallBack}>{team ? 'Start huddle' : 'Call back'}</button>}
     </div>
   );
 }

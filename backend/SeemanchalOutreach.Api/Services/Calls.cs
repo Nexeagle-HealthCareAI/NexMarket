@@ -61,6 +61,12 @@ namespace SeemanchalOutreach.Api.Services
         }
     }
 
+    /// <summary>Calls people walk into rather than being rung for: the Field team huddle and planned meetings.</summary>
+    public static class CallKinds
+    {
+        public static bool IsRoom(string kind) => kind is "huddle" or "meeting";
+    }
+
     public class StartCallDto { public Guid ThreadId { get; set; } public bool Video { get; set; } }
 
     /// <summary>
@@ -240,8 +246,8 @@ namespace SeemanchalOutreach.Api.Services
                 if (t == null) continue;
                 var people = await _db.CallParticipants.AsNoTracking().Where(p => p.CallId == c.Id).ToListAsync(ct);
                 var mineRow = people.FirstOrDefault(p => p.UserId == me);
-                if (mineRow != null && (mineRow.Declined || (mineRow.JoinedAt != null && mineRow.LeftAt == null && c.Kind != "huddle"))) continue;
-                bool forMe = c.Kind == "huddle"
+                if (mineRow != null && (mineRow.Declined || (mineRow.JoinedAt != null && mineRow.LeftAt == null && !CallKinds.IsRoom(c.Kind)))) continue;
+                bool forMe = CallKinds.IsRoom(c.Kind)
                     || (c.Status == "ringing" && c.StartedBy != me && (mineRow != null || (t.Kind == "agent" && office && t.AgentId != me && c.StartedBy == t.AgentId)));
                 if (!forMe) continue;
                 result.Add(Shape(c, t, people));
@@ -320,7 +326,7 @@ namespace SeemanchalOutreach.Api.Services
             {
                 var inCall = await _db.CallParticipants.CountAsync(p => p.CallId == c.Id && p.JoinedAt != null && p.LeftAt == null, ct);
                 if (c.Status == "ringing" && me == c.StartedBy) await CallSweeper.FinishAsync(_db, _notifier, _live, c, "missed", ct);
-                else if (c.Kind == "huddle" ? inCall == 0 : inCall < 2) await CallSweeper.FinishAsync(_db, _notifier, _live, c, c.AnsweredAt != null ? "ended" : "missed", ct);
+                else if (CallKinds.IsRoom(c.Kind) ? inCall == 0 : inCall < 2) await CallSweeper.FinishAsync(_db, _notifier, _live, c, c.AnsweredAt != null ? "ended" : "missed", ct);
                 else await _live.PublishChatAsync(c.ThreadId);
             }
             return Ok(new { ok = true });
@@ -390,7 +396,12 @@ namespace SeemanchalOutreach.Api.Services
 
             var what = c.Video ? "video call" : "voice call";
             var mins = c.AnsweredAt == null ? 0 : (int)Math.Ceiling((c.EndedAt.Value - c.AnsweredAt.Value).TotalMinutes);
-            var text = c.Kind == "huddle"
+            // A planned meeting ends with its call; if it was listened to, its notes are written next (MeetingWorker).
+            var meeting = c.Kind == "meeting" ? await db.Meetings.FirstOrDefaultAsync(m => m.CallId == c.Id, ct) : null;
+            if (meeting != null && meeting.Status == "live") MeetingRules.Close(meeting, c.EndedAt.Value);
+            var text = c.Kind == "meeting"
+                ? $"📅 Meeting{(meeting != null ? $" “{meeting.Title}”" : "")} · {Math.Max(1, mins)} min · {people.Count(p => p.JoinedAt != null)} joined"
+                : c.Kind == "huddle"
                 ? $"{(c.Video ? "📹" : "📞")} Huddle · {Math.Max(1, mins)} min · {people.Count(p => p.JoinedAt != null)} joined"
                 : status switch
                 {

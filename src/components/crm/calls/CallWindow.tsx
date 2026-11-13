@@ -5,10 +5,11 @@ import {
   ConnectionQuality, MediaDeviceFailure, Room, RoomEvent, Track,
   type Participant, type RemoteTrack, type Track as AnyTrack,
 } from 'livekit-client';
-import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, PhoneOff, Signal, Video, VideoOff, Volume2 } from 'lucide-react';
+import { Maximize2, Mic, MicOff, Minimize2, MonitorUp, NotebookPen, PhoneOff, Signal, Square, Video, VideoOff, Volume2 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { useNow } from '@/lib/crm/live';
 import { clock, endSession, leaveCall, updateCall, useCalls, type Call, type CallSession } from '@/lib/crm/calls';
+import { finishMeeting, meetingForCall, NotesListener, setAiNotes, type Meeting, type NotesState } from '@/lib/crm/meetings';
 import { initials } from '@/components/crm/ui';
 
 type Phase = 'connecting' | 'connected' | 'reconnecting' | 'failed';
@@ -46,7 +47,13 @@ export default function CallWindow({ session }: { session: CallSession }) {
   const now = useNow(1000);
   const hadRemote = useRef(false);
   const leaving = useRef(false);
-  const isHuddle = call.kind === 'huddle';
+  // A huddle or a meeting: a room people walk into, not a call that rings.
+  const isHuddle = call.kind === 'huddle' || call.kind === 'meeting';
+  const isMeeting = call.kind === 'meeting';
+  const [meeting, setMeeting] = useState<Meeting | null>(null);
+  const [notes, setNotes] = useState<NotesState>({ listening: false, sent: 0, failed: 0 });
+  const [notesBusy, setNotesBusy] = useState(false);
+  const listener = useRef<NotesListener | null>(null);
 
   // Connect once; leave the room when the window closes.
   useEffect(() => {
@@ -121,6 +128,54 @@ export default function CallWindow({ session }: { session: CallSession }) {
     return () => clearInterval(t);
   }, [call.id, ringingNow, ended, ringSeconds]);
 
+  // A meeting: its name, and whether AI notes are on (everyone in the call must be able to see that).
+  useEffect(() => {
+    if (!isMeeting || ended) return;
+    let live = true;
+    const load = () => meetingForCall(call.id).then((m) => { if (live) setMeeting(m); }).catch(() => undefined);
+    void load();
+    const t = setInterval(load, 6000);
+    return () => { live = false; clearInterval(t); };
+  }, [isMeeting, call.id, ended]);
+
+  // My browser is the one listening: start when AI notes are on and I turned them on, stop when someone turns them off.
+  const iListen = !!meeting?.aiNotes && !!meeting.iTakeNotes;
+  useEffect(() => {
+    if (!room || !meeting) return;
+    if (iListen && !listener.current && NotesListener.supported()) {
+      const l = new NotesListener(room, meeting.id, setNotes);
+      listener.current = l;
+      void l.start().catch(() => setNotes((n) => ({ ...n, error: 'This browser could not start listening for AI notes.' })));
+    } else if (!iListen && listener.current) {
+      const l = listener.current;
+      listener.current = null;
+      void l.stop();
+    }
+    // Only the on/off state matters here, not every refresh of the meeting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room, iListen, meeting?.id]);
+  // The window closing for any reason: send what was heard so far.
+  useEffect(() => () => { void listener.current?.stop(); listener.current = null; }, []);
+
+  const toggleNotes = async () => {
+    if (!meeting || notesBusy) return;
+    setNotesBusy(true);
+    try { setMeeting(await setAiNotes(meeting.id, !meeting.aiNotes)); setMediaError(null); }
+    catch (e) { setMediaError(/"message":"([^"]+)"/.exec(e instanceof Error ? e.message : '')?.[1] ?? "AI notes couldn't be changed just now."); }
+    finally { setNotesBusy(false); }
+  };
+  const endForAll = async () => {
+    if (!meeting || notesBusy) return;
+    setNotesBusy(true);
+    leaving.current = true;
+    try {
+      // Send the last piece first, so the notes include the end of the meeting.
+      if (listener.current) { const l = listener.current; listener.current = null; await l.stop(); }
+      await finishMeeting(meeting.id);
+    } catch { /* leaving still works */ }
+    void leaveCall();
+  };
+
   // Escape leaves full screen.
   useEffect(() => {
     if (!expanded) return;
@@ -159,11 +214,20 @@ export default function CallWindow({ session }: { session: CallSession }) {
     if (session.video || camOn) { try { await lp.setCameraEnabled(true); } catch (e) { setMediaError(mediaMessage(e, 'camera')); } }
     setTick((n) => n + 1);
   };
-  const hangUp = () => { leaving.current = true; void leaveCall(); };
+  const hangUp = async () => {
+    leaving.current = true;
+    // I was the one listening: send the last piece and tell everyone AI notes are off, then leave.
+    if (listener.current && meeting) {
+      const l = listener.current;
+      listener.current = null;
+      try { await l.stop(); await setAiNotes(meeting.id, false); } catch { /* the meeting's end closes it anyway */ }
+    }
+    void leaveCall();
+  };
 
   // What the header says.
   const other = call.people.find((p) => p.userId !== call.startedBy)?.name;
-  const title = isHuddle ? 'Huddle · Field team' : call.mine ? (session.threadTitle ?? other ?? 'Call') : call.startedByName;
+  const title = isMeeting ? (meeting?.title ?? session.threadTitle ?? 'Meeting') : isHuddle ? 'Huddle · Field team' : call.mine ? (session.threadTitle ?? other ?? 'Call') : call.startedByName;
   const started = call.answeredAt ? new Date(call.answeredAt).getTime() : connectedAt;
   const status = ended ?? (phase === 'connecting' ? 'Connecting…' : phase === 'failed' ? "Couldn't connect to the call server"
     : phase === 'reconnecting' ? 'Reconnecting…'
@@ -177,7 +241,7 @@ export default function CallWindow({ session }: { session: CallSession }) {
   const cols = tiles.length <= 1 ? 1 : tiles.length <= 4 ? 2 : tiles.length <= 9 ? 3 : 4;
 
   return (
-    <section className={`cl-win${expanded ? ' is-full' : ''}`} role="region" aria-label={`${isHuddle ? 'Huddle' : call.video ? 'Video call' : 'Voice call'} with ${title}`}>
+    <section className={`cl-win${expanded ? ' is-full' : ''}`} role="region" aria-label={isMeeting ? `Meeting: ${title}` : `${isHuddle ? 'Huddle' : call.video ? 'Video call' : 'Voice call'} with ${title}`}>
       <header className="cl-head">
         <span className="cl-head-text">
           <strong>{title}</strong>
@@ -188,6 +252,18 @@ export default function CallWindow({ session }: { session: CallSession }) {
           {expanded ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
         </button>
       </header>
+
+      {meeting?.aiNotes && !ended && (
+        <div className="cl-notes" role="status">
+          <span className="cl-notes-dot" aria-hidden />
+          <span>
+            <strong>AI notes are on.</strong> What is said is being turned into text for the minutes. The sound is not kept.
+            {meeting.iTakeNotes && notes.listening ? ` ${notes.sent} min sent${notes.failed ? `, ${notes.failed} missed` : ''}.` : ''}
+            {meeting.iTakeNotes && !NotesListener.supported() ? ' This browser cannot listen: use Chrome or Edge.' : ''}
+          </span>
+        </div>
+      )}
+      {meeting?.iTakeNotes && notes.error && !ended && <div className="cl-alert" role="alert"><span>{notes.error}</span></div>}
 
       <div className={`cl-stage${oneToOne ? ' is-one' : ''}`} style={oneToOne ? undefined : { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {oneToOne ? (
@@ -223,9 +299,20 @@ export default function CallWindow({ session }: { session: CallSession }) {
             <MonitorUp size={18} aria-hidden />
           </button>
         )}
-        <button type="button" className="cl-ctl is-hangup" onClick={hangUp} aria-label={isHuddle ? 'Leave huddle' : 'Hang up'} title={isHuddle ? 'Leave huddle' : 'Hang up'}>
+        {meeting?.office && (
+          <button type="button" className={`cl-ctl is-wide${meeting.aiNotes ? ' is-on' : ''}`} onClick={() => void toggleNotes()} disabled={!lp || notesBusy}
+            aria-pressed={meeting.aiNotes} title={meeting.aiNotes ? 'Stop AI notes' : 'Everyone in the meeting is told. The sound is not kept.'}>
+            <NotebookPen size={17} aria-hidden /> {meeting.aiNotes ? 'Stop AI notes' : 'AI notes'}
+          </button>
+        )}
+        <button type="button" className="cl-ctl is-hangup" onClick={() => void hangUp()} aria-label={isMeeting ? 'Leave the meeting' : isHuddle ? 'Leave huddle' : 'Hang up'} title={isMeeting ? 'Leave the meeting' : isHuddle ? 'Leave huddle' : 'Hang up'}>
           <PhoneOff size={18} aria-hidden />
         </button>
+        {meeting?.office && (
+          <button type="button" className="cl-ctl is-wide is-end" onClick={() => void endForAll()} disabled={notesBusy} title="Ends the meeting for everyone">
+            <Square size={14} aria-hidden /> End for all
+          </button>
+        )}
       </footer>
     </section>
   );

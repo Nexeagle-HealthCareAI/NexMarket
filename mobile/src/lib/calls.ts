@@ -17,13 +17,15 @@ import type { TFn } from '../i18n';
 export interface CallPerson { userId: string; name: string; joinedAt?: string | null; leftAt?: string | null; declined?: boolean; inCall?: boolean }
 export type CallStatus = 'ringing' | 'active' | 'ended' | 'missed' | 'declined';
 export interface Call {
-  id: string; threadId: string; threadKind: 'agent' | 'team' | 'direct'; kind: 'call' | 'huddle'; video: boolean; status: CallStatus;
+  id: string; threadId: string; threadKind: 'agent' | 'team' | 'direct'; kind: 'call' | 'huddle' | 'meeting'; video: boolean; status: CallStatus;
   startedBy: string; startedByName: string; mine: boolean; startedAt: string; answeredAt?: string | null; endedAt?: string | null; seconds?: number | null;
   people: CallPerson[];
 }
 export interface CallJoin { url: string; room: string; token: string }
 /** What a chat message says about a call that ended (system message written by the server). */
-export interface CallNote { id: string; kind: 'call' | 'huddle'; video: boolean; status: CallStatus; seconds?: number | null }
+/** A huddle or a planned meeting: people walk in and out, nobody is rung. */
+export const isRoom = (kind?: string | null) => kind === 'huddle' || kind === 'meeting';
+export interface CallNote { id: string; kind: 'call' | 'huddle' | 'meeting'; video: boolean; status: CallStatus; seconds?: number | null }
 
 // ─── Small change-notification helper ───
 function store<T>(initial: T) {
@@ -68,7 +70,7 @@ export function useCallsStatus(): CallsStatus {
 }
 
 // ─── The one call running on this phone ───
-export interface CurrentCall { id: string; threadId: string; video: boolean; kind: 'call' | 'huddle'; join: CallJoin; call: Call }
+export interface CurrentCall { id: string; threadId: string; video: boolean; kind: 'call' | 'huddle' | 'meeting'; join: CallJoin; call: Call }
 const currentStore = store<CurrentCall | null>(null);
 export const currentCall = () => currentStore.get();
 export const useCurrentCall = () => currentStore.use();
@@ -180,7 +182,7 @@ export function useActiveCalls(poll = false): Call[] {
 
 /** A call in this chat that is going on (or a huddle still ringing), for the "Join" banner. */
 export function liveCallIn(list: Call[], threadId: string): Call | null {
-  return list.find((c) => c.threadId === threadId && (c.status === 'active' || (c.kind === 'huddle' && c.status === 'ringing'))) ?? null;
+  return list.find((c) => c.threadId === threadId && (c.status === 'active' || (isRoom(c.kind) && c.status === 'ringing'))) ?? null;
 }
 /** Somebody is calling me (a 1:1 call still ringing that I didn't start). */
 export const ringingForMe = (list: Call[]) => list.find((c) => c.kind === 'call' && c.status === 'ringing' && !c.mine) ?? null;
@@ -226,12 +228,12 @@ export function callLength(t: TFn, seconds: number): string {
 
 /** The line for a call in the chat: "Missed video call", "Voice call · 3 min", "Huddle · 12 min", "Call declined". */
 export function callNoteText(t: TFn, c: CallNote, mine: boolean): string {
-  const kind = c.kind === 'huddle' ? t('clHuddle') : c.video ? t('clVideoCall') : t('clVoiceCall');
+  const kind = c.kind === 'meeting' ? t('mtMeeting') : c.kind === 'huddle' ? t('clHuddle') : c.video ? t('clVideoCall') : t('clVoiceCall');
   if (c.status === 'declined') return t('clDeclinedMsg');
   if (c.status === 'missed') return mine ? `${kind} · ${t('clNoAnswer')}` : c.video ? t('clMissedVideo') : t('clMissedVoice');
   return c.seconds ? `${kind} · ${callLength(t, c.seconds)}` : kind;
 }
-export const callEmoji = (c: { kind: string; video: boolean }) => (c.kind === 'huddle' ? '👥' : c.video ? '📹' : '📞');
+export const callEmoji = (c: { kind: string; video: boolean }) => (c.kind === 'meeting' ? '📅' : c.kind === 'huddle' ? '👥' : c.video ? '📹' : '📞');
 
 /**
  * The chat list's preview when the server wrote it in English (e.g. "📹 Missed video call", "📞 Voice call · 3 min"):
@@ -261,4 +263,27 @@ export function callErrorText(t: TFn, e: unknown): string {
   if (c.code === 'busy') return t('clBusy');
   if (c.code === 'refused') return c.message && c.message !== 'refused' ? c.message : t('clCantJoin');
   return t('clCantStart');
+}
+
+// ─── Meetings planned in a chat ───
+
+export interface Meeting {
+  id: string; threadId: string; title: string; agenda?: string | null; startsAt: string; minutes: number; video: boolean;
+  status: 'scheduled' | 'live' | 'done' | 'cancelled' | 'missed'; callId?: string | null;
+  /** Being listened to for notes right now. */
+  aiNotes: boolean; canJoin: boolean; createdByName: string;
+}
+export const meetingsIn = (threadId: string) => get<Meeting[]>(`/api/v1/meetings?threadId=${encodeURIComponent(threadId)}`);
+export const meetingForCall = (callId: string) => get<Meeting>(`/api/v1/meetings/call/${callId}`);
+
+/** Opens the meeting's room (the first person in starts it) and joins its call on this phone. */
+export async function joinMeeting(id: string): Promise<CurrentCall> {
+  const cur = currentCall();
+  if (cur) throw new CallError('busy');
+  const why = await cannotCall();
+  if (why) throw why;
+  let callId: string;
+  try { callId = (await post<{ callId: string }>(`/api/v1/meetings/${id}/join`, {}, 20000)).callId; }
+  catch (e) { throw wrap(e); }
+  return joinCall(callId);
 }

@@ -2898,3 +2898,28 @@ div.wk-stat { cursor: default; }
 .ai-suggested { border: 1px solid #f5d9a8; background: #fffaf0; }
 .ai-suggested h3 { margin: 0 0 10px; font-size: 15px; }
 .ai-lessons li.is-proposed { align-items: center; border-color: #f5d9a8; }
+
+/* ─── Meetings in chat ─── */
+.cl-notes { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; background: #3b1d12; color: #ffd9c7; font-size: 12.5px; line-height: 1.4; border-bottom: 1px solid rgba(255,255,255,.08); }
+.cl-notes strong { color: #fff; }
+.cl-notes-dot { flex: none; width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: #ff6b4a; animation: clNotesDot 1.4s ease-in-out infinite; }
+@keyframes clNotesDot { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .cl-notes-dot { animation: none; } }
+.cl-ctl.is-wide { width: auto; padding: 0 12px; gap: 6px; font-size: 12.5px; font-weight: 700; border-radius: 22px; }
+.cl-ctl.is-wide.is-on { background: #ff6b4a; color: #1b0d07; }
+.cl-ctl.is-end { background: transparent; border: 1px solid rgba(255,255,255,.28); color: #fff; }
+.ch-meet { display: flex; flex-direction: column; border-bottom: 1px solid var(--line); background: var(--surface, #fff); }
+.ch-meet-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; font-size: 13.5px; }
+.ch-meet-row + .ch-meet-row { border-top: 1px solid var(--line); }
+.ch-meet-row.is-live { background: var(--ok-soft); color: var(--ok-ink); }
+.ch-meet-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ch-meet-text strong { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-meet-text span { font-size: 12.5px; color: var(--muted, #5a6478); }
+.ch-meet-row.is-live .ch-meet-text span { color: inherit; }
+.ch-meet-more { background: transparent; border: 0; color: var(--accent-ink); font: inherit; font-size: 12.5px; font-weight: 700; padding: 6px 14px 8px; text-align: left; cursor: pointer; }
+.ch-meet-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ch-meet-form .is-all { grid-column: 1 / -1; }
+.ch-meet-note { font-size: 13px; color: var(--muted, #5a6478); line-height: 1.45; margin: 0; }
+@media (max-width: 560px) { .ch-meet-form { grid-template-columns: 1fr; } .ch-meet-row { flex-wrap: wrap; } }
+.cl-ctl.is-wide { white-space: nowrap; }
+.cl-bar { flex-wrap: wrap; row-gap: 8px; }

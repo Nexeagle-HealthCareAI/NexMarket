@@ -58,6 +58,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
         public DbSet<ChatRead> ChatReads => Set<ChatRead>();
         public DbSet<CallSession> CallSessions => Set<CallSession>();
+        public DbSet<Meeting> Meetings => Set<Meeting>();
         public DbSet<CallParticipant> CallParticipants => Set<CallParticipant>();
         public DbSet<Hoarding> Hoardings => Set<Hoarding>();
         public DbSet<HoardingOwner> HoardingOwners => Set<HoardingOwner>();
@@ -579,6 +580,14 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("hoarding_photos");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.HoardingId);
+            });
+            modelBuilder.Entity<Meeting>(entity =>
+            {
+                entity.ToTable("meetings");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.ThreadId, e.StartsAt });
+                entity.HasIndex(e => new { e.Status, e.StartsAt });
+                entity.HasIndex(e => e.CallId);
             });
             modelBuilder.Entity<CallSession>(entity =>
             {
