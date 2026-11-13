@@ -329,10 +329,18 @@ const APP_SLIDES = [
   { img: '/appshots/partner.webp', title: 'Visits with proof', line: 'Each visit is saved with its time and place, even with no signal.', alt: 'One partner’s screen in the app: call, WhatsApp, the follow-up due, patients sent, and Visit done and Refer patient buttons.' },
 ];
 
+const WHY = [
+  { title: 'One place for every lead', line: 'WhatsApp, Facebook, Instagram, camps and partner referrals, followed up to your door.' },
+  { title: 'A field team you can see', line: 'Shifts, visits and routes from the agents’ phones, even without signal.' },
+  { title: 'Results as patients', line: 'What each campaign and partner really brought in.' },
+];
+const TABS = ['Why NexEagle', ...APP_SLIDES.map((s) => s.title)];
+
 /**
- * Four screens of the field agents' Android app, one at a time and large, each with a few words on what it gives the
- * manager. It moves on by itself every six seconds; it stops while the pointer or keyboard is on it, and never moves
- * for people who have asked their device for less motion.
+ * Beside the sign-in form: first why NexEagle (three short points), then four screens of the field agents' Android
+ * app, one at a time and large, each with a few words on what it gives the manager. It moves on by itself (the
+ * first one stays a little longer); it stops while the pointer or keyboard is on it, and never moves for people who
+ * have asked their device for less motion.
  */
 function AppShowcase() {
   const [at, setAt] = useState(0);
@@ -340,26 +348,31 @@ function AppShowcase() {
   useEffect(() => {
     if (held) return;
     if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-    const t = setInterval(() => setAt((n) => (n + 1) % APP_SLIDES.length), 6000);
-    return () => clearInterval(t);
-  }, [held]);
-  const slide = APP_SLIDES[at];
+    const t = setTimeout(() => setAt((n) => (n + 1) % TABS.length), at === 0 ? 9000 : 6000);
+    return () => clearTimeout(t);
+  }, [held, at]);
+  const slide = at > 0 ? APP_SLIDES[at - 1] : null;
   return (
-    <div className="lg-show" onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)} onFocus={() => setHeld(true)} onBlur={() => setHeld(false)}>
-      <div className="lg-phone">
+    <div className={`lg-show${slide ? '' : ' is-why'}`} onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)} onFocus={() => setHeld(true)} onBlur={() => setHeld(false)}>
+      {/* The phone stays in the page while "Why" shows, so its pictures are ready the moment it comes in. */}
+      <div className="lg-phone" hidden={!slide}>
         {APP_SLIDES.map((s, i) => (
           // eslint-disable-next-line @next/next/no-img-element -- four small local pictures, cross-faded
-          <img key={s.img} src={s.img} alt={i === at ? s.alt : ''} aria-hidden={i !== at} className={i === at ? 'is-on' : ''} width={640} height={1385} loading={i === 0 ? 'eager' : 'lazy'} decoding="async" />
+          <img key={s.img} src={s.img} alt={i === at - 1 ? s.alt : ''} aria-hidden={i !== at - 1} className={i === at - 1 || (!slide && i === 0) ? 'is-on' : ''} width={640} height={1385} decoding="async" />
         ))}
       </div>
       <div className="lg-show-text">
-        <p className="lg-kicker">Android app for your field team</p>
-        <h1>{slide.title}</h1>
-        <p className="lg-show-line" aria-live="polite">{slide.line}</p>
-        <div className="lg-show-tabs" role="group" aria-label="App screens">
-          {APP_SLIDES.map((s, i) => (
-            <button key={s.img} type="button" className={i === at ? 'is-on' : ''} aria-pressed={i === at} onClick={() => { setAt(i); setHeld(true); }}>
-              <span aria-hidden="true">{i + 1}</span>{s.title}
+        <p className="lg-kicker">{slide ? 'Android app for your field team' : 'Why NexEagle'}</p>
+        <h1>{slide ? slide.title : 'Every lead, partner and patient in one place.'}</h1>
+        {slide ? <p className="lg-show-line" aria-live="polite">{slide.line}</p> : (
+          <ul className="lg-why">
+            {WHY.map((w) => <li key={w.title}><strong>{w.title}</strong>{w.line}</li>)}
+          </ul>
+        )}
+        <div className={`lg-show-tabs${slide ? '' : ' is-row'}`} role="group" aria-label="What to show">
+          {TABS.map((title, i) => (
+            <button key={title} type="button" className={i === at ? 'is-on' : ''} aria-pressed={i === at} onClick={() => { setAt(i); setHeld(true); }}>
+              {i > 0 && <span aria-hidden="true">{i}</span>}{title}
             </button>
           ))}
         </div>
