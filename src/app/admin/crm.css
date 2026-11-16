@@ -2971,6 +2971,8 @@ div.wk-stat { cursor: default; }
 .ms-waiting li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px solid #f0d9a8; background: #fff8ea; border-radius: 12px; }
 .ms-w-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ms-filter { padding: 16px 22px 4px; }
+.ms-h { margin: 8px 0 0; }
+.ms-allclear { display: flex; align-items: center; gap: 8px; color: #0b6b4a; font-weight: 600; }
 .ms-rejected td { color: var(--text-2); }
 .ms-form { display: grid; gap: 14px; }
 .ms-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }

@@ -46,7 +46,7 @@ function BalanceText({ b }: { b: Balance }) {
   return <Pill tone="ok">Settled</Pill>;
 }
 
-type Tab = 'days' | 'entries' | 'people';
+type Tab = 'work' | 'analytics';
 type Range = 'today' | 'week' | 'month' | 'last30' | 'custom';
 
 /**
@@ -61,7 +61,7 @@ export default function SpendPage() {
   const [to, setTo] = useState('');
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>('days');
+  const [tab, setTab] = useState<Tab>('work');
   const [cat, setCat] = useState('');
   const [toast, showToast] = useToast();
   const [form, setForm] = useState<{ edit?: Expense; day?: string } | null>(null);
@@ -134,142 +134,144 @@ export default function SpendPage() {
         <span className="crm-sub">{dayText(data.from, true)} to {dayText(data.to, true)}</span>
       </div>
 
-      <div className="crm-kpis">
-        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Spent in these days</span><span className="crm-kpi-value">{rs(data.total)}</span><span className="crm-sub">{nDays ? `${rs(Math.round(data.total / nDays))} a day over ${nDays} ${nDays === 1 ? 'day' : 'days'} with spending` : 'Nothing entered yet'}</span></div>
-        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Waiting for approval</span><span className="crm-kpi-value">{data.waiting.length}</span><span className="crm-sub">{data.waiting.length ? `${rs(waitingSum)} sent by agents` : 'Nothing waiting'}</span></div>
-        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Held by people</span><span className="crm-kpi-value">{rs(data.held)}</span><span className="crm-sub">Advances not yet spent or returned</span></div>
-        <div className="crm-card crm-kpi"><span className="crm-kpi-label">We owe people</span><span className="crm-kpi-value">{rs(data.owed)}</span><span className="crm-sub">Spent from their own pocket, to settle</span></div>
+      <div className="crm-tabs" role="tablist" aria-label="Marketing spend views">
+        <button type="button" role="tab" className="crm-tab" aria-selected={tab === 'work'} onClick={() => setTab('work')}>Expenses and approvals{data.waiting.length ? <span className="an-count">{data.waiting.length}</span> : null}</button>
+        <button type="button" role="tab" className="crm-tab" aria-selected={tab === 'analytics'} onClick={() => setTab('analytics')}>Analytics</button>
       </div>
 
-      <section className="crm-card so-card">
-        <h2 className="crm-h2" style={{ margin: 0 }}>Where it went</h2>
-        <ul className="ms-cats">
-          {cats.map((c) => {
-            const v = data.byCategory[c.key] ?? 0;
-            return (
-              <li key={c.key}>
-                <span className="ms-cat-name"><i style={{ background: COLOR[c.key] }} aria-hidden />{c.label}</span>
-                <span className="ms-cat-bar" aria-hidden><i style={{ width: `${(v / top) * 100}%`, background: COLOR[c.key] }} /></span>
-                <span className="ms-cat-amt">{rs(v)}</span>
-                <span className="ms-cat-pct">{data.total ? `${Math.round((v / data.total) * 100)}%` : '—'}</span>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+      {tab === 'work' && (
+        <>
+        {data.waiting.length === 0 && <section className="crm-card so-card"><p className="ms-allclear" style={{ margin: 0 }}><Check size={16} aria-hidden /> Nothing is waiting for approval.</p></section>}
+        {data.waiting.length > 0 && (
+          <section className="crm-card so-card">
+            <h2 className="crm-h2" style={{ margin: 0 }}>Waiting for approval <span className="crm-sub">· sent from the app; they count only once approved</span></h2>
+            <ul className="ms-waiting">
+              {data.waiting.map((e) => (
+                <li key={e.id}>
+                  <div className="ms-w-main">
+                    <strong>{rs(e.amount)} · {label[e.category] ?? e.category}</strong>
+                    <span className="crm-sub">{e.agentName} · {dayText(e.spentOn, true)}{e.note ? ` · ${e.note}` : ''}</span>
+                  </div>
+                  <span className="sp-actions">
+                    {e.hasBill ? <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setBill(e)}><Receipt size={14} aria-hidden /> Bill</button> : <span className="crm-sub">No bill photo</span>}
+                    {editable && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setForm({ edit: e })}><Pencil size={14} aria-hidden /> Correct</button>}
+                    {editable && <button type="button" className="crm-btn is-secondary is-sm" disabled={busyId === e.id} onClick={() => setReject(e)}><X size={14} aria-hidden /> Reject</button>}
+                    {editable && <button type="button" className="crm-btn is-sm" disabled={busyId === e.id} onClick={() => void decide(e, true)}><Check size={14} aria-hidden /> Approve</button>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+          <h2 className="crm-h2 ms-h">People and balances <span className="crm-sub">· {rs(data.held)} held by people · we owe {rs(data.owed)}</span></h2>
+          <section className="crm-card">
+            {data.people.length === 0 ? (
+              <Empty title="Nobody holds money yet"><span className="crm-sub">Give a person an advance, or approve an expense they added: they appear here with their balance.</span>{editable && <button type="button" className="crm-btn is-sm" onClick={() => setMove({ kind: 'given' })}>Give money</button>}</Empty>
+            ) : (
+              <div className="crm-table-wrap">
+                <table className="crm-table">
+                  <thead><tr><th scope="col">Person</th><th scope="col" className="wb-num">Given</th><th scope="col" className="wb-num">Returned</th><th scope="col" className="wb-num">Spent</th><th scope="col" className="wb-num">Waiting</th><th scope="col">Balance</th>{editable && <th scope="col"><span className="crm-sr">Actions</span></th>}</tr></thead>
+                  <tbody>
+                    {data.people.map((p) => (
+                      <tr key={p.agentId}>
+                        <td><button type="button" className="wa-link" onClick={() => setPerson(p.agentId)}>{p.name}</button><span className="crm-cell-sub" style={{ display: 'block' }}>{p.agentId}</span></td>
+                        <td className="wb-num">{rs(p.balance.given)}</td>
+                        <td className="wb-num">{rs(p.balance.returned)}</td>
+                        <td className="wb-num">{rs(p.balance.spent)}</td>
+                        <td className="wb-num">{p.balance.pending ? rs(p.balance.pending) : <span className="crm-sub">—</span>}</td>
+                        <td><BalanceText b={p.balance} /></td>
+                        {editable && <td><span className="sp-actions" style={{ justifyContent: 'flex-end' }}>
+                          {p.balance.net < 0 && <button type="button" className="crm-btn is-sm" onClick={() => setMove({ agentId: p.agentId, kind: 'given', amount: p.balance.owed })}>Settle {rs(p.balance.owed)}</button>}
+                          {p.balance.net > 0 && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setMove({ agentId: p.agentId, kind: 'returned', amount: p.balance.holds })}><Undo2 size={14} aria-hidden /> Took back {rs(p.balance.holds)}</button>}
+                          <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setMove({ agentId: p.agentId, kind: 'given' })}>Give money</button>
+                        </span></td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+          <h2 className="crm-h2 ms-h">Entries <span className="crm-sub">· {dayText(data.from)} to {dayText(data.to)}</span></h2>
+          <section className="crm-card">
+            <div className="crm-chips ms-filter" role="group" aria-label="Kind of spend">
+              <button type="button" className="crm-chip" aria-pressed={!cat} onClick={() => setCat('')}>All kinds</button>
+              {cats.map((c) => <button key={c.key} type="button" className="crm-chip" aria-pressed={cat === c.key} onClick={() => setCat(c.key)}>{c.label}</button>)}
+            </div>
+            {entries.length === 0 ? <Empty title="No entries here" /> : (
+              <div className="crm-table-wrap">
+                <table className="crm-table">
+                  <thead><tr><th scope="col">Day</th><th scope="col">Kind</th><th scope="col">For</th><th scope="col">Paid by</th><th scope="col" className="wb-num">Amount</th><th scope="col">Bill</th>{editable && <th scope="col"><span className="crm-sr">Actions</span></th>}</tr></thead>
+                  <tbody>
+                    {entries.map((e) => (
+                      <tr key={e.id} className={e.status === 'rejected' ? 'ms-rejected' : undefined}>
+                        <td style={{ whiteSpace: 'nowrap' }}>{dayText(e.spentOn)}</td>
+                        <td><span className="ms-cat-name"><i style={{ background: COLOR[e.category] }} aria-hidden />{label[e.category] ?? e.category}</span></td>
+                        <td>{e.note || <span className="crm-sub">—</span>}{e.status === 'rejected' && <span className="crm-cell-sub" style={{ display: 'block' }}>Not approved: {e.rejectReason}</span>}</td>
+                        <td>{e.paidBy === 'person' ? <button type="button" className="wa-link" onClick={() => setPerson(e.agentId!)}>{e.agentName}</button> : 'Organisation'}<span className="crm-cell-sub" style={{ display: 'block' }}>entered by {e.createdByName}</span></td>
+                        <td className="wb-num">{e.status === 'rejected' ? <s>{rs(e.amount)}</s> : <strong>{rs(e.amount)}</strong>}</td>
+                        <td>{e.hasBill ? <button type="button" className="wa-link" onClick={() => setBill(e)}>See bill</button> : <span className="crm-sub">—</span>}</td>
+                        {editable && <td><span className="sp-actions" style={{ justifyContent: 'flex-end' }}>
+                          <button type="button" className="crm-btn is-secondary is-sm" aria-label={`Change ${rs(e.amount)} ${label[e.category] ?? ''}`} onClick={() => setForm({ edit: e })}><Pencil size={14} aria-hidden /></button>
+                          <button type="button" className="crm-btn is-secondary is-sm" aria-label={`Take out ${rs(e.amount)} ${label[e.category] ?? ''}`} disabled={busyId === e.id} onClick={() => void remove(e)}><Trash2 size={14} aria-hidden /></button>
+                        </span></td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </>
+      )}
 
-      {data.waiting.length > 0 && (
+      {tab === 'analytics' && (
+        <>
+        <div className="crm-kpis">
+          <div className="crm-card crm-kpi"><span className="crm-kpi-label">Spent in these days</span><span className="crm-kpi-value">{rs(data.total)}</span><span className="crm-sub">{nDays ? `${rs(Math.round(data.total / nDays))} a day over ${nDays} ${nDays === 1 ? 'day' : 'days'} with spending` : 'Nothing entered yet'}</span></div>
+          <div className="crm-card crm-kpi"><span className="crm-kpi-label">Waiting for approval</span><span className="crm-kpi-value">{data.waiting.length}</span><span className="crm-sub">{data.waiting.length ? `${rs(waitingSum)} sent by agents` : 'Nothing waiting'}</span></div>
+          <div className="crm-card crm-kpi"><span className="crm-kpi-label">Held by people</span><span className="crm-kpi-value">{rs(data.held)}</span><span className="crm-sub">Advances not yet spent or returned</span></div>
+          <div className="crm-card crm-kpi"><span className="crm-kpi-label">We owe people</span><span className="crm-kpi-value">{rs(data.owed)}</span><span className="crm-sub">Spent from their own pocket, to settle</span></div>
+        </div>
+
         <section className="crm-card so-card">
-          <h2 className="crm-h2" style={{ margin: 0 }}>Waiting for approval <span className="crm-sub">· sent from the app; they count only once approved</span></h2>
-          <ul className="ms-waiting">
-            {data.waiting.map((e) => (
-              <li key={e.id}>
-                <div className="ms-w-main">
-                  <strong>{rs(e.amount)} · {label[e.category] ?? e.category}</strong>
-                  <span className="crm-sub">{e.agentName} · {dayText(e.spentOn, true)}{e.note ? ` · ${e.note}` : ''}</span>
-                </div>
-                <span className="sp-actions">
-                  {e.hasBill ? <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setBill(e)}><Receipt size={14} aria-hidden /> Bill</button> : <span className="crm-sub">No bill photo</span>}
-                  {editable && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setForm({ edit: e })}><Pencil size={14} aria-hidden /> Correct</button>}
-                  {editable && <button type="button" className="crm-btn is-secondary is-sm" disabled={busyId === e.id} onClick={() => setReject(e)}><X size={14} aria-hidden /> Reject</button>}
-                  {editable && <button type="button" className="crm-btn is-sm" disabled={busyId === e.id} onClick={() => void decide(e, true)}><Check size={14} aria-hidden /> Approve</button>}
-                </span>
-              </li>
-            ))}
+          <h2 className="crm-h2" style={{ margin: 0 }}>Where it went</h2>
+          <ul className="ms-cats">
+            {cats.map((c) => {
+              const v = data.byCategory[c.key] ?? 0;
+              return (
+                <li key={c.key}>
+                  <span className="ms-cat-name"><i style={{ background: COLOR[c.key] }} aria-hidden />{c.label}</span>
+                  <span className="ms-cat-bar" aria-hidden><i style={{ width: `${(v / top) * 100}%`, background: COLOR[c.key] }} /></span>
+                  <span className="ms-cat-amt">{rs(v)}</span>
+                  <span className="ms-cat-pct">{data.total ? `${Math.round((v / data.total) * 100)}%` : '—'}</span>
+                </li>
+              );
+            })}
           </ul>
         </section>
-      )}
-
-      <div className="crm-tabs" role="tablist" aria-label="Marketing spend views">
-        {([['days', 'Day by day'], ['entries', `Entries · ${data.items.length}`], ['people', `People and balances · ${data.people.length}`]] as [Tab, string][]).map(([k, l]) => (
-          <button key={k} type="button" role="tab" className="crm-tab" aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>
-        ))}
-      </div>
-
-      {tab === 'days' && (
-        <section className="crm-card">
-          {data.days.length === 0 ? <Empty title="No spending in these days">{editable && <button type="button" className="crm-btn is-sm" onClick={() => setForm({})}>Add expense</button>}</Empty> : (
-            <div className="crm-table-wrap">
-              <table className="crm-table">
-                <thead><tr><th scope="col">Day</th>{cats.map((c) => <th key={c.key} scope="col" className="wb-num">{c.label}</th>)}<th scope="col" className="wb-num">Total</th>{editable && <th scope="col"><span className="crm-sr">Add</span></th>}</tr></thead>
-                <tbody>
-                  {data.days.map((d) => (
-                    <tr key={d.date}>
-                      <th scope="row" className="ms-day">{dayText(d.date, true)}</th>
-                      {cats.map((c) => <td key={c.key} className="wb-num">{d.byCategory[c.key] ? rs(d.byCategory[c.key]) : <span className="crm-sub">—</span>}</td>)}
-                      <td className="wb-num"><strong>{rs(d.total)}</strong></td>
-                      {editable && <td className="wb-num"><button type="button" className="wa-link" style={{ whiteSpace: 'nowrap' }} aria-label={`Add an expense for ${dayText(d.date, true)}`} onClick={() => setForm({ day: d.date })}>+ Add</button></td>}
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot><tr><th scope="row">All {nDays} {nDays === 1 ? 'day' : 'days'}</th>{cats.map((c) => <td key={c.key} className="wb-num"><strong>{rs(data.byCategory[c.key] ?? 0)}</strong></td>)}<td className="wb-num"><strong>{rs(data.total)}</strong></td>{editable && <td />}</tr></tfoot>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
-
-      {tab === 'entries' && (
-        <section className="crm-card">
-          <div className="crm-chips ms-filter" role="group" aria-label="Kind of spend">
-            <button type="button" className="crm-chip" aria-pressed={!cat} onClick={() => setCat('')}>All kinds</button>
-            {cats.map((c) => <button key={c.key} type="button" className="crm-chip" aria-pressed={cat === c.key} onClick={() => setCat(c.key)}>{c.label}</button>)}
-          </div>
-          {entries.length === 0 ? <Empty title="No entries here" /> : (
-            <div className="crm-table-wrap">
-              <table className="crm-table">
-                <thead><tr><th scope="col">Day</th><th scope="col">Kind</th><th scope="col">For</th><th scope="col">Paid by</th><th scope="col" className="wb-num">Amount</th><th scope="col">Bill</th>{editable && <th scope="col"><span className="crm-sr">Actions</span></th>}</tr></thead>
-                <tbody>
-                  {entries.map((e) => (
-                    <tr key={e.id} className={e.status === 'rejected' ? 'ms-rejected' : undefined}>
-                      <td style={{ whiteSpace: 'nowrap' }}>{dayText(e.spentOn)}</td>
-                      <td><span className="ms-cat-name"><i style={{ background: COLOR[e.category] }} aria-hidden />{label[e.category] ?? e.category}</span></td>
-                      <td>{e.note || <span className="crm-sub">—</span>}{e.status === 'rejected' && <span className="crm-cell-sub" style={{ display: 'block' }}>Not approved: {e.rejectReason}</span>}</td>
-                      <td>{e.paidBy === 'person' ? <button type="button" className="wa-link" onClick={() => setPerson(e.agentId!)}>{e.agentName}</button> : 'Organisation'}<span className="crm-cell-sub" style={{ display: 'block' }}>entered by {e.createdByName}</span></td>
-                      <td className="wb-num">{e.status === 'rejected' ? <s>{rs(e.amount)}</s> : <strong>{rs(e.amount)}</strong>}</td>
-                      <td>{e.hasBill ? <button type="button" className="wa-link" onClick={() => setBill(e)}>See bill</button> : <span className="crm-sub">—</span>}</td>
-                      {editable && <td><span className="sp-actions" style={{ justifyContent: 'flex-end' }}>
-                        <button type="button" className="crm-btn is-secondary is-sm" aria-label={`Change ${rs(e.amount)} ${label[e.category] ?? ''}`} onClick={() => setForm({ edit: e })}><Pencil size={14} aria-hidden /></button>
-                        <button type="button" className="crm-btn is-secondary is-sm" aria-label={`Take out ${rs(e.amount)} ${label[e.category] ?? ''}`} disabled={busyId === e.id} onClick={() => void remove(e)}><Trash2 size={14} aria-hidden /></button>
-                      </span></td>}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
-
-      {tab === 'people' && (
-        <section className="crm-card">
-          {data.people.length === 0 ? (
-            <Empty title="Nobody holds money yet"><span className="crm-sub">Give a person an advance, or approve an expense they added: they appear here with their balance.</span>{editable && <button type="button" className="crm-btn is-sm" onClick={() => setMove({ kind: 'given' })}>Give money</button>}</Empty>
-          ) : (
-            <div className="crm-table-wrap">
-              <table className="crm-table">
-                <thead><tr><th scope="col">Person</th><th scope="col" className="wb-num">Given</th><th scope="col" className="wb-num">Returned</th><th scope="col" className="wb-num">Spent</th><th scope="col" className="wb-num">Waiting</th><th scope="col">Balance</th>{editable && <th scope="col"><span className="crm-sr">Actions</span></th>}</tr></thead>
-                <tbody>
-                  {data.people.map((p) => (
-                    <tr key={p.agentId}>
-                      <td><button type="button" className="wa-link" onClick={() => setPerson(p.agentId)}>{p.name}</button><span className="crm-cell-sub" style={{ display: 'block' }}>{p.agentId}</span></td>
-                      <td className="wb-num">{rs(p.balance.given)}</td>
-                      <td className="wb-num">{rs(p.balance.returned)}</td>
-                      <td className="wb-num">{rs(p.balance.spent)}</td>
-                      <td className="wb-num">{p.balance.pending ? rs(p.balance.pending) : <span className="crm-sub">—</span>}</td>
-                      <td><BalanceText b={p.balance} /></td>
-                      {editable && <td><span className="sp-actions" style={{ justifyContent: 'flex-end' }}>
-                        {p.balance.net < 0 && <button type="button" className="crm-btn is-sm" onClick={() => setMove({ agentId: p.agentId, kind: 'given', amount: p.balance.owed })}>Settle {rs(p.balance.owed)}</button>}
-                        {p.balance.net > 0 && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setMove({ agentId: p.agentId, kind: 'returned', amount: p.balance.holds })}><Undo2 size={14} aria-hidden /> Took back {rs(p.balance.holds)}</button>}
-                        <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setMove({ agentId: p.agentId, kind: 'given' })}>Give money</button>
-                      </span></td>}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+          <h2 className="crm-h2 ms-h">Day by day</h2>
+          <section className="crm-card">
+            {data.days.length === 0 ? <Empty title="No spending in these days">{editable && <button type="button" className="crm-btn is-sm" onClick={() => setForm({})}>Add expense</button>}</Empty> : (
+              <div className="crm-table-wrap">
+                <table className="crm-table">
+                  <thead><tr><th scope="col">Day</th>{cats.map((c) => <th key={c.key} scope="col" className="wb-num">{c.label}</th>)}<th scope="col" className="wb-num">Total</th>{editable && <th scope="col"><span className="crm-sr">Add</span></th>}</tr></thead>
+                  <tbody>
+                    {data.days.map((d) => (
+                      <tr key={d.date}>
+                        <th scope="row" className="ms-day">{dayText(d.date, true)}</th>
+                        {cats.map((c) => <td key={c.key} className="wb-num">{d.byCategory[c.key] ? rs(d.byCategory[c.key]) : <span className="crm-sub">—</span>}</td>)}
+                        <td className="wb-num"><strong>{rs(d.total)}</strong></td>
+                        {editable && <td className="wb-num"><button type="button" className="wa-link" style={{ whiteSpace: 'nowrap' }} aria-label={`Add an expense for ${dayText(d.date, true)}`} onClick={() => setForm({ day: d.date })}>+ Add</button></td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot><tr><th scope="row">All {nDays} {nDays === 1 ? 'day' : 'days'}</th>{cats.map((c) => <td key={c.key} className="wb-num"><strong>{rs(data.byCategory[c.key] ?? 0)}</strong></td>)}<td className="wb-num"><strong>{rs(data.total)}</strong></td>{editable && <td />}</tr></tfoot>
+                </table>
+              </div>
+            )}
+          </section>
+        </>
       )}
 
       {form && <ExpenseForm data={data} edit={form.edit} day={form.day} onClose={() => setForm(null)} onSaved={done} />}
