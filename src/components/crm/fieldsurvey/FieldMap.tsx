@@ -71,12 +71,16 @@ export default function FieldMap({ area, onArea, tracks = [], spots = [], onSpot
   // Create the map (and re-create the layers when the base style changes).
   useEffect(() => {
     if (!boxRef.current) return;
-    const map = new maplibregl.Map({ container: boxRef.current, style: sat ? SATELLITE : getBasemapStyle('streets'), center: CENTER, zoom: 8, attributionControl: { compact: true } });
+    const map = new maplibregl.Map({ container: boxRef.current, style: sat ? SATELLITE : getBasemapStyle('streets'), center: CENTER, zoom: 8, attributionControl: { compact: true },
+      // A click still counts when the hand moves a little between press and release (the default of 3px loses clicks on trackpads).
+      clickTolerance: 12 });
+    // When drawing, a double click would zoom in and drop two corners on one spot.
+    if (onAreaRef.current) map.doubleClickZoom.disable();
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     let styled = false, fellBack = false;
     // Layers go on every style load (the style can be swapped for the fallback below).
-    map.on('style.load', () => {
+    const addLayers = () => {
       styled = true;
       if (map.getSource('fs-area')) return;
       map.addSource('fs-area', { type: 'geojson', data: empty });
@@ -86,7 +90,11 @@ export default function FieldMap({ area, onArea, tracks = [], spots = [], onSpot
       map.addLayer({ id: 'fs-tracks-casing', type: 'line', source: 'fs-tracks', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 7 } });
       map.addLayer({ id: 'fs-tracks', type: 'line', source: 'fs-tracks', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 4 } });
       setReady((n) => n + 1);
-    });
+    };
+    // Whichever comes first: some base maps finish loading before 'style.load' can be heard.
+    map.on('style.load', addLayers);
+    map.on('load', addLayers);
+    if (map.isStyleLoaded()) addLayers();
     map.on('error', () => { if (!styled && !fellBack) { fellBack = true; map.setStyle(OSM); } });
     map.on('click', (e) => {
       const cb = onAreaRef.current;
@@ -107,6 +115,7 @@ export default function FieldMap({ area, onArea, tracks = [], spots = [], onSpot
     area.forEach((c, i) => {
       const el = document.createElement('div');
       el.className = 'fs-corner';
+      el.textContent = String(i + 1);
       el.title = 'Drag to move this corner';
       const m = new maplibregl.Marker({ element: el, draggable: true }).setLngLat(c).addTo(map);
       m.on('dragend', () => {
@@ -155,12 +164,17 @@ export default function FieldMap({ area, onArea, tracks = [], spots = [], onSpot
   }, [fitKey, ready]);
 
   return (
-    <div className="fs-map" style={{ height }}>
+    <div className={`fs-map${onArea ? ' is-draw' : ''}`} style={{ height }}>
       <div ref={boxRef} className="fs-map-box" />
       <div className="fs-map-tools">
         <button type="button" className="crm-chip" aria-pressed={!sat} onClick={() => setSat(false)}>Map</button>
         <button type="button" className="crm-chip" aria-pressed={sat} onClick={() => setSat(true)}>Satellite</button>
       </div>
+      {onArea && (
+        <div className="fs-map-hint" role="status">
+          {area.length === 0 ? 'Click the map to place the first corner of the area' : area.length < 3 ? `Corner ${area.length} placed. Click to place corner ${area.length + 1}` : `${area.length} corners. Click to add another, or drag a corner to move it`}
+        </div>
+      )}
     </div>
   );
 }

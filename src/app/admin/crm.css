@@ -2084,7 +2084,9 @@ button.pp-chip { cursor: pointer; }
 .fs-map-tools { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; z-index: 2; }
 .fs-map-tools .crm-chip { background: #fff; box-shadow: var(--shadow); }
 .fs-map-tools .crm-chip[aria-pressed='true'] { background: var(--ink); color: #fff; }
-.fs-corner { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 3px solid #0a72d6; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: grab; }
+.fs-corner { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 3px solid #0a72d6; box-shadow: 0 1px 4px rgba(0,0,0,.35); cursor: grab; display: grid; place-items: center; font-size: 11px; font-weight: 800; color: #0a4e94; line-height: 1; }
+.fs-map.is-draw .maplibregl-canvas { cursor: crosshair; }
+.fs-map-hint { position: absolute; left: 50%; top: 56px; transform: translateX(-50%); z-index: 2; pointer-events: none; background: var(--ink); color: #fff; font-size: 14px; font-weight: 700; padding: 8px 14px; border-radius: 999px; box-shadow: var(--shadow); max-width: calc(100% - 24px); text-align: center; }
 .fs-spot { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.4); cursor: pointer; padding: 0; }
 .fs-map-wrap { position: relative; }
 .fs-spot-card { position: absolute; right: 12px; top: 56px; width: 280px; max-height: calc(100% - 70px); overflow: auto; display: flex; flex-direction: column; gap: 6px; z-index: 3; box-shadow: 0 8px 24px rgba(14,21,37,.18); }
