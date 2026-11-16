@@ -2545,6 +2545,12 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("DecidedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("ForAgentId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ForAgentName")
+                        .HasColumnType("text");
+
                     b.Property<string>("Note")
                         .HasColumnType("text");
 
@@ -2552,11 +2558,17 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PayMode")
+                        .HasColumnType("text");
+
                     b.Property<string>("RejectReason")
                         .HasColumnType("text");
 
                     b.Property<bool>("Removed")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("SalaryMonth")
+                        .HasColumnType("text");
 
                     b.Property<DateOnly>("SpentOn")
                         .HasColumnType("date");
@@ -2574,6 +2586,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ClientId")
                         .IsUnique();
+
+                    b.HasIndex("ForAgentId");
 
                     b.HasIndex("SpentOn");
 
@@ -2632,6 +2646,83 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.HasIndex("AgentId");
 
                     b.ToTable("marketing_money_moves", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.MarketingSalaryRate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromMonth")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId");
+
+                    b.ToTable("marketing_salary_rates", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.MarketingStaff", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FromMonth")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("OnPayroll")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ToMonth")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId")
+                        .IsUnique();
+
+                    b.ToTable("marketing_staff", "marketing");
                 });
 
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.Meeting", b =>

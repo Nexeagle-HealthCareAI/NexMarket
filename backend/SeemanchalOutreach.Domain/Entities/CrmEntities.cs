@@ -1076,6 +1076,16 @@ namespace SeemanchalOutreach.Domain.Entities
         /// <summary>Who paid, when PaidBy is "person".</summary>
         public string? AgentId { get; set; }
         public string? AgentName { get; set; }
+        /// <summary>
+        /// The person the money was spent on (their petrol, their food, their stay, their pay), whoever paid.
+        /// Empty on older rows: then it is the person who paid, if a person did.
+        /// </summary>
+        public string? ForAgentId { get; set; }
+        public string? ForAgentName { get; set; }
+        /// <summary>For a salary payment: the month it pays for, "yyyy-MM".</summary>
+        public string? SalaryMonth { get; set; }
+        /// <summary>How it was paid, when recorded: cash | upi | bank.</summary>
+        public string? PayMode { get; set; }
         public string Status { get; set; } = "approved";          // pending | approved | rejected
         public string? DecidedBy { get; set; }
         public DateTime? DecidedAt { get; set; }
@@ -1108,6 +1118,34 @@ namespace SeemanchalOutreach.Domain.Entities
         public string CreatedByName { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public bool Removed { get; set; }
+    }
+
+    /// <summary>A person on the marketing team's payroll. Taken off the payroll with OnPayroll = false; the row is kept.</summary>
+    public class MarketingStaff
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public bool OnPayroll { get; set; } = true;
+        /// <summary>The first month a salary is due, "yyyy-MM".</summary>
+        public string FromMonth { get; set; } = string.Empty;
+        /// <summary>The last month a salary is due, once they have left.</summary>
+        public string? ToMonth { get; set; }
+        public string? Note { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>A person's monthly salary from a month onwards. A raise is a new row, so past months keep what was due then.</summary>
+    public class MarketingSalaryRate
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public string FromMonth { get; set; } = string.Empty;    // "yyyy-MM"
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
     /// <summary>Who a hoarding place is rented from. One owner can have several places.</summary>

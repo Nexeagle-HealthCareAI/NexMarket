@@ -2972,6 +2972,11 @@ div.wk-stat { cursor: default; }
 .ms-w-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ms-filter { padding: 16px 22px 4px; }
 .ms-h { margin: 8px 0 0; }
+.ms-h3 { margin: 10px 0 0; font-size: 15px; font-weight: 700; }
+/* In a tall dialog the tables keep their height and the dialog scrolls, instead of each table being squeezed. */
+.crm-modal > .crm-table-wrap, .crm-modal > .crm-chips, .crm-modal > .ms-acct { flex-shrink: 0; }
+.ms-nowrap { flex-wrap: nowrap; }
+.ms-costchip { padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; }
 .ms-allclear { display: flex; align-items: center; gap: 8px; color: #0b6b4a; font-weight: 600; }
 .ms-rejected td { color: var(--text-2); }
 .ms-form { display: grid; gap: 14px; }

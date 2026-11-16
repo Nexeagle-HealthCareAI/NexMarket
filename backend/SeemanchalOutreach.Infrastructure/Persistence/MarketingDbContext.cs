@@ -65,6 +65,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<HoardingPhoto> HoardingPhotos => Set<HoardingPhoto>();
         public DbSet<MarketingExpense> MarketingExpenses => Set<MarketingExpense>();
         public DbSet<MarketingMoneyMove> MarketingMoneyMoves => Set<MarketingMoneyMove>();
+        public DbSet<MarketingStaff> MarketingStaff => Set<MarketingStaff>();
+        public DbSet<MarketingSalaryRate> MarketingSalaryRates => Set<MarketingSalaryRate>();
         public DbSet<Organisation> Organisations => Set<Organisation>();
         public DbSet<ChatReaction> ChatReactions => Set<ChatReaction>();
         public DbSet<ChatPin> ChatPins => Set<ChatPin>();
@@ -591,6 +593,20 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.SpentOn);
                 entity.HasIndex(e => e.AgentId);
                 entity.HasIndex(e => e.Status);
+                entity.HasIndex(e => e.ForAgentId);
+                entity.Property(e => e.Amount).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<MarketingStaff>(entity =>
+            {
+                entity.ToTable("marketing_staff");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.AgentId).IsUnique();
+            });
+            modelBuilder.Entity<MarketingSalaryRate>(entity =>
+            {
+                entity.ToTable("marketing_salary_rates");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.AgentId);
                 entity.Property(e => e.Amount).HasPrecision(12, 2);
             });
             modelBuilder.Entity<MarketingMoneyMove>(entity =>

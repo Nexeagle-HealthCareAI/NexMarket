@@ -62,6 +62,8 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<HoardingPhoto> HoardingPhotos { get; }
         DbSet<MarketingExpense> MarketingExpenses { get; }
         DbSet<MarketingMoneyMove> MarketingMoneyMoves { get; }
+        DbSet<MarketingStaff> MarketingStaff { get; }
+        DbSet<MarketingSalaryRate> MarketingSalaryRates { get; }
         DbSet<Organisation> Organisations { get; }
         DbSet<ChatReaction> ChatReactions { get; }
         DbSet<ChatPin> ChatPins { get; }

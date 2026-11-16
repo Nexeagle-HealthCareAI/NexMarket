@@ -9,8 +9,8 @@ import type { StringKey } from '../i18n';
  * and sent when there is signal; it counts once the office approves it. The office can give money in advance: then
  * what I spend comes off what I hold. If I spend my own money, the office owes it to me until it is settled.
  */
-export const SPEND_KINDS = ['food', 'petrol', 'banner', 'digital', 'rent', 'other'] as const;
-export const SPEND_KEY: Record<string, StringKey> = { food: 'exCatFood', petrol: 'exCatPetrol', banner: 'exCatBanner', digital: 'exCatDigital', rent: 'exCatRent', other: 'exCatOther', agents: 'exCatOther' };
+export const SPEND_KINDS = ['food', 'petrol', 'stay', 'banner', 'digital', 'rent', 'other'] as const;
+export const SPEND_KEY: Record<string, StringKey> = { food: 'exCatFood', petrol: 'exCatPetrol', stay: 'exCatStay', banner: 'exCatBanner', digital: 'exCatDigital', rent: 'exCatRent', other: 'exCatOther', agents: 'exCatOther' };
 
 export interface SpendBalance { given: number; returned: number; spent: number; pending: number; net: number; holds: number; owed: number }
 export interface MyExpense {

@@ -24,6 +24,29 @@ namespace SeemanchalOutreach.Api.Controllers
         /// <summary>office | person (CRM only; from the phone it is always the agent themselves).</summary>
         public string? PaidBy { get; set; }
         public string? AgentId { get; set; }
+        /// <summary>The person it was spent on, when the organisation paid directly (CRM only).</summary>
+        public string? ForAgentId { get; set; }
+    }
+
+    public class TeamMemberDto
+    {
+        public string? AgentId { get; set; }
+        public decimal? Salary { get; set; }
+        /// <summary>"yyyy-MM": the month this salary starts from.</summary>
+        public string? FromMonth { get; set; }
+        public string? Note { get; set; }
+    }
+
+    public class TeamOffDto { public string? LastMonth { get; set; } }
+
+    public class SalaryPayDto
+    {
+        public string? AgentId { get; set; }
+        public string? Month { get; set; }
+        public decimal? Amount { get; set; }
+        public DateOnly? On { get; set; }
+        public string? Mode { get; set; }
+        public string? Note { get; set; }
     }
 
     public class ExpenseDecideDto { public bool Approve { get; set; } public string? Reason { get; set; } }
@@ -74,6 +97,10 @@ namespace SeemanchalOutreach.Api.Controllers
             paidBy = e.PaidBy,
             agentId = e.AgentId,
             agentName = e.AgentName,
+            forAgentId = Spend.ForOf(e),
+            forAgentName = e.ForAgentName ?? (e.PaidBy == "person" ? e.AgentName : null),
+            salaryMonth = e.SalaryMonth,
+            payMode = e.PayMode,
             status = e.Status,
             rejectReason = e.RejectReason,
             hasBill = e.BillKey != null,
@@ -150,6 +177,7 @@ namespace SeemanchalOutreach.Api.Controllers
             }).OrderBy(p => p.net).ThenBy(p => p.name).ToList();
 
             var days = Spend.Days(inRange);
+            var nameOf = new Func<string, string>(id => names.GetValueOrDefault(id)?.name ?? inRange.FirstOrDefault(e => Spend.ForOf(e) == id)?.ForAgentName ?? inRange.FirstOrDefault(e => e.AgentId == id)?.AgentName ?? id);
             return Ok(new
             {
                 from = start.ToString("yyyy-MM-dd"),
@@ -160,6 +188,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 total = days.Sum(d => d.Total),
                 byCategory = Spend.ByCategory(inRange),
                 days = days.Select(d => new { date = d.Date.ToString("yyyy-MM-dd"), total = d.Total, byCategory = d.ByCategory }),
+                byPerson = Spend.ByPerson(inRange).Select(p => new { agentId = p.AgentId, name = nameOf(p.AgentId), total = p.Total, byCategory = p.ByCategory }),
                 items = inRange.Where(e => e.Status != "pending").Select(SpendFiles.Shape),
                 waiting = waiting.Select(SpendFiles.Shape),
                 people = people.Select(p => new { p.agentId, p.name, p.role, p.balance }),
@@ -183,8 +212,22 @@ namespace SeemanchalOutreach.Api.Controllers
                 var a = who == null ? null : await _db.Agents.AsNoTracking().Where(x => x.AgentId == who).Select(x => new { x.AgentId, x.Name }).FirstOrDefaultAsync(ct);
                 if (a == null) return "Pick the person who paid.";
                 e.PaidBy = "person"; e.AgentId = a.AgentId; e.AgentName = a.Name;
+                e.ForAgentId = a.AgentId; e.ForAgentName = a.Name;
             }
-            else { e.PaidBy = "office"; e.AgentId = null; e.AgentName = null; }
+            else
+            {
+                e.PaidBy = "office"; e.AgentId = null; e.AgentName = null;
+                var forWho = Hoardings.Clean(d.ForAgentId, 40);
+                if (forWho == null) { if (e.SalaryMonth == null) { e.ForAgentId = null; e.ForAgentName = null; } }
+                else
+                {
+                    var f = await _db.Agents.AsNoTracking().Where(x => x.AgentId == forWho).Select(x => new { x.AgentId, x.Name }).FirstOrDefaultAsync(ct);
+                    if (f == null) return "Pick the person it was for.";
+                    e.ForAgentId = f.AgentId; e.ForAgentName = f.Name;
+                }
+            }
+            // A salary payment stays a salary payment for its person and month.
+            if (e.SalaryMonth != null) e.Category = "agents";
             e.UpdatedAt = DateTime.UtcNow;
             return null;
         }
@@ -288,6 +331,145 @@ namespace SeemanchalOutreach.Api.Controllers
             });
         }
 
+        // ── Team and salaries ───────────────────────────────────────────────────
+
+        /// <summary>The marketing team for a month: each person's salary, what is paid and left, and what else was spent on them.</summary>
+        [HttpGet("team")]
+        public async Task<IActionResult> Team([FromQuery] string? month, CancellationToken ct)
+        {
+            var today = AttendanceService.TodayIst;
+            var m = Spend.MonthOf(month) ?? Spend.Month(today);
+            var start = Spend.MonthStart(m)!.Value; var end = start.AddMonths(1).AddDays(-1);
+            var staff = await _db.MarketingStaff.AsNoTracking().ToListAsync(ct);
+            var rates = await _db.MarketingSalaryRates.AsNoTracking().ToListAsync(ct);
+            var salary = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.Category == "agents" && e.SalaryMonth != null).ToListAsync(ct);
+            var inMonth = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.Status == "approved" && e.SpentOn >= start && e.SpentOn <= end && e.SalaryMonth == null).ToListAsync(ct);
+            var costs = Spend.ByPerson(inMonth).ToDictionary(p => p.AgentId);
+            var agents = await _db.Agents.AsNoTracking().OrderBy(a => a.Name).Select(a => new { agentId = a.AgentId, name = a.Name, role = a.Role, block = a.Block, active = a.IsActive }).ToListAsync(ct);
+            var byId = agents.ToDictionary(a => a.agentId);
+            var rows = staff.Select(s =>
+            {
+                var due = s.OnPayroll || s.ToMonth != null ? Spend.Due(s, rates, m) : 0;
+                var paid = Spend.PaidFor(s.AgentId, m, salary);
+                var owedBefore = Spend.Months(s, rates, salary, today).Where(x => string.CompareOrdinal(x.Month, m) < 0).Sum(x => x.Left);
+                var c = costs.GetValueOrDefault(s.AgentId);
+                return new
+                {
+                    agentId = s.AgentId, name = byId.GetValueOrDefault(s.AgentId)?.name ?? s.Name, role = byId.GetValueOrDefault(s.AgentId)?.role,
+                    onPayroll = s.OnPayroll, fromMonth = s.FromMonth, toMonth = s.ToMonth, note = s.Note,
+                    salary = Spend.Due(s, rates, m), due, paid, left = Math.Max(0, due - paid), status = Spend.PayStatus(due, paid), owedBefore,
+                    otherCosts = c?.Total ?? 0, costs = c?.ByCategory ?? new Dictionary<string, decimal>(),
+                };
+            }).Where(r => r.onPayroll || r.due > 0 || r.paid > 0 || r.owedBefore > 0).OrderByDescending(r => r.onPayroll).ThenBy(r => r.name).ToList();
+            var on = staff.Where(s => s.OnPayroll).Select(s => s.AgentId).ToHashSet();
+            return Ok(new
+            {
+                month = m, thisMonth = Spend.Month(today), today = today.ToString("yyyy-MM-dd"),
+                rows,
+                due = rows.Sum(r => r.due), paid = rows.Sum(r => r.paid), left = rows.Sum(r => r.left), owedBefore = rows.Sum(r => r.owedBefore),
+                candidates = agents.Where(a => a.active && !on.Contains(a.agentId)),
+            });
+        }
+
+        /// <summary>Put a person on the marketing payroll, or change their salary from a month onwards.</summary>
+        [HttpPost("team")]
+        public async Task<IActionResult> SaveMember([FromBody] TeamMemberDto d, CancellationToken ct)
+        {
+            var today = AttendanceService.TodayIst;
+            var err = Spend.SalaryProblem(d.Salary, d.FromMonth, today);
+            if (err != null) return BadRequest(new { message = err });
+            var who = Hoardings.Clean(d.AgentId, 40);
+            var a = who == null ? null : await _db.Agents.AsNoTracking().Where(x => x.AgentId == who).Select(x => new { x.AgentId, x.Name }).FirstOrDefaultAsync(ct);
+            if (a == null) return BadRequest(new { message = "Pick the person." });
+            var from = Spend.MonthOf(d.FromMonth)!;
+            var me = User.AgentIdOf();
+            var s = await _db.MarketingStaff.FirstOrDefaultAsync(x => x.AgentId == a.AgentId, ct);
+            if (s == null) { s = new MarketingStaff { AgentId = a.AgentId, FromMonth = from, CreatedBy = me }; _db.MarketingStaff.Add(s); }
+            else if (!s.OnPayroll) { s.OnPayroll = true; s.ToMonth = null; if (string.CompareOrdinal(from, s.FromMonth) < 0) s.FromMonth = from; }
+            else if (string.CompareOrdinal(from, s.FromMonth) < 0) s.FromMonth = from;
+            s.Name = a.Name; s.Note = Hoardings.Clean(d.Note, 300) ?? s.Note; s.UpdatedAt = DateTime.UtcNow;
+            // One rate per starting month: saving again for the same month corrects it.
+            var rate = await _db.MarketingSalaryRates.FirstOrDefaultAsync(r => r.AgentId == a.AgentId && r.FromMonth == from, ct);
+            if (rate == null) _db.MarketingSalaryRates.Add(new MarketingSalaryRate { AgentId = a.AgentId, Amount = d.Salary!.Value, FromMonth = from, CreatedBy = me });
+            else { rate.Amount = d.Salary!.Value; rate.CreatedBy = me; rate.CreatedAt = DateTime.UtcNow; }
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { ok = true });
+        }
+
+        /// <summary>Take a person off the payroll after a last month. Their record and payments are kept.</summary>
+        [HttpPost("team/{agentId}/off")]
+        public async Task<IActionResult> MemberOff(string agentId, [FromBody] TeamOffDto d, CancellationToken ct)
+        {
+            var s = await _db.MarketingStaff.FirstOrDefaultAsync(x => x.AgentId == agentId, ct);
+            if (s == null) return NotFound(new { message = "That person isn't on the team." });
+            var last = Spend.MonthOf(d.LastMonth) ?? Spend.Month(AttendanceService.TodayIst);
+            if (string.CompareOrdinal(last, s.FromMonth) < 0) last = s.FromMonth;
+            s.OnPayroll = false; s.ToMonth = last; s.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { ok = true });
+        }
+
+        /// <summary>One team member in full: salary over time, every month's due and paid, every payment, and what else was spent on them.</summary>
+        [HttpGet("team/{agentId}")]
+        public async Task<IActionResult> Member(string agentId, CancellationToken ct)
+        {
+            var today = AttendanceService.TodayIst;
+            var s = await _db.MarketingStaff.AsNoTracking().FirstOrDefaultAsync(x => x.AgentId == agentId, ct);
+            var a = await _db.Agents.AsNoTracking().Where(x => x.AgentId == agentId).Select(x => new { x.Name, x.Role, x.Block }).FirstOrDefaultAsync(ct);
+            if (s == null && a == null) return NotFound(new { message = "That person isn't here." });
+            var rates = await _db.MarketingSalaryRates.AsNoTracking().Where(r => r.AgentId == agentId).OrderByDescending(r => r.FromMonth).ToListAsync(ct);
+            var mine = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && (e.ForAgentId == agentId || (e.ForAgentId == null && e.PaidBy == "person" && e.AgentId == agentId)))
+                .OrderByDescending(e => e.SpentOn).ThenByDescending(e => e.CreatedAt).Take(3000).ToListAsync(ct);
+            var pays = mine.Where(Spend.IsSalary).ToList();
+            var other = mine.Where(e => e.SalaryMonth == null).ToList();
+            var months = s == null ? new List<Spend.MonthPay>() : Spend.Months(s, rates, pays, today);
+            return Ok(new
+            {
+                agentId, name = a?.Name ?? s?.Name ?? agentId, role = a?.Role, block = a?.Block,
+                onTeam = s != null, onPayroll = s?.OnPayroll ?? false, fromMonth = s?.FromMonth, toMonth = s?.ToMonth, note = s?.Note,
+                salary = s == null ? 0 : Spend.Due(s, rates, Spend.Month(today)),
+                rates = rates.Select(r => new { amount = r.Amount, fromMonth = r.FromMonth }),
+                months = months.Select(x => new { month = x.Month, due = x.Due, paid = x.Paid, left = x.Left, status = x.Status }),
+                totalDue = months.Sum(x => x.Due), totalPaid = pays.Sum(e => e.Amount), totalLeft = months.Sum(x => x.Left),
+                payments = pays.Select(SpendFiles.Shape),
+                otherTotal = other.Where(Spend.Counts).Sum(e => e.Amount),
+                otherByCategory = Spend.ByCategory(other),
+                other = other.Take(300).Select(SpendFiles.Shape),
+                categories = Spend.Categories.Select(c => new { key = c, label = Spend.Label(c) }),
+            });
+        }
+
+        /// <summary>A salary payment for a person and a month: all of it or a part. It counts in the daily spend under Salaries.</summary>
+        [HttpPost("salary")]
+        public async Task<IActionResult> PaySalary([FromBody] SalaryPayDto d, CancellationToken ct)
+        {
+            var today = AttendanceService.TodayIst;
+            var err = Spend.Problem(d.Amount, d.On, today, Spend.OfficeDaysBack);
+            if (err != null) return BadRequest(new { message = err });
+            var month = Spend.MonthOf(d.Month);
+            if (month == null) return BadRequest(new { message = "Pick the month it is for." });
+            var who = Hoardings.Clean(d.AgentId, 40);
+            var s = who == null ? null : await _db.MarketingStaff.AsNoTracking().FirstOrDefaultAsync(x => x.AgentId == who, ct);
+            if (s == null) return BadRequest(new { message = "Add the person to the marketing team first, with their salary." });
+            var me = User.AgentIdOf();
+            var e = new MarketingExpense
+            {
+                SpentOn = d.On!.Value, Category = "agents", Amount = d.Amount!.Value, Note = Hoardings.Clean(d.Note, 500), PaidBy = "office",
+                ForAgentId = s.AgentId, ForAgentName = s.Name, SalaryMonth = month, PayMode = Spend.ModeOf(d.Mode),
+                Status = "approved", CreatedBy = me, CreatedByName = await MyNameAsync(ct), DecidedBy = me, DecidedAt = DateTime.UtcNow,
+            };
+            _db.MarketingExpenses.Add(e);
+            await _db.SaveChangesAsync(ct);
+            _notifier.Notify(new NotifyJob
+            {
+                To = new() { s.AgentId }, Except = me, Kind = "note",
+                Title = $"Salary paid: {Spend.Rupees(e.Amount)} for {Spend.MonthStart(month)!.Value.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}",
+                Body = e.Note ?? (e.PayMode == null ? "Recorded by the office." : $"By {e.PayMode}."),
+                Link = "spend", RefId = e.Id.ToString(),
+            });
+            return Ok(SpendFiles.Shape(e));
+        }
+
         /// <summary>Money given to a person (an advance, or paying back what they spent) or returned by them.</summary>
         [HttpPost("moves")]
         public async Task<IActionResult> AddMove([FromBody] MoneyMoveDto d, CancellationToken ct)
@@ -377,7 +559,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var e = new MarketingExpense
             {
                 SpentOn = d.SpentOn!.Value, Category = cat, Amount = d.Amount!.Value, Note = Hoardings.Clean(d.Note, 500),
-                PaidBy = "person", AgentId = me, AgentName = name, Status = "pending", CreatedBy = me, CreatedByName = name,
+                PaidBy = "person", AgentId = me, AgentName = name, ForAgentId = me, ForAgentName = name, Status = "pending", CreatedBy = me, CreatedByName = name,
             };
             if (cid != null) e.ClientId = cid;
             _db.MarketingExpenses.Add(e);
