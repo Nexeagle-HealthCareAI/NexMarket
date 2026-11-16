@@ -174,7 +174,8 @@
 .crm-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
 
 /* ─── Tables ──────────────────────────────────────────────────────────────── */
-.crm-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* position: relative keeps screen-reader-only labels inside wide tables from widening the whole page on phones. */
+.crm-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; position: relative; }
 .crm-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .crm-table th { text-align: left; color: var(--text-2); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .crm-table td { padding: 13px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -2953,3 +2954,39 @@ div.wk-stat { cursor: default; }
 .app-points li { display: flex; gap: 10px; align-items: flex-start; }
 .app-points svg { flex-shrink: 0; margin-top: 2px; color: var(--accent); }
 @media (max-width: 767px) { .app-shots { grid-template-columns: repeat(2, 1fr); gap: 12px; } .app-hero-actions .crm-btn { flex: 1 1 auto; justify-content: center; } }
+
+/* ── Marketing spend ───────────────────────────────────────────────────── */
+.ms-range { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ms-dates { display: inline-flex; align-items: center; gap: 8px; }
+.ms-dates .crm-input { width: auto; }
+.ms-cats { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ms-cats li { display: grid; grid-template-columns: minmax(130px, 180px) minmax(60px, 1fr) minmax(90px, auto) 44px; align-items: center; gap: 12px; font-size: 14px; }
+.ms-cat-name { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
+.ms-cat-name i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.ms-cat-bar { height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.ms-cat-bar i { display: block; height: 100%; border-radius: 999px; min-width: 2px; }
+.ms-cat-amt { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ms-cat-pct { text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ms-waiting { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ms-waiting li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px solid #f0d9a8; background: #fff8ea; border-radius: 12px; }
+.ms-w-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ms-filter { padding: 16px 22px 4px; }
+.ms-rejected td { color: var(--text-2); }
+.ms-form { display: grid; gap: 14px; }
+.ms-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ms-set { border: 0; margin: 0; padding: 0; min-width: 0; }
+.ms-set legend { font-size: 13px; font-weight: 600; padding: 0; margin-bottom: 6px; }
+.ms-err { margin: 0; color: #a1180f; font-size: 14px; font-weight: 600; }
+.ms-bill { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto; border-radius: 12px; }
+.ms-acct { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+.ms-acct > div { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.ms-acct strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.crm-table tfoot th, .crm-table tfoot td { padding: 13px 12px; border-top: 2px solid var(--line); background: #fafbfd; text-align: left; }
+.crm-table tfoot th:first-child { padding-left: 22px; }
+.crm-table tbody th.ms-day { text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; padding: 13px 12px 13px 22px; border-bottom: 1px solid var(--line); }
+@media (max-width: 640px) {
+  .ms-cats li { grid-template-columns: 1fr auto; }
+  .ms-cat-bar { grid-column: 1 / -1; order: 3; }
+  .ms-cat-pct { display: none; }
+  .ms-two { grid-template-columns: 1fr; }
+}

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace SeemanchalOutreach.Domain.Entities
 {
@@ -1056,6 +1056,58 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime? EndedAt { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Money spent on marketing on one day: an agent's pay, food, petrol, a banner, online ads, room rent and the like.
+    /// Paid either straight by the organisation ("office") or by a person from their own pocket or their advance ("person").
+    /// An agent's own entry waits for the office to approve it; only approved entries count. Never deleted: Removed hides it.
+    /// </summary>
+    public class MarketingExpense
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        /// <summary>The phone's own id for this entry, so sending it twice makes one row.</summary>
+        public string ClientId { get; set; } = Guid.NewGuid().ToString("N");
+        public DateOnly SpentOn { get; set; }
+        public string Category { get; set; } = "other";           // agents | food | petrol | banner | digital | rent | other
+        public decimal Amount { get; set; }
+        public string? Note { get; set; }
+        public string PaidBy { get; set; } = "office";            // office | person
+        /// <summary>Who paid, when PaidBy is "person".</summary>
+        public string? AgentId { get; set; }
+        public string? AgentName { get; set; }
+        public string Status { get; set; } = "approved";          // pending | approved | rejected
+        public string? DecidedBy { get; set; }
+        public DateTime? DecidedAt { get; set; }
+        public string? RejectReason { get; set; }
+        /// <summary>The photo of the bill in private storage.</summary>
+        public string? BillKey { get; set; }
+        public string? BillMime { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public string CreatedByName { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public bool Removed { get; set; }
+    }
+
+    /// <summary>
+    /// Money handed to a person for marketing work ("given": an advance, or paying back what they spent) or handed back by
+    /// them ("returned"). With their approved expenses this gives each person's balance. Never deleted: Removed hides it.
+    /// </summary>
+    public class MarketingMoneyMove
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        public string AgentName { get; set; } = string.Empty;
+        public string Kind { get; set; } = "given";               // given | returned
+        public decimal Amount { get; set; }
+        public DateOnly On { get; set; }
+        public string? Mode { get; set; }                          // cash | upi | bank
+        public string? Note { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public string CreatedByName { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public bool Removed { get; set; }
     }
 
     /// <summary>Who a hoarding place is rented from. One owner can have several places.</summary>

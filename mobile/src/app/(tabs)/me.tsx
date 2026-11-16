@@ -19,6 +19,7 @@ import { oldPhone, setPerfMode, useLite, usePerfMode, type PerfMode } from '../.
 import { savedFeedback, setPrefs, usePrefs, type TextSize } from '../../lib/prefs';
 import { useMoney } from '../../lib/useMoney';
 import { inr } from '../../lib/money';
+import { mySpend } from '../../lib/spend';
 
 export default function Me() {
   const lock = useLock();
@@ -30,6 +31,7 @@ export default function Me() {
   const [easyOpen, setEasyOpen] = useState(false);
   const prefs = usePrefs();
   const money = useMoney();
+  const spend = useDb(() => mySpend());
   const light = useLite();
   const pm = usePerfMode();
 
@@ -111,6 +113,7 @@ export default function Me() {
       <Group title={t('meWork')}>
         <Row icon="calendar" label={t('attendanceAndLeave')} sub={t('daysWorked', { n: d.days })} onPress={() => router.push('/attendance')} />
         {money ? <Row icon="doc" label={t('moneyCard')} sub={t('moneyCardSub', { paid: inr(money.summary.partnerPaid), waiting: inr(money.summary.partnerWaiting) })} onPress={() => router.push('/money')} /> : null}
+        <Row icon="tag" label={t('exTitle')} sub={spend && spend.balance.net > 0 ? t('exCardSubHold', { amount: inr(spend.balance.holds) }) : spend && spend.balance.net < 0 ? t('exCardSubOwed', { amount: inr(spend.balance.owed) }) : t('exCardSubEven')} onPress={() => router.push('/expenses')} />
         <Row icon="billboard" label={t('hdTitle')} onPress={() => router.push('/hoardings')} />
         <Row icon="map" label={t('fsTitle')} onPress={() => router.push('/field-surveys')} last />
       </Group>
