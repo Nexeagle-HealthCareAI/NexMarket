@@ -8,6 +8,7 @@ import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, Modal, Pill, Skeleton, type Tone } from '@/components/crm/ui';
 import { StatusPills } from './Editor';
 import { MediaThumb, UploadForm } from './Fields';
+import { ChainPanel } from './Growth';
 import { KIND, dayText, errText, nice, when, type Data, type Doc, type Job, type Kind, type Media, type Row, type Setup } from './shared';
 
 /** A publish in progress, left to right: checks, accept, go live. */
@@ -46,7 +47,7 @@ export function List({ rows, onOpen, extra }: { rows: Row[]; onOpen: (id: string
 }
 
 const ORDERED: Kind[] = ['faq', 'doctor', 'testimonial', 'notice'];
-const KIND_CHIPS: [Kind | 'all', string][] = [['all', 'Everything'], ['article', 'Articles'], ['faq', 'Questions'], ['doctor', 'Doctors'], ['camp', 'Health camps'], ['notice', 'Notices'], ['testimonial', 'Patient stories'], ['service', 'Service pages'], ['redirect', 'Redirects']];
+const KIND_CHIPS: [Kind | 'all', string][] = [['all', 'Everything'], ['article', 'Articles'], ['faq', 'Questions'], ['doctor', 'Doctors'], ['camp', 'Health camps'], ['notice', 'Notices'], ['testimonial', 'Patient stories'], ['service', 'Service pages'], ['location', 'Areas served'], ['redirect', 'Redirects']];
 
 export function ContentTab({ data, kind, setKind, onOpen, onNew, onChanged, say }: { data: Data; kind: Kind | 'all'; setKind: (k: Kind | 'all') => void; onOpen: (id: string) => void; onNew: (k: Kind) => void; onChanged: () => void; say: (m: string) => void }) {
   const [show, setShow] = useState<'all' | 'draft' | 'live' | 'archived'>('all');
@@ -81,6 +82,7 @@ export function ContentTab({ data, kind, setKind, onOpen, onNew, onChanged, say 
         {type && type.canCreate && data.me.write && <button type="button" className="crm-btn is-sm" onClick={() => onNew(type.key)}><Plus size={15} aria-hidden /> New {type.label.toLowerCase()}</button>}
       </div>
       {type && <p className="crm-sub ws-kind-help">{type.help}{type.needsReview ? ' A named reviewer approves each one before it is published.' : ''}</p>}
+      {kind === 'all' && <ChainPanel onOpen={onOpen} onChanged={onChanged} say={say} />}
       {(kind === 'doctor' || kind === 'camp') && data.me.write && <CrmPanel kind={kind} onOpen={onOpen} onChanged={onChanged} />}
       {rows.length === 0
         ? <Empty title={show === 'archived' ? 'Nothing is archived' : 'Nothing here yet'}>{show === 'archived' ? null : kind === 'service' ? 'Service pages come in from the website (Setup → Bring in from the website).' : data.me.write ? 'Start with the New button above.' : 'Content shows here once someone writes it.'}</Empty>
@@ -213,12 +215,13 @@ export function PublishTab({ data, onOpen, onChanged, say }: { data: Data; onOpe
 }
 
 /** The few fields needed to start one; the rest is filled in the editor. */
-const START: Partial<Record<Kind, { name: string; label: string; kind?: 'longtext' | 'date' | 'select' | 'path'; placeholder?: string; options?: string[] }[]>> = {
+const START: Partial<Record<Kind, { name: string; label: string; kind?: 'longtext' | 'date' | 'select' | 'path'; placeholder?: string; options?: string[]; optional?: boolean }[]>> = {
   doctor: [{ name: 'name', label: 'Name, as shown on the website', placeholder: 'e.g. Dr Aziz Ahmed' }],
   camp: [{ name: 'title', label: 'Title', placeholder: 'e.g. Free kidney check-up camp' }, { name: 'date', label: 'Day', kind: 'date' }, { name: 'place', label: 'Place', placeholder: 'e.g. Kasba Panchayat Bhawan' }],
   notice: [{ name: 'text', label: 'Notice (up to 220 characters)', kind: 'longtext', placeholder: 'e.g. The OPD is closed on Sunday 14 January.' }],
   testimonial: [{ name: 'name', label: 'Name shown (first name and initial)', placeholder: 'e.g. Ramesh K.' }, { name: 'quote', label: 'What the patient said', kind: 'longtext' }],
   redirect: [{ name: 'from', label: 'Old address', kind: 'path', placeholder: '/blogs/old-name' }, { name: 'to', label: 'New address', kind: 'path', placeholder: '/blogs/new-name' }],
+  location: [{ name: 'town', label: 'Town or area', placeholder: 'e.g. Kasba' }, { name: 'district', label: 'District (optional)', placeholder: 'e.g. Purnia', optional: true }],
 };
 
 export function NewForm({ type, start, ai, data, onClose, onMade }: { type: Kind; start?: Doc; ai?: boolean; data: Data; onClose: () => void; onMade: (id: string) => void }) {
@@ -233,7 +236,7 @@ export function NewForm({ type, start, ai, data, onClose, onMade }: { type: Kind
   const kindLabel = data.types.find((t) => t.key === type)?.label ?? 'item';
   const save = async () => {
     if (!fields && !title.trim()) { setErr(type === 'faq' ? 'Write the question.' : 'Write the title.'); return; }
-    if (fields?.some((f) => !(vals[f.name] ?? '').trim())) { setErr('Fill in each box.'); return; }
+    if (fields?.some((f) => !f.optional && !(vals[f.name] ?? '').trim())) { setErr('Fill in each box.'); return; }
     setBusy(true); setErr(null);
     try {
       const body = fields ? { ...vals, ...(type === 'notice' ? { tone: 'info' } : {}), ...(type === 'camp' ? { startTime: '09:00', endTime: '14:00', free: true } : {}) }
@@ -359,7 +362,7 @@ export function SetupTab({ setup, onChanged, say }: { setup: Setup; onChanged: (
   const [f, setF] = useState({
     repo: setup.repoOwner && setup.repoName ? `${setup.repoOwner}/${setup.repoName}` : '', branch: setup.branch ?? 'main', contentDir: setup.contentDir ?? 'content',
     mediaDir: setup.mediaDir ?? 'public/media/blogs', siteUrl: setup.siteUrl ?? '', appId: setup.appId ?? '', privateKey: '', token: '',
-    departments: setup.departments.join(', '), review: setup.reviewTypes, ai: setup.ai, stagingBranch: setup.stagingBranch ?? '', scanFiles: setup.scanFiles ?? 'src/data/config.ts',
+    departments: setup.departments.join(', '), review: setup.reviewTypes, ai: setup.ai, stagingBranch: setup.stagingBranch ?? '', scanFiles: setup.scanFiles ?? 'src/data/config.ts', reReviewMonths: String(setup.reReviewMonths ?? 12),
   });
   const [counts, setCounts] = useState<{ type: string; label: string; count: number; found: boolean }[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -373,7 +376,7 @@ export function SetupTab({ setup, onChanged, say }: { setup: Setup; onChanged: (
       await crm.put('/api/v1/website/setup', {
         repoOwner: f.repo, repoName: '', branch: f.branch, contentDir: f.contentDir, mediaDir: f.mediaDir, siteUrl: f.siteUrl, appId: f.appId,
         privateKey: f.privateKey, token: f.token, departments: f.departments.split(',').map((x) => x.trim()).filter(Boolean),
-        reviewTypes: ['article', ...f.review.filter((x) => x !== 'article')], ai: f.ai, stagingBranch: f.stagingBranch, scanFiles: f.scanFiles,
+        reviewTypes: ['article', ...f.review.filter((x) => x !== 'article')], ai: f.ai, stagingBranch: f.stagingBranch, scanFiles: f.scanFiles, reReviewMonths: Number(f.reReviewMonths) || 12,
       });
       setF((x) => ({ ...x, privateKey: '', token: '' })); say('Saved.'); onChanged();
     } catch (e) { setErr(errText(e)); } finally { setBusy(null); }
@@ -432,6 +435,7 @@ export function SetupTab({ setup, onChanged, say }: { setup: Setup; onChanged: (
           <fieldset className="ms-set"><legend>Who must approve before publishing</legend>
             <label className="ws-check"><input type="checkbox" checked disabled /> Articles: always, by a named reviewer</label>
             {REVIEWABLE.map(([k, l]) => <label key={k} className="ws-check"><input type="checkbox" checked={f.review.includes(k)} onChange={(e) => up('review', e.target.checked ? [...f.review, k] : f.review.filter((x) => x !== k))} /> {l}</label>)}
+            <label className="crm-field" style={{ marginTop: 8 }}>Review medical pages again every (months)<input className="crm-input" type="number" min={1} max={60} value={f.reReviewMonths} onChange={(e) => up('reReviewMonths', e.target.value)} style={{ maxWidth: 120 }} /></label>
           </fieldset>
           <fieldset className="ms-set"><legend>Writing help (AI)</legend>
             <label className="ws-check"><input type="checkbox" checked={f.ai} onChange={(e) => up('ai', e.target.checked)} /> Let writers draft articles and get title suggestions with AI</label>

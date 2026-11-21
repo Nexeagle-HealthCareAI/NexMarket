@@ -46,6 +46,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public bool? Ai { get; set; }
         public string? StagingBranch { get; set; }
         public string? ScanFiles { get; set; }
+        public int? ReReviewMonths { get; set; }
     }
     public class SiteAiDraftDto { public string? Topic { get; set; } public string? DepartmentId { get; set; } public string? Notes { get; set; } }
     public class SiteAiTextDto { public JsonObject? Data { get; set; } }
@@ -103,7 +104,7 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             connected = c.Connected, imported = c.ImportedAt != null, siteUrl = c.SiteUrl, repo = c.Connected || full ? $"{c.RepoOwner}/{c.RepoName}".Trim('/') : null,
             reviewTypes = c.ReviewTypes, departments = c.Departments, ai = c.Ai, hasStaging = !string.IsNullOrWhiteSpace(c.StagingBranch),
-            stagingBranch = full ? c.StagingBranch : null, scanFiles = full ? string.Join(", ", c.ScanFiles) : null, syncedAt = full ? c.SyncedAt : null,
+            stagingBranch = full ? c.StagingBranch : null, reReviewMonths = c.ReReviewMonths, headOffice = c.HeadOffice, branches = c.Branches, scanFiles = full ? string.Join(", ", c.ScanFiles) : null, syncedAt = full ? c.SyncedAt : null,
             // The rest is for developers only; secrets are never sent back, only their last four characters.
             repoOwner = full ? c.RepoOwner : null, repoName = full ? c.RepoName : null, branch = full ? c.Branch : null,
             contentDir = full ? c.ContentDir : null, mediaDir = full ? c.MediaDir : null, appId = full ? c.AppId : null,
@@ -146,7 +147,10 @@ namespace SeemanchalOutreach.Api.Controllers
             return Ok(new
             {
                 item = Row(c, d), data = d, published = c.Published == null ? null : SiteRules.Parse(c.Published),
-                problems = SiteRules.Problems(c.Type, d, cfg.Departments, c.ImageKey != null), warnings = SiteRules.Warnings(c.Type, d, c.ImageKey != null),
+                problems = SiteRules.Problems(c.Type, d, cfg.Departments, c.ImageKey != null).Concat(c.Type == "location" ? SiteRules.ExtraProblems(c, d, await _db.SiteContents.AsNoTracking().Where(x => x.Type == "location").ToListAsync(ct)) : new()).ToList(),
+                warnings = SiteRules.Warnings(c.Type, d, c.ImageKey != null),
+                dueForReview = SiteRules.DueForReview(c, cfg, AttendanceService.TodayIst), reviewedOn = c.ReviewedOn?.ToString("yyyy-MM-dd"),
+                chain = c.ChainOrg == null ? null : new { org = c.ChainOrg, version = c.ChainVersion }, shared = c.Shared,
                 needsReview = SiteRules.NeedsReview(c.Type, cfg), versions,
                 address = AddressOf(c, d, cfg),
                 kind = SiteTypes.Describe(SiteTypes.Of(c.Type), cfg),
@@ -248,7 +252,10 @@ namespace SeemanchalOutreach.Api.Controllers
             var c = await _db.SiteContents.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (c == null) return NotFound(new { message = "That isn't here any more." });
             var cfg = SiteConfig.Load(_app);
-            if (SiteRules.CantSubmit(c, SiteRules.Problems(c.Type, SiteRules.Parse(c.Data), cfg.Departments, c.ImageKey != null)) is { } no) return No(no);
+            var subData = SiteRules.Parse(c.Data);
+            var subProblems = SiteRules.Problems(c.Type, subData, cfg.Departments, c.ImageKey != null);
+            if (c.Type == "location") subProblems.AddRange(SiteRules.ExtraProblems(c, subData, await _db.SiteContents.AsNoTracking().Where(x => x.Type == "location").ToListAsync(ct)));
+            if (SiteRules.CantSubmit(c, subProblems, SiteRules.DueForReview(c, cfg, AttendanceService.TodayIst)) is { } no) return No(no);
             var name = await MyNameAsync(ct);
             var review = SiteRules.NeedsReview(c.Type, cfg);
             c.Status = review ? "review" : "approved"; c.SubmittedBy = Me; c.SubmittedByName = name; c.SubmittedAt = DateTime.UtcNow; c.Note = null; c.UpdatedAt = DateTime.UtcNow;
@@ -267,7 +274,7 @@ namespace SeemanchalOutreach.Api.Controllers
             if (SiteRules.CantReview(c) is { } no) return No(no);
             var name = (await MyNameAsync(ct)).Trim();
             if (name.Length == 0 || name == Me) return No("Your account has no name. A reviewer's name is shown on the article, so add it in Users & roles first.");
-            c.Status = "approved"; c.ReviewedBy = Me; c.ReviewedByName = name; c.ReviewedAt = DateTime.UtcNow; c.Note = null; c.UpdatedAt = DateTime.UtcNow;
+            c.Status = "approved"; c.ReviewedBy = Me; c.ReviewedByName = name; c.ReviewedAt = DateTime.UtcNow; c.ReviewedOn = AttendanceService.TodayIst; c.ReReviewAskedAt = null; c.Note = null; c.UpdatedAt = DateTime.UtcNow;
             Log(c, "approved", name);
             await _db.SaveChangesAsync(ct);
             if (c.SubmittedBy != null) _notifier.Notify(new NotifyJob { To = new() { c.SubmittedBy }, Except = Me, Kind = "website", Title = "Website: approved", Body = $"{name} approved \"{c.Title}\". It can be published now.", Link = "website:" + c.Id, RefId = c.Id.ToString() });
@@ -438,6 +445,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 ["departments"] = string.Join(",", (dto.Departments ?? old.Departments).Select(t => SiteRules.Slug(t)).Where(SiteRules.SlugOk).Distinct()),
                 ["ai"] = (dto.Ai ?? old.Ai) ? "on" : null,
                 ["stagingBranch"] = Name(dto.StagingBranch, "The staging branch", ref err),
+                ["reReviewMonths"] = (dto.ReReviewMonths ?? old.ReReviewMonths) is var rr && rr is >= 1 and <= 60 ? rr.ToString() : "12",
                 ["scanFiles"] = dto.ScanFiles == null ? string.Join(",", old.ScanFiles) : string.Join(",", dto.ScanFiles.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Take(10)),
             };
             if (err != null) return No(err);

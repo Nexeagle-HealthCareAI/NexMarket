@@ -102,8 +102,19 @@ namespace SeemanchalOutreach.Api.Services
             F("from", "Old address", FieldKind.Path, true, 200, "e.g. /blogs/old-name"), F("to", "New address", FieldKind.Path, true, 200, "e.g. /blogs/new-name"),
         }, "Old addresses sent to new ones. Made by itself when an article's address changes.");
 
-        public static readonly SiteType[] All = { Article, Faq, Site, Doctor, Camp, Notice, Testimonial, Service, Redirect };
-        public static readonly string[] Generic = { "doctor", "camp", "notice", "testimonial", "service", "redirect" };
+        public static readonly SiteType Location = new("location", "Area served", "Areas served", "locations.json", "list", "slug", "town", false, true, true, new[]
+        {
+            F("town", "Town or area", FieldKind.Text, true, 80, "e.g. Kasba"), F("district", "District", FieldKind.Text, false, 80, "e.g. Purnia"),
+            F("intro", "About care for people from here", FieldKind.LongText, true, 2000, "Only what is true of this place: how far, what people there often come for, camps held there."),
+            F("howToReach", "How to reach the hospital from here", FieldKind.LongText, true, 1200, "Road, landmarks, bus or auto routes, time taken."),
+            F("distance", "Distance", FieldKind.Text, false, 80, "e.g. 18 km, about 35 minutes by road"),
+            F("services", "Services people from here often use (one per line)", FieldKind.Lines),
+            Pairs("faqs", "Questions from people in this area", "question", "Question", "answer", "Answer"),
+            F("block", "CRM block or panchayat", FieldKind.Text, crmOnly: true),
+        }, "A page for each town or area the hospital serves, at /areas/<address>. Each must be its own page: the CRM refuses near-copies.");
+
+        public static readonly SiteType[] All = { Article, Faq, Site, Doctor, Camp, Notice, Testimonial, Service, Location, Redirect };
+        public static readonly string[] Generic = { "doctor", "camp", "notice", "testimonial", "service", "location", "redirect" };
         public static SiteType Of(string type) => All.FirstOrDefault(t => t.Key == type) ?? throw new ArgumentException("Unknown content type " + type);
         public static bool IsGeneric(string type) => Generic.Contains(type);
 

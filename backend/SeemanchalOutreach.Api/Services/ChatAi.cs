@@ -312,6 +312,32 @@ namespace SeemanchalOutreach.Api.Services
             return (json["claims"]?.AsArray() ?? new JsonArray()).Select(c => new Claim((c?["text"]?.ToString() ?? "").Trim(), (c?["why"]?.ToString() ?? "").Trim())).Where(c => c.Text.Length > 0).ToList();
         }
 
+        /// <summary>The article in Hindi or Bengali, for a person to check and a reviewer to approve. Names, doses and numbers are kept as written.</summary>
+        public async Task<JsonObject> ArticleTranslateAsync(string who, string articleJson, string language, CancellationToken ct)
+        {
+            SpendWebsite(who);
+            var lang = language == "bn" ? "Bengali (Bangla script)" : "Hindi (Devanagari script)";
+            var section = Schema(Obj(("heading", Str()), ("paragraphs", Arr(Str(), 6)), ("points", Arr(Str(), 12))), "heading", "paragraphs", "points");
+            var schema = Schema(Obj(("title", Str()), ("excerpt", Str()), ("sections", Arr(section, 30))), "title", "excerpt", "sections");
+            return await AskJsonAsync(who, $"Translate this hospital patient-education article into simple, everyday {lang} that people in rural Bihar and Bengal speak, " +
+                "not formal or literary language. Keep every section, in the same order, with the same number of paragraphs and points. Keep the meaning exactly: " +
+                "add nothing, leave nothing out, no new medical claims. Keep medicine names, numbers and the hospital's name as written; common English medical words " +
+                "people use (like 'ultrasound', 'stone', 'operation') may stay in English, written in the target script.",
+                articleJson.Length > 14000 ? articleJson[..14000] : articleJson, "translate", schema, fast: false, ct, temperature: 0.2);
+        }
+
+        /// <summary>Questions patients commonly ask about a topic, to answer on the page. Suggestions only.</summary>
+        public async Task<List<string>> ArticleQuestionsAsync(string who, string topic, IEnumerable<string> searched, CancellationToken ct)
+        {
+            SpendWebsite(who);
+            var schema = Schema(Obj(("questions", Arr(Str(), 10))), "questions");
+            var seen = string.Join("\n", searched.Take(40));
+            var json = await AskJsonAsync(who, SiteVoice + " List up to 8 questions patients and families commonly ask about this topic that a good page should answer, " +
+                "in plain English, each under 15 words. Prefer questions like the searches given, if any. Don't answer them.",
+                $"Topic: {topic}" + (seen.Length > 0 ? $"\nSearches that already reach the page:\n{seen}" : ""), "questions", schema, fast: true, ct, temperature: 0.4);
+            return (json["questions"]?.AsArray() ?? new JsonArray()).Select(x => (x?.ToString() ?? "").Trim()).Where(x => x.Length > 0).Distinct().ToList();
+        }
+
         // ─── 1. Translation ──────────────────────────────────────────────────
 
         private static int Count(string s, int from, int to) => s.Count(c => c >= from && c <= to);

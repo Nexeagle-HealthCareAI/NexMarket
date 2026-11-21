@@ -71,6 +71,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<SiteContentVersion> SiteContentVersions => Set<SiteContentVersion>();
         public DbSet<SitePublish> SitePublishes => Set<SitePublish>();
         public DbSet<SiteMedia> SiteMedia => Set<SiteMedia>();
+        public DbSet<SiteEvent> SiteEvents => Set<SiteEvent>();
+        public DbSet<SiteApiKey> SiteApiKeys => Set<SiteApiKey>();
+        public DbSet<SiteWebhookDelivery> SiteWebhookDeliveries => Set<SiteWebhookDelivery>();
         public DbSet<Organisation> Organisations => Set<Organisation>();
         public DbSet<ChatReaction> ChatReactions => Set<ChatReaction>();
         public DbSet<ChatPin> ChatPins => Set<ChatPin>();
@@ -612,6 +615,24 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("site_content_versions");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.ContentId);
+            });
+            modelBuilder.Entity<SiteEvent>(entity =>
+            {
+                entity.ToTable("site_events");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.Day, e.Path, e.Kind }).IsUnique();
+            });
+            modelBuilder.Entity<SiteApiKey>(entity =>
+            {
+                entity.ToTable("site_api_keys");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Hash).IsUnique();
+            });
+            modelBuilder.Entity<SiteWebhookDelivery>(entity =>
+            {
+                entity.ToTable("site_webhook_deliveries");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.Status, e.NextAt });
             });
             modelBuilder.Entity<SiteMedia>(entity =>
             {

@@ -104,6 +104,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var lead = new Lead
             {
                 Name = name, Phone = phone, Source = source, SourceRef = sourceRef, Department = dept, Note = message,
+                LandingPage = page == null ? null : SiteInsights.PathOf(page),
                 CreatedBy = "website", CreatedAt = now, LastActivityAt = now, Status = "new", Unread = 1,
             };
             _db.Leads.Add(lead);

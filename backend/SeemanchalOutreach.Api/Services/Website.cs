@@ -32,6 +32,8 @@ namespace SeemanchalOutreach.Api.Services
             ("repoOwner", false), ("repoName", false), ("branch", false), ("contentDir", false), ("mediaDir", false), ("siteUrl", false),
             ("appId", false), ("privateKey", true), ("token", true), ("reviewTypes", false), ("departments", false), ("ai", false),
             ("connectedAt", false), ("importedAt", false), ("stagingBranch", false), ("scanFiles", false), ("syncSha", false), ("syncedAt", false),
+            ("reReviewMonths", false), ("headOffice", false), ("branches", false), ("siteName", false),
+            ("hook1Url", false), ("hook1Secret", true), ("hook2Url", false), ("hook2Secret", true), ("hook3Url", false), ("hook3Secret", true),
         };
         public static readonly string[] DefaultReviewTypes = { "article", "service", "testimonial" };
         public static IEnumerable<string> SecretKeys => Fields.Where(f => f.Secret).Select(f => Prefix + f.Key);
@@ -55,6 +57,14 @@ namespace SeemanchalOutreach.Api.Services
         /// <summary>The website commit the CRM last compared with (to notice changes made directly on GitHub).</summary>
         public string? SyncSha { get; set; }
         public string? SyncedAt { get; set; }
+        /// <summary>How often a reviewed medical page must be reviewed again.</summary>
+        public int ReReviewMonths { get; set; } = 12;
+        /// <summary>Branch: the head office organisation whose shared content it can adopt.</summary>
+        public string? HeadOffice { get; set; }
+        /// <summary>Head office: the branch organisations allowed to adopt its shared content.</summary>
+        public List<string> Branches { get; set; } = new();
+        /// <summary>Up to three addresses told about every publish, each with its own signing secret.</summary>
+        public List<(int N, string Url, string? Secret)> Hooks { get; set; } = new();
         public List<string> Departments { get; set; } = SiteRules.DefaultDepartments.ToList();
         public bool Ai { get; set; }
         public string? ConnectedAt { get; set; }
@@ -88,6 +98,9 @@ namespace SeemanchalOutreach.Api.Services
                 MediaDir = g("mediaDir") ?? "public/media/blogs", SiteUrl = g("siteUrl")?.TrimEnd('/'), AppId = g("appId"), PrivateKey = g("privateKey"), Token = g("token"),
                 ReviewTypes = ListOf(s.Get(Prefix + "reviewTypes"), DefaultReviewTypes).Where(SiteRules.Types.Contains).Union(new[] { "article" }).ToList(),
                 StagingBranch = g("stagingBranch"), SyncSha = g("syncSha"), SyncedAt = g("syncedAt"),
+                ReReviewMonths = int.TryParse(g("reReviewMonths"), out var rr) && rr is >= 1 and <= 60 ? rr : 12,
+                HeadOffice = g("headOffice"), Branches = (g("branches") ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(x => x.ToLowerInvariant()).ToList(),
+                Hooks = new[] { 1, 2, 3 }.Select(n => (n, g($"hook{n}Url"), g($"hook{n}Secret"))).Where(h => h.Item2 != null).Select(h => (h.n, h.Item2!, h.Item3)).ToList(),
                 ScanFiles = g("scanFiles") is { } sf ? sf.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Where(f => System.Text.RegularExpressions.Regex.IsMatch(f, @"^[\w.\-/]+$")).Take(10).ToList() : new() { "src/data/config.ts" },
                 Departments = g("departments") == null ? SiteRules.DefaultDepartments.ToList() : ListOf(g("departments"), SiteRules.DefaultDepartments).Where(SiteRules.SlugOk).ToList(),
                 Ai = g("ai") == "on", ConnectedAt = g("connectedAt"), ImportedAt = g("importedAt"),
@@ -167,10 +180,14 @@ namespace SeemanchalOutreach.Api.Services
             if (type == "site")
             {
                 foreach (var k in SiteKeys) o[k] = Text(d[k]);
+                // Optional: used by starter websites (the hospital's own website keeps these in its code).
+                foreach (var k in new[] { "name", "address" }) if (Text(d[k]).Length > 0) o[k] = Text(d[k]);
                 return o;
             }
             o["slug"] = Text(d["slug"]).ToLowerInvariant();
             o["title"] = Text(d["title"]); o["excerpt"] = Text(d["excerpt"]); o["departmentId"] = Text(d["departmentId"]).ToLowerInvariant(); o["author"] = Text(d["author"]);
+            if (Text(d["language"]).ToLowerInvariant() is "hi" or "bn") o["language"] = Text(d["language"]).ToLowerInvariant();
+            if (Text(d["translationOf"]).Length > 0) o["translationOf"] = Text(d["translationOf"]).ToLowerInvariant();
             if (d["image"] is JsonObject img && (Text(img["src"]).Length > 0 || Text(img["alt"]).Length > 0))
                 o["image"] = new JsonObject { ["src"] = Text(img["src"]), ["alt"] = Text(img["alt"]) };
             var sections = new JsonArray();
@@ -191,6 +208,14 @@ namespace SeemanchalOutreach.Api.Services
                 refs.Add(new JsonObject { ["label"] = label, ["url"] = url });
             }
             if (refs.Count > 0) o["references"] = refs;
+            var related = new JsonArray();
+            foreach (var r in (d["related"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Take(8))
+            {
+                var label = Text(r["label"]); var href = Text(r["href"]);
+                if (label.Length == 0 && href.Length == 0) continue;
+                related.Add(new JsonObject { ["label"] = label, ["href"] = href });
+            }
+            if (related.Count > 0) o["related"] = related;
             return o;
         }
 
@@ -234,6 +259,10 @@ namespace SeemanchalOutreach.Api.Services
             var refs = (d["references"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().ToList();
             for (var i = 0; i < refs.Count; i++)
                 if (Text(refs[i]["label"]).Length == 0 || !Regex.IsMatch(Text(refs[i]["url"]), @"^https://\S+$")) p.Add($"Reference {i + 1} needs a name and a link that starts with https://.");
+            var rel = (d["related"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().ToList();
+            for (var i = 0; i < rel.Count; i++)
+                if (Text(rel[i]["label"]).Length == 0 || !SiteTypes.PathOk(Text(rel[i]["href"]))) p.Add($"Related link {i + 1} needs a name and a page address on this website, like /blogs/kidney-stones.");
+            if (Text(d["translationOf"]).Length > 0 && !SlugOk(Text(d["translationOf"]))) p.Add("The original article's address isn't valid.");
             var img = d["image"] as JsonObject;
             if (hasPicture || (img != null && Text(img["src"]).Length > 0))
             {
@@ -257,10 +286,48 @@ namespace SeemanchalOutreach.Api.Services
             var words = (d["sections"] as JsonArray ?? new JsonArray()).OfType<JsonObject>()
                 .Sum(s => Texts(s["paragraphs"], 99).Concat(Texts(s["points"], 99)).Sum(t => t.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length));
             if (words > 0 && words < 300) w.Add($"The article is short (about {words} words). 600 or more usually does better.");
+            w.AddRange(SiteWriting.Check(d));
             return w;
         }
 
         public static bool NeedsReview(string type, SiteConfig c) => c.ReviewTypes.Contains(type);
+
+        /// <summary>
+        /// Checks that need the other items: a location page must be its own (at least 120 words of its own, the town named,
+        /// and not mostly the same words as another location page), so the website never has thin copies of one page.
+        /// </summary>
+        public static List<string> ExtraProblems(SiteContent c, JsonObject d, IEnumerable<SiteContent> all)
+        {
+            var p = new List<string>();
+            if (c.Type != "location") return p;
+            var own = Text(d["intro"]) + " " + Text(d["howToReach"]);
+            var words = Regex.Matches(own, @"[\p{L}\p{N}']+").Count;
+            if (words < 120) p.Add($"The page has {words} words of its own; write at least 120 about this place (how to reach, nearby landmarks, what people there often come for).");
+            var town = Text(d["town"]);
+            if (town.Length > 0 && !own.Contains(town, StringComparison.OrdinalIgnoreCase)) p.Add($"Name {town} in the text.");
+            foreach (var o in all.Where(x => x.Type == "location" && x.Id != c.Id && !x.Archived))
+            {
+                var od = Parse(o.Data);
+                var sim = Similarity(own, Text(od["intro"]) + " " + Text(od["howToReach"]));
+                if (sim >= 0.5) p.Add($"It is {sim:P0} the same as \"{o.Title}\". Rewrite it with what is true only of this place.");
+            }
+            return p;
+        }
+
+        /// <summary>How much two texts share, as runs of three words (0 = nothing, 1 = the same).</summary>
+        public static double Similarity(string a, string b)
+        {
+            HashSet<string> Sh(string t)
+            {
+                var w = Regex.Matches(t.ToLowerInvariant(), @"[\p{L}\p{N}']+").Select(m => m.Value).ToList();
+                var set = new HashSet<string>();
+                for (var i = 0; i + 2 < w.Count; i++) set.Add(w[i] + " " + w[i + 1] + " " + w[i + 2]);
+                return set;
+            }
+            var x = Sh(a); var y = Sh(b);
+            if (x.Count == 0 || y.Count == 0) return 0;
+            return Math.Round((double)x.Intersect(y).Count() / Math.Min(x.Count, y.Count), 2);
+        }
 
         public static bool Live(SiteContent c) => !string.IsNullOrEmpty(c.Published);
 
@@ -268,10 +335,14 @@ namespace SeemanchalOutreach.Api.Services
         public static string? CantEdit(SiteContent c) =>
             c.Archived ? "This is archived. Bring it back first." : c.Status == "publishing" ? "This is being published right now. Try again in a few minutes." : null;
 
-        public static string? CantSubmit(SiteContent c, List<string> problems) =>
+        /// <summary>A live page of a kind that needs review, whose last review is older than the set months (or was never recorded).</summary>
+        public static bool DueForReview(SiteContent c, SiteConfig cfg, DateOnly today) =>
+            !c.Archived && Live(c) && c.Status == "published" && NeedsReview(c.Type, cfg) && (c.ReviewedOn == null || c.ReviewedOn.Value.AddMonths(cfg.ReReviewMonths) <= today);
+
+        public static string? CantSubmit(SiteContent c, List<string> problems, bool dueForReview = false) =>
             CantEdit(c) ?? (c.Status is "review" ? "This is already waiting for review."
                 : c.Status is "approved" ? "This is already approved."
-                : c.Status is "published" ? "Nothing has changed since it was published."
+                : c.Status is "published" && !dueForReview ? "Nothing has changed since it was published."
                 : problems.Count > 0 ? problems[0] : null);
 
         public static string? CantReview(SiteContent c) =>
@@ -305,12 +376,19 @@ namespace SeemanchalOutreach.Api.Services
                 ["publishedAt"] = (c.FirstPublishedOn ?? today).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
                 ["author"] = Text(d["author"]),
             };
-            if (!string.IsNullOrWhiteSpace(c.ReviewedByName)) o["reviewedBy"] = c.ReviewedByName.Trim();
+            if (!string.IsNullOrWhiteSpace(c.ReviewedByName))
+            {
+                o["reviewedBy"] = c.ReviewedByName.Trim();
+                if (c.ReviewedOn != null) o["reviewedOn"] = c.ReviewedOn.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+            }
+            if (d["language"] != null) o["language"] = d["language"]!.DeepClone();
+            if (d["translationOf"] != null) o["translationOf"] = d["translationOf"]!.DeepClone();
             var img = d["image"] as JsonObject;
             var src = pictureUrl ?? Text(img?["src"]);
             if (src.Length > 0) o["image"] = new JsonObject { ["src"] = src, ["alt"] = Text(img?["alt"]) };
             o["sections"] = d["sections"]!.DeepClone();
             if (d["references"] != null) o["references"] = d["references"]!.DeepClone();
+            if (d["related"] != null) o["related"] = d["related"]!.DeepClone();
             return o;
         }
 
@@ -522,6 +600,7 @@ namespace SeemanchalOutreach.Api.Services
                 else
                 {
                     var problems = SiteRules.Problems(c.Type, data, cfg.Departments, c.ImageKey != null);
+                    problems.AddRange(SiteRules.ExtraProblems(c, data, all));
                     if (SiteRules.CantPublish(c, cfg, problems) is { } no) return ($"{c.Title}: {no}", null);
                     string? picture = null;
                     if (c.Type == "article" && c.ImageKey != null)
@@ -621,6 +700,7 @@ namespace SeemanchalOutreach.Api.Services
             }
             foreach (var mid in MediaOf(p))
                 if (await _db.SiteMedia.FirstOrDefaultAsync(m => m.Id == mid, ct) is { } m) m.OnSite = true;
+            await SiteHooks.QueueAsync(_db, SiteConfig.Load(_app), p, ItemsOf(p).ToList(), ct);
         }
 
         /// <summary>The content is on the staging branch: nothing is live, the items stay ready to publish.</summary>
@@ -991,7 +1071,25 @@ namespace SeemanchalOutreach.Api.Services
                 return;
             }
             await _db.SaveChangesAsync(ct);
-            if (syncDue) await SyncAsync(null, ct);
+            if (syncDue)
+            {
+                await RemindReReviewAsync(cfg, ct);
+                await SyncAsync(null, ct);
+            }
+        }
+
+        /// <summary>Tells the reviewers, at most once a month per page, which medical pages are due to be reviewed again.</summary>
+        private async Task RemindReReviewAsync(SiteConfig cfg, CancellationToken ct)
+        {
+            var today = AttendanceService.TodayIst;
+            var monthAgo = DateTime.UtcNow.AddDays(-30);
+            var due = (await _db.SiteContents.Where(c => c.Published != null && c.Status == "published" && !c.Archived).ToListAsync(ct))
+                .Where(c => SiteRules.DueForReview(c, cfg, today) && (c.ReReviewAskedAt == null || c.ReReviewAskedAt < monthAgo)).ToList();
+            if (due.Count == 0) return;
+            foreach (var c in due) c.ReReviewAskedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            var names = string.Join(", ", due.Take(3).Select(c => c.Title)) + (due.Count > 3 ? $" and {due.Count - 3} more" : "");
+            _notifier.Notify(new NotifyJob { ToOffice = true, Kind = "website", Title = $"Website: {due.Count} page{(due.Count == 1 ? "" : "s")} due for review again", Body = $"Last reviewed over {cfg.ReReviewMonths} months ago: {names}.", Link = "website", RefId = "rereview" });
         }
 
         public record Gap(string Where, string What, Guid? ItemId, string? File, int? Line);
@@ -1052,6 +1150,9 @@ namespace SeemanchalOutreach.Api.Services
                         var db = scope.ServiceProvider.GetRequiredService<IMarketingDbContext>();
                         var job = await db.SitePublishes.Where(p => SitePublisher.Active.Contains(p.Status)).OrderBy(p => p.StartedAt).FirstOrDefaultAsync(stoppingToken);
                         var publisher = scope.ServiceProvider.GetRequiredService<SitePublisher>();
+                        // Webhooks about earlier publishes go out first, a few at a time.
+                        try { await SiteHooks.SendDueAsync(db, SiteConfig.Load(scope.ServiceProvider.GetRequiredService<IAppSettings>()), scope.ServiceProvider.GetRequiredService<IHttpClientFactory>().CreateClient("linkcheck"), stoppingToken); }
+                        catch (Exception ex) when (ex is not OperationCanceledException) { _logger.LogWarning(ex, "Website webhooks failed this round."); }
                         if (job != null) await publisher.StepAsync(job, stoppingToken);
                         else
                         {

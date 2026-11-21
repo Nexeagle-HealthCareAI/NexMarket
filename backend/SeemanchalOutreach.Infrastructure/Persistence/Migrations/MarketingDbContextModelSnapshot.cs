@@ -2349,6 +2349,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("FirstResponseAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("LandingPage")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("LastActivityAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -3504,6 +3507,45 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.ToTable("role_permissions", "marketing");
                 });
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SiteApiKey", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Last4")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Hash")
+                        .IsUnique();
+
+                    b.ToTable("site_api_keys", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SiteContent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3515,6 +3557,18 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("Archived")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("ChainBase")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ChainId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChainOrg")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ChainVersion")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -3559,6 +3613,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("PublishedByName")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("ReReviewAskedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -3568,11 +3625,17 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("ReviewedByName")
                         .HasColumnType("text");
 
+                    b.Property<DateOnly?>("ReviewedOn")
+                        .HasColumnType("date");
+
                     b.Property<string>("ScheduledBy")
                         .HasColumnType("text");
 
                     b.Property<string>("ScheduledByName")
                         .HasColumnType("text");
+
+                    b.Property<bool>("Shared")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
@@ -3666,6 +3729,34 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.HasIndex("ContentId");
 
                     b.ToTable("site_content_versions", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SiteEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Day", "Path", "Kind")
+                        .IsUnique();
+
+                    b.ToTable("site_events", "marketing");
                 });
 
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SiteMedia", b =>
@@ -3810,6 +3901,56 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("site_publishes", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SiteWebhookDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Event")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Hook")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("LastStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("NextAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Tries")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "NextAt");
+
+                    b.ToTable("site_webhook_deliveries", "marketing");
                 });
 
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SocialConversation", b =>

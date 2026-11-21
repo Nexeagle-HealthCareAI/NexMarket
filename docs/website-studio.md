@@ -116,6 +116,46 @@ The website reads each file in `content/` and checks it when it builds (`src/dat
 
 With no camps, notices or stories, every existing page is built exactly as before.
 
-## Not built yet (phase 3 and 4)
+## Search & results (phase 3)
 
-Search Console figures per page, enquiries per page, translations, re-review reminders, more than one website per organisation, chains, starter websites.
+The **Search & results** tab shows every page for the last 28 days with complete figures (Google stops at three days ago) against the 28 days before: visits from Google, times shown, average place, page views (Google Analytics), and enquiries, admissions, calls, WhatsApp taps and bookings for that page.
+
+- **What to work on first** lists pages losing visits (down by 30% or more from at least 10), pages almost on page 1 (place 8 to 20, shown 50+ times) and pages competing for the same search.
+- In the editor, the **Search & results** box shows the page's own figures, what people searched, questions people ask (**Answer it** adds a section to write), suggested **pages to link to** (**Add** puts them under Related reading), and AI suggestions of questions (only the page's public text and searches go to the AI).
+- **Enquiries per page** come from the Leads inbox: each website enquiry now records the page it came from.
+- **Calls, WhatsApp taps and bookings per page** are counted only if the website build turns it on (`VITE_CRM_EVENTS_URL`). Only the page and the kind of tap are counted, one number per page per day: no names, phone numbers or IP addresses.
+- **Writing checks** appear under "Worth improving for Google": long paragraphs and sentences, repeated headings, and hard English (reading ease under 50). They never block publishing.
+
+## Translations
+
+On an approved English article, **Hindi** or **Bengali** makes an AI draft at `/blogs/<slug>-hi` or `-bn`, labelled as AI, linked to the original. It goes through the same review by a named doctor; nothing is published automatically.
+
+## Re-review
+
+An article or medical page reviewed more than 12 months ago (change it in Setup) is listed under **Waiting for review → Due for a fresh look**, and the office gets one reminder a month. The page stays live. A doctor reviews it again and the new date shows on the website.
+
+## Areas served
+
+**Areas served** pages (`/areas/<town>`) say how to reach the hospital from a nearby town and which services people from there come for. To stop thin copies, each needs at least 120 words of its own and the town named in the text, and cannot be more than half the same as another area page.
+
+## Chains (head office and branches)
+
+In Setup, a branch names its head office and the head office lists its branches; both sides must agree. The head office ticks **Share with branches** on a page. The branch sees it under **From the head office** and adopts it as its own draft (still reviewed there). When the head office changes the page, the branch can **take the latest**; fields the branch changed itself are kept.
+
+## Starter website
+
+For a new organisation without a website: **Setup → Starter website** downloads a small static website (Node builder, no framework) filled from the CRM's doctors, departments and camps, or opens a pull request into an **empty** GitHub repository (it refuses a repository that already has a website). `README.md` inside says how to build and host it.
+
+## Developer: webhooks and read API
+
+- **Webhooks** (up to three): after each publish the CRM sends `content.published` to your address, signed: header `X-NexMarket-Signature: sha256=<HMAC-SHA256 of the body with your secret>`. Failed sends are retried after 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours. Only public, non-private addresses are allowed.
+- **API keys**: shown once when made, stored only as a hash; the list shows the last 4 characters. Revoke any time.
+- `GET /api/v1/public/website/content?type=<kind>` and `/website/content/<kind>/<key>` with header `X-Api-Key` return the live public content only.
+- Click counting: `POST /api/v1/public/web-event?org=<id>` (rate limited).
+
+Server pieces: `Services/WebsiteInsights.cs` (figures, fixes, writing checks, related pages), `Services/WebsitePlatform.cs` (webhooks, keys, chains), `Services/WebsiteStarter.cs` and `Starter/` (starter website), `Controllers/WebsiteController.Growth.cs`. Tables `site_events`, `site_api_keys`, `site_webhook_deliveries` (migration `AddWebsitePhase34`).
+
+## Not built
+
+- AI descriptions of pictures (the AI cannot see the picture; write them yourself).
+- More than one website per organisation (use one organisation per website).

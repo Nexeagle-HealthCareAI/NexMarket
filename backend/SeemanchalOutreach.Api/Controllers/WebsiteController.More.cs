@@ -36,6 +36,7 @@ namespace SeemanchalOutreach.Api.Controllers
             "faq" => $"{cfg.SiteUrl}/faqs",
             "doctor" => $"{cfg.SiteUrl}/doctors",
             "redirect" => cfg.SiteUrl + c.Key,
+            "location" => $"{cfg.SiteUrl}/areas/{c.Key}",
             _ => cfg.SiteUrl,
         };
 

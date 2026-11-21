@@ -560,6 +560,8 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? LastMessage { get; set; }
         public int Unread { get; set; }
         public bool OptOut { get; set; }                           // asked not to be messaged
+        /// <summary>The website page an enquiry was sent from (a path like /blogs/kidney-stones), when it came from the website.</summary>
+        public string? LandingPage { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public string? CreatedBy { get; set; }
         public DateTime? FirstResponseAt { get; set; }
@@ -1164,6 +1166,17 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? ScheduledByName { get; set; }
         /// <summary>When this version was last put on the staging site (null when it has changed since).</summary>
         public DateTime? StagedAt { get; set; }
+        /// <summary>The day a named reviewer last approved it (kept through later edits; shown on the website).</summary>
+        public DateOnly? ReviewedOn { get; set; }
+        /// <summary>When the reviewers were last reminded that this is due for re-review.</summary>
+        public DateTime? ReReviewAskedAt { get; set; }
+        /// <summary>Head office: offered to the branches of the chain.</summary>
+        public bool Shared { get; set; }
+        /// <summary>Branch: the head office this was adopted from, its item and version, and that version's data (to merge later updates).</summary>
+        public string? ChainOrg { get; set; }
+        public Guid? ChainId { get; set; }
+        public int? ChainVersion { get; set; }
+        public string? ChainBase { get; set; }
         public string CreatedBy { get; set; } = string.Empty;
         public string CreatedByName { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -1196,6 +1209,46 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public string UpdatedByName { get; set; } = string.Empty;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>How many times a website page led to a call, WhatsApp, booking or enquiry click on a day. No personal data.</summary>
+    public class SiteEvent
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public DateOnly Day { get; set; }
+        public string Path { get; set; } = "/";
+        public string Kind { get; set; } = "call";                // call | whatsapp | booking | enquiry
+        public int Count { get; set; }
+    }
+
+    /// <summary>A key another system uses to read the live website content. Only a hash is kept; it can be revoked, not deleted.</summary>
+    public class SiteApiKey
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Name { get; set; } = string.Empty;
+        public string Hash { get; set; } = string.Empty;
+        public string Last4 { get; set; } = string.Empty;
+        public string CreatedByName { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? LastUsedAt { get; set; }
+        public DateTime? RevokedAt { get; set; }
+    }
+
+    /// <summary>One webhook call about a publish, with its retries. Kept as a log.</summary>
+    public class SiteWebhookDelivery
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public int Hook { get; set; }
+        public string Url { get; set; } = string.Empty;
+        public string Event { get; set; } = string.Empty;          // content.published | content.unpublished
+        public string Payload { get; set; } = "{}";
+        public string Status { get; set; } = "waiting";            // waiting | sent | failed
+        public int Tries { get; set; }
+        public DateTime NextAt { get; set; } = DateTime.UtcNow;
+        public string? LastError { get; set; }
+        public int? LastStatus { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? SentAt { get; set; }
     }
 
     /// <summary>What a piece of website content looked like each time something happened to it. Rows are only added.</summary>

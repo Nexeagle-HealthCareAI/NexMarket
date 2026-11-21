@@ -3129,3 +3129,26 @@ button.ws-media-card:hover, button.ws-media-card:focus-visible { border-color: v
   .ws-pair { grid-template-columns: 1fr; }
   .ws-history li { flex-direction: column; align-items: flex-start; }
 }
+/* Website phases 3 and 4 */
+.ws-up { color: #0f7a4f; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; }
+.ws-down { color: #b3261e; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; }
+.ws-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ws-insights th { white-space: nowrap; }
+.ws-sort { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: inherit; cursor: pointer; }
+.ws-sort[aria-pressed="true"] { color: var(--accent); text-decoration: underline; }
+.ws-fixes { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ws-fixes li { border: 1px solid var(--line); border-left-width: 4px; border-radius: 10px; padding: 10px 12px; display: grid; gap: 4px; }
+.ws-fixes li.is-losing { border-left-color: #b3261e; } .ws-fixes li.is-almost { border-left-color: var(--accent); } .ws-fixes li.is-competing { border-left-color: #d08b00; }
+.ws-fixes p { margin: 0; font-size: 14px; }
+.ws-figs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+.ws-figs div { background: var(--surface-2, #f4f6fa); border-radius: 8px; padding: 6px 8px; }
+.ws-figs dt { font-size: 11px; color: var(--text-2); } .ws-figs dd { margin: 0; font-weight: 700; font-size: 15px; }
+.ws-queries { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.ws-queries li { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--line); padding-bottom: 5px; }
+.ws-setup-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ws-setup-steps li { display: flex; gap: 10px; align-items: flex-start; }
+.ws-setup-steps li.is-done .ws-step-dot { background: #0f8a5f; border-color: #0f8a5f; color: #fff; }
+.ws-hook { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ws-hook .crm-input { flex: 1; min-width: 200px; }
+.ws-secret { font-size: 13px; padding: 6px 8px; flex: 1; min-width: 0; }
+.ws-chain { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

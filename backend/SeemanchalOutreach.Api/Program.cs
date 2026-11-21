@@ -74,6 +74,8 @@ builder.Services.AddHttpClient("linkcheck", c => { c.Timeout = TimeSpan.FromSeco
     .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false, ConnectCallback = SeemanchalOutreach.Api.Services.LinkChecker.ConnectPublicAsync });
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.GitHubClient>();
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.SitePublisher>();
+builder.Services.AddScoped<SeemanchalOutreach.Api.Services.SiteInsights>();
+builder.Services.AddScoped<SeemanchalOutreach.Api.Services.SiteStarter>();
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.SitePublishWorker>();
 builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.PresenceTracker>();
 // NexMarket Agents (Python service next to this API): its URL and the shared secret, from the environment.

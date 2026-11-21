@@ -8,6 +8,7 @@ import {
 import { crm } from '@/lib/sync/api-client';
 import { ErrorBox, Modal, Pill, Skeleton } from '@/components/crm/ui';
 import { GenericFields } from './Fields';
+import { ItemSearchCard } from './Growth';
 import {
   ACTION, KIND, STATUS, diff, errText, fromLines, fromParas, localInput, nice, shrinkPicture, toLines, toParas, when,
   type Data, type Doc, type One, type Row, type Version,
@@ -29,7 +30,7 @@ export function StatusPills({ r }: { r: Row }) {
 
 interface EditSection { heading: string; text: string; points: string }
 
-export function Editor({ id, data, embedded, onBack, onChanged, say }: { id: string; data: Data; embedded?: boolean; onBack: () => void; onChanged: () => void; say: (m: string) => void }) {
+export function Editor({ id, data, embedded, onBack, onOpen, onChanged, say }: { id: string; data: Data; embedded?: boolean; onBack: () => void; onOpen?: (id: string) => void; onChanged: () => void; say: (m: string) => void }) {
   const [one, setOne] = useState<One | null>(null);
   const [doc, setDoc] = useState<Doc>({});
   const [secs, setSecs] = useState<EditSection[]>([]);
@@ -142,7 +143,9 @@ export function Editor({ id, data, embedded, onBack, onChanged, say }: { id: str
   const check = async () => { setBusy('claims'); setErr(null); try { setClaims((await crm.post<{ claims: { text: string; why: string }[] }>('/api/v1/website/ai/claims', { data: built })).claims); } catch (e) { setErr(errText(e)); } finally { setBusy(null); } };
 
   const count = (n: number, max: number, min = 0) => <span className={`ws-count${n > max || (n > 0 && n < min) ? ' is-off' : ''}`}>{n} / {max}</span>;
-  const canSubmit = me.write && !r.archived && (r.status === 'draft' || r.status === 'unpublished' || dirty);
+  const canSubmit = me.write && !r.archived && (r.status === 'draft' || r.status === 'unpublished' || dirty || (!!one.dueForReview && r.status === 'published'));
+  const takeChain = () => run('chain', async () => { await saveNow(); const x = await crm.post<{ kept: string[] }>(`/api/v1/website/${id}/chain-update`); return x.kept.length ? `Took the head office's version. Kept your own: ${x.kept.join(', ')}.` : "Took the head office's version."; });
+  const share = (on: boolean) => run('share', async () => { await crm.post(`/api/v1/website/${id}/share${on ? '' : '?off=true'}`); return on ? 'Shared with the branches.' : 'No longer shared. Branches keep what they adopted.'; });
 
   return (
     <div className="ws-editor">
@@ -154,6 +157,8 @@ export function Editor({ id, data, embedded, onBack, onChanged, say }: { id: str
         </div>
       )}
       {r.note && <div className="ws-banner" role="status">{r.note}</div>}
+      {one.dueForReview && r.status === 'published' && <div className="ws-banner" role="status">Due for review again: last reviewed {one.reviewedOn ? `on ${one.reviewedOn}` : '(no date recorded)'}. Read it, update anything out of date, and send it for review.</div>}
+      {one.chain && <div className="ws-banner ws-chain" role="status"><span>Adopted from the head office (their version {one.chain.version}). Your changes here stay when you take a newer version.</span>{me.write && !locked && <button type="button" className="crm-btn is-secondary is-sm" disabled={!!busy} onClick={() => void takeChain()}>{busy === 'chain' ? 'Taking…' : "Take the head office's latest"}</button>}</div>}
       {err && <ErrorBox message={err} />}
       <div className="ws-cols">
         <div className="ws-main">
@@ -203,6 +208,16 @@ export function Editor({ id, data, embedded, onBack, onChanged, say }: { id: str
               </div>
             ))}
             {!locked && <button type="button" className="crm-btn is-secondary" onClick={() => set('references', [...refs, { label: '', url: '' }])}><Plus size={16} aria-hidden /> Add a reference</button>}
+            <h2 className="ws-h2">Related reading</h2>
+            <p className="crm-sub" style={{ margin: 0 }}>Other pages on this website to read next. The Search &amp; results box suggests some.</p>
+            {((doc.related as { label: string; href: string }[] | undefined) ?? []).map((x, i, all) => (
+              <div key={i} className="ws-ref">
+                <input className="crm-input" aria-label={`Name of related page ${i + 1}`} value={x.label} disabled={locked} onChange={(e) => set('related', all.map((y, n) => (n === i ? { ...y, label: e.target.value } : y)))} placeholder="Name" />
+                <input className="crm-input" aria-label={`Address of related page ${i + 1}`} value={x.href} disabled={locked} onChange={(e) => set('related', all.map((y, n) => (n === i ? { ...y, href: e.target.value } : y)))} placeholder="/blogs/…" />
+                {!locked && <button type="button" className="crm-btn is-secondary is-sm" aria-label="Remove related page" onClick={() => set('related', all.filter((_, n) => n !== i))}><X size={14} aria-hidden /></button>}
+              </div>
+            ))}
+            {!locked && <button type="button" className="crm-btn is-secondary" onClick={() => set('related', [...((doc.related as { label: string; href: string }[] | undefined) ?? []), { label: '', href: '' }])}><Plus size={16} aria-hidden /> Add a related page</button>}
           </>)}
           {type === 'faq' && <>
             <label className="crm-field">Question<input className="crm-input ws-big" value={doc.question ?? ''} disabled={locked} maxLength={300} onChange={(e) => set('question', e.target.value)} /></label>
@@ -258,6 +273,14 @@ export function Editor({ id, data, embedded, onBack, onChanged, say }: { id: str
           </section>
 
           {checks && <ChecksCard checks={checks} pic={pic} onClose={() => setChecks(null)} />}
+
+          {type !== 'site' && type !== 'redirect' && type !== 'notice' && type !== 'testimonial' && <ItemSearchCard id={id} type={type} aiOn={data.aiOn} canWrite={me.write && !locked} doc={built} say={say}
+            onAddRelated={(x) => set('related', [...((doc.related as { label: string; href: string }[] | undefined) ?? []), x])}
+            onAddQuestion={(q) => { setSecs((a) => [...a, { heading: q.charAt(0).toUpperCase() + q.slice(1).replace(/\?*$/, '?'), text: '', points: '' }]); setDirty(true); }}
+            onTranslated={(x) => (onOpen ? onOpen(x) : undefined)} />}
+          {me.publish && !one.chain && type !== 'site' && type !== 'redirect' && data.setup.branches && data.setup.branches.length > 0 && (
+            <section className="crm-card ws-card"><label className="ws-check"><input type="checkbox" checked={!!one.shared} disabled={!!busy} onChange={(e) => void share(e.target.checked)} /> Share with the branches</label><span className="crm-sub">Branches can adopt it and change it for their own website.</span></section>
+          )}
 
           {(one.problems.length > 0 || one.warnings.length > 0) && !dirty && (
             <section className="crm-card ws-card">

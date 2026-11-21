@@ -68,6 +68,9 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<SiteContentVersion> SiteContentVersions { get; }
         DbSet<SitePublish> SitePublishes { get; }
         DbSet<SiteMedia> SiteMedia { get; }
+        DbSet<SiteEvent> SiteEvents { get; }
+        DbSet<SiteApiKey> SiteApiKeys { get; }
+        DbSet<SiteWebhookDelivery> SiteWebhookDeliveries { get; }
         DbSet<Organisation> Organisations { get; }
         DbSet<ChatReaction> ChatReactions { get; }
         DbSet<ChatPin> ChatPins { get; }

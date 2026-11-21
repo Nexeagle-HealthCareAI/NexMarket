@@ -7,8 +7,9 @@ import { Empty, ErrorBox, PageHead, Skeleton, useToast } from '@/components/crm/
 import { Editor } from '@/components/crm/website/Editor';
 import { AiDraftForm, ContentTab, DeveloperTab, GapsCard, List, MediaTab, NewForm, Progress, PublishTab, SetupTab } from '@/components/crm/website/Tabs';
 import { errText, type Data, type Doc, type Kind } from '@/components/crm/website/shared';
+import { ChainSettings, IntegrationsCard, ReReviewList, SearchTab, SetupSteps, StarterCard } from '@/components/crm/website/Growth';
 
-type Tab = 'content' | 'review' | 'publish' | 'media' | 'site' | 'developer' | 'setup';
+type Tab = 'content' | 'review' | 'publish' | 'search' | 'media' | 'site' | 'developer' | 'setup';
 
 export default function WebsitePage() {
   const [data, setData] = useState<Data | null>(null);
@@ -49,7 +50,7 @@ export default function WebsitePage() {
   if (open) {
     return (
       <main className="crm-page">
-        <Editor key={open} id={open} data={data} onBack={() => { setOpen(null); void load(); }} say={say} onChanged={() => void load()} />
+        <Editor key={open} id={open} data={data} onBack={() => { setOpen(null); void load(); }} onOpen={(x) => { void load(); setOpen(x); }} say={say} onChanged={() => void load()} />
         {toast}
       </main>
     );
@@ -73,6 +74,7 @@ export default function WebsitePage() {
         {tabBtn('content', 'Content')}
         {tabBtn('review', <>Waiting for review{waiting.length ? <span className="an-count">{waiting.length}</span> : null}</>)}
         {tabBtn('publish', <>Publish{ready.length ? <span className="an-count">{ready.length}</span> : null}</>)}
+        {tabBtn('search', 'Search & results')}
         {tabBtn('media', 'Media')}
         {tabBtn('site', 'Hospital details')}
         {me.develop && tabBtn('developer', 'Developer')}
@@ -80,19 +82,23 @@ export default function WebsitePage() {
       </div>
 
       {tab === 'content' && <ContentTab data={data} kind={kind} setKind={setKind} onOpen={setOpen} onNew={(k) => setDraft({ type: k })} onChanged={() => void load()} say={say} />}
-      {tab === 'review' && (waiting.length === 0
-        ? <Empty title="Nothing is waiting for review">When a writer sends something for review (articles, service pages, patient stories), it shows here for the reviewer to read and approve.</Empty>
-        : <List rows={waiting} onOpen={setOpen} extra={(r) => <span className="crm-sub">Sent by {r.submittedByName}</span>} />)}
+      {tab === 'review' && <>
+        {waiting.length === 0
+          ? <Empty title="Nothing is waiting for review">When a writer sends something for review (articles, service pages, patient stories), it shows here for the reviewer to read and approve.</Empty>
+          : <List rows={waiting} onOpen={setOpen} extra={(r) => <span className="crm-sub">Sent by {r.submittedByName}</span>} />}
+        <ReReviewList onOpen={setOpen} />
+      </>}
+      {tab === 'search' && <SearchTab onOpen={setOpen} />}
       {tab === 'publish' && <PublishTab data={data} onOpen={setOpen} onChanged={() => void load()} say={say} />}
       {tab === 'media' && <MediaTab data={data} onChanged={() => void load()} say={say} />}
       {tab === 'site' && <>
         {site
-          ? <Editor key={site.id} id={site.id} data={data} embedded onBack={() => void load()} say={say} onChanged={() => void load()} />
+          ? <Editor key={site.id} id={site.id} data={data} embedded onBack={() => void load()} onOpen={setOpen} say={say} onChanged={() => void load()} />
           : <Empty title="The hospital's details aren't here yet">They come in when the website is connected and its content is brought in (Setup).</Empty>}
         <GapsCard onOpen={setOpen} />
       </>}
-      {tab === 'developer' && me.develop && <DeveloperTab data={data} onChanged={() => void load()} say={say} />}
-      {tab === 'setup' && me.develop && <SetupTab setup={setup} onChanged={() => void load()} say={say} />}
+      {tab === 'developer' && me.develop && <><DeveloperTab data={data} onChanged={() => void load()} say={say} /><IntegrationsCard say={say} /></>}
+      {tab === 'setup' && me.develop && <><SetupSteps /><SetupTab setup={setup} onChanged={() => void load()} say={say} /><ChainSettings say={say} /><StarterCard connected={setup.connected} say={say} /></>}
 
       {draft && <NewForm type={draft.type} start={draft.data} ai={draft.ai} data={data} onClose={() => setDraft(null)} onMade={(id) => { setDraft(null); setOpen(id); }} />}
       {aiForm && <AiDraftForm data={data} onClose={() => setAiForm(false)} onDraft={(d) => { setAiForm(false); setDraft({ type: 'article', data: d, ai: true }); }} />}

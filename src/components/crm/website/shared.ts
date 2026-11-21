@@ -1,6 +1,6 @@
 import { friendlyError, type Tone } from '@/components/crm/ui';
 
-export type Kind = 'article' | 'faq' | 'site' | 'doctor' | 'camp' | 'notice' | 'testimonial' | 'service' | 'redirect';
+export type Kind = 'article' | 'faq' | 'site' | 'doctor' | 'camp' | 'notice' | 'testimonial' | 'service' | 'location' | 'redirect';
 export type Status = 'draft' | 'review' | 'approved' | 'publishing' | 'published' | 'unpublished';
 export interface Row {
   id: string; type: Kind; key: string; title: string; status: Status; live: boolean; changed: boolean; version: number; sortOrder: number;
@@ -18,7 +18,7 @@ export interface Setup {
   connected: boolean; imported: boolean; siteUrl?: string | null; repo?: string | null; reviewTypes: string[]; departments: string[]; ai: boolean; hasStaging: boolean;
   repoOwner?: string | null; repoName?: string | null; branch?: string | null; contentDir?: string | null; mediaDir?: string | null; appId?: string | null;
   privateKey?: string | null; token?: string | null; connectedAt?: string | null; importedAt?: string | null; keyUnreadable?: boolean;
-  stagingBranch?: string | null; scanFiles?: string | null; syncedAt?: string | null;
+  stagingBranch?: string | null; scanFiles?: string | null; syncedAt?: string | null; reReviewMonths?: number; headOffice?: string | null; branches?: string[];
 }
 export interface FieldDef {
   name: string; label: string; kind: 'text' | 'longtext' | 'paras' | 'lines' | 'date' | 'time' | 'bool' | 'select' | 'image' | 'phone' | 'url' | 'path' | 'pairs';
@@ -38,7 +38,7 @@ export interface Doc {
 export interface Version { id: string; version: number; action: string; note?: string | null; byName: string; at: string; reviewedByName?: string | null }
 export interface One {
   item: Row; data: Doc; published?: Doc | null; problems: string[]; warnings: string[]; needsReview: boolean; address?: string | null;
-  versions: Version[]; kind: TypeDef;
+  versions: Version[]; kind: TypeDef; dueForReview?: boolean; reviewedOn?: string | null; chain?: { org: string; version: number } | null; shared?: boolean;
 }
 export interface Media {
   id: string; name: string; path: string; mime: string; width: number; height: number; bytes: number; alt: string; onSite: boolean; version: number; archived: boolean;
@@ -55,7 +55,7 @@ export const when = (d?: string | null) => (d ? new Date(d).toLocaleString('en-I
 export const dayText = (d?: string | null) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '');
 export const nice = (s: string) => s.replace(/-/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 export const KIND: Record<Kind, string> = {
-  article: 'Article', faq: 'Question', site: 'Hospital details', doctor: 'Doctor', camp: 'Health camp', notice: 'Notice', testimonial: 'Patient story', service: 'Service page', redirect: 'Redirect',
+  article: 'Article', faq: 'Question', site: 'Hospital details', doctor: 'Doctor', camp: 'Health camp', notice: 'Notice', testimonial: 'Patient story', service: 'Service page', location: 'Area served', redirect: 'Redirect',
 };
 export const STATUS: Record<Status, { label: string; tone: Tone }> = {
   draft: { label: 'Draft', tone: 'neutral' }, review: { label: 'Waiting for review', tone: 'warn' }, approved: { label: 'Ready to publish', tone: 'info' },

@@ -1,0 +1,19 @@
+name: Website
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node build.mjs
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          CRM_EVENTS_URL: ${{ vars.CRM_EVENTS_URL }}
+      # Add your host's deploy step here, running only on main, e.g.:
+      # - if: github.ref == 'refs/heads/main'
+      #   uses: cloudflare/wrangler-action@v3 ...
