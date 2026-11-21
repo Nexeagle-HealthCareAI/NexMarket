@@ -31,8 +31,9 @@ namespace SeemanchalOutreach.Api.Services
         {
             ("repoOwner", false), ("repoName", false), ("branch", false), ("contentDir", false), ("mediaDir", false), ("siteUrl", false),
             ("appId", false), ("privateKey", true), ("token", true), ("reviewTypes", false), ("departments", false), ("ai", false),
-            ("connectedAt", false), ("importedAt", false),
+            ("connectedAt", false), ("importedAt", false), ("stagingBranch", false), ("scanFiles", false), ("syncSha", false), ("syncedAt", false),
         };
+        public static readonly string[] DefaultReviewTypes = { "article", "service", "testimonial" };
         public static IEnumerable<string> SecretKeys => Fields.Where(f => f.Secret).Select(f => Prefix + f.Key);
 
         public string? RepoOwner { get; set; }
@@ -46,7 +47,14 @@ namespace SeemanchalOutreach.Api.Services
         public string? PrivateKey { get; set; }
         public string? Token { get; set; }
         /// <summary>Content types a named reviewer must approve before publishing.</summary>
-        public List<string> ReviewTypes { get; set; } = new() { "article" };
+        public List<string> ReviewTypes { get; set; } = DefaultReviewTypes.ToList();
+        /// <summary>A branch the website deploys to a staging address, if it has one; empty = no staging.</summary>
+        public string? StagingBranch { get; set; }
+        /// <summary>Code files the "Missing information" list reads for [PLACEHOLDER: …] text.</summary>
+        public List<string> ScanFiles { get; set; } = new() { "src/data/config.ts" };
+        /// <summary>The website commit the CRM last compared with (to notice changes made directly on GitHub).</summary>
+        public string? SyncSha { get; set; }
+        public string? SyncedAt { get; set; }
         public List<string> Departments { get; set; } = SiteRules.DefaultDepartments.ToList();
         public bool Ai { get; set; }
         public string? ConnectedAt { get; set; }
@@ -78,7 +86,9 @@ namespace SeemanchalOutreach.Api.Services
             {
                 RepoOwner = g("repoOwner"), RepoName = g("repoName"), Branch = g("branch") ?? "main", ContentDir = g("contentDir") ?? "content",
                 MediaDir = g("mediaDir") ?? "public/media/blogs", SiteUrl = g("siteUrl")?.TrimEnd('/'), AppId = g("appId"), PrivateKey = g("privateKey"), Token = g("token"),
-                ReviewTypes = ListOf(s.Get(Prefix + "reviewTypes"), new[] { "article" }).Where(SiteRules.Types.Contains).ToList(),
+                ReviewTypes = ListOf(s.Get(Prefix + "reviewTypes"), DefaultReviewTypes).Where(SiteRules.Types.Contains).Union(new[] { "article" }).ToList(),
+                StagingBranch = g("stagingBranch"), SyncSha = g("syncSha"), SyncedAt = g("syncedAt"),
+                ScanFiles = g("scanFiles") is { } sf ? sf.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Where(f => System.Text.RegularExpressions.Regex.IsMatch(f, @"^[\w.\-/]+$")).Take(10).ToList() : new() { "src/data/config.ts" },
                 Departments = g("departments") == null ? SiteRules.DefaultDepartments.ToList() : ListOf(g("departments"), SiteRules.DefaultDepartments).Where(SiteRules.SlugOk).ToList(),
                 Ai = g("ai") == "on", ConnectedAt = g("connectedAt"), ImportedAt = g("importedAt"),
             };
@@ -92,7 +102,7 @@ namespace SeemanchalOutreach.Api.Services
     /// </summary>
     public static class SiteRules
     {
-        public static readonly string[] Types = { "article", "faq", "site" };
+        public static string[] Types => SiteTypes.All.Select(t => t.Key).ToArray();
         public static readonly string[] FaqCategories = { "appointment", "consultation", "hospital", "medical" };
         public static readonly string[] DefaultDepartments = { "urology", "ent", "general-medicine", "anesthesiology", "neurology" };
         public static readonly string[] SiteKeys = { "phone", "whatsappNumber", "email", "website", "consultationTimings", "emergencyInfo", "description", "medicalDisclaimer" };
@@ -147,6 +157,7 @@ namespace SeemanchalOutreach.Api.Services
         /// <summary>The working copy in the website's shape: known fields only, trimmed, empty lines dropped.</summary>
         public static JsonObject Clean(string type, JsonObject d)
         {
+            if (SiteTypes.IsGeneric(type)) return SiteTypes.Clean(SiteTypes.Of(type), d);
             var o = new JsonObject();
             if (type == "faq")
             {
@@ -183,12 +194,15 @@ namespace SeemanchalOutreach.Api.Services
             return o;
         }
 
-        public static string KeyOf(string type, JsonObject d) => type == "site" ? "site" : Text(d[type == "faq" ? "id" : "slug"]).ToLowerInvariant();
-        public static string TitleOf(string type, JsonObject d) => type == "site" ? "Hospital details" : Text(d[type == "faq" ? "question" : "title"]);
+        public static string KeyOf(string type, JsonObject d) =>
+            SiteTypes.IsGeneric(type) ? SiteTypes.KeyOf(SiteTypes.Of(type), d) : type == "site" ? "site" : Text(d[type == "faq" ? "id" : "slug"]).ToLowerInvariant();
+        public static string TitleOf(string type, JsonObject d) =>
+            SiteTypes.IsGeneric(type) ? SiteTypes.TitleOf(SiteTypes.Of(type), d) : type == "site" ? "Hospital details" : Text(d[type == "faq" ? "question" : "title"]);
 
         /// <summary>What stops this from going to the website, in plain words. Empty when it is fine.</summary>
         public static List<string> Problems(string type, JsonObject d, IReadOnlyCollection<string> departments, bool hasPicture = false)
         {
+            if (SiteTypes.IsGeneric(type)) return SiteTypes.Problems(SiteTypes.Of(type), d, departments);
             var p = new List<string>();
             if (type == "site")
             {
@@ -271,14 +285,17 @@ namespace SeemanchalOutreach.Api.Services
         public static string? CantUnpublish(SiteContent c) =>
             c.Status == "publishing" ? "This is being published right now. Try again in a few minutes."
             : c.Type == "site" ? "The hospital's details can't be taken off the website."
+            : !SiteTypes.Of(c.Type).CanUnpublish ? "A service page can't be taken off the website here; change its text instead."
             : !Live(c) ? "This isn't on the website." : null;
 
         public static string? CantArchive(SiteContent c) =>
-            c.Status == "publishing" ? "This is being published right now." : Live(c) ? "Take it off the website first." : c.Type == "site" ? "The hospital's details can't be archived." : null;
+            c.Status == "publishing" ? "This is being published right now." : Live(c) ? "Take it off the website first."
+            : c.Type is "site" or "service" ? "This can't be archived." : null;
 
         /// <summary>The copy the website gets. An article keeps its first publishing date and carries its reviewer's name.</summary>
         public static JsonObject LiveCopy(SiteContent c, DateOnly today, string? pictureUrl)
         {
+            if (SiteTypes.IsGeneric(c.Type)) return SiteTypes.LiveCopy(SiteTypes.Of(c.Type), Parse(c.Data));
             var d = Clean(c.Type, Parse(c.Data));
             if (c.Type != "article") return d;
             var o = new JsonObject
@@ -447,27 +464,53 @@ namespace SeemanchalOutreach.Api.Services
         public SitePublisher(IMarketingDbContext db, IAppSettings app, GitHubClient gh, IFileStore files, INotifier notifier)
         { _db = db; _app = app; _gh = gh; _files = files; _notifier = notifier; }
 
+        /// <summary>Publish or take down one item (Id = the item), or copy one library picture (Action "media", Id = the picture).</summary>
         public record Ask(Guid Id, string Action);
 
         public static string PictureFile(SiteContent c) => $"{c.Key}.{SiteRules.ImageTypes.GetValueOrDefault(c.ImageMime ?? "", "jpg")}";
+        public static string BlogPath(string slug) => "/blogs/" + slug;
+
+        /// <summary>The whole content file for one kind, from what will be live.</summary>
+        public static string FileFor(string type, IEnumerable<(SiteContent Item, JsonObject Live)> live)
+        {
+            var rows = live.ToList();
+            return type switch
+            {
+                "article" => SiteRules.BlogFile(rows.Select(r => r.Live)),
+                "faq" => SiteRules.FaqFile(rows.Select(r => (r.Item.SortOrder, r.Live))),
+                "site" => rows.Count == 0 ? "" : SiteRules.FileText(rows[0].Live),
+                _ => SiteTypes.FileFor(SiteTypes.Of(type), rows),
+            };
+        }
 
         /// <summary>Lines up a publish. Returns the reason it can't start, or the new job.</summary>
-        public async Task<(string? Problem, SitePublish? Job)> StartAsync(IReadOnlyList<Ask> asks, string by, string byName, CancellationToken ct)
+        public async Task<(string? Problem, SitePublish? Job)> StartAsync(IReadOnlyList<Ask> asks, string by, string byName, CancellationToken ct, string target = "live")
         {
             var cfg = SiteConfig.Load(_app);
             if (!cfg.Connected) return ("The website isn't connected yet. A developer does that once in Website → Setup.", null);
             if (cfg.ImportedAt == null) return ("First bring in what is on the website now (Website → Setup → Bring in from the website), so nothing there is lost.", null);
+            if (target == "staging" && string.IsNullOrWhiteSpace(cfg.StagingBranch)) return ("There is no staging branch set in Setup.", null);
             if (asks.Count == 0) return ("Pick what to publish.", null);
-            if (asks.Count > 30) return ("Publish up to 30 things at a time.", null);
+            if (asks.Count > 40) return ("Publish up to 40 things at a time.", null);
             if (await _db.SitePublishes.AnyAsync(p => Active.Contains(p.Status), ct)) return ("Another publish is still running. Wait for it to finish.", null);
 
-            var all = await _db.SiteContents.Where(c => !c.Archived).ToListAsync(ct);
+            var all = await _db.SiteContents.Where(c => !c.Archived || c.Published != null).ToListAsync(ct);
+            var media = await _db.SiteMedia.Where(m => !m.Archived).ToListAsync(ct);
             var today = AttendanceService.TodayIst;
             var items = new JsonArray(); var files = new JsonArray(); var titles = new List<string>(); var touched = new HashSet<string>();
+            var mediaIds = new HashSet<Guid>();
             var next = all.ToDictionary(c => c.Id, c => c.Published);
+            var added = new List<SiteContent>();
             foreach (var ask in asks.GroupBy(a => a.Id).Select(g => g.First()))
             {
-                var c = all.FirstOrDefault(x => x.Id == ask.Id);
+                if (ask.Action == "media")
+                {
+                    var m = media.FirstOrDefault(x => x.Id == ask.Id);
+                    if (m == null) return ("One of those pictures can't be found any more.", null);
+                    mediaIds.Add(m.Id); titles.Add($"Picture: {m.Name}");
+                    continue;
+                }
+                var c = all.FirstOrDefault(x => x.Id == ask.Id && !x.Archived) ?? all.FirstOrDefault(x => x.Id == ask.Id && ask.Action == "unpublish");
                 if (c == null) return ("One of those can't be found any more.", null);
                 var data = SiteRules.Parse(c.Data);
                 if (ask.Action == "unpublish")
@@ -487,36 +530,77 @@ namespace SeemanchalOutreach.Api.Services
                         picture = cfg.MediaUrl(file);
                         files.Add(new JsonObject { ["path"] = cfg.MediaDir.Trim('/') + "/" + file, ["fileKey"] = c.ImageKey });
                     }
-                    next[c.Id] = SiteRules.LiveCopy(c, today, picture).ToJsonString();
+                    var copy = SiteRules.LiveCopy(c, today, picture);
+                    next[c.Id] = copy.ToJsonString();
                     titles.Add($"Publish: {c.Title}");
+                    // An article whose address changed leaves a redirect from the old address, and older redirects follow it.
+                    var oldSlug = c.Type == "article" && c.Published != null ? SiteRules.Text(SiteRules.Parse(c.Published)["slug"]) : "";
+                    if (oldSlug.Length > 0 && oldSlug != c.Key)
+                    {
+                        var from = BlogPath(oldSlug); var to = BlogPath(c.Key);
+                        foreach (var r in all.Where(x => x.Type == "redirect" && x.Published != null && SiteRules.Text(SiteRules.Parse(x.Published)["to"]) == from))
+                        {
+                            var rd = SiteRules.Parse(r.Data); rd["to"] = to; r.Data = rd.ToJsonString(); r.Version++; r.Title = SiteRules.TitleOf("redirect", rd);
+                            next[r.Id] = SiteTypes.LiveCopy(SiteTypes.Redirect, rd).ToJsonString(); touched.Add("redirect");
+                            items.Add(new JsonObject { ["id"] = r.Id.ToString(), ["action"] = "publish", ["was"] = r.Status, ["live"] = next[r.Id], ["version"] = r.Version });
+                            r.Status = "publishing";
+                        }
+                        var existing = all.FirstOrDefault(x => x.Type == "redirect" && x.Key == from);
+                        var red = new JsonObject { ["from"] = from, ["to"] = to };
+                        if (existing == null)
+                        {
+                            existing = new SiteContent { Type = "redirect", Key = from, Title = SiteRules.TitleOf("redirect", red), Data = red.ToJsonString(), Status = "approved", CreatedBy = by, CreatedByName = byName, UpdatedByName = byName };
+                            _db.SiteContents.Add(existing); added.Add(existing); next[existing.Id] = null;
+                            _db.SiteContentVersions.Add(new SiteContentVersion { ContentId = existing.Id, Version = 1, Action = "created", Data = existing.Data, Note = $"Made when \"{c.Title}\" moved", By = by, ByName = byName });
+                        }
+                        else { existing.Data = red.ToJsonString(); existing.Version++; existing.Archived = false; }
+                        next[existing.Id] = SiteTypes.LiveCopy(SiteTypes.Redirect, red).ToJsonString(); touched.Add("redirect");
+                        items.Add(new JsonObject { ["id"] = existing.Id.ToString(), ["action"] = "publish", ["was"] = "approved", ["live"] = next[existing.Id], ["version"] = existing.Version });
+                        existing.Status = "publishing";
+                    }
                 }
                 touched.Add(c.Type);
                 items.Add(new JsonObject { ["id"] = c.Id.ToString(), ["action"] = ask.Action == "unpublish" ? "unpublish" : "publish", ["was"] = c.Status, ["live"] = next[c.Id], ["version"] = c.Version });
                 c.Status = "publishing";
             }
+            all.AddRange(added);
+
+            // Library pictures used by what is being published, that the website doesn't have yet (or has an older copy of).
+            var newText = string.Join("\n", items.OfType<JsonObject>().Select(i => i["live"]?.ToString() ?? ""));
+            foreach (var m in media.Where(m => !m.OnSite && newText.Contains(m.Path, StringComparison.Ordinal))) mediaIds.Add(m.Id);
+            foreach (var m in media.Where(m => mediaIds.Contains(m.Id)))
+                files.Add(new JsonObject { ["path"] = "public" + m.Path, ["fileKey"] = m.Key, ["mediaId"] = m.Id.ToString() });
 
             // Only the files for the kinds of content in this publish are written; the others are left exactly as they are.
-            IEnumerable<SiteContent> liveOf(string type) => all.Where(c => c.Type == type && next[c.Id] != null);
-            if (touched.Contains("article"))
-                files.Add(new JsonObject { ["path"] = cfg.FilePath("blog.json"), ["text"] = SiteRules.BlogFile(liveOf("article").Select(c => SiteRules.Parse(next[c.Id]))) });
-            if (touched.Contains("faq"))
-                files.Add(new JsonObject { ["path"] = cfg.FilePath("faqs.json"), ["text"] = SiteRules.FaqFile(liveOf("faq").Select(c => (c.SortOrder, SiteRules.Parse(next[c.Id])))) });
-            if (touched.Contains("site") && liveOf("site").FirstOrDefault() is { } site)
-                files.Add(new JsonObject { ["path"] = cfg.FilePath("site.json"), ["text"] = SiteRules.FileText(SiteRules.Parse(next[site.Id])) });
+            foreach (var type in touched)
+            {
+                var t = SiteTypes.Of(type);
+                var live = all.Where(c => c.Type == type && next[c.Id] != null).Select(c => (c, SiteRules.Parse(next[c.Id]))).ToList();
+                if (type == "doctor" && live.Count == 0) return ("The website needs at least one doctor on the Our doctors page.", null);
+                if (type == "site" && live.Count == 0) continue;
+                files.Add(new JsonObject { ["path"] = cfg.FilePath(t.File), ["text"] = FileFor(type, live) });
+            }
+            if (items.Count == 0 && mediaIds.Count == 0) return ("Pick what to publish.", null);
 
-            var title = titles.Count == 1 ? titles[0] : $"{titles[0]} and {titles.Count - 1} more";
-            var job = new SitePublish { Title = title.Length > 200 ? title[..200] : title, Items = items.ToJsonString(), Files = files.ToJsonString(), StartedBy = by, StartedByName = byName };
+            var title = (target == "staging" ? "Staging: " : "") + (titles.Count == 1 ? titles[0] : $"{titles[0]} and {titles.Count - 1} more");
+            var job = new SitePublish
+            {
+                Title = title.Length > 200 ? title[..200] : title, Items = items.ToJsonString(), Files = files.ToJsonString(), StartedBy = by, StartedByName = byName,
+                Target = target, Media = new JsonArray(mediaIds.Select(x => (JsonNode)JsonValue.Create(x.ToString())!).ToArray()).ToJsonString(),
+            };
             _db.SitePublishes.Add(job);
             await _db.SaveChangesAsync(ct);
             return (null, job);
         }
 
         private static IEnumerable<JsonObject> ItemsOf(SitePublish p) => (JsonNode.Parse(p.Items) as JsonArray ?? new JsonArray()).OfType<JsonObject>();
+        private static IEnumerable<Guid> MediaOf(SitePublish p) => (JsonNode.Parse(string.IsNullOrEmpty(p.Media) ? "[]" : p.Media) as JsonArray ?? new JsonArray())
+            .Select(x => Guid.TryParse(x?.ToString(), out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty);
 
         private void Stage(SitePublish p, string status, string? note = null)
         {
             p.Status = status; p.Note = note; p.UpdatedAt = DateTime.UtcNow; p.Tries = 0;
-            if (status is "live" or "failed" or "deploy_failed") p.FinishedAt = DateTime.UtcNow;
+            if (status is "live" or "staged" or "failed" or "deploy_failed") p.FinishedAt = DateTime.UtcNow;
         }
 
         /// <summary>The content is now in the website's main branch: record what is live.</summary>
@@ -531,9 +615,24 @@ namespace SeemanchalOutreach.Api.Services
                 var publish = it["action"]?.ToString() != "unpublish";
                 c.Published = publish ? it["live"]?.ToString() : null;
                 c.Status = publish ? "published" : "unpublished";
-                c.Note = null; c.UpdatedAt = DateTime.UtcNow;
+                c.Note = null; c.UpdatedAt = DateTime.UtcNow; c.StagedAt = null;
                 if (publish) { c.FirstPublishedOn ??= today; c.PublishedAt = DateTime.UtcNow; c.PublishedByName = p.StartedByName; }
-                _db.SiteContentVersions.Add(new SiteContentVersion { ContentId = c.Id, Version = c.Version, Action = publish ? "published" : "unpublished", Data = c.Data, By = p.StartedBy, ByName = p.StartedByName });
+                _db.SiteContentVersions.Add(new SiteContentVersion { ContentId = c.Id, Version = c.Version, Action = publish ? "published" : "unpublished", Data = c.Data, By = p.StartedBy, ByName = p.StartedByName, ReviewedByName = publish ? c.ReviewedByName : null });
+            }
+            foreach (var mid in MediaOf(p))
+                if (await _db.SiteMedia.FirstOrDefaultAsync(m => m.Id == mid, ct) is { } m) m.OnSite = true;
+        }
+
+        /// <summary>The content is on the staging branch: nothing is live, the items stay ready to publish.</summary>
+        private async Task ApplyStagedAsync(SitePublish p, CancellationToken ct)
+        {
+            foreach (var it in ItemsOf(p))
+            {
+                if (!Guid.TryParse(it["id"]?.ToString(), out var id)) continue;
+                var c = await _db.SiteContents.FirstOrDefaultAsync(x => x.Id == id, ct);
+                if (c == null || c.Status != "publishing") continue;
+                c.Status = it["was"]?.ToString() ?? "approved"; c.StagedAt = DateTime.UtcNow; c.Note = null;
+                _db.SiteContentVersions.Add(new SiteContentVersion { ContentId = c.Id, Version = c.Version, Action = "staged", Data = c.Data, By = p.StartedBy, ByName = p.StartedByName });
             }
         }
 
@@ -579,8 +678,9 @@ namespace SeemanchalOutreach.Api.Services
 
         private async Task OpenAsync(SitePublish p, SiteConfig cfg, CancellationToken ct)
         {
-            var baseSha = (await _gh.GetAsync(cfg, $"/git/ref/heads/{cfg.Branch}", ct))?["object"]?["sha"]?.ToString()
-                ?? throw new GitHubException(404, $"The branch \"{cfg.Branch}\" isn't in the repository.");
+            var baseBranch = p.Target == "staging" && !string.IsNullOrWhiteSpace(cfg.StagingBranch) ? cfg.StagingBranch! : cfg.Branch;
+            var baseSha = (await _gh.GetAsync(cfg, $"/git/ref/heads/{baseBranch}", ct))?["object"]?["sha"]?.ToString()
+                ?? throw new GitHubException(404, $"The branch \"{baseBranch}\" isn't in the repository.");
             var baseTree = (await _gh.GetAsync(cfg, $"/git/commits/{baseSha}", ct))?["tree"]?["sha"]?.ToString();
 
             var entries = new JsonArray();
@@ -601,8 +701,8 @@ namespace SeemanchalOutreach.Api.Services
             var tree = (await _gh.SendAsync(cfg, HttpMethod.Post, "/git/trees", new JsonObject { ["base_tree"] = baseTree, ["tree"] = entries }, ct))?["sha"]?.ToString();
             if (tree == baseTree)
             {
-                await ApplyAsync(p, ct);
-                Stage(p, "live", "The website already had exactly this content, so nothing needed to change.");
+                if (p.Target == "staging") { await ApplyStagedAsync(p, ct); Stage(p, "staged", "Staging already had exactly this content."); }
+                else { await ApplyAsync(p, ct); Stage(p, "live", "The website already had exactly this content, so nothing needed to change."); }
                 return;
             }
             var who = string.IsNullOrWhiteSpace(p.StartedByName) ? p.StartedBy : p.StartedByName;
@@ -616,7 +716,7 @@ namespace SeemanchalOutreach.Api.Services
             var lines = string.Join("\n", ItemsOf(p).Select(i => $"- {i["action"]}: {i["id"]}"));
             var pr = await _gh.SendAsync(cfg, HttpMethod.Post, "/pulls", new JsonObject
             {
-                ["title"] = p.Title, ["head"] = branch, ["base"] = cfg.Branch,
+                ["title"] = p.Title, ["head"] = branch, ["base"] = baseBranch,
                 ["body"] = $"Published from the CRM (Website) by {who}.\n\nThe CRM merges this when the checks pass. If a check fails it is closed and the live site is unchanged.\n\n{lines}",
             }, ct);
             p.PrNumber = (int?)pr?["number"]; p.PrUrl = pr?["html_url"]?.ToString();
@@ -666,6 +766,13 @@ namespace SeemanchalOutreach.Api.Services
                 if (pr?["merged"]?.GetValue<bool>() != true) return;
             }
             p.MergeSha = pr?["merge_commit_sha"]?.ToString();
+            if (p.Target == "staging")
+            {
+                await ApplyStagedAsync(p, ct);
+                Stage(p, "staged", "On the staging branch. Check it there, then publish to the live website.");
+                Tell(p, "On staging", p.Title);
+                return;
+            }
             await ApplyAsync(p, ct);
             Stage(p, "deploying");
         }
@@ -689,47 +796,236 @@ namespace SeemanchalOutreach.Api.Services
             Tell(p, "Live on the website", p.Title + (p.Note == null ? "." : ". " + p.Note));
         }
 
+        /// <summary>One kind's entries as the website has them, by key. Null when the website has no such file.</summary>
+        private async Task<Dictionary<string, JsonObject>?> SiteEntriesAsync(SiteConfig cfg, SiteType t, string branch, CancellationToken ct, IHttpClientFactory? http = null)
+        {
+            var text = await _gh.FileAsync(cfg, cfg.FilePath(t.File), branch, ct);
+            if (text == null) return null;
+            JsonNode? node;
+            try { node = JsonNode.Parse(text); } catch (JsonException) { throw new GitHubException(422, $"{cfg.FilePath(t.File)} on the website can't be read."); }
+            var map = new Dictionary<string, JsonObject>();
+            if (t.Shape == "single") { if (node is JsonObject o) map["site"] = o; return map; }
+            if (t.Shape == "map")
+            {
+                foreach (var (k, v) in node as JsonObject ?? new JsonObject()) if (v is JsonObject o) map[k] = o;
+                return map;
+            }
+            foreach (var e in (node as JsonArray ?? new JsonArray()).OfType<JsonObject>())
+            {
+                if (t.Key == "article" && e["status"]?.ToString() != "published") continue;
+                var key = SiteRules.KeyOf(t.Key, SiteRules.Clean(t.Key, e));
+                if (key.Length > 0) map[key] = e;
+            }
+            return map;
+        }
+
+        private SiteContent NewFromSite(SiteType t, string key, JsonObject live, int order, string by, string byName, string action, string note)
+        {
+            var data = t.Key is "article" or "faq" or "site" ? SiteRules.Clean(t.Key, live) : SiteTypes.FromSite(t, live, key);
+            var c = new SiteContent
+            {
+                Type = t.Key, Key = key, Title = SiteRules.TitleOf(t.Key, data) is { Length: > 0 } title ? title : key, Data = data.ToJsonString(), Published = live.ToJsonString(),
+                Status = "published", SortOrder = order, CreatedBy = by, CreatedByName = byName, UpdatedByName = byName,
+                ReviewedByName = SiteRules.Text(live["reviewedBy"]) is { Length: > 0 } r ? r : null,
+                FirstPublishedOn = t.Key == "article" ? Hoardings.Date(live["publishedAt"]?.ToString()) : null,
+                PublishedAt = DateTime.UtcNow, PublishedByName = "Already on the website",
+            };
+            _db.SiteContents.Add(c);
+            _db.SiteContentVersions.Add(new SiteContentVersion { ContentId = c.Id, Version = 1, Action = action, Data = c.Data, Note = note, By = by, ByName = byName, ReviewedByName = c.ReviewedByName });
+            return c;
+        }
+
         /// <summary>
         /// Brings in what the website has now, so the CRM starts from the truth and a first publish loses nothing.
-        /// Only adds records the CRM doesn't have; nothing already in the CRM is changed.
+        /// Only adds records the CRM doesn't have; nothing already in the CRM is changed. Service pages are read from the
+        /// text the website's build publishes at /_content/services.json, with any CRM changes already on GitHub laid over.
         /// </summary>
-        public async Task<(int Articles, int Faqs, bool Site)> ImportAsync(string by, string byName, CancellationToken ct)
+        public async Task<Dictionary<string, int>> ImportAsync(string by, string byName, CancellationToken ct, IHttpClientFactory? http = null)
         {
             var cfg = SiteConfig.Load(_app);
-            var have = await _db.SiteContents.Select(c => c.Type + ":" + c.Key).ToListAsync(ct);
-            int articles = 0, faqs = 0; var site = false;
-            void Add(string type, JsonObject live, int order)
+            var have = (await _db.SiteContents.Select(c => c.Type + ":" + c.Key).ToListAsync(ct)).ToHashSet();
+            var counts = new Dictionary<string, int>();
+            foreach (var t in SiteTypes.All)
             {
-                var data = SiteRules.Clean(type, live);
-                var key = SiteRules.KeyOf(type, data);
-                if (key.Length == 0 || have.Contains(type + ":" + key)) return;
-                have.Add(type + ":" + key);
-                var isLive = type != "article" || live["status"]?.ToString() == "published";
-                var c = new SiteContent
+                Dictionary<string, JsonObject>? entries;
+                if (t.Key == "service")
                 {
-                    Type = type, Key = key, Title = SiteRules.TitleOf(type, data), Data = data.ToJsonString(), Published = isLive ? live.ToJsonString() : null,
-                    Status = isLive ? "published" : "draft", SortOrder = order, CreatedBy = by, CreatedByName = byName, UpdatedByName = byName,
-                    ReviewedByName = type == "article" ? SiteRules.Text(live["reviewedBy"]) is { Length: > 0 } r ? r : null : null,
-                    FirstPublishedOn = type == "article" && isLive ? Hoardings.Date(live["publishedAt"]?.ToString()) : null,
-                    PublishedAt = isLive ? DateTime.UtcNow : null, PublishedByName = isLive ? "Already on the website" : null,
-                };
-                _db.SiteContents.Add(c);
-                _db.SiteContentVersions.Add(new SiteContentVersion { ContentId = c.Id, Version = 1, Action = "imported", Data = c.Data, By = by, ByName = byName });
-                if (type == "article") articles++; else if (type == "faq") faqs++; else site = true;
+                    entries = await ServiceTextAsync(cfg, ct, http);
+                    if (entries == null) continue;
+                    var overrides = await SiteEntriesAsync(cfg, t, cfg.Branch, ct) ?? new();
+                    foreach (var (k, o) in overrides) if (entries.TryGetValue(k, out var e)) foreach (var (f, v) in o) e[f] = v?.DeepClone();
+                }
+                else entries = await SiteEntriesAsync(cfg, t, cfg.Branch, ct);
+                if (entries == null)
+                {
+                    if (t.Key is "article" or "faq" or "site") throw new GitHubException(404, $"The website has no {cfg.FilePath(t.File)} on \"{cfg.Branch}\". The website's content files have to be merged first.");
+                    continue;
+                }
+                var n = 0; var order = 0;
+                foreach (var (key, live) in entries)
+                {
+                    order += 10;
+                    if (have.Contains(t.Key + ":" + key)) continue;
+                    have.Add(t.Key + ":" + key);
+                    var c = NewFromSite(t, key, live, order, by, byName, "imported", "Brought in from the website");
+                    if (t.Key == "service") { c.Published = SiteTypes.LiveCopy(t, SiteRules.Parse(c.Data)).ToJsonString(); }
+                    n++;
+                }
+                counts[t.Key] = n;
             }
-            async Task<JsonNode?> ReadAsync(string name)
-            {
-                var text = await _gh.FileAsync(cfg, cfg.FilePath(name), cfg.Branch, ct);
-                if (text == null) throw new GitHubException(404, $"The website has no {cfg.FilePath(name)} on \"{cfg.Branch}\". The website's content files have to be merged first.");
-                try { return JsonNode.Parse(text); } catch (JsonException) { throw new GitHubException(422, $"{cfg.FilePath(name)} on the website can't be read."); }
-            }
-            var n = 0;
-            foreach (var a in (await ReadAsync("blog.json") as JsonArray ?? new JsonArray()).OfType<JsonObject>()) Add("article", a, 0);
-            foreach (var f in (await ReadAsync("faqs.json") as JsonArray ?? new JsonArray()).OfType<JsonObject>()) Add("faq", f, ++n * 10);
-            if (await ReadAsync("site.json") is JsonObject s) Add("site", s, 0);
             await _db.SaveChangesAsync(ct);
             await _app.SetAsync(new Dictionary<string, string?> { [SiteConfig.Prefix + "importedAt"] = DateTime.UtcNow.ToString("o") }, SiteConfig.SecretKeys.ToList(), by, ct);
-            return (articles, faqs, site);
+            return counts;
+        }
+
+        /// <summary>Every service page's current text, from the live website; null when the website doesn't publish it yet.</summary>
+        private static async Task<Dictionary<string, JsonObject>?> ServiceTextAsync(SiteConfig cfg, CancellationToken ct, IHttpClientFactory? http)
+        {
+            if (http == null || string.IsNullOrWhiteSpace(cfg.SiteUrl)) return null;
+            try
+            {
+                using var res = await http.CreateClient("linkcheck").GetAsync(cfg.SiteUrl + "/_content/services.json", ct);
+                if (!res.IsSuccessStatusCode) return null;
+                var map = new Dictionary<string, JsonObject>();
+                foreach (var e in (JsonNode.Parse(await res.Content.ReadAsStringAsync(ct)) as JsonArray ?? new JsonArray()).OfType<JsonObject>())
+                {
+                    var id = SiteRules.Text(e["id"]);
+                    if (!SiteRules.SlugOk(id)) continue;
+                    // Text fields the website keeps only in its design are left out.
+                    foreach (var k in e.Select(kv => kv.Key).ToList()) if (e[k] == null) e.Remove(k);
+                    map[id] = e;
+                }
+                return map;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException) { return null; }
+        }
+
+        /// <summary>
+        /// Notices changes made directly on GitHub (not through the CRM) and records them, so the CRM always shows what is
+        /// live. A draft open in the CRM is kept, with a note. Returns how many items changed.
+        /// </summary>
+        public async Task<int> SyncAsync(string? force, CancellationToken ct)
+        {
+            var cfg = SiteConfig.Load(_app);
+            if (!cfg.Connected || cfg.ImportedAt == null) return 0;
+            var sha = (await _gh.GetAsync(cfg, $"/git/ref/heads/{cfg.Branch}", ct, missingOk: true))?["object"]?["sha"]?.ToString();
+            if (sha == null || (sha == cfg.SyncSha && force == null)) return 0;
+            var changed = 0;
+            var items = await _db.SiteContents.ToListAsync(ct);
+            foreach (var t in SiteTypes.All)
+            {
+                var entries = await SiteEntriesAsync(cfg, t, cfg.Branch, ct);
+                if (entries == null) continue;
+                var mine = items.Where(c => c.Type == t.Key).ToList();
+                foreach (var (key, live) in entries)
+                {
+                    var c = mine.FirstOrDefault(x => x.Key == key);
+                    if (c == null)
+                    {
+                        if (t.Key == "service") continue;      // service pages come only from bring-in
+                        NewFromSite(t, key, live, (mine.Count + 1) * 10, "github", "GitHub", "changed_on_github", "Added directly on GitHub");
+                        changed++; continue;
+                    }
+                    var was = SiteRules.Parse(c.Published);
+                    var now = (JsonObject)live.DeepClone();
+                    if (t.Key == "service") { now = (JsonObject)was.DeepClone(); foreach (var (f, v) in live) now[f] = v?.DeepClone(); }
+                    if (c.Published != null && JsonNode.DeepEquals(was, now)) continue;
+                    c.Published = now.ToJsonString(); c.UpdatedAt = DateTime.UtcNow; c.Archived = false;
+                    if (c.Status is "published" or "unpublished")
+                    {
+                        var data = t.Key is "article" or "faq" or "site" ? SiteRules.Clean(t.Key, now) : SiteTypes.FromSite(t, now, key);
+                        // Keep what only the CRM holds (consent notes, links to CRM records).
+                        foreach (var f in (SiteTypes.IsGeneric(t.Key) ? t.Fields.Where(f => f.CrmOnly) : Array.Empty<SiteField>()))
+                            if (SiteRules.Parse(c.Data)[f.Name] is { } keep) data[f.Name] = keep.DeepClone();
+                        c.Data = data.ToJsonString(); c.Version++; c.Status = "published"; c.Title = SiteRules.TitleOf(t.Key, data) is { Length: > 0 } title ? title : c.Title;
+                    }
+                    else c.Note = "Changed on GitHub while a draft was open here. The website shows the GitHub text; this draft is kept.";
+                    _db.SiteContentVersions.Add(new SiteContentVersion { ContentId = c.Id, Version = c.Version, Action = "changed_on_github", Data = c.Data, Note = "Changed directly on GitHub", By = "github", ByName = "GitHub" });
+                    changed++;
+                }
+                if (t.Key is "service" or "site") continue;
+                foreach (var c in mine.Where(x => x.Published != null && !entries.ContainsKey(x.Key) && x.Status != "publishing"))
+                {
+                    c.Published = null; c.UpdatedAt = DateTime.UtcNow;
+                    if (c.Status == "published") c.Status = "unpublished";
+                    _db.SiteContentVersions.Add(new SiteContentVersion { ContentId = c.Id, Version = c.Version, Action = "removed_on_github", Data = c.Data, Note = "Removed directly on GitHub", By = "github", ByName = "GitHub" });
+                    changed++;
+                }
+            }
+            await _db.SaveChangesAsync(ct);
+            await _app.SetAsync(new Dictionary<string, string?> { [SiteConfig.Prefix + "syncSha"] = sha, [SiteConfig.Prefix + "syncedAt"] = DateTime.UtcNow.ToString("o") }, SiteConfig.SecretKeys.ToList(), "github", ct);
+            return changed;
+        }
+
+        /// <summary>
+        /// What runs by itself between publishes: scheduled publishing and taking down, camps leaving the day after,
+        /// and noticing changes made on GitHub (every 10 minutes).
+        /// </summary>
+        public async Task HousekeepAsync(bool syncDue, CancellationToken ct)
+        {
+            var cfg = SiteConfig.Load(_app);
+            if (!cfg.Connected || cfg.ImportedAt == null) return;
+            if (await _db.SitePublishes.AnyAsync(p => Active.Contains(p.Status), ct)) return;
+            var now = DateTime.UtcNow;
+            var today = AttendanceService.TodayIst;
+            var due = await _db.SiteContents.Where(c => !c.Archived && ((c.PublishAt != null && c.PublishAt <= now) || (c.UnpublishAt != null && c.UnpublishAt <= now && c.Published != null))).ToListAsync(ct);
+            var camps = await _db.SiteContents.Where(c => c.Type == "camp" && c.Published != null && c.Status == "published").ToListAsync(ct);
+            var asks = new List<Ask>(); string? who = null, whoName = null;
+            foreach (var c in due)
+            {
+                var off = c.UnpublishAt != null && c.UnpublishAt <= now;
+                if (off) { asks.Add(new Ask(c.Id, "unpublish")); c.UnpublishAt = null; }
+                else if (c.Status == "approved") asks.Add(new Ask(c.Id, "publish"));
+                else c.Note = "It was set to go live by itself, but it wasn't ready to publish at that time.";
+                if (!off) c.PublishAt = null;
+                who ??= c.ScheduledBy; whoName ??= c.ScheduledByName;
+            }
+            foreach (var c in camps)
+                if (string.CompareOrdinal(SiteRules.Text(SiteRules.Parse(c.Published)["date"]), today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)) < 0 && asks.All(a => a.Id != c.Id))
+                    asks.Add(new Ask(c.Id, "unpublish"));
+            if (asks.Count > 0)
+            {
+                var (problem, _) = await StartAsync(asks.Take(40).ToList(), who ?? "website", (whoName ?? "Website") + " (automatic)", ct);
+                if (problem != null) foreach (var c in due) c.Note = "Didn't go by itself: " + problem;
+                await _db.SaveChangesAsync(ct);
+                return;
+            }
+            await _db.SaveChangesAsync(ct);
+            if (syncDue) await SyncAsync(null, ct);
+        }
+
+        public record Gap(string Where, string What, Guid? ItemId, string? File, int? Line);
+
+        /// <summary>Everything still waiting for real information: placeholders and empty fields in the content, and [PLACEHOLDER: …] text in the code files set in Setup.</summary>
+        public async Task<List<Gap>> GapsAsync(CancellationToken ct)
+        {
+            var gaps = new List<Gap>();
+            var cfg = SiteConfig.Load(_app);
+            foreach (var c in await _db.SiteContents.AsNoTracking().Where(c => !c.Archived).ToListAsync(ct))
+            {
+                var d = SiteRules.Parse(c.Published ?? c.Data);
+                foreach (var (k, v) in d)
+                {
+                    var text = v?.ToJsonString() ?? "";
+                    foreach (Match m in Regex.Matches(text, @"\[PLACEHOLDER:?\s*([^\]""]{0,120})\]"))
+                        gaps.Add(new Gap($"{SiteTypes.Of(c.Type).Label}: {c.Title}", m.Groups[1].Value.Trim() is { Length: > 0 } w ? Cap(w) : k, c.Id, null, null));
+                }
+            }
+            if (cfg.Connected)
+            {
+                foreach (var file in cfg.ScanFiles)
+                {
+                    string? text;
+                    try { text = await _gh.FileAsync(cfg, file, cfg.Branch, ct); } catch (GitHubException) { continue; }
+                    if (text == null) continue;
+                    var lines = text.Split('\n');
+                    for (var i = 0; i < lines.Length; i++)
+                        foreach (Match m in Regex.Matches(lines[i], @"\[PLACEHOLDER:?\s*([^\]]{0,120})\]"))
+                            gaps.Add(new Gap("In the website's code", Cap(m.Groups[1].Value.Trim()), null, file, i + 1));
+                }
+            }
+            return gaps.GroupBy(g => g.Where + g.What + g.File + g.Line).Select(g => g.First()).ToList();
+            static string Cap(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..].ToLowerInvariant();
         }
     }
 
@@ -743,8 +1039,11 @@ namespace SeemanchalOutreach.Api.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            var lastSync = DateTime.MinValue;
             while (!stoppingToken.IsCancellationRequested)
             {
+                var syncDue = DateTime.UtcNow - lastSync > TimeSpan.FromMinutes(10);
+                if (syncDue) lastSync = DateTime.UtcNow;
                 try
                 {
                     await _orgs.ForEachAsync(async _ =>
@@ -752,7 +1051,13 @@ namespace SeemanchalOutreach.Api.Services
                         using var scope = _scopes.CreateScope();
                         var db = scope.ServiceProvider.GetRequiredService<IMarketingDbContext>();
                         var job = await db.SitePublishes.Where(p => SitePublisher.Active.Contains(p.Status)).OrderBy(p => p.StartedAt).FirstOrDefaultAsync(stoppingToken);
-                        if (job != null) await scope.ServiceProvider.GetRequiredService<SitePublisher>().StepAsync(job, stoppingToken);
+                        var publisher = scope.ServiceProvider.GetRequiredService<SitePublisher>();
+                        if (job != null) await publisher.StepAsync(job, stoppingToken);
+                        else
+                        {
+                            try { await publisher.HousekeepAsync(syncDue, stoppingToken); }
+                            catch (GitHubException ex) { _logger.LogWarning("Website housekeeping: {Message}", ex.Message); }
+                        }
                     });
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }

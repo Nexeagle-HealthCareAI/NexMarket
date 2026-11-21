@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 using SeemanchalOutreach.Api.Services;
@@ -215,6 +216,134 @@ namespace SeemanchalOutreach.Tests
             Assert.True(rsa.VerifyData(Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]), Un(parts[2]), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
             var ex = Assert.Throws<GitHubException>(() => GitHubClient.AppJwt("1", "not a key", DateTimeOffset.UtcNow));
             Assert.True(ex.Message.StartsWith("The private key can't be read"));
+        }
+
+        // ── Phase 2: more kinds of content ─────────────────────────────────────
+
+        private static JsonObject Camp(string date = "2030-01-12") => new()
+        {
+            ["slug"] = "kasba-camp", ["title"] = "Free kidney camp", ["date"] = date, ["startTime"] = "09:00", ["endTime"] = "14:00",
+            ["place"] = "Kasba Panchayat Bhawan", ["description"] = "Free check-up.", ["services"] = new JsonArray("Urine test", " "), ["doctors"] = new JsonArray(),
+            ["free"] = true, ["contactPhone"] = "+91 92346 06330", ["campId"] = "abc",
+        };
+
+        [Fact]
+        public void A_camp_is_checked_and_its_crm_link_never_reaches_the_website()
+        {
+            var t = SiteTypes.Camp;
+            var d = SiteTypes.Clean(t, Camp());
+            Assert.Equal("9234606330", d["contactPhone"]!.ToString());
+            Assert.Equal(1, ((JsonArray)d["services"]!).Count);
+            Assert.Equal(0, SiteTypes.Problems(t, d, Depts).Count);
+            var live = SiteTypes.LiveCopy(t, d);
+            Assert.Null(live["campId"]);
+            Assert.Equal("kasba-camp", live.First().Key == "slug" ? live["slug"]!.ToString() : "");
+            d["endTime"] = "08:00"; d["date"] = "2030-02-30";
+            var p = SiteTypes.Problems(t, d, Depts);
+            Assert.True(p.Contains("The camp ends before it starts."));
+            Assert.True(p.Any(x => x.Contains("isn't a real date")));
+        }
+
+        [Fact]
+        public void A_patient_story_needs_written_consent_and_the_note_stays_in_the_crm()
+        {
+            var t = SiteTypes.Testimonial;
+            var d = SiteTypes.Clean(t, new JsonObject { ["id"] = "story-ramesh", ["quote"] = "Home the next day.", ["name"] = "Ramesh K." });
+            var p = SiteTypes.Problems(t, d, Depts);
+            Assert.True(p.Any(x => x.Contains("written consent")));
+            Assert.True(p.Any(x => x.StartsWith("How consent was given")));
+            d["consentRecorded"] = true; d["consentNote"] = "Signed form, reception file 4";
+            Assert.Equal(0, SiteTypes.Problems(t, d, Depts).Count);
+            var live = SiteTypes.LiveCopy(t, d);
+            Assert.Equal(true, live["consentRecorded"]!.GetValue<bool>());
+            Assert.Null(live["consentNote"]);
+            Assert.True(SiteRules.NeedsReview("testimonial", new SiteConfig()));
+        }
+
+        [Fact]
+        public void A_notice_link_is_shaped_for_the_website_and_back()
+        {
+            var t = SiteTypes.Notice;
+            var d = SiteTypes.Clean(t, new JsonObject { ["id"] = "notice-1", ["text"] = "OPD closed on Sunday.", ["tone"] = "info", ["linkLabel"] = "Timings", ["linkHref"] = "/contact", ["startDate"] = "2026-11-20", ["endDate"] = "2026-11-19" });
+            Assert.True(SiteTypes.Problems(t, d, Depts).Contains("The notice ends before it starts."));
+            d["endDate"] = "2026-11-30";
+            Assert.Equal(0, SiteTypes.Problems(t, d, Depts).Count);
+            var live = SiteTypes.LiveCopy(t, d);
+            Assert.Equal("/contact", live["link"]!["href"]!.ToString());
+            Assert.Null(live["linkHref"]);
+            var back = SiteTypes.FromSite(t, live);
+            Assert.Equal("Timings", back["linkLabel"]!.ToString());
+            d["linkHref"] = "javascript:alert(1)";
+            Assert.True(SiteTypes.Problems(t, d, Depts).Any(x => x.StartsWith("The link must be")));
+        }
+
+        [Fact]
+        public void A_doctor_gets_a_name_line_and_initials_and_keeps_fields_it_does_not_edit()
+        {
+            var t = SiteTypes.Doctor;
+            var d = SiteTypes.Clean(t, new JsonObject
+            {
+                ["id"] = "dr-aziz-ahmed", ["name"] = "Dr Aziz Ahmed", ["department"] = "Anesthesiology", ["specialty"] = "Anesthesiology", ["qualifications"] = "MBBS, MD",
+                ["yearsOfExperience"] = "10 years experience", ["medicalRegistration"] = "Verified Profile", ["consultationTimings"] = "Mon - Sat", ["languages"] = "Hindi",
+                ["avatarGradient"] = "from-sky-500 to-blue-500", ["slug"] = "dr-aziz", ["crmDoctorId"] = "x",
+            });
+            Assert.Equal(0, SiteTypes.Problems(t, d, Depts).Count);
+            var live = SiteTypes.LiveCopy(t, d);
+            Assert.Equal("AA", live["initials"]!.ToString());
+            Assert.Equal("Dr Aziz Ahmed, MBBS, MD", live["profileImagePlaceholder"]!.ToString());
+            Assert.Equal("from-sky-500 to-blue-500", live["avatarGradient"]!.ToString());
+            Assert.Null(live["slug"]);           // no profile page, so no address
+            Assert.Null(live["crmDoctorId"]);
+            d["isClickable"] = true; d.Remove("slug");
+            Assert.True(SiteTypes.Problems(t, d, Depts).Contains("A doctor with a profile page needs its address."));
+        }
+
+        [Fact]
+        public void Service_text_is_written_by_service_id_and_redirects_are_checked()
+        {
+            var svc = new SiteContent { Type = "service", Key = "srv-5", Data = new JsonObject { ["id"] = "srv-5", ["slug"] = "lap", ["title"] = "Laparoscopic surgery", ["tagline"] = "Small scars" }.ToJsonString() };
+            var copy = SiteRules.LiveCopy(svc, new DateOnly(2026, 11, 21), null);
+            Assert.Null(copy["id"]); Assert.Null(copy["slug"]);
+            var file = SitePublisher.FileFor("service", new[] { (svc, copy) });
+            Assert.True(file.Contains("\"srv-5\": {"));
+            Assert.NotNull(SiteRules.CantUnpublish(new SiteContent { Type = "service", Status = "published", Published = "{}" }));
+            var r = SiteTypes.Clean(SiteTypes.Redirect, new JsonObject { ["from"] = "/blogs/Old", ["to"] = "/blogs/old" });
+            Assert.True(SiteTypes.Problems(SiteTypes.Redirect, r, Depts).Contains("The redirect points to itself."));
+            Assert.Equal("/blogs/old", SitePublisher.BlogPath("old"));
+        }
+
+        [Fact]
+        public void Camps_are_written_in_date_order()
+        {
+            SiteContent Item(string key) => new() { Type = "camp", Key = key };
+            JsonObject C(string slug, string date) { var c = SiteTypes.LiveCopy(SiteTypes.Camp, SiteTypes.Clean(SiteTypes.Camp, Camp(date))); c["slug"] = slug; return c; }
+            var file = SitePublisher.FileFor("camp", new[] { (Item("b"), C("b", "2030-03-01")), (Item("a"), C("a", "2030-01-01")) });
+            Assert.True(file.IndexOf("2030-01-01") < file.IndexOf("2030-03-01"));
+        }
+
+        [Fact]
+        public void Every_kind_has_a_file_and_review_defaults_are_safe()
+        {
+            Assert.Equal(SiteTypes.All.Length, SiteTypes.All.Select(t => t.File).Distinct().Count());
+            var cfg = new SiteConfig();
+            Assert.True(SiteRules.NeedsReview("article", cfg) && SiteRules.NeedsReview("service", cfg));
+            Assert.False(SiteRules.NeedsReview("camp", cfg));
+        }
+
+        [Fact]
+        public void The_link_checker_only_reaches_public_addresses()
+        {
+            Assert.False(LinkChecker.IsPublic(IPAddress.Parse("127.0.0.1")));
+            Assert.False(LinkChecker.IsPublic(IPAddress.Parse("10.2.3.4")));
+            Assert.False(LinkChecker.IsPublic(IPAddress.Parse("172.20.0.1")));
+            Assert.False(LinkChecker.IsPublic(IPAddress.Parse("192.168.1.1")));
+            Assert.False(LinkChecker.IsPublic(IPAddress.Parse("169.254.169.254")));
+            Assert.False(LinkChecker.IsPublic(IPAddress.Parse("::1")));
+            Assert.False(LinkChecker.IsPublic(IPAddress.Parse("fd00::1")));
+            Assert.True(LinkChecker.IsPublic(IPAddress.Parse("8.8.8.8")));
+            var (links, paths) = LinkChecker.Find(new JsonObject { ["text"] = "See https://www.nhs.uk/x. and more", ["image"] = new JsonObject { ["src"] = "/media/library/a.webp" }, ["linkHref"] = "/contact" });
+            Assert.True(links.Contains("https://www.nhs.uk/x"));
+            Assert.True(paths.Contains("/media/library/a.webp") && paths.Contains("/contact"));
         }
     }
 }

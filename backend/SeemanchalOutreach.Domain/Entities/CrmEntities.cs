@@ -1156,7 +1156,42 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? ImageKey { get; set; }
         public string? ImageMime { get; set; }
         public bool Archived { get; set; }
+        /// <summary>When it goes live by itself (it must be ready to publish by then).</summary>
+        public DateTime? PublishAt { get; set; }
+        /// <summary>When it comes off the website by itself.</summary>
+        public DateTime? UnpublishAt { get; set; }
+        public string? ScheduledBy { get; set; }
+        public string? ScheduledByName { get; set; }
+        /// <summary>When this version was last put on the staging site (null when it has changed since).</summary>
+        public DateTime? StagedAt { get; set; }
         public string CreatedBy { get; set; } = string.Empty;
+        public string CreatedByName { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string UpdatedByName { get; set; } = string.Empty;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// A picture in the website's media library. It is kept in the CRM's storage and copied to the website (Path) the
+    /// first time something using it is published, and again after it is replaced. Never deleted: Archived hides it.
+    /// </summary>
+    public class SiteMedia
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        /// <summary>File name on the website, without the extension; also its id in the library ("kasba-camp-2026").</summary>
+        public string Name { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
+        public string Key { get; set; } = string.Empty;
+        public string Mime { get; set; } = "image/webp";
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public long Bytes { get; set; }
+        /// <summary>Describes the picture for people who can't see it.</summary>
+        public string Alt { get; set; } = string.Empty;
+        /// <summary>True when the website has the current file.</summary>
+        public bool OnSite { get; set; }
+        public int Version { get; set; } = 1;
+        public bool Archived { get; set; }
         public string CreatedByName { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public string UpdatedByName { get; set; } = string.Empty;
@@ -1172,6 +1207,8 @@ namespace SeemanchalOutreach.Domain.Entities
         public string Action { get; set; } = "saved";             // created | saved | submitted | approved | sent_back | published | unpublished | imported | failed
         public string Data { get; set; } = "{}";
         public string? Note { get; set; }
+        /// <summary>Who had approved it, on a "published" row: rolling back to it keeps that reviewer.</summary>
+        public string? ReviewedByName { get; set; }
         public string By { get; set; } = string.Empty;
         public string ByName { get; set; } = string.Empty;
         public DateTime At { get; set; } = DateTime.UtcNow;
@@ -1190,7 +1227,11 @@ namespace SeemanchalOutreach.Domain.Entities
         public string Items { get; set; } = "[]";
         /// <summary>JSON: [{ path, text }] or [{ path, fileKey }], the files this publish writes.</summary>
         public string Files { get; set; } = "[]";
-        public string Status { get; set; } = "queued";           // queued | checking | merging | deploying | live | failed
+        public string Status { get; set; } = "queued";           // queued | checking | merging | deploying | live | staged | failed | deploy_failed
+        /// <summary>live, or staging (the staging branch, set in Setup).</summary>
+        public string Target { get; set; } = "live";
+        /// <summary>JSON: ids of media library pictures this publish copies to the website.</summary>
+        public string Media { get; set; } = "[]";
         public string? Branch { get; set; }
         public int? PrNumber { get; set; }
         public string? PrUrl { get; set; }

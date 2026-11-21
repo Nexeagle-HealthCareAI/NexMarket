@@ -69,6 +69,9 @@ builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.MeetingWorker>
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.HoardingSweeper>();
 // Website: content written in the CRM is published to the website's GitHub repository as a pull request.
 builder.Services.AddHttpClient("github", c => c.Timeout = TimeSpan.FromSeconds(40));
+// Checks links before publishing: public internet addresses only, no redirects followed.
+builder.Services.AddHttpClient("linkcheck", c => { c.Timeout = TimeSpan.FromSeconds(10); c.DefaultRequestHeaders.UserAgent.ParseAdd("NexMarket-LinkCheck/1.0"); })
+    .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false, ConnectCallback = SeemanchalOutreach.Api.Services.LinkChecker.ConnectPublicAsync });
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.GitHubClient>();
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.SitePublisher>();
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.SitePublishWorker>();

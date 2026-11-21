@@ -26,7 +26,7 @@ namespace SeemanchalOutreach.Api.Controllers
     }
     public class SiteNoteDto { public string? Note { get; set; } }
     public class SiteOrderDto { public List<Guid>? Ids { get; set; } }
-    public class SitePublishDto { public List<SitePublishItemDto>? Items { get; set; } }
+    public class SitePublishDto { public List<SitePublishItemDto>? Items { get; set; } public string? Target { get; set; } }
     public class SitePublishItemDto { public Guid Id { get; set; } public string? Action { get; set; } }
     public class SiteSetupDto
     {
@@ -44,6 +44,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public List<string>? ReviewTypes { get; set; }
         public List<string>? Departments { get; set; }
         public bool? Ai { get; set; }
+        public string? StagingBranch { get; set; }
+        public string? ScanFiles { get; set; }
     }
     public class SiteAiDraftDto { public string? Topic { get; set; } public string? DepartmentId { get; set; } public string? Notes { get; set; } }
     public class SiteAiTextDto { public JsonObject? Data { get; set; } }
@@ -57,7 +59,7 @@ namespace SeemanchalOutreach.Api.Controllers
     [Authorize]
     [PageAccess(Pages.Website, Pages.WebsiteReview, Pages.WebsitePublish, Pages.WebsiteDevelop)]
     [Route("api/v1/website")]
-    public class WebsiteController : ControllerBase
+    public partial class WebsiteController : ControllerBase
     {
         private readonly IMarketingDbContext _db;
         private readonly IAppSettings _app;
@@ -85,20 +87,23 @@ namespace SeemanchalOutreach.Api.Controllers
             submittedByName = c.SubmittedByName, submittedAt = c.SubmittedAt, reviewedByName = c.ReviewedByName, reviewedAt = c.ReviewedAt,
             publishedAt = c.PublishedAt, firstPublishedOn = c.FirstPublishedOn?.ToString("yyyy-MM-dd"), hasPicture = c.ImageKey != null,
             createdByName = c.CreatedByName, updatedByName = c.UpdatedByName, updatedAt = c.UpdatedAt,
+            publishAt = c.PublishAt, unpublishAt = c.UnpublishAt, scheduledByName = c.ScheduledByName, stagedAt = c.StagedAt,
+            date = c.Type == "camp" ? SiteRules.Text(d["date"]) : null, linked = c.Type == "doctor" ? SiteRules.Text(d["crmDoctorId"]).Length > 0 : c.Type == "camp" ? SiteRules.Text(d["campId"]).Length > 0 : (bool?)null,
         };
 
         private static object Job(SitePublish p, bool withLog = false) => new
         {
             id = p.Id, title = p.Title, status = p.Status, note = p.Note, prUrl = p.PrUrl, prNumber = p.PrNumber, branch = p.Branch,
             startedByName = p.StartedByName, startedAt = p.StartedAt, updatedAt = p.UpdatedAt, finishedAt = p.FinishedAt,
-            running = SitePublisher.Active.Contains(p.Status), log = withLog ? p.Log : null,
+            running = SitePublisher.Active.Contains(p.Status), log = withLog ? p.Log : null, target = p.Target,
             files = withLog ? (JsonNode.Parse(p.Files) as JsonArray ?? new JsonArray()).Select(f => f?["path"]?.ToString()).ToList() : null,
         };
 
         private object Setup(SiteConfig c, bool full) => new
         {
             connected = c.Connected, imported = c.ImportedAt != null, siteUrl = c.SiteUrl, repo = c.Connected || full ? $"{c.RepoOwner}/{c.RepoName}".Trim('/') : null,
-            reviewTypes = c.ReviewTypes, departments = c.Departments, ai = c.Ai,
+            reviewTypes = c.ReviewTypes, departments = c.Departments, ai = c.Ai, hasStaging = !string.IsNullOrWhiteSpace(c.StagingBranch),
+            stagingBranch = full ? c.StagingBranch : null, scanFiles = full ? string.Join(", ", c.ScanFiles) : null, syncedAt = full ? c.SyncedAt : null,
             // The rest is for developers only; secrets are never sent back, only their last four characters.
             repoOwner = full ? c.RepoOwner : null, repoName = full ? c.RepoName : null, branch = full ? c.Branch : null,
             contentDir = full ? c.ContentDir : null, mediaDir = full ? c.MediaDir : null, appId = full ? c.AppId : null,
@@ -125,6 +130,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 faqCategories = SiteRules.FaqCategories,
                 siteFields = SiteRules.SiteKeys.Select(k => new { key = k, label = SiteRules.SiteLabels[k] }),
                 limits = new { title = SiteRules.TitleBest, excerptMin = SiteRules.ExcerptMin, excerptMax = SiteRules.ExcerptMax },
+                types = SiteTypes.All.Select(t => SiteTypes.Describe(t, cfg)),
             });
         }
 
@@ -136,13 +142,14 @@ namespace SeemanchalOutreach.Api.Controllers
             var cfg = SiteConfig.Load(_app);
             var d = SiteRules.Parse(c.Data);
             var versions = await _db.SiteContentVersions.AsNoTracking().Where(v => v.ContentId == id).OrderByDescending(v => v.At).Take(100)
-                .Select(v => new { id = v.Id, version = v.Version, action = v.Action, note = v.Note, byName = v.ByName, at = v.At }).ToListAsync(ct);
+                .Select(v => new { id = v.Id, version = v.Version, action = v.Action, note = v.Note, byName = v.ByName, at = v.At, reviewedByName = v.ReviewedByName }).ToListAsync(ct);
             return Ok(new
             {
                 item = Row(c, d), data = d, published = c.Published == null ? null : SiteRules.Parse(c.Published),
                 problems = SiteRules.Problems(c.Type, d, cfg.Departments, c.ImageKey != null), warnings = SiteRules.Warnings(c.Type, d, c.ImageKey != null),
                 needsReview = SiteRules.NeedsReview(c.Type, cfg), versions,
-                address = c.Type == "article" && cfg.SiteUrl != null ? $"{cfg.SiteUrl}/blog/{c.Key}" : null,
+                address = AddressOf(c, d, cfg),
+                kind = SiteTypes.Describe(SiteTypes.Of(c.Type), cfg),
             });
         }
 
@@ -161,19 +168,34 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> Create([FromBody] SiteContentDto dto, CancellationToken ct)
         {
             var type = (dto.Type ?? "").Trim().ToLowerInvariant();
-            if (type != "article" && type != "faq") return No("Pick what to add: an article or a question.");
+            if (!SiteRules.Types.Contains(type) || !SiteTypes.Of(type).CanCreate) return No("Pick what to add.");
             var d = SiteRules.Clean(type, dto.Data ?? new JsonObject());
             var title = SiteRules.TitleOf(type, d);
-            if (title.Length == 0) return No(type == "faq" ? "Write the question." : "Write the title.");
-            // The address is made from the title unless one was typed; it must be free.
-            var keyField = type == "faq" ? "id" : "slug";
+            if (title.Length == 0 && type != "redirect") return No(type == "faq" ? "Write the question." : type == "notice" ? "Write the notice." : type == "testimonial" ? "Write the patient's words and name." : "Write the title.");
+            // The id or address is made from the title unless one was typed; it must be free.
+            var keyField = SiteTypes.Of(type).KeyField;
             var key = SiteRules.KeyOf(type, d);
-            if (key.Length == 0) key = SiteRules.Slug(title);
-            if (!SiteRules.SlugOk(key)) return No("The web address needs lowercase English letters, numbers and hyphens. Type one.");
+            if (type == "redirect")
+            {
+                if (!SiteTypes.PathOk(key) || key == "/") return No("The old address must be a page address like /blogs/old-name.");
+            }
+            else
+            {
+                if (key.Length == 0) key = type switch
+                {
+                    "notice" => "notice-" + AttendanceService.TodayIst.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture),
+                    "testimonial" => "story-" + SiteRules.Slug(SiteRules.Text(d["name"])),
+                    "camp" => SiteRules.Slug(title + " " + SiteRules.Text(d["date"])),
+                    _ => SiteRules.Slug(title),
+                };
+                key = key.Trim('-');
+                if (!SiteRules.SlugOk(key)) return No("The web address needs lowercase English letters, numbers and hyphens. Type one.");
+            }
             var taken = await _db.SiteContents.AsNoTracking().Where(c => c.Type == type).Select(c => c.Key).ToListAsync(ct);
             if (taken.Contains(key))
             {
                 if (SiteRules.KeyOf(type, d).Length > 0) return No("Another one already uses that address. Pick a different one.");
+                if (type == "redirect") return No("That old address already has a redirect. Open it and change where it goes.");
                 var n = 2; while (taken.Contains($"{key}-{n}")) n++;
                 key = $"{key}-{n}";
             }
@@ -182,7 +204,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var c = new SiteContent
             {
                 Type = type, Key = key, Title = title, Data = d.ToJsonString(), AiDrafted = dto.AiDrafted, CreatedBy = Me, CreatedByName = name, UpdatedByName = name,
-                SortOrder = type == "faq" ? ((await _db.SiteContents.Where(x => x.Type == "faq").MaxAsync(x => (int?)x.SortOrder, ct)) ?? 0) + 10 : 0,
+                SortOrder = type is "faq" or "doctor" or "testimonial" or "notice" ? ((await _db.SiteContents.Where(x => x.Type == type).MaxAsync(x => (int?)x.SortOrder, ct)) ?? 0) + 10 : 0,
             };
             _db.SiteContents.Add(c);
             Log(c, "created", name, dto.AiDrafted ? "First draft written by AI" : null);
@@ -199,8 +221,9 @@ namespace SeemanchalOutreach.Api.Controllers
             if (SiteRules.CantEdit(c) is { } no) return No(no);
             if (dto.Version != null && dto.Version != c.Version) return Conflict(new { message = $"{c.UpdatedByName} changed this while you were editing. Copy your text, reload, and add it again." });
             var d = SiteRules.Clean(c.Type, dto.Data ?? new JsonObject());
-            // The address never changes once made: links and search results point at it.
-            if (c.Type != "site") d[c.Type == "faq" ? "id" : "slug"] = c.Key;
+            // The id or address never changes here (an article's address is changed with "Change web address", which leaves a redirect).
+            if (c.Type != "site") d[SiteTypes.Of(c.Type).KeyField] = c.Key;
+            if (c.Type == "service") d["slug"] = SiteRules.Text(SiteRules.Parse(c.Data)["slug"]);
             // A picture already on the website keeps its address.
             if (c.Type == "article" && d["image"] is JsonObject img) img["src"] = SiteRules.Text((SiteRules.Parse(c.Data)["image"] as JsonObject)?["src"]);
             var text = d.ToJsonString();
@@ -211,6 +234,7 @@ namespace SeemanchalOutreach.Api.Controllers
             c.Version++; c.Status = "draft"; c.UpdatedAt = DateTime.UtcNow; c.UpdatedByName = name;
             // An approval is for the exact text that was read: any change after it needs a new one.
             if (wasChecked) { c.ReviewedBy = null; c.ReviewedAt = null; if (!SiteRules.Live(c)) c.ReviewedByName = null; c.Note = "Changed after it was sent for review, so it needs sending again."; }
+            c.StagedAt = null;
             Log(c, "saved", name);
             await _db.SaveChangesAsync(ct);
             return Ok(new { id = c.Id, version = c.Version, status = c.Status });
@@ -355,7 +379,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> Publish([FromBody] SitePublishDto dto, CancellationToken ct)
         {
             var asks = (dto.Items ?? new()).Select(i => new SitePublisher.Ask(i.Id, i.Action == "unpublish" ? "unpublish" : "publish")).ToList();
-            var (problem, job) = await _publisher.StartAsync(asks, Me, await MyNameAsync(ct), ct);
+            var asksAll = asks.Select(a => a with { Action = (dto.Items ?? new()).FirstOrDefault(i => i.Id == a.Id)?.Action == "media" ? "media" : a.Action }).ToList();
+            var (problem, job) = await _publisher.StartAsync(asksAll, Me, await MyNameAsync(ct), ct, dto.Target == "staging" ? "staging" : "live");
             return problem != null ? No(problem) : Ok(Job(job!));
         }
 
@@ -375,15 +400,13 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             var cfg = SiteConfig.Load(_app);
             var live = await _db.SiteContents.AsNoTracking().Where(c => c.Published != null).ToListAsync(ct);
-            var site = live.FirstOrDefault(c => c.Type == "site");
             return Ok(new
             {
-                files = new[]
+                files = SiteTypes.All.Select(t => new
                 {
-                    new { path = cfg.FilePath("blog.json"), text = SiteRules.BlogFile(live.Where(c => c.Type == "article").Select(c => SiteRules.Parse(c.Published))) },
-                    new { path = cfg.FilePath("faqs.json"), text = SiteRules.FaqFile(live.Where(c => c.Type == "faq").Select(c => (c.SortOrder, SiteRules.Parse(c.Published)))) },
-                    new { path = cfg.FilePath("site.json"), text = site == null ? "" : SiteRules.FileText(SiteRules.Parse(site.Published)) },
-                },
+                    path = cfg.FilePath(t.File),
+                    text = SitePublisher.FileFor(t.Key, live.Where(c => c.Type == t.Key).Select(c => (c, SiteRules.Parse(c.Published)))),
+                }),
             });
         }
 
@@ -414,10 +437,13 @@ namespace SeemanchalOutreach.Api.Controllers
                 ["reviewTypes"] = string.Join(",", (dto.ReviewTypes ?? old.ReviewTypes).Select(t => t.Trim().ToLowerInvariant()).Where(SiteRules.Types.Contains).Distinct()),
                 ["departments"] = string.Join(",", (dto.Departments ?? old.Departments).Select(t => SiteRules.Slug(t)).Where(SiteRules.SlugOk).Distinct()),
                 ["ai"] = (dto.Ai ?? old.Ai) ? "on" : null,
+                ["stagingBranch"] = Name(dto.StagingBranch, "The staging branch", ref err),
+                ["scanFiles"] = dto.ScanFiles == null ? string.Join(",", old.ScanFiles) : string.Join(",", dto.ScanFiles.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Take(10)),
             };
             if (err != null) return No(err);
             if (values["siteUrl"] != null && !values["siteUrl"]!.StartsWith("https://")) return No("The website address must start with https://.");
             if (values["appId"] != null && !values["appId"]!.All(char.IsLetterOrDigit)) return No("The app id is the number (or client id) on the GitHub App's page.");
+            if (values["stagingBranch"] != null && values["stagingBranch"] == values["branch"]) return No("The staging branch must be a different branch from the live one.");
             if (string.IsNullOrEmpty(values["departments"])) return No("Keep at least one department.");
             if (!string.IsNullOrWhiteSpace(dto.PrivateKey))
             {
@@ -466,13 +492,13 @@ namespace SeemanchalOutreach.Api.Controllers
         /// <summary>Brings in what is on the website now. Only adds what the CRM doesn't have.</summary>
         [HttpPost("import")]
         [PageAccess(Pages.WebsiteDevelop)]
-        public async Task<IActionResult> Import(CancellationToken ct)
+        public async Task<IActionResult> Import([FromServices] IHttpClientFactory http, CancellationToken ct)
         {
             if (!SiteConfig.Load(_app).Connected) return No("Connect the website first.");
             try
             {
-                var (articles, faqs, site) = await _publisher.ImportAsync(Me, await MyNameAsync(ct), ct);
-                return Ok(new { articles, faqs, site });
+                var counts = await _publisher.ImportAsync(Me, await MyNameAsync(ct), ct, http);
+                return Ok(new { counts = SiteTypes.All.Select(t => new { type = t.Key, label = t.Plural, count = counts.GetValueOrDefault(t.Key), found = counts.ContainsKey(t.Key) }) });
             }
             catch (GitHubException ex) { return No(ex.Message); }
         }

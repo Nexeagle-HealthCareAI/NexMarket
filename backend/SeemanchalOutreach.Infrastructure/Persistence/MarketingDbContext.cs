@@ -70,6 +70,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<SiteContent> SiteContents => Set<SiteContent>();
         public DbSet<SiteContentVersion> SiteContentVersions => Set<SiteContentVersion>();
         public DbSet<SitePublish> SitePublishes => Set<SitePublish>();
+        public DbSet<SiteMedia> SiteMedia => Set<SiteMedia>();
         public DbSet<Organisation> Organisations => Set<Organisation>();
         public DbSet<ChatReaction> ChatReactions => Set<ChatReaction>();
         public DbSet<ChatPin> ChatPins => Set<ChatPin>();
@@ -611,6 +612,12 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("site_content_versions");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.ContentId);
+            });
+            modelBuilder.Entity<SiteMedia>(entity =>
+            {
+                entity.ToTable("site_media");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Name).IsUnique();
             });
             modelBuilder.Entity<SitePublish>(entity =>
             {
