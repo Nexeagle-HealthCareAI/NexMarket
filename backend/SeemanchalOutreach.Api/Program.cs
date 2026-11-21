@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
 using System.Threading.Tasks;
@@ -67,6 +67,11 @@ builder.Services.Configure<SeemanchalOutreach.Api.Services.LiveKitSettings>(buil
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.CallSweeper>();
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.MeetingWorker>();
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.HoardingSweeper>();
+// Website: content written in the CRM is published to the website's GitHub repository as a pull request.
+builder.Services.AddHttpClient("github", c => c.Timeout = TimeSpan.FromSeconds(40));
+builder.Services.AddScoped<SeemanchalOutreach.Api.Services.GitHubClient>();
+builder.Services.AddScoped<SeemanchalOutreach.Api.Services.SitePublisher>();
+builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.SitePublishWorker>();
 builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.PresenceTracker>();
 // NexMarket Agents (Python service next to this API): its URL and the shared secret, from the environment.
 builder.Services.Configure<SeemanchalOutreach.Api.Controllers.AgentsSettings>(builder.Configuration.GetSection("Agents"));

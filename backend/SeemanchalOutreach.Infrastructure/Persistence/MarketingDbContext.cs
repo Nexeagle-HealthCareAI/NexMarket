@@ -67,6 +67,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<MarketingMoneyMove> MarketingMoneyMoves => Set<MarketingMoneyMove>();
         public DbSet<MarketingStaff> MarketingStaff => Set<MarketingStaff>();
         public DbSet<MarketingSalaryRate> MarketingSalaryRates => Set<MarketingSalaryRate>();
+        public DbSet<SiteContent> SiteContents => Set<SiteContent>();
+        public DbSet<SiteContentVersion> SiteContentVersions => Set<SiteContentVersion>();
+        public DbSet<SitePublish> SitePublishes => Set<SitePublish>();
         public DbSet<Organisation> Organisations => Set<Organisation>();
         public DbSet<ChatReaction> ChatReactions => Set<ChatReaction>();
         public DbSet<ChatPin> ChatPins => Set<ChatPin>();
@@ -595,6 +598,25 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.Status);
                 entity.HasIndex(e => e.ForAgentId);
                 entity.Property(e => e.Amount).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<SiteContent>(entity =>
+            {
+                entity.ToTable("site_contents");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.Type, e.Key }).IsUnique();
+                entity.HasIndex(e => e.Status);
+            });
+            modelBuilder.Entity<SiteContentVersion>(entity =>
+            {
+                entity.ToTable("site_content_versions");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.ContentId);
+            });
+            modelBuilder.Entity<SitePublish>(entity =>
+            {
+                entity.ToTable("site_publishes");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Status);
             });
             modelBuilder.Entity<MarketingStaff>(entity =>
             {

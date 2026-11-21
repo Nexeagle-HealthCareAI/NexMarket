@@ -13,7 +13,7 @@ import {
   LayoutDashboard, PhoneCall, Columns3, Users, MessageCircle, MapPin, Smartphone, ClipboardList,
   Wallet, BarChart3, ListChecks, Building2, Landmark, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
   PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus, Tent,
-  AtSign, Search, Route, Signpost, KanbanSquare, Download, IndianRupee,
+  AtSign, Search, Route, Signpost, KanbanSquare, Download, IndianRupee, Globe,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
@@ -82,6 +82,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/payments', label: 'Payments', page: 'payments', icon: Wallet },
       { href: '/admin/spend', label: 'Marketing spend', page: 'payments', icon: IndianRupee },
+      { href: '/admin/website', label: 'Website', page: 'website', icon: Globe },
       { href: '/admin/reports', label: 'Analytics', page: 'analytics', icon: BarChart3 },
       { href: '/admin/surveys', label: 'Surveys', page: 'analytics', icon: ListChecks },
     ],

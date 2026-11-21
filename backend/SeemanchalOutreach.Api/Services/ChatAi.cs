@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -155,6 +155,17 @@ namespace SeemanchalOutreach.Api.Services
             _cache.Set(key, used + 1, TimeSpan.FromHours(26));
         }
 
+        /// <summary>The same allowance, for the Website page's writing help (its own switch, in Website → Setup).</summary>
+        private void SpendWebsite(string who)
+        {
+            if (!Configured) throw new ChatAiException(503, "Writing help isn't switched on yet. Add the Groq API key on the server (Groq__ApiKey).");
+            if (_app.Get(SiteConfig.Prefix + "ai") != "on") throw new ChatAiException(503, "Writing help is switched off. A developer can switch it on in Website → Setup.");
+            var key = DayKey(who);
+            var used = _cache.TryGetValue(key, out int n) ? n : 0;
+            if (used >= _settings.ChatAiDailyCalls) throw new ChatAiException(429, "Today's AI allowance is used up. It's back tomorrow.");
+            _cache.Set(key, used + 1, TimeSpan.FromHours(26));
+        }
+
         /// <summary>Gives back a request that didn't get an answer (the AI failed), so failures don't eat the allowance.</summary>
         private void Refund(string who)
         {
@@ -246,6 +257,60 @@ namespace SeemanchalOutreach.Api.Services
             ["required"] = new JsonArray(required.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
             ["additionalProperties"] = false,
         };
+
+        // ─── Website: writing help ───────────────────────────────────────────
+        // Only text meant for the public website goes to the AI. What comes back is a draft for a person to edit:
+        // it is labelled as AI-drafted, is never published by itself, and carries no references (the AI is told not to
+        // make any up; a person adds real ones).
+
+        private const string SiteVoice =
+            "You help a hospital in Bihar, India write patient-education articles for its public website. Write in plain, warm, simple English that a " +
+            "worried patient or family member can follow; short sentences; no jargon without explaining it. Be medically careful: say only what is " +
+            "widely accepted, never promise a cure or a result, never give medicine doses, never name statistics, studies, numbers or sources unless they " +
+            "were given to you, and never invent a reference or a link. Tell the reader when to see a doctor. Do not mention any patient.";
+
+        /// <summary>A first draft of an article: title, short summary and sections. For a person to edit and a doctor to review.</summary>
+        public async Task<JsonObject> ArticleDraftAsync(string who, string topic, string department, string? notes, CancellationToken ct)
+        {
+            SpendWebsite(who);
+            var red = await RedactorAsync(ct);
+            var section = Schema(Obj(("heading", Str()), ("paragraphs", Arr(Str(), 4)), ("points", Arr(Str(), 8))), "heading", "paragraphs", "points");
+            var schema = Schema(Obj(("title", Str()), ("excerpt", Str()), ("sections", Arr(section, 7))), "title", "excerpt", "sections");
+            var user = $"Topic: {red.Hide(topic)}\nDepartment: {department}" + (string.IsNullOrWhiteSpace(notes) ? "" : $"\nPoints the writer wants covered: {red.Hide(notes)}");
+            var json = await AskJsonAsync(who, SiteVoice + " Write an article of 5 to 7 sections (for example: what it is, signs to watch for, causes, when to see a doctor, " +
+                "how it is treated in general terms, how to lower the risk). Each section: a short heading, one to three paragraphs, and bullet points only where a list " +
+                $"reads better (else an empty list). The title: under {SiteRules.TitleBest} characters, says what the reader will learn. The excerpt: one or two sentences, " +
+                $"{SiteRules.ExcerptMin} to {SiteRules.ExcerptMax} characters.", user, "article", schema, fast: false, ct, temperature: 0.4);
+            return json;
+        }
+
+        /// <summary>Other ways to write the title and the short summary of an article.</summary>
+        public async Task<(List<string> Titles, List<string> Excerpts)> ArticleSuggestAsync(string who, string articleText, CancellationToken ct)
+        {
+            SpendWebsite(who);
+            var schema = Schema(Obj(("titles", Arr(Str(), 3)), ("excerpts", Arr(Str(), 2))), "titles", "excerpts");
+            var json = await AskJsonAsync(who, SiteVoice + $" Read the article and suggest three titles (each under {SiteRules.TitleBest} characters, clear about what the reader " +
+                $"learns, no clickbait) and two short summaries for search results ({SiteRules.ExcerptMin} to {SiteRules.ExcerptMax} characters each). Use only what the article says.",
+                articleText.Length > 12000 ? articleText[..12000] : articleText, "suggest", schema, fast: true, ct, temperature: 0.5);
+            List<string> Take(string k) => (json[k]?.AsArray() ?? new JsonArray()).Select(x => (x?.ToString() ?? "").Trim()).Where(x => x.Length > 0).ToList();
+            return (Take("titles"), Take("excerpts"));
+        }
+
+        public record Claim(string Text, string Why);
+
+        /// <summary>Sentences in an article that state a medical fact or number a doctor should check or that needs a source.</summary>
+        public async Task<List<Claim>> ArticleClaimsAsync(string who, string articleText, CancellationToken ct)
+        {
+            SpendWebsite(who);
+            var claim = Schema(Obj(("text", Str()), ("why", Str())), "text", "why");
+            var schema = Schema(Obj(("claims", Arr(claim, 12))), "claims");
+            var json = await AskJsonAsync(who, "You help a medical reviewer check a hospital's patient-education article before it is published. List the sentences that " +
+                "most need checking: a number or statistic, a claim about how well a treatment works, a dose, a cause stated as certain, a promise of a result, or advice " +
+                "that could harm if wrong. Quote each sentence exactly as written (\"text\") and say in under 20 words why it needs a source or a doctor's check (\"why\"). " +
+                "List nothing that is ordinary, safe general advice. If nothing needs checking, give an empty list. Do not judge whether a claim is true.",
+                articleText.Length > 12000 ? articleText[..12000] : articleText, "claims", schema, fast: false, ct);
+            return (json["claims"]?.AsArray() ?? new JsonArray()).Select(c => new Claim((c?["text"]?.ToString() ?? "").Trim(), (c?["why"]?.ToString() ?? "").Trim())).Where(c => c.Text.Length > 0).ToList();
+        }
 
         // ─── 1. Translation ──────────────────────────────────────────────────
 

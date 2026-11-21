@@ -1120,6 +1120,93 @@ namespace SeemanchalOutreach.Domain.Entities
         public bool Removed { get; set; }
     }
 
+    /// <summary>
+    /// One piece of website content managed from the CRM: a blog article, a question and answer, or the hospital's details.
+    /// Data is the working copy people edit; Published is the copy that is live on the website (empty when it is not live).
+    /// Never deleted: Archived hides it.
+    /// </summary>
+    public class SiteContent
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Type { get; set; } = "article";            // article | faq | site
+        /// <summary>The article's slug, the question's id, or "site". Unique within its type.</summary>
+        public string Key { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        /// <summary>The working copy, as JSON in the website's own shape.</summary>
+        public string Data { get; set; } = "{}";
+        /// <summary>What is live on the website, as JSON. Null when this item is not live.</summary>
+        public string? Published { get; set; }
+        public string Status { get; set; } = "draft";             // draft | review | approved | publishing | published | unpublished
+        public int Version { get; set; } = 1;
+        public int SortOrder { get; set; }
+        public bool AiDrafted { get; set; }
+        public string? SubmittedBy { get; set; }
+        public string? SubmittedByName { get; set; }
+        public DateTime? SubmittedAt { get; set; }
+        public string? ReviewedBy { get; set; }
+        public string? ReviewedByName { get; set; }
+        public DateTime? ReviewedAt { get; set; }
+        /// <summary>The reviewer's note when it was sent back, or the reason the last publish failed.</summary>
+        public string? Note { get; set; }
+        /// <summary>The day it first went live; an article keeps this date when it is published again.</summary>
+        public DateOnly? FirstPublishedOn { get; set; }
+        public DateTime? PublishedAt { get; set; }
+        public string? PublishedByName { get; set; }
+        /// <summary>The article's picture in private storage, until it is copied to the website on publish.</summary>
+        public string? ImageKey { get; set; }
+        public string? ImageMime { get; set; }
+        public bool Archived { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public string CreatedByName { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string UpdatedByName { get; set; } = string.Empty;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>What a piece of website content looked like each time something happened to it. Rows are only added.</summary>
+    public class SiteContentVersion
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid ContentId { get; set; }
+        public int Version { get; set; }
+        public string Action { get; set; } = "saved";             // created | saved | submitted | approved | sent_back | published | unpublished | imported | failed
+        public string Data { get; set; } = "{}";
+        public string? Note { get; set; }
+        public string By { get; set; } = string.Empty;
+        public string ByName { get; set; } = string.Empty;
+        public DateTime At { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// One publish to the website: the CRM opens a pull request with the content files, waits for the website's checks,
+    /// merges, and follows the deploy. Status says where it is; Note says why in plain words when it failed.
+    /// </summary>
+    public class SitePublish
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        /// <summary>What is being done, for the list: "Publish: Kidney stones…".</summary>
+        public string Title { get; set; } = string.Empty;
+        /// <summary>JSON: [{ id, action: publish|unpublish, version }].</summary>
+        public string Items { get; set; } = "[]";
+        /// <summary>JSON: [{ path, text }] or [{ path, fileKey }], the files this publish writes.</summary>
+        public string Files { get; set; } = "[]";
+        public string Status { get; set; } = "queued";           // queued | checking | merging | deploying | live | failed
+        public string? Branch { get; set; }
+        public int? PrNumber { get; set; }
+        public string? PrUrl { get; set; }
+        public string? HeadSha { get; set; }
+        public string? MergeSha { get; set; }
+        public string? Note { get; set; }
+        /// <summary>The end of the build log when a check failed, for the developer.</summary>
+        public string? Log { get; set; }
+        public int Tries { get; set; }
+        public string StartedBy { get; set; } = string.Empty;
+        public string StartedByName { get; set; } = string.Empty;
+        public DateTime StartedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? FinishedAt { get; set; }
+    }
+
     /// <summary>A person on the marketing team's payroll. Taken off the payroll with OnPayroll = false; the row is kept.</summary>
     public class MarketingStaff
     {

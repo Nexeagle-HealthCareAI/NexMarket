@@ -5,7 +5,8 @@ import { crm } from '@/lib/sync/api-client';
 
 export type PageKey =
   | 'dashboard' | 'calls' | 'desk' | 'pipeline' | 'partners' | 'whatsapp' | 'field'
-  | 'payments' | 'targets' | 'analytics' | 'camps' | 'social' | 'departments' | 'users' | 'hoardings' | 'work';
+  | 'payments' | 'targets' | 'analytics' | 'camps' | 'social' | 'departments' | 'users' | 'hoardings' | 'work'
+  | 'website' | 'website_review' | 'website_publish' | 'website_develop';
 
 export interface AccessMe {
   agentId: string;

@@ -35,11 +35,20 @@ namespace SeemanchalOutreach.Api.Security
         public const string Hoardings = "hoardings";
         /// <summary>Team board, plans and uploaded files. Office roles start with full access; field agents never have it.</summary>
         public const string Work = "work";
+        /// <summary>Website content: view to see it, edit to write drafts and send them for review.</summary>
+        public const string Website = "website";
+        /// <summary>Edit = may approve medical content or send it back.</summary>
+        public const string WebsiteReview = "website_review";
+        /// <summary>Edit = may publish to the live website and take things down.</summary>
+        public const string WebsitePublish = "website_publish";
+        /// <summary>Edit = developer tools: the repository connection, content types, raw files and build logs.</summary>
+        public const string WebsiteDevelop = "website_develop";
 
         public static readonly string[] All =
         {
             Dashboard, Calls, Desk, Pipeline, Partners, WhatsApp, Field,
             Payments, Targets, Analytics, Camps, Social, Departments, Users, Hoardings, Work,
+            Website, WebsiteReview, WebsitePublish, WebsiteDevelop,
         };
 
         public const int None = 0, View = 1, Edit = 2;
@@ -52,12 +61,15 @@ namespace SeemanchalOutreach.Api.Security
                 [Dashboard] = Edit, [Calls] = Edit, [Desk] = View, [Pipeline] = Edit, [Partners] = Edit,
                 [WhatsApp] = Edit, [Field] = View, [Payments] = View, [Targets] = Edit, [Analytics] = View,
                 [Camps] = Edit, [Social] = Edit, [Departments] = View, [Users] = None, [Hoardings] = Edit, [Work] = Edit,
+                [Website] = Edit, [WebsiteReview] = None, [WebsitePublish] = Edit, [WebsiteDevelop] = None,
             },
             [RoleChecks.HospitalRep] = new()
             {
                 [Dashboard] = View, [Calls] = None, [Desk] = Edit, [Pipeline] = View, [Partners] = None,
                 [WhatsApp] = None, [Field] = None, [Payments] = None, [Targets] = None, [Analytics] = View,
                 [Camps] = View, [Social] = None, [Departments] = Edit, [Users] = None, [Hoardings] = None, [Work] = Edit,
+                // The hospital's own person is the natural medical reviewer.
+                [Website] = View, [WebsiteReview] = Edit, [WebsitePublish] = None, [WebsiteDevelop] = None,
             },
             // Digital marketing specialist: everything under Network; no money, field or user pages.
             [RoleChecks.DigitalMarketing] = new()
@@ -65,6 +77,7 @@ namespace SeemanchalOutreach.Api.Security
                 [Dashboard] = None, [Calls] = None, [Desk] = None, [Pipeline] = None, [Partners] = Edit,
                 [WhatsApp] = Edit, [Field] = None, [Payments] = None, [Targets] = None, [Analytics] = None,
                 [Camps] = Edit, [Social] = Edit, [Departments] = None, [Users] = None, [Hoardings] = None, [Work] = Edit,
+                [Website] = Edit, [WebsiteReview] = None, [WebsitePublish] = Edit, [WebsiteDevelop] = Edit,
             },
         };
     }

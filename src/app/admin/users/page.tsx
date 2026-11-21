@@ -20,6 +20,7 @@ const PAGE_LABELS: Record<PageKey, string> = {
   dashboard: 'Command centre', calls: 'Daily calls', desk: 'Referral desk', pipeline: 'Referral pipeline', partners: 'Partners',
   whatsapp: 'WhatsApp broadcasts', field: 'Field force & map', payments: 'Payments', targets: 'Targets', analytics: 'Analytics & surveys',
   camps: 'Health camps', social: 'Facebook & Instagram', departments: 'Departments & doctors', users: 'Users & roles', hoardings: 'Hoardings & rent', work: 'Team board & plans',
+  website: 'Website: see and write', website_review: 'Website: review (edit = may approve)', website_publish: 'Website: publish (edit = may publish)', website_develop: 'Website: developer (edit = setup and logs)',
 };
 const HIDDEN_PAGES: PageKey[] = ['targets']; // not built yet
 
