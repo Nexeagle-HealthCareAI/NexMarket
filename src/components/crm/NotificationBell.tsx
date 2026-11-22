@@ -38,6 +38,8 @@ export function crmHref(link?: string | null): string | null {
   if (k === 'chat' && id) return `/admin/chat?t=${encodeURIComponent(id)}`;
   if (k === 'lead' && id) return `/admin/leads?id=${encodeURIComponent(id)}`;
   if (k === 'work' && id) return `/admin/work?card=${encodeURIComponent(id)}`;
+  if (k === 'doc' && id) { const c = link.split(':')[2]; return `/admin/work?v=docs&doc=${encodeURIComponent(id)}${c ? `&c=${encodeURIComponent(c)}` : ''}`; }
+  if (k === 'docs-folder' && id) return `/admin/work?v=docs&folder=${encodeURIComponent(id)}`;
   if (k === 'ai-agents') return '/admin/ai-agents';
   if (k === 'field-survey' && id) return `/admin/field-surveys?id=${encodeURIComponent(id)}`;
   if (k === 'hoarding' && id) return `/admin/hoardings?id=${encodeURIComponent(id)}`;

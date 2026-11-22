@@ -235,8 +235,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Select(n => new { id = n.Id, kind = n.Kind, agentId = n.AgentId, text = n.Text, at = n.CreatedAt }).ToListAsync(ct);
             var subs = await _db.WorkCards.AsNoTracking().Where(x => x.ParentId == id && !x.Archived).ToListAsync(ct);
             var family = await FamilyAsync(subs.Append(c), ct);
-            var docs = await _db.WorkDocs.AsNoTracking().Where(x => x.CardId == id && !x.Archived && x.DeletedAt == null).OrderByDescending(x => x.UpdatedAt)
-                .Select(x => new { id = x.Id, title = x.Title, kind = x.Kind, updatedAt = x.UpdatedAt, updatedBy = x.UpdatedBy }).ToListAsync(ct);
+            // Only the plans this person may open (a private plan linked to the card stays private).
+            var access = await WorkDocsController.AccessAsync(_db, User.AgentIdOf(), ct);
+            var docs = (await _db.WorkDocs.AsNoTracking().Where(x => x.CardId == id && !x.Archived && x.DeletedAt == null).OrderByDescending(x => x.UpdatedAt)
+                .Select(x => new { x.Id, x.Title, x.Kind, x.UpdatedAt, x.UpdatedBy, x.CreatedBy, x.Access, x.FolderId }).ToListAsync(ct))
+                .Where(x => access.Doc(x.Id, x.CreatedBy, x.Access, x.FolderId) >= Services.DocAccess.View)
+                .Select(x => new { id = x.Id, title = x.Title, kind = x.Kind, updatedAt = x.UpdatedAt, updatedBy = x.UpdatedBy }).ToList();
             return Ok(new
             {
                 card = View(c, family),

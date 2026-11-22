@@ -38,6 +38,10 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<WorkNote> WorkNotes { get; }
         DbSet<WorkDoc> WorkDocs { get; }
         DbSet<WorkDocRevision> WorkDocRevisions { get; }
+        DbSet<WorkDocFolder> WorkDocFolders { get; }
+        DbSet<WorkDocShare> WorkDocShares { get; }
+        DbSet<WorkDocComment> WorkDocComments { get; }
+        DbSet<WorkDocStar> WorkDocStars { get; }
         DbSet<AgentIncentive> AgentIncentives { get; }
         DbSet<Department> Departments { get; }
         DbSet<Doctor> Doctors { get; }

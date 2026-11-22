@@ -10,9 +10,10 @@ import { Highlight } from '@tiptap/extension-highlight';
 import { TextAlign } from '@tiptap/extension-text-align';
 import { TableKit } from '@tiptap/extension-table';
 import { Color, FontFamily, FontSize, TextStyle } from '@tiptap/extension-text-style';
+import { CommentAnchors } from './DocComments';
 import {
   AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Check, ChevronDown, Code2, Heading1, Heading2, Heading3, Highlighter, Italic, Link2, List, ListChecks, ListOrdered,
-  Minus, Pilcrow, Quote, Redo2, RemoveFormatting, Strikethrough, Table as TableIcon, Underline as UnderlineIcon, Undo2, Unlink,
+  MessageSquarePlus, Minus, Pilcrow, Quote, Redo2, RemoveFormatting, Strikethrough, Table as TableIcon, Underline as UnderlineIcon, Undo2, Unlink,
 } from 'lucide-react';
 
 /** The editor's extensions. Links only open http(s), mail and phone links (the default protocol check). */
@@ -55,7 +56,7 @@ export function useDocEditor(content: JSONContent | null, onChange: () => void, 
   const changed = useRef(onChange);
   useEffect(() => { changed.current = onChange; });
   return useEditor({
-    extensions: EXTENSIONS,
+    extensions: [...EXTENSIONS, CommentAnchors],
     content: content ?? undefined,
     editable,
     immediatelyRender: false,
@@ -118,7 +119,7 @@ function Btn({ on, label, onClick, children, disabled }: { on?: boolean; label: 
 }
 
 /** The formatting bar. Every button also has a keyboard shortcut (Ctrl+B, Ctrl+I, Ctrl+Shift+8 …). */
-export function Toolbar({ editor }: { editor: Editor }) {
+export function Toolbar({ editor, onComment, canComment }: { editor: Editor; onComment?: () => void; canComment?: boolean }) {
   const s = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -186,6 +187,7 @@ export function Toolbar({ editor }: { editor: Editor }) {
       {s.link && <Btn label="Remove link" onClick={() => c().extendMarkRange('link').unsetLink().run()}><Unlink size={16} /></Btn>}
       <Btn label="Insert table" on={s.table} onClick={() => c().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}><TableIcon size={16} /></Btn>
       <Btn label="Clear formatting" onClick={() => c().unsetAllMarks().clearNodes().run()}><RemoveFormatting size={16} /></Btn>
+      {onComment && <><span className="wk-tb-sep" /><Btn label="Comment on the selected words (Ctrl+Alt+M)" onClick={onComment} disabled={!canComment}><MessageSquarePlus size={16} /></Btn></>}
       {s.table && (
         <span className="wk-tb-table">
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => c().addRowAfter().run()}>+ Row</button>

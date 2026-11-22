@@ -110,6 +110,12 @@ function WorkBoard() {
     if (val) sp.set(key, val); else sp.delete(key);
     router.replace(`/admin/work${sp.size ? `?${sp}` : ''}`, { scroll: false });
   };
+  /** Several address bar changes at once (one replace, so none is lost). */
+  const setParams = (changes: Record<string, string | null>) => {
+    const sp = new URLSearchParams(params.toString());
+    for (const [k, v] of Object.entries(changes)) { if (v) sp.set(k, v); else sp.delete(k); }
+    router.replace(`/admin/work${sp.size ? `?${sp}` : ''}`, { scroll: false });
+  };
   const openCard = (id: string | null) => setParam('card', id);
   const pickView = (v: View) => { setView(v); setParam('v', v === 'board' ? null : v); };
   /** Opens a plan in Plans & docs (closing any open card). */
@@ -361,7 +367,7 @@ function WorkBoard() {
         </section>
       )}
 
-      {view === 'docs' && <Docs board={board} toast={showToast} openCard={openCard} docId={params.get('doc')} setDoc={(id) => setParam('doc', id)} />}
+      {view === 'docs' && <Docs board={board} toast={showToast} openCard={openCard} docId={params.get('doc')} folderParam={params.get('folder')} commentParam={params.get('c')} setQuery={setParams} />}
 
       {open && <CardDrawer key={open} id={open} board={board} onClose={() => openCard(null)} onSaved={merge} toast={showToast}
         onOpen={(id) => openCard(id)} onOpenDoc={openDoc} />}

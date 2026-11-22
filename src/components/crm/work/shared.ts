@@ -21,7 +21,29 @@ export interface DocRow {
   file?: { name: string; mime: string; size: number } | null;
   /** This person may delete it for ever (an admin, or whoever wrote it). */
   canErase?: boolean;
+  /** The folder it is in (null = the top level). */
+  folderId?: string | null;
+  /** team = open to everyone who can see its folder; restricted = only the owner and the people it is shared with. */
+  access?: 'team' | 'restricted';
+  /** What this person may do: owner | edit | comment | view. */
+  role?: DocRole;
+  owner?: string;
+  starred?: boolean;
+  /** How many people it is shared with directly. */
+  people?: number;
+  openComments?: number;
 }
+export type DocRole = 'owner' | 'edit' | 'comment' | 'view';
+export const canEdit = (r?: DocRole | string) => r === 'owner' || r === 'edit' || r === undefined;
+export interface FolderRow {
+  id: string; name: string; parentId?: string | null; color?: string | null; access: 'team' | 'restricted'; owner: string; role: DocRole;
+  /** Shown in the folder tree (every folder above it can be seen too). */
+  inTree: boolean;
+  /** Shared directly with this person (not theirs). */
+  shared: boolean;
+  people: number; items: number; createdAt: string; updatedAt: string; deleted?: boolean; deletedAt?: string | null; deletedBy?: string | null;
+}
+export const FOLDER_COLORS: Record<string, string> = { '': '#8a93a6', blue: '#0a72d6', green: '#0f8a5f', orange: '#d9822b', red: '#c0271e', purple: '#7b3fe4', teal: '#0e7490', grey: '#667085' };
 export const DOC_KIND: Record<DocRow['kind'], string> = { plan: 'Plan', doc: 'Document', notes: 'Meeting notes', file: 'File' };
 export const MAX_UPLOAD_MB = 25;
 export const UPLOAD_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.webp,.gif';

@@ -929,6 +929,71 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? FileName { get; set; }
         public string? FileMime { get; set; }
         public long? FileSize { get; set; }
+        /// <summary>The folder it is in; null = the top level.</summary>
+        public Guid? FolderId { get; set; }
+        /// <summary>team = everyone who can see its folder; restricted = only its owner (CreatedBy) and the people it is shared with.</summary>
+        public string Access { get; set; } = "team";
+        /// <summary>Went to the Bin together with this folder (so putting the folder back brings it back too).</summary>
+        public Guid? DeletedWith { get; set; }
+    }
+
+    /// <summary>A folder of plans and files on the Team board. Folders can sit inside folders.</summary>
+    public class WorkDocFolder
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Name { get; set; } = string.Empty;
+        public Guid? ParentId { get; set; }
+        public string? Color { get; set; }
+        /// <summary>team | restricted (only its owner and the people it is shared with see it and what is in it).</summary>
+        public string Access { get; set; } = "team";
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? DeletedAt { get; set; }
+        public string? DeletedBy { get; set; }
+        public Guid? DeletedWith { get; set; }
+    }
+
+    /// <summary>A document or folder shared with one person: view, comment or edit.</summary>
+    public class WorkDocShare
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid? DocId { get; set; }
+        public Guid? FolderId { get; set; }
+        public string AgentId { get; set; } = string.Empty;
+        public string Role { get; set; } = "view";              // view | comment | edit
+        public string SharedBy { get; set; } = string.Empty;
+        public DateTime SharedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>A comment on a document, on a piece of its text (Quote) or on the whole thing. Replies point to the first comment.</summary>
+    public class WorkDocComment
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid DocId { get; set; }
+        public Guid? ParentId { get; set; }
+        /// <summary>The text it is about, and which time that text appears in the document (0 = the first).</summary>
+        public string? Quote { get; set; }
+        public int QuoteNth { get; set; }
+        public string Text { get; set; } = string.Empty;
+        public string MentionsJson { get; set; } = "[]";
+        public string AgentId { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? EditedAt { get; set; }
+        public bool Resolved { get; set; }
+        public string? ResolvedBy { get; set; }
+        public DateTime? ResolvedAt { get; set; }
+        /// <summary>Taken back by its writer: shown as "comment removed"; the words are kept for the record.</summary>
+        public DateTime? DeletedAt { get; set; }
+    }
+
+    /// <summary>A document someone starred for themselves.</summary>
+    public class WorkDocStar
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        public Guid DocId { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
     /// <summary>An earlier version of a plan, kept when it is saved again, so nothing written is ever lost.</summary>

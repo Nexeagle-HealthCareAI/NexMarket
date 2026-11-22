@@ -41,6 +41,10 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<WorkNote> WorkNotes => Set<WorkNote>();
         public DbSet<WorkDoc> WorkDocs => Set<WorkDoc>();
         public DbSet<WorkDocRevision> WorkDocRevisions => Set<WorkDocRevision>();
+        public DbSet<WorkDocFolder> WorkDocFolders => Set<WorkDocFolder>();
+        public DbSet<WorkDocShare> WorkDocShares => Set<WorkDocShare>();
+        public DbSet<WorkDocComment> WorkDocComments => Set<WorkDocComment>();
+        public DbSet<WorkDocStar> WorkDocStars => Set<WorkDocStar>();
         public DbSet<AgentIncentive> AgentIncentives => Set<AgentIncentive>();
         public DbSet<Department> Departments => Set<Department>();
         public DbSet<Doctor> Doctors => Set<Doctor>();
@@ -313,7 +317,34 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => new { e.Archived, e.UpdatedAt });
                 entity.HasIndex(e => e.CardId);
+                entity.HasIndex(e => e.FolderId);
                 entity.Property(e => e.Version).IsConcurrencyToken();
+            });
+            modelBuilder.Entity<WorkDocFolder>(entity =>
+            {
+                entity.ToTable("work_doc_folders");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.ParentId);
+            });
+            modelBuilder.Entity<WorkDocShare>(entity =>
+            {
+                entity.ToTable("work_doc_shares");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.DocId);
+                entity.HasIndex(e => e.FolderId);
+                entity.HasIndex(e => e.AgentId);
+            });
+            modelBuilder.Entity<WorkDocComment>(entity =>
+            {
+                entity.ToTable("work_doc_comments");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.DocId, e.CreatedAt });
+            });
+            modelBuilder.Entity<WorkDocStar>(entity =>
+            {
+                entity.ToTable("work_doc_stars");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.AgentId, e.DocId }).IsUnique();
             });
             modelBuilder.Entity<WorkDocRevision>(entity =>
             {
