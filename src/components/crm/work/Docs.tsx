@@ -11,6 +11,8 @@ import { canEdit, DOC_KIND, FOLDER_COLORS, MAX_UPLOAD_MB, UPLOAD_ACCEPT, fileSiz
 import { useLiveEvents } from '@/lib/crm/live';
 import { COMMENT_PICK, CommentsPanel, selectionAnchor } from './DocComments';
 import { MoveModal, ShareModal } from './DocShare';
+import { IssuePicker, TypeIcon } from './Issues';
+import type { IssueType } from './shared';
 import { EditorContent, ReadOnly, Toolbar, useDocEditor, type JSONContent } from './Editor';
 import { PdfView } from './PdfView';
 
@@ -543,6 +545,8 @@ function DocEditor({ id, board, toast, openCard, onClose, onSaved, onGone, dirty
   const [pending, setPending] = useState<{ quote: string; nth: number } | null>(null);
   const [openCount, setOpenCount] = useState(0);
   const [hasSel, setHasSel] = useState(false);
+  const [tasks, setTasks] = useState<{ id: string; number: number; title: string; type: IssueType; status: string }[]>([]);
+  const [taskPick, setTaskPick] = useState(false);
   const loading = useRef(true);
   const version = useRef(0);
   const nameOf = (a: string) => board.people.find((p) => p.agentId === a)?.name ?? a;
@@ -601,6 +605,17 @@ function DocEditor({ id, board, toast, openCard, onClose, onSaved, onGone, dirty
     return () => { alive = false; };
   }, [editor, id, putRow]);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  // The tasks this document is linked to.
+  const loadTasks = useCallback(() => { crm.get<typeof tasks>(`/api/v1/work/docs-links/${id}`).then(setTasks).catch(() => setTasks([])); }, [id]);
+  useEffect(() => { const t = setTimeout(loadTasks, 0); return () => clearTimeout(t); }, [loadTasks, tick]);
+  const linkTask = async (cardId: string) => {
+    try { await crm.post(`/api/v1/work/cards/${cardId}/docs`, { docId: id }); setTaskPick(false); loadTasks(); toast('Linked to the task. It shows on the task too.'); }
+    catch (e) { toast(friendlyError(e)); }
+  };
+  const unlinkTask = async (cardId: string) => {
+    try { await crm.post(`/api/v1/work/cards/${cardId}/docs/${id}/remove`); loadTasks(); }
+    catch (e) { toast(friendlyError(e)); }
+  };
   // Is any text selected? (The "Comment" button needs some.)
   useEffect(() => {
     if (!editor) return;
@@ -806,6 +821,7 @@ function DocEditor({ id, board, toast, openCard, onClose, onSaved, onGone, dirty
                 <span className="wk-menu is-right" role="menu" onClick={() => setMore(false)}>
                   {!isFile && <button type="button" role="menuitem" onClick={() => setHistOpen(true)}><History size={14} aria-hidden /> Earlier versions</button>}
                   {editable && <button type="button" role="menuitem" onClick={() => onMove(row)}><FolderInput size={14} aria-hidden /> Move to…</button>}
+                  <button type="button" role="menuitem" onClick={() => setTaskPick(true)}><Link2 size={14} aria-hidden /> Link to a task…</button>
                   {!isFile && <button type="button" role="menuitem" onClick={() => void copy()}><CopyIcon size={14} aria-hidden /> Make a copy</button>}
                   {!isFile && <button type="button" role="menuitem" onClick={() => printDoc(titleRef.current || row.title, editor.getHTML())}><Printer size={14} aria-hidden /> Print or save as PDF</button>}
                   {editable && <button type="button" role="menuitem" onClick={() => void flag('pin', row.pinned)}>{row.pinned ? <><PinOff size={14} aria-hidden /> Unpin</> : <><Pin size={14} aria-hidden /> Pin to the top</>}</button>}
@@ -838,6 +854,21 @@ function DocEditor({ id, board, toast, openCard, onClose, onSaved, onGone, dirty
         {row.access === 'restricted' && <span className="wk-doc-private"><Lock size={12} aria-hidden /> {row.owner === board.me ? (row.people ? `Private · shared with ${row.people}` : 'Private: only you') : `Shared with you by ${nameOf(row.owner ?? '')}`}</span>}
         {row.access !== 'restricted' && !!row.people && <span className="wk-doc-private is-team"><Users size={12} aria-hidden /> Also shared with {row.people}</span>}
       </nav>
+      {(tasks.length > 0 || taskPick) && (
+        <div className="wk-doc-tasks">
+          <span className="crm-sub">Tasks:</span>
+          {tasks.map((t) => (
+            <span key={t.id} className="wk-doc-task">
+              <button type="button" className="wa-link" onClick={() => openCard(t.id)}><TypeIcon type={t.type} size={14} /> #{t.number} {t.title}</button>
+              <button type="button" className="wk-icon-btn" aria-label={`Unlink from #${t.number}`} title="Unlink from this task" onClick={() => void unlinkTask(t.id)}><Unlink size={12} aria-hidden /></button>
+            </span>
+          ))}
+          {taskPick ? (
+            <span className="wk-doc-taskpick"><IssuePicker autoFocus exclude={tasks.map((t) => t.id)} onPick={(h) => void linkTask(h.id)} placeholder="Find the task: #12 or words" />
+              <button type="button" className="wa-link" onClick={() => setTaskPick(false)}>Cancel</button></span>
+          ) : <button type="button" className="wk-add-mini" onClick={() => setTaskPick(true)}><Plus size={13} aria-hidden /> Link to a task</button>}
+        </div>
+      )}
       <div className={`wk-doc-split${showCmts ? ' has-cmts' : ''}`}>
         <div className="wk-doc-col">
           <input className="wk-doc-title" value={title} maxLength={200} onChange={(e) => { setTitle(e.target.value); titleRef.current = e.target.value; touched(); }} placeholder="Title" aria-label="Title" readOnly={!editable} />

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SeemanchalOutreach.Api.Security;
+using SeemanchalOutreach.Api.Services;
 using SeemanchalOutreach.Application.Interfaces;
 using SeemanchalOutreach.Domain.Entities;
 
@@ -25,8 +26,28 @@ namespace SeemanchalOutreach.Api.Controllers
         public List<WorkCheckItem>? Checklist { get; set; }
         public string? Link { get; set; }
         public string? Repeat { get; set; }
-        /// <summary>Creating a sub-task: the card it belongs under.</summary>
+        /// <summary>The issue it belongs under (an epic, feature, story…); Guid.Empty to take it out.</summary>
         public Guid? ParentId { get; set; }
+        /// <summary>epic | feature | story | task | bug | subtask</summary>
+        public string? Type { get; set; }
+        /// <summary>yyyy-MM-dd, or "" to clear.</summary>
+        public string? StartDate { get; set; }
+        /// <summary>Story points; -1 to clear.</summary>
+        public int? StoryPoints { get; set; }
+        /// <summary>Original estimate: "2h 30m", "1d"…; "" to clear.</summary>
+        public string? Estimate { get; set; }
+        /// <summary>The sprint; Guid.Empty = the backlog.</summary>
+        public Guid? SprintId { get; set; }
+        public string? Reporter { get; set; }
+        /// <summary>Bugs: blocker | critical | major | minor | trivial; "" to clear.</summary>
+        public string? Severity { get; set; }
+        public string? Environment { get; set; }
+        public string? Steps { get; set; }
+        public string? Expected { get; set; }
+        public string? Actual { get; set; }
+        public string? Acceptance { get; set; }
+        /// <summary>done | wont_do | duplicate | cannot_reproduce (only for a done issue).</summary>
+        public string? Resolution { get; set; }
     }
 
     public class WorkMoveDto
@@ -48,7 +69,7 @@ namespace SeemanchalOutreach.Api.Controllers
     [Route("api/v1/work")]
     [Authorize]
     [PageAccess(Pages.Work)]
-    public class WorkBoardController : ControllerBase
+    public partial class WorkBoardController : ControllerBase
     {
         public static readonly string[] Statuses = { "idea", "todo", "doing", "review", "done" };
         private static readonly string[] Priorities = { "urgent", "high", "normal", "low" };
@@ -66,7 +87,7 @@ namespace SeemanchalOutreach.Api.Controllers
         private static DateOnly Today => DateOnly.FromDateTime(IstClock.NowIst);
 
         /// <summary>Sub-task counts per parent, and the number and title of each parent, for the cards being shown.</summary>
-        private record Family(Dictionary<Guid, (int Total, int Done)> Subs, Dictionary<Guid, (int Number, string Title)> Parents);
+        private record Family(Dictionary<Guid, (int Total, int Done)> Subs, Dictionary<Guid, (int Number, string Title, string Type)> Parents);
 
         private async Task<Family> FamilyAsync(IEnumerable<WorkCard> cards, CancellationToken ct)
         {
@@ -76,9 +97,9 @@ namespace SeemanchalOutreach.Api.Controllers
                     .Select(x => new { x.ParentId, x.Status }).ToListAsync(ct))
                 .GroupBy(x => x.ParentId!.Value).ToDictionary(g => g.Key, g => (g.Count(), g.Count(x => x.Status == "done")));
             var pids = list.Where(c => c.ParentId != null).Select(c => c.ParentId!.Value).Distinct().ToList();
-            var parents = pids.Count == 0 ? new Dictionary<Guid, (int, string)>()
-                : (await _db.WorkCards.AsNoTracking().Where(x => pids.Contains(x.Id)).Select(x => new { x.Id, x.Number, x.Title }).ToListAsync(ct))
-                    .ToDictionary(x => x.Id, x => (x.Number, x.Title));
+            var parents = pids.Count == 0 ? new Dictionary<Guid, (int, string, string)>()
+                : (await _db.WorkCards.AsNoTracking().Where(x => pids.Contains(x.Id)).Select(x => new { x.Id, x.Number, x.Title, x.Type }).ToListAsync(ct))
+                    .ToDictionary(x => x.Id, x => (x.Number, x.Title, x.Type));
             return new Family(subs, parents);
         }
 
@@ -86,7 +107,7 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             var checks = Checks(c.ChecklistJson);
             var sub = f != null && f.Subs.TryGetValue(c.Id, out var s) ? s : (0, 0);
-            var parent = c.ParentId != null && f != null && f.Parents.TryGetValue(c.ParentId.Value, out var pp) ? new { id = c.ParentId.Value, number = pp.Number, title = pp.Title } : null;
+            var parent = c.ParentId != null && f != null && f.Parents.TryGetValue(c.ParentId.Value, out var pp) ? new { id = c.ParentId.Value, number = pp.Number, title = pp.Title, type = pp.Type } : null;
             return new
             {
                 id = c.Id, number = c.Number, title = c.Title, description = c.Description, status = c.Status, order = c.Order, priority = c.Priority,
@@ -96,6 +117,10 @@ namespace SeemanchalOutreach.Api.Controllers
                 startedAt = c.StartedAt, doneAt = c.DoneAt, doneBy = c.DoneBy,
                 overdue = c.DueDate != null && c.Status != "done" && c.DueDate < Today,
                 parentId = c.ParentId, parent, subTotal = sub.Item1, subDone = sub.Item2,
+                type = c.Type, startDate = c.StartDate, storyPoints = c.StoryPoints, estimateMinutes = c.EstimateMinutes, spentMinutes = c.SpentMinutes,
+                sprintId = c.SprintId, rank = c.Rank, reporter = c.Reporter ?? c.CreatedBy, severity = c.Severity, resolution = c.Resolution,
+                environment = c.Environment, steps = c.Steps, expected = c.Expected, actual = c.Actual, acceptance = c.Acceptance,
+                watchers = Strings(c.WatchersJson),
             };
         }
 
@@ -113,7 +138,22 @@ namespace SeemanchalOutreach.Api.Controllers
             // Field agents can be given office cards too, but they are listed after the office team.
             var agents = await _db.Agents.AsNoTracking().Where(a => a.IsActive && a.Role == "field_rep").OrderBy(a => a.Name)
                 .Select(a => new { agentId = a.AgentId, name = a.Name, role = a.Role, photo = a.PhotoUrl }).ToListAsync(ct);
-            var all = await _db.WorkCards.AsNoTracking().Where(c => !c.Archived).Select(c => new { c.LabelsJson, c.Project, c.Status, c.DueDate, c.DoneAt, c.AssigneesJson }).ToListAsync(ct);
+            var all = await _db.WorkCards.AsNoTracking().Where(c => !c.Archived).Select(c => new { c.Id, c.ParentId, c.Type, c.StoryPoints, c.LabelsJson, c.Project, c.Status, c.DueDate, c.DoneAt, c.AssigneesJson }).ToListAsync(ct);
+            var sprints = await _db.WorkSprints.AsNoTracking().Where(s => s.Status != "closed").OrderBy(s => s.Status == "active" ? 0 : 1).ThenBy(s => s.StartDate).ThenBy(s => s.CreatedAt).ToListAsync(ct);
+            // Progress of epics and features: everything under them, all the way down.
+            var kidsOf = all.Where(x => x.ParentId != null).ToLookup(x => x.ParentId!.Value);
+            var rollup = all.Where(x => x.Type == "epic" || x.Type == "feature").ToDictionary(x => x.Id, x =>
+            {
+                var under = new List<(string Status, int? Points)>();
+                var frontier = new List<Guid> { x.Id };
+                for (var depth = 0; depth < 4 && frontier.Count > 0; depth++)
+                {
+                    var next = frontier.SelectMany(f => kidsOf[f]).ToList();
+                    under.AddRange(next.Select(n => (n.Status, n.StoryPoints)));
+                    frontier = next.Select(n => n.Id).ToList();
+                }
+                return new { total = under.Count, done = under.Count(u => u.Status == "done"), points = under.Sum(u => u.Points ?? 0), pointsDone = under.Where(u => u.Status == "done").Sum(u => u.Points ?? 0) };
+            });
             var weekStart = IstClock.TodayStartUtc.AddDays(-(((int)IstClock.NowIst.DayOfWeek + 6) % 7));
             var today = Today;
             var open = all.Where(c => c.Status != "done").ToList();
@@ -124,6 +164,8 @@ namespace SeemanchalOutreach.Api.Controllers
                 columns = Statuses.Select(s => new { key = s, label = StatusLabel[s] }),
                 cards = cards.Select(c => View(c, family)),
                 people = people.Concat(agents),
+                sprints = sprints.Select(SprintView),
+                rollup,
                 labels = all.SelectMany(c => Strings(c.LabelsJson)).GroupBy(x => x, StringComparer.OrdinalIgnoreCase).OrderByDescending(g => g.Count()).Select(g => g.First()).Take(40),
                 projects = all.Where(c => !string.IsNullOrWhiteSpace(c.Project)).GroupBy(c => c.Project!)
                     .Select(g => new { name = g.Key, open = g.Count(x => x.Status != "done"), done = g.Count(x => x.Status == "done") }).OrderByDescending(x => x.open),
@@ -180,11 +222,85 @@ namespace SeemanchalOutreach.Api.Controllers
                 c.Link = l;
             }
             if (d.Repeat != null && Repeats.Contains(d.Repeat)) c.Repeat = d.Repeat;
+            if (d.StartDate != null)
+            {
+                DateOnly? start = d.StartDate == "" ? null : DateOnly.TryParse(d.StartDate, out var x) ? x : c.StartDate;
+                if (start != c.StartDate && c.Title != "") changes.Add(start == null ? "removed the start date" : $"set start date {start:d MMM}");
+                c.StartDate = start;
+            }
+            if (c.StartDate != null && c.DueDate != null && c.DueDate < c.StartDate) return "The due date is before the start date.";
+            if (d.StoryPoints != null)
+            {
+                int? pts = d.StoryPoints < 0 ? null : Math.Min(d.StoryPoints.Value, 1000);
+                if (pts != c.StoryPoints && c.Title != "") changes.Add(pts == null ? "removed the story points" : $"set story points to {pts}");
+                c.StoryPoints = pts;
+            }
+            if (d.Estimate != null)
+            {
+                if (d.Estimate.Trim() == "") c.EstimateMinutes = null;
+                else if (WorkIssues.Minutes(d.Estimate) is int mins) { if (mins != c.EstimateMinutes && c.Title != "") changes.Add($"set the estimate to {WorkIssues.Duration(mins)}"); c.EstimateMinutes = mins; }
+                else return "Write the estimate like 2h 30m, 1d or 45m.";
+            }
+            if (d.Reporter != null) c.Reporter = Clip(d.Reporter, 60);
+            if (d.Severity != null)
+            {
+                if (d.Severity == "") c.Severity = null;
+                else if (WorkIssues.Severities.Contains(d.Severity)) { if (d.Severity != c.Severity && c.Title != "") changes.Add($"set severity to {d.Severity}"); c.Severity = d.Severity; }
+            }
+            if (d.Environment != null) c.Environment = Clip(d.Environment, 1000);
+            if (d.Steps != null) c.Steps = Clip(d.Steps, 8000);
+            if (d.Expected != null) c.Expected = Clip(d.Expected, 4000);
+            if (d.Actual != null) c.Actual = Clip(d.Actual, 4000);
+            if (d.Acceptance != null) c.Acceptance = Clip(d.Acceptance, 8000);
+            if (d.Resolution != null && WorkIssues.Resolutions.Contains(d.Resolution) && c.Status == "done" && d.Resolution != c.Resolution)
+            {
+                if (c.Title != "") changes.Add($"set the resolution to {d.Resolution.Replace('_', ' ')}");
+                c.Resolution = d.Resolution;
+            }
+            return null;
+        }
+
+        /// <summary>Type, parent and sprint: these need the database, so they are checked here.</summary>
+        private async Task<string?> PlaceAsync(WorkCard c, WorkCardDto d, List<string> changes, bool isNew, CancellationToken ct)
+        {
+            var type = d.Type != null ? d.Type : c.Type;
+            if (!WorkIssues.Types.Contains(type)) return "Choose a type: epic, feature, story, task, bug or sub-task.";
+            var parentId = d.ParentId == null ? c.ParentId : d.ParentId == Guid.Empty ? null : d.ParentId;
+            WorkCard? parent = null;
+            if (parentId != null)
+            {
+                if (parentId == c.Id) return "An issue can't go under itself.";
+                parent = await _db.WorkCards.FirstOrDefaultAsync(x => x.Id == parentId, ct);
+                if (parent == null || parent.Archived) return "That issue isn't on the board any more.";
+            }
+            var childTypes = isNew ? new List<string>() : await _db.WorkCards.AsNoTracking().Where(x => x.ParentId == c.Id && !x.Archived).Select(x => x.Type).ToListAsync(ct);
+            if (WorkIssues.TypeProblem(type, parent?.Type, childTypes) is string problem) return problem;
+            if (!isNew && type != c.Type) changes.Add($"changed the type to {WorkIssues.Label(type)}");
+            if (!isNew && parentId != c.ParentId) changes.Add(parent == null ? "took it out of its parent" : $"put it under #{parent.Number} {parent.Title}");
+            c.Type = type;
+            c.ParentId = parentId;
+            if (d.SprintId != null)
+            {
+                var sid = d.SprintId == Guid.Empty ? (Guid?)null : d.SprintId;
+                if (sid != null)
+                {
+                    var sp = await _db.WorkSprints.AsNoTracking().FirstOrDefaultAsync(x => x.Id == sid, ct);
+                    if (sp == null || sp.Status == "closed") return "That sprint isn't open any more.";
+                    if (c.Type == "epic") return "Epics stay out of sprints: put their stories and tasks in the sprint instead.";
+                    if (sid != c.SprintId && !isNew) changes.Add($"moved it to the sprint {sp.Name}");
+                }
+                else if (c.SprintId != null && !isNew) changes.Add("moved it to the backlog");
+                c.SprintId = sid;
+            }
             return null;
         }
 
         private void Note(Guid card, string text, string kind = "activity") =>
             _db.WorkNotes.Add(new WorkNote { CardId = card, Kind = kind, AgentId = User.AgentIdOf(), Text = text });
+
+        /// <summary>Everyone who follows an issue: the people on it, whoever made or reported it, and its watchers.</summary>
+        private static IEnumerable<string> Followers(WorkCard c) =>
+            Strings(c.AssigneesJson).Append(c.CreatedBy).Append(c.Reporter ?? c.CreatedBy).Concat(Strings(c.WatchersJson));
 
         private void Tell(WorkCard c, IEnumerable<string> to, string title)
         {
@@ -203,23 +319,25 @@ namespace SeemanchalOutreach.Api.Controllers
             if (string.IsNullOrWhiteSpace(d.Title)) return BadRequest(new { message = "Write what needs doing." });
             var err = Apply(c, d, new(), out var assigned);
             if (err != null) return BadRequest(new { message = err });
-            WorkCard? parent = null;
-            if (d.ParentId != null)
+            WorkCard? parent = d.ParentId is Guid pid && pid != Guid.Empty ? await _db.WorkCards.AsNoTracking().FirstOrDefaultAsync(x => x.Id == pid, ct) : null;
+            // Under a story, task or bug it is a sub-task unless said otherwise; under a feature a story; otherwise a task.
+            d.Type ??= parent == null ? "task" : WorkIssues.Level(parent.Type) == 2 ? "subtask" : parent.Type == "feature" ? "story" : "task";
+            if (await PlaceAsync(c, d, new(), true, ct) is string placeErr) return BadRequest(new { message = placeErr });
+            if (parent != null)
             {
-                parent = await _db.WorkCards.FirstOrDefaultAsync(x => x.Id == d.ParentId, ct);
-                if (parent == null || parent.Archived) return BadRequest(new { message = "That card isn't on the board any more." });
-                if (parent.ParentId != null) return BadRequest(new { message = "Sub-tasks can't have their own sub-tasks. Add it to the main card instead." });
-                c.ParentId = parent.Id;
                 c.Project ??= parent.Project;
                 if (d.Labels == null) c.LabelsJson = parent.LabelsJson;
+                if (d.SprintId == null && c.Type == "subtask") c.SprintId = parent.SprintId;   // a sub-task goes in its parent's sprint
             }
+            c.Reporter ??= c.CreatedBy;
             c.Number = (await _db.WorkCards.MaxAsync(x => (int?)x.Number, ct) ?? 0) + 1;
             c.Order = await EndOrderAsync(c.Status, ct);
+            c.Rank = (await _db.WorkCards.MaxAsync(x => (double?)x.Rank, ct) ?? 0) + 1000;
             if (c.Status == "doing") c.StartedAt = DateTime.UtcNow;
             if (c.Status == "done") { c.DoneAt = DateTime.UtcNow; c.DoneBy = c.CreatedBy; }
             _db.WorkCards.Add(c);
-            Note(c.Id, parent == null ? "created the card" : $"created it as a sub-task of #{parent.Number}");
-            if (parent != null) { Note(parent.Id, $"added sub-task #{c.Number} {c.Title}"); parent.UpdatedAt = DateTime.UtcNow; }
+            Note(c.Id, parent == null ? $"created the {WorkIssues.Label(c.Type)}" : $"created it as a {WorkIssues.Label(c.Type)} under #{parent.Number}");
+            if (parent != null) Note(parent.Id, $"added {WorkIssues.Label(c.Type)} #{c.Number} {c.Title}");
             await _db.SaveChangesAsync(ct);
             Tell(c, assigned, "New work for you");
             await _live.PublishAsync(new LiveEvent { Kind = "work", Text = $"New card: {c.Title}", RefId = c.Id.ToString() });
@@ -235,18 +353,19 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Select(n => new { id = n.Id, kind = n.Kind, agentId = n.AgentId, text = n.Text, at = n.CreatedAt }).ToListAsync(ct);
             var subs = await _db.WorkCards.AsNoTracking().Where(x => x.ParentId == id && !x.Archived).ToListAsync(ct);
             var family = await FamilyAsync(subs.Append(c), ct);
-            // Only the plans this person may open (a private plan linked to the card stays private).
-            var access = await WorkDocsController.AccessAsync(_db, User.AgentIdOf(), ct);
-            var docs = (await _db.WorkDocs.AsNoTracking().Where(x => x.CardId == id && !x.Archived && x.DeletedAt == null).OrderByDescending(x => x.UpdatedAt)
-                .Select(x => new { x.Id, x.Title, x.Kind, x.UpdatedAt, x.UpdatedBy, x.CreatedBy, x.Access, x.FolderId }).ToListAsync(ct))
-                .Where(x => access.Doc(x.Id, x.CreatedBy, x.Access, x.FolderId) >= Services.DocAccess.View)
-                .Select(x => new { id = x.Id, title = x.Title, kind = x.Kind, updatedAt = x.UpdatedAt, updatedBy = x.UpdatedBy }).ToList();
+            // Only the documents this person may open (a private plan linked to the card stays private).
+            var docs = await LinkedDocsAsync(id, ct);
             return Ok(new
             {
                 card = View(c, family),
                 notes,
-                subtasks = subs.OrderBy(x => x.Status == "done").ThenBy(x => x.CreatedAt).Select(x => View(x, family)),
+                subtasks = subs.OrderBy(x => x.Status == "done").ThenBy(x => x.Rank).ThenBy(x => x.CreatedAt).Select(x => View(x, family)),
                 docs,
+                path = await PathAsync(c, ct),
+                links = await LinksAsync(id, ct),
+                worklog = await _db.WorkLogs.AsNoTracking().Where(w => w.CardId == id).OrderByDescending(w => w.Day).ThenByDescending(w => w.CreatedAt).Take(200)
+                    .Select(w => new { id = w.Id, agentId = w.AgentId, minutes = w.Minutes, day = w.Day, note = w.Note, at = w.CreatedAt }).ToListAsync(ct),
+                sprint = c.SprintId == null ? null : await _db.WorkSprints.AsNoTracking().Where(x => x.Id == c.SprintId).Select(x => new { id = x.Id, name = x.Name, status = x.Status }).FirstOrDefaultAsync(ct),
             });
         }
 
@@ -258,6 +377,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var changes = new List<string>();
             var err = Apply(c, d, changes, out var assigned);
             if (err != null) return BadRequest(new { message = err });
+            if ((d.Type != null || d.ParentId != null || d.SprintId != null) && await PlaceAsync(c, d, changes, false, ct) is string placeErr) return BadRequest(new { message = placeErr });
             if (d.Status != null && Statuses.Contains(d.Status) && d.Status != c.Status) await MoveAsync(c, d.Status, null, null, changes, ct);
             c.UpdatedAt = DateTime.UtcNow;
             foreach (var ch in changes) Note(c.Id, ch);
@@ -300,10 +420,11 @@ namespace SeemanchalOutreach.Api.Controllers
                 {
                     c.DoneAt = DateTime.UtcNow; c.DoneBy = me;
                     if (c.ParentId != null) Note(c.ParentId.Value, $"finished sub-task #{c.Number} {c.Title}");
-                    Tell(c, Strings(c.AssigneesJson).Append(c.CreatedBy), "Card done");
+                    c.Resolution ??= "done";
+                    Tell(c, Followers(c), "Card done");
                     if (c.Repeat != "none") next = await RepeatAsync(c, ct);
                 }
-                else { c.DoneAt = null; c.DoneBy = null; }
+                else { c.DoneAt = null; c.DoneBy = null; c.Resolution = null; }
                 c.Status = status;
             }
             return next;
@@ -324,6 +445,8 @@ namespace SeemanchalOutreach.Api.Controllers
                 Number = (await _db.WorkCards.MaxAsync(x => (int?)x.Number, ct) ?? 0) + 1,
                 Title = c.Title, Description = c.Description, Status = "todo", Priority = c.Priority, DueDate = due, AssigneesJson = c.AssigneesJson,
                 LabelsJson = c.LabelsJson, Project = c.Project, Link = c.Link, Repeat = c.Repeat, RepeatOf = c.RepeatOf ?? c.Id, CreatedBy = c.CreatedBy,
+                Type = c.Type, ParentId = c.ParentId, StoryPoints = c.StoryPoints, EstimateMinutes = c.EstimateMinutes, Reporter = c.Reporter, WatchersJson = c.WatchersJson,
+                Acceptance = c.Acceptance, Rank = c.Rank + 1,
                 ChecklistJson = JsonSerializer.Serialize(Checks(c.ChecklistJson).Select(x => new WorkCheckItem { Id = x.Id, Text = x.Text, Done = false }), Json),
                 Order = await EndOrderAsync("todo", ct),
             };
@@ -338,6 +461,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 {
                     Number = ++n, Title = s.Title, Description = s.Description, Status = "todo", Priority = s.Priority, AssigneesJson = s.AssigneesJson,
                     LabelsJson = s.LabelsJson, Project = s.Project, ParentId = next.Id, CreatedBy = s.CreatedBy, Order = next.Order + n,
+                    Type = s.Type, StoryPoints = s.StoryPoints, EstimateMinutes = s.EstimateMinutes, Reporter = s.Reporter, Rank = next.Rank + n,
                     ChecklistJson = JsonSerializer.Serialize(Checks(s.ChecklistJson).Select(x => new WorkCheckItem { Id = x.Id, Text = x.Text, Done = false }), Json),
                 });
             }
@@ -353,9 +477,14 @@ namespace SeemanchalOutreach.Api.Controllers
             if (undo) c.Order = await EndOrderAsync(c.Status, ct);
             c.UpdatedAt = DateTime.UtcNow;
             Note(c.Id, undo ? "brought it back from the archive" : "archived it");
-            // A card's sub-tasks go to the archive with it, and come back with it.
-            var subs = await _db.WorkCards.Where(x => x.ParentId == c.Id && x.Archived == undo).ToListAsync(ct);
-            foreach (var s in subs) { s.Archived = !undo; s.UpdatedAt = DateTime.UtcNow; }
+            // Everything under it (an epic's stories and their sub-tasks…) goes to the archive with it, and comes back with it.
+            var level = new List<Guid> { c.Id };
+            for (var depth = 0; depth < 4 && level.Count > 0; depth++)
+            {
+                var kids = await _db.WorkCards.Where(x => x.ParentId != null && level.Contains(x.ParentId.Value) && x.Archived == undo).ToListAsync(ct);
+                foreach (var s in kids) { s.Archived = !undo; s.UpdatedAt = DateTime.UtcNow; }
+                level = kids.Select(x => x.Id).ToList();
+            }
             if (undo && c.ParentId != null && await _db.WorkCards.AnyAsync(x => x.Id == c.ParentId && x.Archived, ct))
                 c.ParentId = null; // its parent is still archived: it comes back as a card of its own
             await _db.SaveChangesAsync(ct);
@@ -386,7 +515,7 @@ namespace SeemanchalOutreach.Api.Controllers
             c.CommentCount++;
             c.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
-            Tell(c, Strings(c.AssigneesJson).Append(c.CreatedBy), "New comment on a card");
+            Tell(c, Followers(c), "New comment on a card");
             return Ok(new { id = n.Id, kind = n.Kind, agentId = n.AgentId, text = n.Text, at = n.CreatedAt });
         }
     }

@@ -10,8 +10,45 @@ export interface Card {
   link?: string | null; repeat: Repeat; comments: number; archived: boolean; createdBy: string; createdAt: string; updatedAt: string;
   startedAt?: string | null; doneAt?: string | null; doneBy?: string | null; overdue: boolean;
   /** Sub-tasks: the parent card (for a sub-task), and how many sub-tasks a card has and how many are done. */
-  parentId?: string | null; parent?: { id: string; number: number; title: string } | null; subTotal: number; subDone: number;
+  parentId?: string | null; parent?: { id: string; number: number; title: string; type?: IssueType } | null; subTotal: number; subDone: number;
+  /** Issue tracking (like Jira). Older replies may leave these out. */
+  type?: IssueType; startDate?: string | null; storyPoints?: number | null; estimateMinutes?: number | null; spentMinutes?: number;
+  sprintId?: string | null; rank?: number; reporter?: string; severity?: Severity | null; resolution?: string | null;
+  environment?: string | null; steps?: string | null; expected?: string | null; actual?: string | null; acceptance?: string | null; watchers?: string[];
 }
+export type IssueType = 'epic' | 'feature' | 'story' | 'task' | 'bug' | 'subtask';
+export type Severity = 'blocker' | 'critical' | 'major' | 'minor' | 'trivial';
+export const ISSUE_TYPES: IssueType[] = ['epic', 'feature', 'story', 'task', 'bug', 'subtask'];
+export const TYPE_META: Record<IssueType, { label: string; color: string; hint: string }> = {
+  epic: { label: 'Epic', color: '#7b3fe4', hint: 'A big goal that takes weeks: holds features, stories, tasks and bugs.' },
+  feature: { label: 'Feature', color: '#0e7490', hint: 'Something new for patients or the team, made of stories and tasks.' },
+  story: { label: 'Story', color: '#0f8a5f', hint: 'What someone needs, written from their side: “As a patient I want…”.' },
+  task: { label: 'Task', color: '#0a72d6', hint: 'A piece of work to do.' },
+  bug: { label: 'Bug', color: '#c0271e', hint: 'Something that is wrong and needs fixing.' },
+  subtask: { label: 'Sub-task', color: '#5a6478', hint: 'A smaller step of a story, task or bug.' },
+};
+export const SEVERITY: Record<Severity, { label: string; color: string }> = {
+  blocker: { label: 'Blocker', color: '#7a0f0a' }, critical: { label: 'Critical', color: '#b42318' }, major: { label: 'Major', color: '#d9822b' },
+  minor: { label: 'Minor', color: '#8a93a6' }, trivial: { label: 'Trivial', color: '#c3c9d4' },
+};
+export const RESOLUTION: Record<string, string> = { done: 'Done', wont_do: 'Won’t do', duplicate: 'Duplicate', cannot_reproduce: 'Cannot reproduce' };
+const LEVEL: Record<IssueType, number> = { epic: 0, feature: 1, story: 2, task: 2, bug: 2, subtask: 3 };
+/** Can an issue of this type go under that one? (Epic › feature › story, task or bug › sub-task.) */
+export const canParent = (child: IssueType, parent: IssueType | null): boolean =>
+  parent === null ? child !== 'subtask' : child !== 'epic' && (child === 'subtask' ? LEVEL[parent] === 2 : LEVEL[parent] < LEVEL[child]);
+/** The types an issue's parent may have. */
+export const parentTypes = (child: IssueType): IssueType[] => ISSUE_TYPES.filter((t) => canParent(child, t));
+/** "2h 30m" from minutes (8-hour days). */
+export const duration = (m?: number | null) => {
+  if (!m || m <= 0) return '0m';
+  const d = Math.floor(m / 480), h = Math.floor((m % 480) / 60), mm = m % 60;
+  return [d ? `${d}d` : '', h ? `${h}h` : '', mm ? `${mm}m` : ''].filter(Boolean).join(' ');
+};
+export interface Sprint {
+  id: string; name: string; goal?: string | null; startDate?: string | null; endDate?: string | null; status: 'planned' | 'active' | 'closed';
+  committedPoints?: number | null; completedPoints?: number | null; completedIssues?: number | null; startedAt?: string | null; closedAt?: string | null;
+}
+export interface Rollup { total: number; done: number; points: number; pointsDone: number }
 export interface DocRow {
   id: string; title: string; kind: 'plan' | 'doc' | 'notes' | 'file'; project?: string | null; cardId?: string | null; card?: { number: number; title: string } | null;
   pinned: boolean; archived: boolean; createdBy: string; createdAt: string; updatedBy: string; updatedAt: string; preview: string; words: number; version: number;
@@ -53,6 +90,8 @@ export interface BoardRes {
   me: string; isAdmin: boolean;
   columns: { key: Status; label: string }[];
   cards: Card[]; people: Person[]; labels: string[];
+  /** Open sprints (the running one first), and progress of each epic and feature. */
+  sprints?: Sprint[]; rollup?: Record<string, Rollup>;
   projects: { name: string; open: number; done: number }[];
   stats: { open: number; doing: number; overdue: number; dueToday: number; doneThisWeek: number; load: { agentId: string; open: number; overdue: number; doing: number }[] };
 }

@@ -369,6 +369,7 @@ namespace SeemanchalOutreach.Api.Controllers
             _db.WorkDocComments.RemoveRange(await _db.WorkDocComments.Where(c => c.DocId == id).ToListAsync(ct));
             _db.WorkDocShares.RemoveRange(await _db.WorkDocShares.Where(x => x.DocId == id).ToListAsync(ct));
             _db.WorkDocStars.RemoveRange(await _db.WorkDocStars.Where(x => x.DocId == id).ToListAsync(ct));
+            _db.WorkCardDocs.RemoveRange(await _db.WorkCardDocs.Where(x => x.DocId == id).ToListAsync(ct));
             _db.WorkDocs.Remove(d);
             if (cardId != null) _db.WorkNotes.Add(new WorkNote { CardId = cardId.Value, Kind = "activity", AgentId = Me, Text = $"deleted \"{title}\" for ever" });
             await _db.SaveChangesAsync(ct);

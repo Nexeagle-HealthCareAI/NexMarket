@@ -901,6 +901,83 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime? StartedAt { get; set; }
         public DateTime? DoneAt { get; set; }
         public string? DoneBy { get; set; }
+        // ─── Issue tracking (Jira-style) ───
+        /// <summary>epic | feature | story | task | bug | subtask. Epic › feature › story/task/bug › sub-task.</summary>
+        public string Type { get; set; } = "task";
+        public DateOnly? StartDate { get; set; }
+        public int? StoryPoints { get; set; }
+        /// <summary>Original estimate, and the time logged so far (sum of the work log), in minutes.</summary>
+        public int? EstimateMinutes { get; set; }
+        public int SpentMinutes { get; set; }
+        /// <summary>The sprint it is planned in; null = the backlog.</summary>
+        public Guid? SprintId { get; set; }
+        /// <summary>Its place in the backlog and sprint lists (the board's columns use Order).</summary>
+        public double Rank { get; set; }
+        /// <summary>Who reported it (defaults to whoever made it).</summary>
+        public string? Reporter { get; set; }
+        /// <summary>Bugs: blocker | critical | major | minor | trivial, and how to see it happen.</summary>
+        public string? Severity { get; set; }
+        public string? Environment { get; set; }
+        public string? Steps { get; set; }
+        public string? Expected { get; set; }
+        public string? Actual { get; set; }
+        /// <summary>Stories, features and epics: what "done" means.</summary>
+        public string? Acceptance { get; set; }
+        public string WatchersJson { get; set; } = "[]";
+        /// <summary>When done: done | wont_do | duplicate | cannot_reproduce.</summary>
+        public string? Resolution { get; set; }
+    }
+
+    /// <summary>A sprint: a fixed stretch of time with the issues the team commits to finish in it.</summary>
+    public class WorkSprint
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Name { get; set; } = string.Empty;
+        public string? Goal { get; set; }
+        public DateOnly? StartDate { get; set; }
+        public DateOnly? EndDate { get; set; }
+        public string Status { get; set; } = "planned";           // planned | active | closed
+        /// <summary>When it was started: the issues and points committed then (for the burndown and velocity).</summary>
+        public int? CommittedPoints { get; set; }
+        public int? CompletedPoints { get; set; }
+        public int? CompletedIssues { get; set; }
+        public DateTime? StartedAt { get; set; }
+        public DateTime? ClosedAt { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>Two issues linked: From blocks To, From relates to To, From duplicates To, From clones To.</summary>
+    public class WorkCardLink
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid FromId { get; set; }
+        public Guid ToId { get; set; }
+        public string Kind { get; set; } = "relates";             // blocks | relates | duplicates | clones
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>A document linked to an issue (a document can be linked to many issues).</summary>
+    public class WorkCardDoc
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid CardId { get; set; }
+        public Guid DocId { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>Time spent on an issue.</summary>
+    public class WorkLog
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid CardId { get; set; }
+        public string AgentId { get; set; } = string.Empty;
+        public int Minutes { get; set; }
+        public DateOnly Day { get; set; }
+        public string? Note { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
     /// <summary>A comment on a team-board card, or a line of its history (moved, assigned, due date changed…).</summary>

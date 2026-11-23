@@ -39,6 +39,10 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<FieldSurveySpot> FieldSurveySpots => Set<FieldSurveySpot>();
         public DbSet<WorkCard> WorkCards => Set<WorkCard>();
         public DbSet<WorkNote> WorkNotes => Set<WorkNote>();
+        public DbSet<WorkSprint> WorkSprints => Set<WorkSprint>();
+        public DbSet<WorkCardLink> WorkCardLinks => Set<WorkCardLink>();
+        public DbSet<WorkCardDoc> WorkCardDocs => Set<WorkCardDoc>();
+        public DbSet<WorkLog> WorkLogs => Set<WorkLog>();
         public DbSet<WorkDoc> WorkDocs => Set<WorkDoc>();
         public DbSet<WorkDocRevision> WorkDocRevisions => Set<WorkDocRevision>();
         public DbSet<WorkDocFolder> WorkDocFolders => Set<WorkDocFolder>();
@@ -304,6 +308,33 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.Number).IsUnique();
                 entity.HasIndex(e => new { e.Archived, e.Status });
                 entity.HasIndex(e => e.ParentId);
+                entity.HasIndex(e => e.SprintId);
+            });
+            modelBuilder.Entity<WorkSprint>(entity =>
+            {
+                entity.ToTable("work_sprints");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Status);
+            });
+            modelBuilder.Entity<WorkCardLink>(entity =>
+            {
+                entity.ToTable("work_card_links");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.FromId);
+                entity.HasIndex(e => e.ToId);
+            });
+            modelBuilder.Entity<WorkCardDoc>(entity =>
+            {
+                entity.ToTable("work_card_docs");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.CardId, e.DocId }).IsUnique();
+                entity.HasIndex(e => e.DocId);
+            });
+            modelBuilder.Entity<WorkLog>(entity =>
+            {
+                entity.ToTable("work_logs");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.CardId, e.Day });
             });
             modelBuilder.Entity<WorkNote>(entity =>
             {

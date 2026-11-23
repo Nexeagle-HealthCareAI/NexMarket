@@ -4469,6 +4469,12 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Acceptance")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Actual")
+                        .HasColumnType("text");
+
                     b.Property<bool>("Archived")
                         .HasColumnType("boolean");
 
@@ -4502,6 +4508,15 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
 
+                    b.Property<string>("Environment")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("EstimateMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Expected")
+                        .HasColumnType("text");
+
                     b.Property<string>("LabelsJson")
                         .IsRequired()
                         .HasColumnType("text");
@@ -4525,12 +4540,33 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("Project")
                         .HasColumnType("text");
 
+                    b.Property<double>("Rank")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("Repeat")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<Guid?>("RepeatOf")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Reporter")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Resolution")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Severity")
+                        .HasColumnType("text");
+
+                    b.Property<int>("SpentMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SprintId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date");
 
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("timestamp with time zone");
@@ -4539,12 +4575,26 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Steps")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("StoryPoints")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Type")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WatchersJson")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -4555,7 +4605,70 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ParentId");
 
+                    b.HasIndex("SprintId");
+
                     b.ToTable("work_cards", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.WorkCardDoc", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("DocId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CardId", "DocId")
+                        .IsUnique();
+
+                    b.HasIndex("DocId");
+
+                    b.ToTable("work_card_docs", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.WorkCardLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("FromId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ToId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromId");
+
+                    b.HasIndex("ToId");
+
+                    b.ToTable("work_card_links", "marketing");
                 });
 
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.WorkDoc", b =>
@@ -4846,6 +4959,38 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.ToTable("work_doc_stars", "marketing");
                 });
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.WorkLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("CardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Minutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CardId", "Day");
+
+                    b.ToTable("work_logs", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.WorkNote", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4875,6 +5020,58 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.HasIndex("CardId", "CreatedAt");
 
                     b.ToTable("work_notes", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.WorkSprint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CommittedPoints")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CompletedIssues")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CompletedPoints")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Goal")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("work_sprints", "marketing");
                 });
 #pragma warning restore 612, 618
         }
