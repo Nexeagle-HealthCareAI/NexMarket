@@ -1230,6 +1230,11 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? SalaryMonth { get; set; }
         /// <summary>How it was paid, when recorded: cash | upi | bank.</summary>
         public string? PayMode { get; set; }
+        /// <summary>The project it was spent for, if any.</summary>
+        public Guid? ProjectId { get; set; }
+        /// <summary>For a constant payment (rent, a subscription…): which one, and the period it pays for ("yyyy-MM", the period's first month).</summary>
+        public Guid? RecurringId { get; set; }
+        public string? Period { get; set; }
         public string Status { get; set; } = "approved";          // pending | approved | rejected
         public string? DecidedBy { get; set; }
         public DateTime? DecidedAt { get; set; }
@@ -1257,6 +1262,14 @@ namespace SeemanchalOutreach.Domain.Entities
         public decimal Amount { get; set; }
         public DateOnly On { get; set; }
         public string? Mode { get; set; }                          // cash | upi | bank
+        /// <summary>
+        /// Who handed it over (a money manager giving from the funds they hold) or got it back. Empty: the organisation
+        /// directly. A manager's balance goes down by what they hand out and up by what is returned to them.
+        /// </summary>
+        public string? FromAgentId { get; set; }
+        public string? FromAgentName { get; set; }
+        /// <summary>The project the money is for, if any.</summary>
+        public Guid? ProjectId { get; set; }
         public string? Note { get; set; }
         public string CreatedBy { get; set; } = string.Empty;
         public string CreatedByName { get; set; } = string.Empty;
@@ -1441,6 +1454,115 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime StartedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? FinishedAt { get; set; }
+    }
+
+    /// <summary>
+    /// A kind of spend the team chooses: Food, Petrol, Room rent, Software… Constant kinds are fixed, regular costs
+    /// (salaries, rent, subscriptions); variable kinds change with the work. Never deleted: Archived hides it from new entries.
+    /// </summary>
+    public class SpendCategory
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        /// <summary>The key stored on expenses ("food", or "c-1a2b3c" for one the team made).</summary>
+        public string Key { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string Nature { get; set; } = "variable";          // constant | variable
+        public string Color { get; set; } = "#6b7280";
+        public int Order { get; set; }
+        /// <summary>Agents can pick it when they add an expense from the phone.</summary>
+        public bool AgentCanUse { get; set; } = true;
+        public bool Archived { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>A piece of marketing work with its own money: a health camp, a campaign, a launch. Closed, never deleted.</summary>
+    public class SpendProject
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        /// <summary>What it may cost in all; empty when there is no set budget.</summary>
+        public decimal? Budget { get; set; }
+        public DateOnly? StartDate { get; set; }
+        public DateOnly? EndDate { get; set; }
+        public string Status { get; set; } = "active";            // active | closed
+        /// <summary>The person leading it.</summary>
+        public string? LeadId { get; set; }
+        public string? LeadName { get; set; }
+        public string Color { get; set; } = "#0a72d6";
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Money received for marketing: from the hospital's management, a sponsor, a partner… for a project or in general.
+    /// When a person (a money manager) received it in hand, it counts in what they hold. Never deleted: Removed hides it.
+    /// </summary>
+    public class SpendFund
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid? ProjectId { get; set; }
+        public decimal Amount { get; set; }
+        public DateOnly On { get; set; }
+        /// <summary>Who it came from, in words.</summary>
+        public string Source { get; set; } = string.Empty;
+        public string? Mode { get; set; }                          // cash | upi | bank
+        public string? Note { get; set; }
+        /// <summary>The person who received it and now holds it; empty when it went to the organisation's account.</summary>
+        public string? ReceivedBy { get; set; }
+        public string? ReceivedByName { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public string CreatedByName { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public bool Removed { get; set; }
+    }
+
+    /// <summary>
+    /// A constant payment: the same amount due every month, quarter or year (room rent, a software subscription, the
+    /// phone bill). Each payment is an expense with RecurringId and the period it pays for. Stopped with Active = false.
+    /// </summary>
+    public class SpendRecurring
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Title { get; set; } = string.Empty;
+        public string Category { get; set; } = "rent";
+        public decimal Amount { get; set; }
+        public string Every { get; set; } = "month";              // month | quarter | year
+        /// <summary>The day of the month it is due (1–28).</summary>
+        public int DueDay { get; set; } = 1;
+        /// <summary>The first period, "yyyy-MM".</summary>
+        public string FromMonth { get; set; } = string.Empty;
+        /// <summary>The last month it is due, once stopped.</summary>
+        public string? ToMonth { get; set; }
+        public Guid? ProjectId { get; set; }
+        /// <summary>Who it is paid to (landlord, company).</summary>
+        public string? Payee { get; set; }
+        /// <summary>The person it is for, if any (their room, their phone).</summary>
+        public string? ForAgentId { get; set; }
+        public string? ForAgentName { get; set; }
+        public string? Note { get; set; }
+        public bool Active { get; set; } = true;
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// A money manager (the marketing manager, usually): receives the marketing funds, hands money out to the team,
+    /// approves expenses and records payments, even without edit rights on the Payments page. Removed with Active = false.
+    /// </summary>
+    public class SpendManager
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public bool Active { get; set; } = true;
+        public string? Note { get; set; }
+        public string AddedBy { get; set; } = string.Empty;
+        public DateTime AddedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 
     /// <summary>A person on the marketing team's payroll. Taken off the payroll with OnPayroll = false; the row is kept.</summary>

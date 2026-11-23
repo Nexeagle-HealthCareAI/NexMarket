@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Api.Services;
 using SeemanchalOutreach.Application.Interfaces;
@@ -26,6 +27,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public string? AgentId { get; set; }
         /// <summary>The person it was spent on, when the organisation paid directly (CRM only).</summary>
         public string? ForAgentId { get; set; }
+        /// <summary>The project it was for; Guid.Empty takes it out of its project.</summary>
+        public Guid? ProjectId { get; set; }
     }
 
     public class TeamMemberDto
@@ -60,6 +63,9 @@ namespace SeemanchalOutreach.Api.Controllers
         public DateOnly? On { get; set; }
         public string? Mode { get; set; }
         public string? Note { get; set; }
+        /// <summary>Who hands it over: "org" (the organisation directly) or a money manager's id. Empty: the manager doing it, else the organisation.</summary>
+        public string? From { get; set; }
+        public Guid? ProjectId { get; set; }
     }
 
     internal static class SpendFiles
@@ -101,6 +107,9 @@ namespace SeemanchalOutreach.Api.Controllers
             forAgentName = e.ForAgentName ?? (e.PaidBy == "person" ? e.AgentName : null),
             salaryMonth = e.SalaryMonth,
             payMode = e.PayMode,
+            projectId = e.ProjectId,
+            recurringId = e.RecurringId,
+            period = e.Period,
             status = e.Status,
             rejectReason = e.RejectReason,
             hasBill = e.BillKey != null,
@@ -113,9 +122,14 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             id = m.Id, agentId = m.AgentId, agentName = m.AgentName, kind = m.Kind, amount = m.Amount,
             on = m.On.ToString("yyyy-MM-dd"), mode = m.Mode, note = m.Note, createdByName = m.CreatedByName, createdAt = m.CreatedAt,
+            fromAgentId = m.FromAgentId, fromAgentName = m.FromAgentName, projectId = m.ProjectId,
         };
 
-        public static object Shape(Spend.Balance b) => new { given = b.Given, returned = b.Returned, spent = b.Spent, pending = b.Pending, net = b.Net, holds = b.Holds, owed = b.Owed };
+        public static object Shape(Spend.Balance b) => new
+        {
+            given = b.Given, returned = b.Returned, spent = b.Spent, pending = b.Pending, net = b.Net, holds = b.Holds, owed = b.Owed,
+            received = b.Received, handedOut = b.HandedOut, handedBack = b.HandedBack,
+        };
     }
 
     /// <summary>
@@ -126,7 +140,7 @@ namespace SeemanchalOutreach.Api.Controllers
     [Authorize]
     [PageAccess(Pages.Payments)]
     [Route("api/v1/spend")]
-    public class SpendController : ControllerBase
+    public partial class SpendController : ControllerBase
     {
         private readonly IMarketingDbContext _db;
         private readonly IFileStore _files;
@@ -139,7 +153,10 @@ namespace SeemanchalOutreach.Api.Controllers
             return await _db.Agents.AsNoTracking().Where(a => a.AgentId == me).Select(a => a.Name).FirstOrDefaultAsync(ct) ?? me;
         }
 
-        /// <summary>Everything the page shows for a range of days (31 days by default, a year at most).</summary>
+        /// <summary>
+        /// Everything the page shows for a range of days (31 days by default, a year at most): entries, waiting approvals,
+        /// balances, and the analytics (constant and variable, by project, against the days before, and the things to note).
+        /// </summary>
         [HttpGet]
         public async Task<IActionResult> Get([FromQuery] string? from, [FromQuery] string? to, CancellationToken ct)
         {
@@ -148,9 +165,13 @@ namespace SeemanchalOutreach.Api.Controllers
             var start = Hoardings.Date(from) ?? end.AddDays(-30);
             if (start > end) (start, end) = (end, start);
             if (end.DayNumber - start.DayNumber > 366) start = end.AddDays(-366);
+            var span = end.DayNumber - start.DayNumber + 1;
+            var prevStart = start.AddDays(-span); var prevEnd = start.AddDays(-1);
 
+            var kinds = await KindsAsync(ct);
             var inRange = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.SpentOn >= start && e.SpentOn <= end)
                 .OrderByDescending(e => e.SpentOn).ThenByDescending(e => e.CreatedAt).Take(5000).ToListAsync(ct);
+            var prevTotal = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.Status == "approved" && e.SpentOn >= prevStart && e.SpentOn <= prevEnd).SumAsync(e => e.Amount, ct);
             // Waiting entries are shown whatever their day, so none is missed because of the dates picked.
             var waiting = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.Status == "pending")
                 .OrderBy(e => e.CreatedAt).Take(500).ToListAsync(ct);
@@ -158,43 +179,131 @@ namespace SeemanchalOutreach.Api.Controllers
             // Balances are over all time, not the range.
             var allPerson = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.PaidBy == "person" && e.AgentId != null && e.Status != "rejected").ToListAsync(ct);
             var moves = await _db.MarketingMoneyMoves.AsNoTracking().Where(m => !m.Removed).ToListAsync(ct);
+            var funds = await _db.SpendFunds.AsNoTracking().Where(f => !f.Removed).ToListAsync(ct);
+            var managers = await _db.SpendManagers.AsNoTracking().Where(m => m.Active).Select(m => m.AgentId).ToListAsync(ct);
             var staff = await _db.Agents.AsNoTracking().Where(a => a.IsActive).OrderBy(a => a.Name)
                 .Select(a => new { agentId = a.AgentId, name = a.Name, role = a.Role, block = a.Block }).ToListAsync(ct);
             var names = staff.ToDictionary(s => s.agentId, s => s);
-            var ids = moves.Select(m => m.AgentId).Concat(allPerson.Select(e => e.AgentId!)).Distinct().ToList();
+            var ids = moves.Select(m => m.AgentId).Concat(moves.Where(m => m.FromAgentId != null).Select(m => m.FromAgentId!))
+                .Concat(allPerson.Select(e => e.AgentId!)).Concat(funds.Where(f => f.ReceivedBy != null).Select(f => f.ReceivedBy!)).Concat(managers).Distinct().ToList();
             var people = ids.Select(id =>
             {
-                var b = Spend.BalanceOf(id, moves, allPerson);
+                var b = Spend.BalanceOf(id, moves, allPerson, funds);
                 var s = names.GetValueOrDefault(id);
                 return new
                 {
                     agentId = id,
-                    name = s?.name ?? moves.FirstOrDefault(m => m.AgentId == id)?.AgentName ?? id,
+                    name = s?.name ?? moves.FirstOrDefault(m => m.AgentId == id)?.AgentName ?? funds.FirstOrDefault(f => f.ReceivedBy == id)?.ReceivedByName ?? id,
                     role = s?.role,
+                    manager = managers.Contains(id),
                     balance = SpendFiles.Shape(b),
                     net = b.Net,
                 };
-            }).OrderBy(p => p.net).ThenBy(p => p.name).ToList();
+            }).OrderByDescending(p => p.manager).ThenBy(p => p.net).ThenBy(p => p.name).ToList();
 
+            var counted = inRange.Where(Spend.Counts).ToList();
+            bool IsConstant(MarketingExpense e) => Spend.NatureOf(e.Category, kinds) == "constant";
+            var constant = counted.Where(IsConstant).Sum(e => e.Amount);
+            var variable = counted.Where(e => !IsConstant(e)).Sum(e => e.Amount);
             var days = Spend.Days(inRange);
+            var byCat = Spend.ByCategory(inRange);
+            var topVar = byCat.Where(c => Spend.NatureOf(c.Key, kinds) != "constant").OrderByDescending(c => c.Value).FirstOrDefault();
+
+            // Projects: what each spent in these days, and their money over all time.
+            var projects = await _db.SpendProjects.AsNoTracking().ToListAsync(ct);
+            var projExpenses = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.ProjectId != null).ToListAsync(ct);
+            var projMoney = projects.ToDictionary(p => p.Id, p => Spend.MoneyOf(p, projExpenses, funds, kinds));
+            var byProject = counted.GroupBy(e => e.ProjectId).Select(g =>
+            {
+                var p = g.Key is Guid pid ? projects.FirstOrDefault(x => x.Id == pid) : null;
+                var m = p == null ? null : projMoney[p.Id];
+                return new
+                {
+                    projectId = g.Key, name = p?.Name ?? "Not in a project", color = p?.Color ?? "#8a93a6", status = p?.Status,
+                    total = g.Sum(e => e.Amount), constant = g.Where(IsConstant).Sum(e => e.Amount), variable = g.Where(e => !IsConstant(e)).Sum(e => e.Amount),
+                    budget = p?.Budget, spentAllTime = m?.Spent, receivedAllTime = m?.Received, left = m?.Left, usedPct = m?.UsedPct,
+                };
+            }).OrderBy(x => x.projectId == null).ThenByDescending(x => x.total).ToList();
+            var hot = projects.Where(p => p.Status == "active" && projMoney[p.Id].UsedPct is int pct && pct >= 85)
+                .Select(p => (p.Name, projMoney[p.Id].UsedPct!.Value, Math.Max(0, projMoney[p.Id].Spent - (p.Budget ?? 0)))).OrderByDescending(x => x.Item2).ToList();
+
+            // Constant payments: overdue, and due in the next 7 days.
+            var rec = await _db.SpendRecurrings.AsNoTracking().ToListAsync(ct);
+            var recIds = rec.Select(r => (Guid?)r.Id).ToList();
+            var recPays = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.RecurringId != null && recIds.Contains(e.RecurringId)).ToListAsync(ct);
+            var periods = rec.SelectMany(r => Spend.Periods(r, recPays.Where(p => p.RecurringId == r.Id), today).Select(p => (r, p))).ToList();
+            var overdue = periods.Where(x => x.p.Left > 0 && x.p.DueOn < today).ToList();
+            var soon = periods.Where(x => x.p.Left > 0 && x.p.DueOn >= today && x.p.DueOn <= today.AddDays(7)).ToList();
+            var thisMonth = Spend.Month(today);
+            var constantMonth = periods.Where(x => x.p.Month == Spend.PeriodFor(x.r, thisMonth)).ToList();
+
+            // Salaries: left this month and from earlier months.
+            var staffRows = await _db.MarketingStaff.AsNoTracking().ToListAsync(ct);
+            var rates = await _db.MarketingSalaryRates.AsNoTracking().ToListAsync(ct);
+            var salaryPays = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.Category == "agents" && e.SalaryMonth != null).ToListAsync(ct);
+            var salaryMonths = staffRows.SelectMany(st => Spend.Months(st, rates, salaryPays, today)).ToList();
+            var salaryDueThisMonth = salaryMonths.Where(x => x.Month == thisMonth).Sum(x => x.Due);
+            var salaryPaidThisMonth = salaryMonths.Where(x => x.Month == thisMonth).Sum(x => x.Paid);
+            var salaryLeftThis = salaryMonths.Where(x => x.Month == thisMonth).Sum(x => x.Left);
+            var salaryLeftEarlier = salaryMonths.Where(x => string.CompareOrdinal(x.Month, thisMonth) < 0).Sum(x => x.Left);
+
+            var heldByManagers = people.Where(p => p.manager).Sum(p => Math.Max(0, p.net));
+            var heldByOthers = people.Where(p => !p.manager).Sum(p => Math.Max(0, p.net));
+            var owedPeople = people.Where(p => p.net < 0).ToList();
+            var fundsInRange = funds.Where(f => f.On >= start && f.On <= end).ToList();
+            var spentAllTime = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.Status == "approved").SumAsync(e => e.Amount, ct);
+            var notes = Spend.Notes(new Spend.NoteInput(
+                waiting.Count, waiting.Sum(e => e.Amount),
+                overdue.Count, overdue.Sum(x => x.p.Left), soon.Count, soon.Sum(x => x.p.Left),
+                salaryLeftEarlier, salaryLeftThis, hot,
+                owedPeople.Sum(p => -p.net), owedPeople.Count, heldByManagers, heldByOthers,
+                days.Sum(d => d.Total), prevTotal, constant, variable, topVar.Key == null ? null : kinds.FirstOrDefault(k => k.Key == topVar.Key)?.Label ?? topVar.Key, topVar.Value,
+                fundsInRange.Sum(f => f.Amount), spentAllTime, funds.Sum(f => f.Amount)));
+
             var nameOf = new Func<string, string>(id => names.GetValueOrDefault(id)?.name ?? inRange.FirstOrDefault(e => Spend.ForOf(e) == id)?.ForAgentName ?? inRange.FirstOrDefault(e => e.AgentId == id)?.AgentName ?? id);
+            var perms = HttpContext.RequestServices.GetRequiredService<IPermissionService>();
+            var canSetup = User.IsAdmin() || await perms.GetLevelAsync(User, Pages.Payments) >= Pages.Edit;
             return Ok(new
             {
                 from = start.ToString("yyyy-MM-dd"),
                 to = end.ToString("yyyy-MM-dd"),
                 today = today.ToString("yyyy-MM-dd"),
-                categories = Spend.Categories.Select(c => new { key = c, label = Spend.Label(c) }),
+                me = new { agentId = User.AgentIdOf(), canHandle = await CanHandleAsync(ct), isManager = await IsManagerAsync(ct), canSetup },
+                categories = kinds.Select(k => new { key = k.Key, label = k.Label, nature = k.Nature, color = k.Color, archived = k.Archived, agentCanUse = k.AgentCanUse }),
                 modes = Spend.Modes,
                 total = days.Sum(d => d.Total),
-                byCategory = Spend.ByCategory(inRange),
-                days = days.Select(d => new { date = d.Date.ToString("yyyy-MM-dd"), total = d.Total, byCategory = d.ByCategory }),
+                prevTotal, prevFrom = prevStart.ToString("yyyy-MM-dd"), prevTo = prevEnd.ToString("yyyy-MM-dd"),
+                constant, variable,
+                fundsIn = fundsInRange.Sum(f => f.Amount),
+                funds = fundsInRange.OrderByDescending(f => f.On).Select(FundShape),
+                byCategory = byCat,
+                days = days.Select(d => new
+                {
+                    date = d.Date.ToString("yyyy-MM-dd"), total = d.Total, byCategory = d.ByCategory,
+                    constant = d.ByCategory.Where(c => Spend.NatureOf(c.Key, kinds) == "constant").Sum(c => c.Value),
+                    variable = d.ByCategory.Where(c => Spend.NatureOf(c.Key, kinds) != "constant").Sum(c => c.Value),
+                }),
                 byPerson = Spend.ByPerson(inRange).Select(p => new { agentId = p.AgentId, name = nameOf(p.AgentId), total = p.Total, byCategory = p.ByCategory }),
+                byProject,
+                commitments = new
+                {
+                    month = thisMonth,
+                    salaryDue = salaryDueThisMonth, salaryPaid = salaryPaidThisMonth, salaryLeft = salaryLeftThis, salaryLeftEarlier,
+                    constantDue = constantMonth.Sum(x => x.p.Due), constantPaid = constantMonth.Sum(x => x.p.Paid), constantLeft = constantMonth.Sum(x => x.p.Left),
+                    overdueCount = overdue.Count, overdueSum = overdue.Sum(x => x.p.Left),
+                    upcoming = periods.Where(x => x.p.Left > 0 && x.p.DueOn <= today.AddDays(31)).OrderBy(x => x.p.DueOn).Take(12)
+                        .Select(x => new { id = x.r.Id, title = x.r.Title, period = x.p.Month, dueOn = x.p.DueOn.ToString("yyyy-MM-dd"), left = x.p.Left, late = x.p.DueOn < today }),
+                },
+                notes = notes.Select(n => new { tone = n.Tone, title = n.Title, body = n.Body, go = n.Go }),
+                projects = projects.OrderBy(p => p.Status).ThenBy(p => p.Name).Select(p => new { id = p.Id, name = p.Name, status = p.Status, color = p.Color }),
                 items = inRange.Where(e => e.Status != "pending").Select(SpendFiles.Shape),
                 waiting = waiting.Select(SpendFiles.Shape),
-                people = people.Select(p => new { p.agentId, p.name, p.role, p.balance }),
+                people = people.Select(p => new { p.agentId, p.name, p.role, p.manager, p.balance }),
                 held = people.Sum(p => Math.Max(0, p.net)),
+                heldByManagers,
                 owed = people.Sum(p => Math.Max(0, -p.net)),
                 staff,
+                managers,
             });
         }
 
@@ -204,8 +313,14 @@ namespace SeemanchalOutreach.Api.Controllers
             if (err != null) return err;
             e.Amount = d.Amount!.Value;
             e.SpentOn = d.SpentOn!.Value;
-            e.Category = Spend.CategoryOf(d.Category);
+            e.Category = Spend.KindOf(d.Category, await KindsAsync(ct));
             e.Note = Hoardings.Clean(d.Note, 500);
+            if (d.ProjectId != null)
+            {
+                if (d.ProjectId == Guid.Empty) e.ProjectId = null;
+                else if (d.ProjectId != e.ProjectId && !await _db.SpendProjects.AnyAsync(p => p.Id == d.ProjectId && p.Status == "active", ct)) return "Pick a project that is still open.";
+                else e.ProjectId = d.ProjectId;
+            }
             if (d.PaidBy == "person")
             {
                 var who = Hoardings.Clean(d.AgentId, 40);
@@ -234,8 +349,10 @@ namespace SeemanchalOutreach.Api.Controllers
 
         /// <summary>An expense entered by the office counts straight away.</summary>
         [HttpPost]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
         public async Task<IActionResult> Create([FromBody] ExpenseDto d, CancellationToken ct)
         {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
             var me = User.AgentIdOf();
             var e = new MarketingExpense { Status = "approved", CreatedBy = me, CreatedByName = await MyNameAsync(ct), DecidedBy = me, DecidedAt = DateTime.UtcNow };
             var err = await ApplyAsync(e, d, ct);
@@ -246,8 +363,10 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpPut("{id:guid}")]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
         public async Task<IActionResult> Update(Guid id, [FromBody] ExpenseDto d, CancellationToken ct)
         {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
             var e = await _db.MarketingExpenses.FirstOrDefaultAsync(x => x.Id == id && !x.Removed, ct);
             if (e == null) return NotFound(new { message = "That entry isn't here any more." });
             // Whose money it was stays as the agent sent it; the office corrects the amount, day, kind and note.
@@ -260,8 +379,10 @@ namespace SeemanchalOutreach.Api.Controllers
 
         /// <summary>Approve or reject an expense an agent sent. Approving makes it count; rejecting needs a reason.</summary>
         [HttpPost("{id:guid}/decide")]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
         public async Task<IActionResult> Decide(Guid id, [FromBody] ExpenseDecideDto d, CancellationToken ct)
         {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
             var e = await _db.MarketingExpenses.FirstOrDefaultAsync(x => x.Id == id && !x.Removed, ct);
             if (e == null) return NotFound(new { message = "That entry isn't here any more." });
             var reason = Hoardings.Clean(d.Reason, 300);
@@ -284,8 +405,10 @@ namespace SeemanchalOutreach.Api.Controllers
 
         /// <summary>Takes an entry out of the totals. It is kept, not deleted.</summary>
         [HttpPost("{id:guid}/remove")]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
         public async Task<IActionResult> Remove(Guid id, CancellationToken ct)
         {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
             var e = await _db.MarketingExpenses.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (e == null) return NotFound(new { message = "That entry isn't here any more." });
             e.Removed = true; e.UpdatedAt = DateTime.UtcNow;
@@ -295,8 +418,10 @@ namespace SeemanchalOutreach.Api.Controllers
 
         [HttpPost("{id:guid}/bill")]
         [RequestSizeLimit(12_000_000)]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
         public async Task<IActionResult> AddBill(Guid id, IFormFile? file, CancellationToken ct)
         {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
             var e = await _db.MarketingExpenses.FirstOrDefaultAsync(x => x.Id == id && !x.Removed, ct);
             if (e == null) return NotFound(new { message = "That entry isn't here any more." });
             var err = await SpendFiles.SaveBillAsync(_files, e, file, ct);
@@ -316,10 +441,11 @@ namespace SeemanchalOutreach.Api.Controllers
         [HttpGet("people/{agentId}")]
         public async Task<IActionResult> Person(string agentId, CancellationToken ct)
         {
-            var moves = await _db.MarketingMoneyMoves.AsNoTracking().Where(m => !m.Removed && m.AgentId == agentId).OrderByDescending(m => m.On).ThenByDescending(m => m.CreatedAt).Take(1000).ToListAsync(ct);
+            var moves = await _db.MarketingMoneyMoves.AsNoTracking().Where(m => !m.Removed && (m.AgentId == agentId || m.FromAgentId == agentId)).OrderByDescending(m => m.On).ThenByDescending(m => m.CreatedAt).Take(2000).ToListAsync(ct);
             var expenses = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.PaidBy == "person" && e.AgentId == agentId).OrderByDescending(e => e.SpentOn).ThenByDescending(e => e.CreatedAt).Take(2000).ToListAsync(ct);
+            var funds = await _db.SpendFunds.AsNoTracking().Where(f => !f.Removed && f.ReceivedBy == agentId).OrderByDescending(f => f.On).ToListAsync(ct);
             var a = await _db.Agents.AsNoTracking().Where(x => x.AgentId == agentId).Select(x => new { x.Name, x.Role }).FirstOrDefaultAsync(ct);
-            var b = Spend.BalanceOf(agentId, moves, expenses);
+            var b = Spend.BalanceOf(agentId, moves, expenses, funds);
             var settle = Spend.Settling(b);
             return Ok(new
             {
@@ -328,6 +454,8 @@ namespace SeemanchalOutreach.Api.Controllers
                 settle = settle == null ? null : new { kind = settle.Value.Kind, amount = settle.Value.Amount },
                 moves = moves.Select(SpendFiles.Shape),
                 expenses = expenses.Select(SpendFiles.Shape),
+                funds = funds.Select(FundShape),
+                manager = await _db.SpendManagers.AsNoTracking().AnyAsync(m => m.AgentId == agentId && m.Active, ct),
             });
         }
 
@@ -373,8 +501,10 @@ namespace SeemanchalOutreach.Api.Controllers
 
         /// <summary>Put a person on the marketing payroll, or change their salary from a month onwards.</summary>
         [HttpPost("team")]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
         public async Task<IActionResult> SaveMember([FromBody] TeamMemberDto d, CancellationToken ct)
         {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
             var today = AttendanceService.TodayIst;
             var err = Spend.SalaryProblem(d.Salary, d.FromMonth, today);
             if (err != null) return BadRequest(new { message = err });
@@ -398,8 +528,10 @@ namespace SeemanchalOutreach.Api.Controllers
 
         /// <summary>Take a person off the payroll after a last month. Their record and payments are kept.</summary>
         [HttpPost("team/{agentId}/off")]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
         public async Task<IActionResult> MemberOff(string agentId, [FromBody] TeamOffDto d, CancellationToken ct)
         {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
             var s = await _db.MarketingStaff.FirstOrDefaultAsync(x => x.AgentId == agentId, ct);
             if (s == null) return NotFound(new { message = "That person isn't on the team." });
             var last = Spend.MonthOf(d.LastMonth) ?? Spend.Month(AttendanceService.TodayIst);
@@ -441,8 +573,10 @@ namespace SeemanchalOutreach.Api.Controllers
 
         /// <summary>A salary payment for a person and a month: all of it or a part. It counts in the daily spend under Salaries.</summary>
         [HttpPost("salary")]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
         public async Task<IActionResult> PaySalary([FromBody] SalaryPayDto d, CancellationToken ct)
         {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
             var today = AttendanceService.TodayIst;
             var err = Spend.Problem(d.Amount, d.On, today, Spend.OfficeDaysBack);
             if (err != null) return BadRequest(new { message = err });
@@ -472,8 +606,10 @@ namespace SeemanchalOutreach.Api.Controllers
 
         /// <summary>Money given to a person (an advance, or paying back what they spent) or returned by them.</summary>
         [HttpPost("moves")]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
         public async Task<IActionResult> AddMove([FromBody] MoneyMoveDto d, CancellationToken ct)
         {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
             var err = Spend.Problem(d.Amount, d.On, AttendanceService.TodayIst, Spend.OfficeDaysBack);
             if (err != null) return BadRequest(new { message = err });
             var who = Hoardings.Clean(d.AgentId, 40);
@@ -485,12 +621,31 @@ namespace SeemanchalOutreach.Api.Controllers
                 AgentId = a.AgentId, AgentName = a.Name, Kind = d.Kind == "returned" ? "returned" : "given", Amount = d.Amount!.Value, On = d.On!.Value,
                 Mode = Spend.ModeOf(d.Mode), Note = Hoardings.Clean(d.Note, 300), CreatedBy = me, CreatedByName = await MyNameAsync(ct),
             };
+            // Whose money: a money manager's (it comes out of what they hold) or the organisation's. A manager without edit
+            // rights always hands out their own.
+            var from = Hoardings.Clean(d.From, 40);
+            if (from == null && await IsManagerAsync(ct)) from = me;
+            var perms = HttpContext.RequestServices.GetRequiredService<IPermissionService>();
+            if (from != me && !User.IsAdmin() && await perms.GetLevelAsync(User, Pages.Payments) < Pages.Edit) from = me;
+            if (from != null && from != "org")
+            {
+                if (from == a.AgentId) return BadRequest(new { message = "A person can't give money to themselves." });
+                var mgr = await _db.SpendManagers.AsNoTracking().Where(x => x.AgentId == from && x.Active).Select(x => new { x.AgentId, x.Name }).FirstOrDefaultAsync(ct);
+                if (mgr == null) return BadRequest(new { message = "Only a money manager can hand out money from what they hold." });
+                m.FromAgentId = mgr.AgentId; m.FromAgentName = mgr.Name;
+            }
+            if (d.ProjectId != null && d.ProjectId != Guid.Empty)
+            {
+                if (!await _db.SpendProjects.AnyAsync(p => p.Id == d.ProjectId, ct)) return BadRequest(new { message = "That project isn't here any more." });
+                m.ProjectId = d.ProjectId;
+            }
             _db.MarketingMoneyMoves.Add(m);
             await _db.SaveChangesAsync(ct);
+            var byWhom = m.FromAgentName != null ? $" by {m.FromAgentName}" : "";
             _notifier.Notify(new NotifyJob
             {
                 To = new() { a.AgentId }, Except = me, Kind = "note",
-                Title = m.Kind == "given" ? $"{Spend.Rupees(m.Amount)} given to you for marketing work" : $"{Spend.Rupees(m.Amount)} returned by you was recorded",
+                Title = m.Kind == "given" ? $"{Spend.Rupees(m.Amount)} given to you for marketing work{byWhom}" : $"{Spend.Rupees(m.Amount)} returned by you was recorded",
                 Body = m.Note ?? "See your balance in the app under Money.",
                 Link = "spend", RefId = m.Id.ToString(),
             });
@@ -499,8 +654,10 @@ namespace SeemanchalOutreach.Api.Controllers
 
         /// <summary>Takes a wrong entry out of the balance. It is kept, not deleted.</summary>
         [HttpPost("moves/{id:guid}/remove")]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
         public async Task<IActionResult> RemoveMove(Guid id, CancellationToken ct)
         {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
             var m = await _db.MarketingMoneyMoves.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (m == null) return NotFound(new { message = "That entry isn't here any more." });
             m.Removed = true;
@@ -533,8 +690,9 @@ namespace SeemanchalOutreach.Api.Controllers
             {
                 today = AttendanceService.TodayIst.ToString("yyyy-MM-dd"),
                 daysBack = Spend.AgentDaysBack,
-                categories = Spend.AgentCategories.Select(c => new { key = c, label = Spend.Label(c) }),
-                balance = SpendFiles.Shape(Spend.BalanceOf(me, moves, expenses)),
+                categories = Spend.KindsOf(await _db.SpendCategories.AsNoTracking().ToListAsync(ct)).Where(k => k.AgentCanUse && !k.Archived && k.Key != "agents").Select(k => new { key = k.Key, label = k.Label }),
+                projects = await _db.SpendProjects.AsNoTracking().Where(p => p.Status == "active").OrderBy(p => p.Name).Select(p => new { id = p.Id, name = p.Name }).ToListAsync(ct),
+                balance = SpendFiles.Shape(Spend.BalanceOf(me, moves, expenses, await _db.SpendFunds.AsNoTracking().Where(f => !f.Removed && f.ReceivedBy == me).ToListAsync(ct))),
                 items = expenses.Take(200).Select(SpendFiles.Shape),
                 moves = moves.Take(100).Select(SpendFiles.Shape),
             });
@@ -553,13 +711,16 @@ namespace SeemanchalOutreach.Api.Controllers
             }
             var err = Spend.Problem(d.Amount, d.SpentOn, AttendanceService.TodayIst, Spend.AgentDaysBack);
             if (err != null) return BadRequest(new { message = err });
-            var cat = Spend.CategoryOf(d.Category);
-            if (!Spend.AgentCategories.Contains(cat)) cat = "other";
+            var kinds = Spend.KindsOf(await _db.SpendCategories.AsNoTracking().ToListAsync(ct));
+            var cat = Spend.KindOf(d.Category, kinds);
+            if (cat == "agents" || !kinds.Any(k => k.Key == cat && k.AgentCanUse)) cat = "other";
+            Guid? project = d.ProjectId is Guid pid && pid != Guid.Empty && await _db.SpendProjects.AnyAsync(p => p.Id == pid && p.Status == "active", ct) ? pid : null;
             var name = await _db.Agents.AsNoTracking().Where(a => a.AgentId == me).Select(a => a.Name).FirstOrDefaultAsync(ct) ?? me;
             var e = new MarketingExpense
             {
                 SpentOn = d.SpentOn!.Value, Category = cat, Amount = d.Amount!.Value, Note = Hoardings.Clean(d.Note, 500),
                 PaidBy = "person", AgentId = me, AgentName = name, ForAgentId = me, ForAgentName = name, Status = "pending", CreatedBy = me, CreatedByName = name,
+                ProjectId = project,
             };
             if (cid != null) e.ClientId = cid;
             _db.MarketingExpenses.Add(e);

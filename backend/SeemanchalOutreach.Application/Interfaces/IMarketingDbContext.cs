@@ -70,6 +70,11 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<HoardingPhoto> HoardingPhotos { get; }
         DbSet<MarketingExpense> MarketingExpenses { get; }
         DbSet<MarketingMoneyMove> MarketingMoneyMoves { get; }
+        DbSet<SpendCategory> SpendCategories { get; }
+        DbSet<SpendProject> SpendProjects { get; }
+        DbSet<SpendFund> SpendFunds { get; }
+        DbSet<SpendRecurring> SpendRecurrings { get; }
+        DbSet<SpendManager> SpendManagers { get; }
         DbSet<MarketingStaff> MarketingStaff { get; }
         DbSet<MarketingSalaryRate> MarketingSalaryRates { get; }
         DbSet<SiteContent> SiteContents { get; }

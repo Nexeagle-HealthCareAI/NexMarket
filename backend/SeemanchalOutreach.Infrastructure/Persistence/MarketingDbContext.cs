@@ -73,6 +73,11 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<HoardingPhoto> HoardingPhotos => Set<HoardingPhoto>();
         public DbSet<MarketingExpense> MarketingExpenses => Set<MarketingExpense>();
         public DbSet<MarketingMoneyMove> MarketingMoneyMoves => Set<MarketingMoneyMove>();
+        public DbSet<SpendCategory> SpendCategories => Set<SpendCategory>();
+        public DbSet<SpendProject> SpendProjects => Set<SpendProject>();
+        public DbSet<SpendFund> SpendFunds => Set<SpendFund>();
+        public DbSet<SpendRecurring> SpendRecurrings => Set<SpendRecurring>();
+        public DbSet<SpendManager> SpendManagers => Set<SpendManager>();
         public DbSet<MarketingStaff> MarketingStaff => Set<MarketingStaff>();
         public DbSet<MarketingSalaryRate> MarketingSalaryRates => Set<MarketingSalaryRate>();
         public DbSet<SiteContent> SiteContents => Set<SiteContent>();
@@ -663,7 +668,42 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.AgentId);
                 entity.HasIndex(e => e.Status);
                 entity.HasIndex(e => e.ForAgentId);
+                entity.HasIndex(e => e.ProjectId);
+                entity.HasIndex(e => new { e.RecurringId, e.Period });
                 entity.Property(e => e.Amount).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<SpendCategory>(entity =>
+            {
+                entity.ToTable("spend_categories");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Key).IsUnique();
+            });
+            modelBuilder.Entity<SpendProject>(entity =>
+            {
+                entity.ToTable("spend_projects");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Status);
+                entity.Property(e => e.Budget).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<SpendFund>(entity =>
+            {
+                entity.ToTable("spend_funds");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.ProjectId);
+                entity.HasIndex(e => e.On);
+                entity.Property(e => e.Amount).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<SpendRecurring>(entity =>
+            {
+                entity.ToTable("spend_recurrings");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Amount).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<SpendManager>(entity =>
+            {
+                entity.ToTable("spend_managers");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.AgentId).IsUnique();
             });
             modelBuilder.Entity<SiteContent>(entity =>
             {
@@ -726,6 +766,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("marketing_money_moves");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.AgentId);
+                entity.HasIndex(e => e.FromAgentId);
                 entity.Property(e => e.Amount).HasPrecision(12, 2);
             });
             modelBuilder.Entity<Meeting>(entity =>
