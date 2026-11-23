@@ -67,6 +67,7 @@ builder.Services.Configure<SeemanchalOutreach.Api.Services.LiveKitSettings>(buil
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.CallSweeper>();
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.MeetingWorker>();
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.HoardingSweeper>();
+builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.WorkReminders>();
 // Website: content written in the CRM is published to the website's GitHub repository as a pull request.
 builder.Services.AddHttpClient("github", c => c.Timeout = TimeSpan.FromSeconds(40));
 // Checks links before publishing: public internet addresses only, no redirects followed.

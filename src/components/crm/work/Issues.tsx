@@ -404,7 +404,7 @@ function SprintForm({ sprint, onClose, onSaved, toast }: { sprint: Sprint; onClo
   );
 }
 
-function CompleteSprint({ sprint, next, open, done, onClose, onDone, toast }: {
+export function CompleteSprint({ sprint, next, open, done, onClose, onDone, toast }: {
   sprint: Sprint; next: Sprint[]; open: number; done: number; onClose: () => void; onDone: () => void; toast: (m: string) => void;
 }) {
   const [to, setTo] = useState(next[0]?.id ?? '');

@@ -94,5 +94,35 @@ namespace SeemanchalOutreach.Api.Services
             }
             return list;
         }
+
+        /// <summary>
+        /// The people a comment @mentions: "@imran", "@ImranAhmad", "@imran.ahmad" or "@MM-1" (first name, full name with or
+        /// without spaces or dots, or the agent id; any case). A first name two people share mentions neither (say the full name).
+        /// </summary>
+        public static List<string> MentionedIn(string? text, IEnumerable<(string Id, string Name)> people)
+        {
+            var found = new List<string>();
+            if (string.IsNullOrWhiteSpace(text) || !text.Contains('@')) return found;
+            var list = people.Where(p => !string.IsNullOrWhiteSpace(p.Name)).ToList();
+            static string Key(string s) => new string(s.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+            var firsts = list.GroupBy(p => Key(p.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0])).ToDictionary(g => g.Key, g => g.Select(p => p.Id).Distinct().ToList());
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(text, @"(?<![\w@])@([\p{L}\p{N}][\p{L}\p{N}._-]{0,40})"))
+            {
+                var raw = m.Groups[1].Value.TrimEnd('.', '-', '_');
+                var k = Key(raw);
+                if (k.Length == 0) continue;
+                var hit = list.FirstOrDefault(p => string.Equals(p.Id, raw, StringComparison.OrdinalIgnoreCase) || Key(p.Id) == k || Key(p.Name) == k).Id;
+                if (hit == null && firsts.TryGetValue(k, out var ids) && ids.Count == 1) hit = ids[0];
+                if (hit != null && !found.Contains(hit)) found.Add(hit);
+            }
+            return found;
+        }
+
+        /// <summary>A comment cut short for a notification.</summary>
+        public static string Clip(string text, int max = 140)
+        {
+            var t = System.Text.RegularExpressions.Regex.Replace(text ?? "", @"\s+", " ").Trim();
+            return t.Length > max ? t[..max].TrimEnd() + "…" : t;
+        }
     }
 }

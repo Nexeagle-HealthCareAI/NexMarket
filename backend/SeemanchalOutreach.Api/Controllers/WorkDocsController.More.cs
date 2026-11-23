@@ -442,7 +442,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 foreach (var group in to.GroupBy(a => mentions.Contains(a)))
                     _notifier.Notify(new NotifyJob
                     {
-                        To = group.ToList(), Kind = "work", Except = Me,
+                        To = group.ToList(), Kind = group.Key ? "work_mention" : "work", Except = Me,
                         Title = group.Key ? $"{me} mentioned you in “{d.Title}”" : root != null ? $"{me} replied on “{d.Title}”" : $"{me} commented on “{d.Title}”",
                         Body = clip, Link = $"doc:{d.Id}:{root?.Id ?? c.Id}", RefId = d.Id.ToString(),
                     });

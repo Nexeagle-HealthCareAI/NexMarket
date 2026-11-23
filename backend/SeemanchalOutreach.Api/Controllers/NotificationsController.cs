@@ -66,23 +66,36 @@ namespace SeemanchalOutreach.Api.Controllers
 
         /// <summary>My notifications, newest first (30 a page; <c>before</c> for older). Also the unread count.</summary>
         [HttpGet]
-        public async Task<IActionResult> List([FromQuery] DateTime? before, [FromQuery] bool unreadOnly = false, [FromQuery] int limit = 30, CancellationToken ct = default)
+        public async Task<IActionResult> List([FromQuery] DateTime? before, [FromQuery] bool unreadOnly = false, [FromQuery] int limit = 30, [FromQuery] string? kind = null, CancellationToken ct = default)
         {
             var me = Me;
             limit = Math.Clamp(limit, 1, 100);
-            var q = _db.Notifications.AsNoTracking().Where(n => n.UserId == me);
+            var q = OfKind(_db.Notifications.AsNoTracking().Where(n => n.UserId == me), kind);
             if (unreadOnly) q = q.Where(n => n.ReadAt == null);
             if (before != null) q = q.Where(n => n.CreatedAt < before.Value.ToUniversalTime());
             var list = await q.OrderByDescending(n => n.CreatedAt).Take(limit).ToListAsync(ct);
-            var unread = await _db.Notifications.CountAsync(n => n.UserId == me && n.ReadAt == null, ct);
+            var unread = await OfKind(_db.Notifications.Where(n => n.UserId == me && n.ReadAt == null), kind).CountAsync(ct);
             return Ok(new { items = list.Select(Shape), unread, hasMore = list.Count == limit });
         }
 
+        /// <summary>
+        /// Only some kinds: a comma list, where a name ending in * means every kind starting with it
+        /// (<c>work*</c> is everything from the Team board).
+        /// </summary>
+        private static IQueryable<Notification> OfKind(IQueryable<Notification> q, string? kind)
+        {
+            var kinds = (kind ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(10).ToList();
+            if (kinds.Count == 0) return q;
+            var exact = kinds.Where(k => !k.EndsWith('*')).ToList();
+            var prefix = kinds.Where(k => k.EndsWith('*')).Select(k => k.TrimEnd('*')).FirstOrDefault();
+            return prefix == null ? q.Where(n => exact.Contains(n.Kind)) : q.Where(n => exact.Contains(n.Kind) || n.Kind.StartsWith(prefix));
+        }
+
         [HttpGet("unread")]
-        public async Task<IActionResult> Unread(CancellationToken ct)
+        public async Task<IActionResult> Unread([FromQuery] string? kind, CancellationToken ct)
         {
             var me = Me;
-            return Ok(new { total = await _db.Notifications.CountAsync(n => n.UserId == me && n.ReadAt == null, ct) });
+            return Ok(new { total = await OfKind(_db.Notifications.Where(n => n.UserId == me && n.ReadAt == null), kind).CountAsync(ct) });
         }
 
         [HttpPost("{id:guid}/read")]
@@ -97,11 +110,11 @@ namespace SeemanchalOutreach.Api.Controllers
         }
 
         [HttpPost("read-all")]
-        public async Task<IActionResult> ReadAll(CancellationToken ct)
+        public async Task<IActionResult> ReadAll([FromQuery] string? kind, CancellationToken ct)
         {
             var me = Me;
             var now = DateTime.UtcNow;
-            var list = await _db.Notifications.Where(x => x.UserId == me && x.ReadAt == null).ToListAsync(ct);
+            var list = await OfKind(_db.Notifications.Where(x => x.UserId == me && x.ReadAt == null), kind).ToListAsync(ct);
             foreach (var n in list) n.ReadAt = now;
             await _db.SaveChangesAsync(ct);
             return Ok(new { read = list.Count });

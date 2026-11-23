@@ -302,11 +302,30 @@ namespace SeemanchalOutreach.Api.Controllers
         private static IEnumerable<string> Followers(WorkCard c) =>
             Strings(c.AssigneesJson).Append(c.CreatedBy).Append(c.Reporter ?? c.CreatedBy).Concat(Strings(c.WatchersJson));
 
-        private void Tell(WorkCard c, IEnumerable<string> to, string title)
+        /// <summary>
+        /// Tells people about a change on an issue (never the person who made it). Kinds: work (changes on my work),
+        /// work_mention (someone @mentioned me), work_due (reminders); each can be turned off in notification settings.
+        /// </summary>
+        private void Tell(WorkCard c, IEnumerable<string> to, string title, string? body = null, string kind = "work")
         {
-            var list = to.Where(a => a != User.AgentIdOf()).Distinct().ToList();
+            var me = User.AgentIdOf();
+            var list = to.Where(a => !string.IsNullOrEmpty(a) && a != me).Distinct().ToList();
             if (list.Count == 0) return;
-            _notifier.Notify(new NotifyJob { To = list, Kind = "work", Title = title, Body = $"#{c.Number} {c.Title}", Link = $"work:{c.Id}", RefId = c.Id.ToString() });
+            _notifier.Notify(new NotifyJob
+            {
+                To = list, Kind = kind, Except = me, Title = title,
+                Body = body == null ? $"#{c.Number} {c.Title}" : $"{body} · #{c.Number} {c.Title}", Link = $"work:{c.Id}", RefId = c.Id.ToString(),
+            });
+        }
+
+        private string? _myName;
+        /// <summary>The name of whoever is making the change, for "Imran moved #43 to Check".</summary>
+        private async Task<string> MyNameAsync(CancellationToken ct)
+        {
+            if (_myName != null) return _myName;
+            var me = User.AgentIdOf();
+            var n = await _db.Agents.AsNoTracking().Where(a => a.AgentId == me).Select(a => a.Name).FirstOrDefaultAsync(ct);
+            return _myName = string.IsNullOrWhiteSpace(n) ? "Someone" : n.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
         }
 
         private async Task<double> EndOrderAsync(string status, CancellationToken ct) =>
@@ -339,7 +358,7 @@ namespace SeemanchalOutreach.Api.Controllers
             Note(c.Id, parent == null ? $"created the {WorkIssues.Label(c.Type)}" : $"created it as a {WorkIssues.Label(c.Type)} under #{parent.Number}");
             if (parent != null) Note(parent.Id, $"added {WorkIssues.Label(c.Type)} #{c.Number} {c.Title}");
             await _db.SaveChangesAsync(ct);
-            Tell(c, assigned, "New work for you");
+            Tell(c, assigned, $"{await MyNameAsync(ct)} gave you {WorkIssues.Label(c.Type)} #{c.Number}", c.DueDate is DateOnly due ? $"Due {due:d MMM}" : null);
             await _live.PublishAsync(new LiveEvent { Kind = "work", Text = $"New card: {c.Title}", RefId = c.Id.ToString() });
             return Ok(View(c, await FamilyAsync(new[] { c }, ct)));
         }
@@ -382,7 +401,11 @@ namespace SeemanchalOutreach.Api.Controllers
             c.UpdatedAt = DateTime.UtcNow;
             foreach (var ch in changes) Note(c.Id, ch);
             await _db.SaveChangesAsync(ct);
-            Tell(c, assigned, "You were added to a card");
+            var who = await MyNameAsync(ct);
+            Tell(c, assigned, $"{who} added you to #{c.Number}");
+            // Everyone else following it hears what changed (a move to another column is told by MoveAsync).
+            var told = changes.Where(x => x != "changed who is on it" && !x.StartsWith("moved it to ", StringComparison.Ordinal) || x.StartsWith("moved it to the sprint", StringComparison.Ordinal) || x == "moved it to the backlog").ToList();
+            if (told.Count > 0) Tell(c, Followers(c).Except(assigned), $"{who} updated #{c.Number}", WorkIssues.Clip(string.Join("; ", told), 160));
             await _live.PublishAsync(new LiveEvent { Kind = "work", Text = $"Card changed: {c.Title}", RefId = c.Id.ToString() });
             return Ok(View(c, await FamilyAsync(new[] { c }, ct)));
         }
@@ -415,13 +438,14 @@ namespace SeemanchalOutreach.Api.Controllers
             if (status != c.Status)
             {
                 changes.Add($"moved it to {StatusLabel[status]}");
+                if (status != "done") Tell(c, Followers(c), $"{await MyNameAsync(ct)} moved #{c.Number} to {StatusLabel[status]}");
                 if (status == "doing") c.StartedAt ??= DateTime.UtcNow;
                 if (status == "done")
                 {
                     c.DoneAt = DateTime.UtcNow; c.DoneBy = me;
                     if (c.ParentId != null) Note(c.ParentId.Value, $"finished sub-task #{c.Number} {c.Title}");
                     c.Resolution ??= "done";
-                    Tell(c, Followers(c), "Card done");
+                    Tell(c, Followers(c), $"{await MyNameAsync(ct)} finished #{c.Number}");
                     if (c.Repeat != "none") next = await RepeatAsync(c, ct);
                 }
                 else { c.DoneAt = null; c.DoneBy = null; c.Resolution = null; }
@@ -515,7 +539,11 @@ namespace SeemanchalOutreach.Api.Controllers
             c.CommentCount++;
             c.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
-            Tell(c, Followers(c), "New comment on a card");
+            var who = await MyNameAsync(ct);
+            var people = (await _db.Agents.AsNoTracking().Where(a => a.Name != "").Select(a => new { a.AgentId, a.Name }).ToListAsync(ct)).Select(a => (a.AgentId, a.Name));
+            var mentioned = WorkIssues.MentionedIn(text, people);
+            Tell(c, mentioned, $"{who} mentioned you on #{c.Number}", $"“{WorkIssues.Clip(text)}”", "work_mention");
+            Tell(c, Followers(c).Except(mentioned), $"{who} commented on #{c.Number}", $"“{WorkIssues.Clip(text)}”");
             return Ok(new { id = n.Id, kind = n.Kind, agentId = n.AgentId, text = n.Text, at = n.CreatedAt });
         }
     }

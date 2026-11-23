@@ -331,7 +331,8 @@ namespace SeemanchalOutreach.Api.Controllers
             if (s.Status != "planned") return BadRequest(new { message = "That sprint has already started." });
             var running = await _db.WorkSprints.AsNoTracking().Where(x => x.Status == "active").Select(x => x.Name).FirstOrDefaultAsync(ct);
             if (running != null) return BadRequest(new { message = $"{running} is still running. Complete it first." });
-            var issues = await _db.WorkCards.AsNoTracking().Where(c => c.SprintId == id && !c.Archived).Select(c => c.StoryPoints).ToListAsync(ct);
+            var inSprint = await _db.WorkCards.AsNoTracking().Where(c => c.SprintId == id && !c.Archived).Select(c => new { c.StoryPoints, c.AssigneesJson }).ToListAsync(ct);
+            var issues = inSprint.Select(c => c.StoryPoints).ToList();
             if (issues.Count == 0) return BadRequest(new { message = "Put some issues in the sprint first: drag them in from the backlog." });
             s.Status = "active"; s.StartedAt = DateTime.UtcNow;
             s.StartDate ??= Today;
@@ -340,6 +341,15 @@ namespace SeemanchalOutreach.Api.Controllers
             s.CommittedPoints = issues.Sum(p => p ?? 0);
             await _db.SaveChangesAsync(ct);
             await _live.PublishAsync(new LiveEvent { Kind = "work", Text = $"{s.Name} started", RefId = s.Id.ToString() });
+            // Everyone with work in it hears it started, and how much of it is theirs.
+            var who = await MyNameAsync(ct);
+            foreach (var g in inSprint.SelectMany(c => Strings(c.AssigneesJson)).GroupBy(a => a))
+                _notifier.Notify(new NotifyJob
+                {
+                    To = new() { g.Key }, Except = User.AgentIdOf(), Kind = "work", Link = "work-board", RefId = s.Id.ToString(),
+                    Title = $"{who} started {s.Name}",
+                    Body = $"{g.Count()} issue{(g.Count() == 1 ? "" : "s")} in it are yours{(s.EndDate is DateOnly end ? $" · ends {end:d MMM}" : "")}{(string.IsNullOrWhiteSpace(s.Goal) ? "" : $" · Goal: {s.Goal}")}",
+                });
             return Ok(SprintView(s));
         }
 
@@ -360,6 +370,15 @@ namespace SeemanchalOutreach.Api.Controllers
             s.CompletedIssues = done.Count; s.CompletedPoints = done.Sum(c => c.StoryPoints ?? 0);
             await _db.SaveChangesAsync(ct);
             await _live.PublishAsync(new LiveEvent { Kind = "work", Text = $"{s.Name} completed", RefId = s.Id.ToString() });
+            var closer = await MyNameAsync(ct);
+            var people = issues.SelectMany(c => Strings(c.AssigneesJson)).Distinct().ToList();
+            if (people.Count > 0)
+                _notifier.Notify(new NotifyJob
+                {
+                    To = people, Except = User.AgentIdOf(), Kind = "work", Link = "work-board", RefId = s.Id.ToString(),
+                    Title = $"{closer} completed {s.Name}",
+                    Body = $"{done.Count} done{(left.Count > 0 ? $", {left.Count} moved {(d.MoveTo == null ? "back to the backlog" : "to the next sprint")}" : "")}",
+                });
             return Ok(new { sprint = SprintView(s), done = done.Count, moved = left.Count });
         }
 

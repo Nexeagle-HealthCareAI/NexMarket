@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Bell, BellOff, CalendarOff, Check, ClipboardList, Flag, HeartPulse, MapPinned, MessageCircle, Monitor, Settings, StickyNote, UserPlus, Users, X,
+  AtSign, AlarmClock, Bell, BellOff, CalendarOff, Check, ClipboardList, Columns3, Flag, HeartPulse, MapPinned, MessageCircle, Monitor, Settings, StickyNote, UserPlus, Users, X,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import type { LiveNotification } from '@/lib/crm/live';
@@ -29,7 +29,11 @@ const KIND: Record<string, { icon: typeof Bell; tone: string }> = {
   referral: { icon: HeartPulse, tone: 'ok' },
   note: { icon: StickyNote, tone: 'muted' },
   lead: { icon: UserPlus, tone: 'ok' },
+  work: { icon: Columns3, tone: 'blue' },
+  work_mention: { icon: AtSign, tone: 'blue' },
+  work_due: { icon: AlarmClock, tone: 'warn' },
 };
+export const NOTIFY_KINDS = KIND;
 
 /** Where a tap on a notification goes in the CRM. */
 export function crmHref(link?: string | null): string | null {
@@ -38,6 +42,8 @@ export function crmHref(link?: string | null): string | null {
   if (k === 'chat' && id) return `/admin/chat?t=${encodeURIComponent(id)}`;
   if (k === 'lead' && id) return `/admin/leads?id=${encodeURIComponent(id)}`;
   if (k === 'work' && id) return `/admin/work?card=${encodeURIComponent(id)}`;
+  if (k === 'work-day') return '/admin/work';
+  if (k === 'work-board') return '/admin/work?v=board';
   if (k === 'doc' && id) { const c = link.split(':')[2]; return `/admin/work?v=docs&doc=${encodeURIComponent(id)}${c ? `&c=${encodeURIComponent(c)}` : ''}`; }
   if (k === 'docs-folder' && id) return `/admin/work?v=docs&folder=${encodeURIComponent(id)}`;
   if (k === 'ai-agents') return '/admin/ai-agents';

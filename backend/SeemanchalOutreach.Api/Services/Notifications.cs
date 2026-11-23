@@ -41,6 +41,9 @@ namespace SeemanchalOutreach.Api.Services
             ("call", "Calls to me (ringing and missed)", "calls"),
             ("huddle", "Field team huddles", "chat"),
             ("hoarding", "Banner and hoarding places", "updates"),
+            ("work", "Team board: changes on my work (given to me, moved, comments, sprints)", "updates"),
+            ("work_mention", "Team board: someone @mentions me", "chat"),
+            ("work_due", "Team board: a morning reminder of what is due today and late", "updates"),
         };
         public static string ChannelOf(string kind) => All.FirstOrDefault(k => k.Kind == kind).Channel ?? "updates";
         public static bool IsKnown(string kind) => All.Any(k => k.Kind == kind);
