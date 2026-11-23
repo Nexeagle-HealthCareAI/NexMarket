@@ -143,13 +143,23 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
 
 export function Modal({ title, onClose, children, actions, wide }: { title: string; onClose: () => void; children: ReactNode; actions?: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Callers usually pass a new onClose on every render (an inline arrow). Keep the latest in a
+  // ref so the focus effect below runs only when the box opens; re-running it on each keystroke
+  // pulled the cursor out of the field the person was typing in.
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; });
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
-    ref.current?.querySelector<HTMLElement>('input, select, textarea, button')?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const box = ref.current;
+    if (box && !box.contains(document.activeElement)) {
+      const first = box.querySelector<HTMLElement>('[autofocus], input:not([type=checkbox]):not([type=radio]):not([type=hidden]), select, textarea')
+        ?? box.querySelector<HTMLElement>('button');
+      first?.focus();
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current(); };
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('keydown', onKey); prev?.focus?.(); };
-  }, [onClose]);
+  }, []);
   return (
     <div className="crm-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="crm-modal" role="dialog" aria-modal="true" aria-label={title} ref={ref} style={wide ? { maxWidth: 720 } : undefined}>
