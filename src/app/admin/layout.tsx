@@ -14,6 +14,7 @@ import {
   Wallet, BarChart3, ListChecks, Building2, Landmark, ShieldCheck, RefreshCw, LogOut, Menu, MoreHorizontal,
   PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus, Tent,
   AtSign, Search, Route, Signpost, KanbanSquare, Download, IndianRupee, Globe,
+  ChevronDown,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
@@ -120,6 +121,25 @@ function useSidebarCollapsed(): [boolean, (v: boolean) => void] {
   return [value, writeCollapsed];
 }
 
+// Which menu sections are open — remembered per browser. The section of the page you are on is always open.
+const OPEN_KEY = 'crm-nav-open';
+function readOpen(): string[] | null {
+  try { const v = localStorage.getItem(OPEN_KEY); return v ? (JSON.parse(v) as string[]) : null; } catch { return null; }
+}
+function useOpenGroups(): [Set<string> | null, (g: string, open: boolean) => void] {
+  const [open, setOpen] = useState<Set<string> | null>(null);
+  useEffect(() => { const t = setTimeout(() => setOpen(new Set(readOpen() ?? ['Overview'])), 0); return () => clearTimeout(t); }, []);
+  const set = useCallback((g: string, o: boolean) => {
+    setOpen((cur) => {
+      const n = new Set(cur ?? ['Overview']);
+      if (o) n.add(g); else n.delete(g);
+      try { localStorage.setItem(OPEN_KEY, JSON.stringify([...n])); } catch { /* storage blocked: still works for this visit */ }
+      return n;
+    });
+  }, []);
+  return [open, set];
+}
+
 function isActive(pathname: string, item: NavItem): boolean {
   if (pathname === item.href || pathname.startsWith(item.href + '/')) {
     // /admin/sync/dlq still highlights Sync; but /admin/pipeline must not swallow /admin/referrals
@@ -133,6 +153,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
   const [collapsed, setCollapsed] = useSidebarCollapsed(); // desktop
+  const [openGroups, setGroupOpen] = useOpenGroups();
   const [railOpen, setRailOpen] = useState(false); // tablet: rail expanded over the page
 
   const agentId = useAgentStore((s) => s.agentId);
@@ -314,24 +335,40 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
         </div>
 
-        {groups.map((g) => (
-          <div className="crm-nav-group" key={g.group}>
-            <span className="crm-nav-label">{g.group}</span>
-            {g.items.map((item) => {
-              const Icon = item.icon;
-              const active = current === item;
-              return (
-                <Link key={item.href} href={item.href} className="crm-nav-item" aria-current={active ? 'page' : undefined} title={item.label}>
-                  <Icon size={18} strokeWidth={2} aria-hidden />
-                  <span className="crm-nav-text">{item.label}</span>
-                  {item.page === 'chat' && chatUnread > 0 && <span className="crm-nav-badge" aria-label={`${chatUnread} unread`}>{chatUnread > 99 ? '99+' : chatUnread}</span>}
-                  {item.page === 'social' && socialUnread > 0 && <span className="crm-nav-badge is-lead" aria-label={`${socialUnread} unread`}>{socialUnread > 99 ? '99+' : socialUnread}</span>}
-                  {item.page === 'leads' && leadsUnread > 0 && <span className="crm-nav-badge is-lead" aria-label={`${leadsUnread} new`}>{leadsUnread > 99 ? '99+' : leadsUnread}</span>}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+        <div className="crm-nav-scroll">
+        {groups.map((g) => {
+          const here = g.items.includes(current as never);
+          const isOpen = here || (openGroups ? openGroups.has(g.group) : g.group === 'Overview');
+          const waiting = g.items.reduce((n, i) => n + (i.page === 'chat' ? chatUnread : i.page === 'social' ? socialUnread : i.page === 'leads' ? leadsUnread : 0), 0);
+          const id = `nav-${g.group.replace(/\W+/g, '-').toLowerCase()}`;
+          return (
+            <div className={`crm-nav-group${isOpen ? '' : ' is-shut'}${here ? ' is-here' : ''}`} key={g.group}>
+              <button type="button" className="crm-nav-head" aria-expanded={isOpen} aria-controls={id}
+                onClick={() => { if (!here) setGroupOpen(g.group, !isOpen); }} title={here ? 'The page you are on is in this section' : undefined}>
+                <span className="crm-nav-label">{g.group}</span>
+                {!isOpen && waiting > 0 && <span className="crm-nav-badge is-lead" aria-label={`${waiting} waiting`}>{waiting > 99 ? '99+' : waiting}</span>}
+                {!isOpen && <span className="crm-nav-count" aria-hidden>{g.items.length}</span>}
+                <ChevronDown size={15} className="crm-nav-chev" aria-hidden />
+              </button>
+              <div className="crm-nav-items" id={id}>
+              {g.items.map((item) => {
+                const Icon = item.icon;
+                const active = current === item;
+                return (
+                  <Link key={item.href} href={item.href} className="crm-nav-item" aria-current={active ? 'page' : undefined} title={item.label}>
+                    <Icon size={18} strokeWidth={2} aria-hidden />
+                    <span className="crm-nav-text">{item.label}</span>
+                    {item.page === 'chat' && chatUnread > 0 && <span className="crm-nav-badge" aria-label={`${chatUnread} unread`}>{chatUnread > 99 ? '99+' : chatUnread}</span>}
+                    {item.page === 'social' && socialUnread > 0 && <span className="crm-nav-badge is-lead" aria-label={`${socialUnread} unread`}>{socialUnread > 99 ? '99+' : socialUnread}</span>}
+                    {item.page === 'leads' && leadsUnread > 0 && <span className="crm-nav-badge is-lead" aria-label={`${leadsUnread} new`}>{leadsUnread > 99 ? '99+' : leadsUnread}</span>}
+                  </Link>
+                );
+              })}
+              </div>
+            </div>
+          );
+        })}
+        </div>
 
         <div className="crm-user">
           <div className="crm-avatar" aria-hidden="true">{initials(name)}</div>
