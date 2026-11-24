@@ -10,10 +10,23 @@ export interface DiseaseOptions {
 }
 
 /** One line of the entry grid, as typed (the server reads and checks it). */
-export interface GridRow { key: number; date: string; disease: string; age: string; sex: string; district: string; block: string; panchayat: string; count: string }
-export const COLS = ['date', 'disease', 'age', 'sex', 'district', 'block', 'panchayat', 'count'] as const;
+export interface GridRow {
+  key: number; date: string; disease: string; age: string; sex: string; district: string; block: string; panchayat: string; count: string;
+  bp: string; sugar: string; weight: string; height: string; spo2: string; pulse: string; temp: string;
+}
+/** One person's readings, as on the printed camp sheet. */
+export const READ_COLS = ['bp', 'sugar', 'weight', 'height', 'spo2', 'pulse', 'temp'] as const;
+export const COLS = ['date', 'disease', 'age', 'sex', 'district', 'block', 'panchayat', 'count', ...READ_COLS] as const;
 export type Col = typeof COLS[number];
-export const COL_LABEL: Record<Col, string> = { date: 'Date', disease: 'Disease / complaint', age: 'Age', sex: 'Gender', district: 'District', block: 'Block', panchayat: 'Panchayat', count: 'Count' };
+export const COL_LABEL: Record<Col, string> = {
+  date: 'Date', disease: 'Disease / complaint', age: 'Age', sex: 'Gender', district: 'District', block: 'Block', panchayat: 'Panchayat', count: 'Count',
+  bp: 'BP', sugar: 'Sugar', weight: 'Weight', height: 'Height', spo2: 'SpO2', pulse: 'Pulse', temp: 'Temp',
+};
+/** Units and examples for the readings, shown under the headings and as placeholders. */
+export const READ_HINT: Record<typeof READ_COLS[number], { unit: string; eg: string }> = {
+  bp: { unit: 'mmHg', eg: '130/85' }, sugar: { unit: 'mg/dL', eg: '140' }, weight: { unit: 'kg', eg: '62' }, height: { unit: 'cm', eg: '160' },
+  spo2: { unit: '%', eg: '97' }, pulse: { unit: '/min', eg: '78' }, temp: { unit: '°F', eg: '98.6' },
+};
 
 /** Header words people use in their sheets, for each column. */
 const HEADERS: Record<Col, string[]> = {
@@ -25,6 +38,13 @@ const HEADERS: Record<Col, string[]> = {
   block: ['block', 'prakhand', 'प्रखंड'],
   panchayat: ['panchayat', 'gram panchayat', 'पंचायत', 'village', 'gaon', 'गांव'],
   count: ['count', 'number', 'no.', 'no', 'cases', 'patients', 'people', 'total', 'sankhya', 'संख्या'],
+  bp: ['bp', 'b.p.', 'b.p', 'blood pressure', 'बीपी', 'रक्तचाप'],
+  sugar: ['sugar', 'rbs', 'grbs', 'blood sugar', 'random sugar', 'random blood sugar', 'glucose', 'शुगर'],
+  weight: ['weight', 'wt', 'wt.', 'वजन', 'wajan', 'vajan'],
+  height: ['height', 'ht', 'ht.', 'लंबाई', 'ऊंचाई', 'lambai'],
+  spo2: ['spo2', 'sp02', 'spo₂', 'oxygen', 'o2', 'o2 saturation', 'oxygen saturation', 'saturation'],
+  pulse: ['pulse', 'pulse rate', 'heart rate', 'नाड़ी', 'नब्ज'],
+  temp: ['temp', 'temp.', 'temperature', 'तापमान', 'body temperature'],
 };
 
 /** Which sheet column holds which field, from the header row. Columns it can't place are reported. */

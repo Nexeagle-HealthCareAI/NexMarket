@@ -392,6 +392,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
             {
                 entity.ToTable("disease_records");
                 entity.HasKey(e => e.Id);
+                entity.Property(e => e.WeightKg).HasPrecision(5, 1);
+                entity.Property(e => e.HeightCm).HasPrecision(5, 1);
+                entity.Property(e => e.TempF).HasPrecision(4, 1);
                 entity.HasIndex(e => e.Date);
                 entity.HasIndex(e => new { e.District, e.Block });
                 entity.HasIndex(e => e.ConditionCode);

@@ -19,6 +19,14 @@ namespace SeemanchalOutreach.Api.Controllers
         public string? Block { get; set; }
         public string? Panchayat { get; set; }
         public string? Count { get; set; }
+        // One person's readings (optional), as on the printed camp sheet.
+        public string? Bp { get; set; }
+        public string? Sugar { get; set; }
+        public string? Weight { get; set; }
+        public string? Height { get; set; }
+        public string? Spo2 { get; set; }
+        public string? Pulse { get; set; }
+        public string? Temp { get; set; }
     }
 
     public class DiseaseSaveDto
@@ -96,7 +104,8 @@ namespace SeemanchalOutreach.Api.Controllers
                 var r = rows[i];
                 var bad = new Dictionary<string, string>();
                 bool blank = string.IsNullOrWhiteSpace(r.Disease) && string.IsNullOrWhiteSpace(r.Age) && string.IsNullOrWhiteSpace(r.Sex)
-                    && string.IsNullOrWhiteSpace(r.Block) && string.IsNullOrWhiteSpace(r.Panchayat) && string.IsNullOrWhiteSpace(r.District);
+                    && string.IsNullOrWhiteSpace(r.Block) && string.IsNullOrWhiteSpace(r.Panchayat) && string.IsNullOrWhiteSpace(r.District)
+                    && new[] { r.Bp, r.Sugar, r.Weight, r.Height, r.Spo2, r.Pulse, r.Temp }.All(string.IsNullOrWhiteSpace);
                 if (blank) continue; // empty lines in a sheet are skipped
 
                 var date = DiseaseRegister.ParseDate(r.Date, today);
@@ -117,6 +126,10 @@ namespace SeemanchalOutreach.Api.Controllers
                 int count = 1;
                 if (!string.IsNullOrWhiteSpace(r.Count) && (!int.TryParse(r.Count.Trim(), out count) || count < 1 || count > DiseaseRegister.MaxCount))
                     bad["count"] = $"Use a whole number from 1 to {DiseaseRegister.MaxCount}.";
+
+                var (rd, rbad) = DiseaseRegister.ParseReadings(r.Bp, r.Sugar, r.Weight, r.Height, r.Spo2, r.Pulse, r.Temp);
+                foreach (var (k, v) in rbad) bad[k] = v;
+                if (rd.Any && count != 1 && !bad.ContainsKey("count")) bad["count"] = "Readings are for one person: make the count 1, or leave the readings blank.";
 
                 // Place: district and block must be known; the panchayat is matched by name when it can be.
                 string? district = null, block = null, panchayatId = null, panchayatText = null;
@@ -152,6 +165,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     Date = date!.Value, Disease = code != null ? CampBook.ConditionLabel(code) : disease, ConditionCode = code,
                     AgeBand = age!, Sex = sex!, District = district, Block = block, PanchayatId = panchayatId, Panchayat = panchayatText,
                     Count = count, CampId = dto.CampId, Source = source, BatchId = batch, CreatedBy = me,
+                    BpSystolic = rd.BpSystolic, BpDiastolic = rd.BpDiastolic, Sugar = rd.Sugar, WeightKg = rd.WeightKg, HeightCm = rd.HeightCm,
+                    Spo2 = rd.Spo2, Pulse = rd.Pulse, TempF = rd.TempF,
                 });
             }
 
@@ -159,6 +174,7 @@ namespace SeemanchalOutreach.Api.Controllers
             {
                 rows = ok.Count,
                 cases = ok.Sum(x => x.Count),
+                withReadings = ok.Count(x => x.BpSystolic != null || x.Sugar != null || x.WeightKg != null || x.HeightCm != null || x.Spo2 != null || x.Pulse != null || x.TempF != null),
                 unmatchedDisease = ok.Where(x => x.ConditionCode == null).Select(x => x.Disease).Distinct().Take(20),
                 unmatchedPanchayat = ok.Where(x => x.Panchayat != null).Select(x => x.Panchayat).Distinct().Take(20),
             };
@@ -200,6 +216,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     panchayat = r.PanchayatId != null ? pnames.GetValueOrDefault(r.PanchayatId) : r.Panchayat, panchayatMatched = r.PanchayatId != null,
                     count = r.Count, camp = r.CampId != null ? camps.GetValueOrDefault(r.CampId.Value) : null, source = r.Source, batchId = r.BatchId,
                     by = names.GetValueOrDefault(r.CreatedBy) ?? r.CreatedBy, at = r.CreatedAt,
+                    bpSystolic = r.BpSystolic, bpDiastolic = r.BpDiastolic, sugar = r.Sugar, weightKg = r.WeightKg, heightCm = r.HeightCm,
+                    spo2 = r.Spo2, pulse = r.Pulse, tempF = r.TempF, bmi = DiseaseRegister.Bmi(r.WeightKg, r.HeightCm),
                 }),
             });
         }
@@ -213,10 +231,13 @@ namespace SeemanchalOutreach.Api.Controllers
             var rows = await q.OrderByDescending(r => r.Date).Take(50000).ToListAsync(ct);
             var pnames = await _db.Panchayats.AsNoTracking().ToDictionaryAsync(p => p.PanchayatId, p => p.Name, ct);
             static string c(string? s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
-            var sb = new StringBuilder("Date,Disease,Age group,Gender,District,Block,Panchayat,Count\n");
+            var sb = new StringBuilder("Date,Disease,Age group,Gender,District,Block,Panchayat,Count,BP,Sugar (mg/dL),Weight (kg),Height (cm),BMI,SpO2 (%),Pulse,Temperature (F)\n");
+            static string n(object? v) => v == null ? "" : Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture) ?? "";
             foreach (var r in rows)
                 sb.Append(string.Join(",", c(r.Date.ToString("yyyy-MM-dd")), c(r.Disease), c(r.AgeBand == "unknown" ? "" : r.AgeBand), c(r.Sex == "U" ? "" : r.Sex),
-                    c(r.District), c(r.Block), c(r.PanchayatId != null ? pnames.GetValueOrDefault(r.PanchayatId) : r.Panchayat), r.Count.ToString())).Append('\n');
+                    c(r.District), c(r.Block), c(r.PanchayatId != null ? pnames.GetValueOrDefault(r.PanchayatId) : r.Panchayat), r.Count.ToString(),
+                    c(r.BpSystolic != null ? $"{r.BpSystolic}/{r.BpDiastolic}" : ""), n(r.Sugar), n(r.WeightKg), n(r.HeightCm), n(DiseaseRegister.Bmi(r.WeightKg, r.HeightCm)),
+                    n(r.Spo2), n(r.Pulse), n(r.TempF))).Append('\n');
             return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray(), "text/csv", $"disease-register-{TodayIst:yyyy-MM-dd}.csv");
         }
 

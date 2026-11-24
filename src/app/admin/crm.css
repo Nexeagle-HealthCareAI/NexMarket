@@ -3818,3 +3818,21 @@ button.ws-media-card:hover, button.ws-media-card:focus-visible { border-color: v
   .ma-trend { height: 120px; }
   .mp-months li { grid-template-columns: 64px minmax(0, 1fr) 80px; }
 }
+
+/* Disease data: one person's readings from the printed camp sheet */
+.dz-grid { min-width: 1560px; }
+.dz-grid th.dz-read, .dz-grid td.dz-read { background: #f6f9fe; }
+.dz-grid th.dz-read { width: 74px; }
+.dz-grid th.dz-c-bp { width: 92px; }
+.dz-grid .dz-read-first { border-left: 2px solid var(--accent-soft, #cfe3fb); }
+.dz-grid td.dz-read input { text-align: right; font-variant-numeric: tabular-nums; }
+.dz-unit { display: block; font-size: 10.5px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text-2); }
+.dz-reads { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.dz-reads span { white-space: nowrap; }
+.dz-reads .is-high { color: var(--bad); font-weight: 700; }
+.dz-rd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.dz-rd { padding: 12px 14px; border-radius: 12px; background: var(--bg); display: flex; flex-direction: column; gap: 2px; }
+.dz-rd strong { font-size: 22px; font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+.dz-rd span { font-size: 13px; color: var(--text-3); }
+.dz-rd.is-bad strong { color: var(--bad); }
+.dz-rd.is-warn strong { color: var(--warn-ink); }

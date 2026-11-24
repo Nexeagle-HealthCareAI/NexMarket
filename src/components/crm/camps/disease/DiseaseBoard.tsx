@@ -95,6 +95,23 @@ export function DiseaseBoard({ toast }: { toast: (m: string) => void }) {
 interface RecRow {
   id: string; date: string; disease: string; matched: boolean; ageBand: string; age: string; sex: string; district?: string | null; block?: string | null;
   panchayat?: string | null; panchayatMatched: boolean; count: number; camp?: string | null; source: string; batchId?: string | null; by: string; at: string;
+  bpSystolic?: number | null; bpDiastolic?: number | null; sugar?: number | null; weightKg?: number | null; heightCm?: number | null;
+  spo2?: number | null; pulse?: number | null; tempF?: number | null; bmi?: number | null;
+}
+
+/** One person's readings in a line, with readings outside the usual range in red. */
+function Readings({ r }: { r: RecRow }) {
+  const parts: { t: string; high: boolean; title: string }[] = [];
+  if (r.bpSystolic != null) parts.push({ t: `BP ${r.bpSystolic}/${r.bpDiastolic}`, high: r.bpSystolic >= 140 || (r.bpDiastolic ?? 0) >= 90, title: 'Blood pressure, mmHg (high from 140/90)' });
+  if (r.sugar != null) parts.push({ t: `Sugar ${r.sugar}`, high: r.sugar >= 200, title: 'Random blood sugar, mg/dL (high from 200)' });
+  if (r.weightKg != null) parts.push({ t: `${r.weightKg} kg`, high: false, title: 'Weight' });
+  if (r.heightCm != null) parts.push({ t: `${r.heightCm} cm`, high: false, title: 'Height' });
+  if (r.bmi != null && !['0-5', '6-14'].includes(r.ageBand)) parts.push({ t: `BMI ${r.bmi}`, high: r.bmi < 18.5 || r.bmi >= 25, title: 'Body mass index (usual 18.5–24.9 for adults)' });
+  if (r.spo2 != null) parts.push({ t: `SpO2 ${r.spo2}%`, high: r.spo2 < 94, title: 'Oxygen saturation (low under 94%)' });
+  if (r.pulse != null) parts.push({ t: `Pulse ${r.pulse}`, high: r.pulse > 100 || r.pulse < 60, title: 'Pulse a minute (usual 60–100)' });
+  if (r.tempF != null) parts.push({ t: `${r.tempF}°F`, high: r.tempF >= 100.4, title: 'Temperature (fever from 100.4 °F)' });
+  if (!parts.length) return <span className="crm-sub">—</span>;
+  return <span className="dz-reads">{parts.map((p) => <span key={p.t} className={p.high ? 'is-high' : undefined} title={p.title}>{p.t}</span>)}</span>;
 }
 interface RecRes { total: number; cases: number; page: number; pageSize: number; items: RecRow[] }
 
@@ -136,12 +153,12 @@ function Records({ filters, version, editable, toast, onChanged }: { filters: Fi
         <Empty title="No rows match">Add data, or clear a filter.</Empty>
       ) : (
         <>
-          <div style={{ overflowX: 'auto' }}>
+          <div className="crm-table-wrap">
             <table className="crm-table dz-rec">
               <thead>
                 <tr>
                   <th scope="col">Date</th><th scope="col">Disease</th><th scope="col">Age</th><th scope="col">Gender</th>
-                  <th scope="col">Place</th><th scope="col" className="wb-num">Count</th><th scope="col">Added</th>
+                  <th scope="col">Place</th><th scope="col" className="wb-num">Count</th><th scope="col">Readings</th><th scope="col">Added</th>
                   {editable && <th scope="col"><span className="crm-sr">Remove</span></th>}
                 </tr>
               </thead>
@@ -157,6 +174,7 @@ function Records({ filters, version, editable, toast, onChanged }: { filters: Fi
                       <span className="crm-cell-sub" style={{ display: 'block' }}>{[r.block, r.district].filter(Boolean).join(' · ')}</span>
                     </td>
                     <td className="wb-num"><strong>{r.count.toLocaleString('en-IN')}</strong></td>
+                    <td style={{ minWidth: 150 }}><Readings r={r} /></td>
                     <td className="crm-cell-sub">{r.source === 'camp' ? 'Camp register' : `${r.by}${r.source === 'upload' ? ' · upload' : ''}`}{r.camp ? <span style={{ display: 'block' }}>{r.camp}</span> : null}</td>
                     {editable && <td>{r.source !== 'camp' && <button type="button" className="crm-btn is-ghost is-sm" onClick={() => setRemoving(r)} aria-label={`Remove ${r.disease}, ${r.date}`}><Trash2 size={14} aria-hidden /></button>}</td>}
                   </tr>

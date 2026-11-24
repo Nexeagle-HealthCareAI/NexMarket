@@ -104,6 +104,154 @@ namespace SeemanchalOutreach.Api.Services
             return null;
         }
 
+        // ── One person's readings, as on the printed camp sheet ────────────────────
+
+        /// <summary>What was read from the cells. Values are null when the cell was blank.</summary>
+        public sealed record Readings(int? BpSystolic, int? BpDiastolic, int? Sugar, decimal? WeightKg, decimal? HeightCm, int? Spo2, int? Pulse, decimal? TempF)
+        {
+            public bool Any => BpSystolic != null || Sugar != null || WeightKg != null || HeightCm != null || Spo2 != null || Pulse != null || TempF != null;
+        }
+
+        private static string Bare(string? raw) =>
+            Regex.Replace((raw ?? "").Trim().ToLowerInvariant(), @"\s*(mm\s*hg|mg\s*/\s*dl|mg/dl|kgs?|cms?|bpm|/\s*min|%|°\s*[fc]|deg\s*[fc]?)\s*$", "").Trim();
+
+        private static bool Num(string s, out decimal v) => decimal.TryParse(s, NumberStyles.Number, CultureInfo.InvariantCulture, out v);
+
+        /// <summary>
+        /// Reads BP ("130/85"), sugar, weight, height (cm, or feet and inches like 5'4"), SpO2, pulse and temperature
+        /// (°F; a value up to 45 is taken as °C and turned into °F). Units typed after the number are ignored. Each cell
+        /// that can't be read, or is outside what a person can have, gets a message for the grid.
+        /// </summary>
+        public static (Readings Value, Dictionary<string, string> Bad) ParseReadings(string? bp, string? sugar, string? weight, string? height, string? spo2, string? pulse, string? temp)
+        {
+            var bad = new Dictionary<string, string>();
+            int? sys = null, dia = null, sug = null, sp = null, pu = null;
+            decimal? wt = null, ht = null, tf = null;
+
+            var b = Bare(bp);
+            if (b.Length > 0)
+            {
+                var m = Regex.Match(b, @"^(\d{2,3})\s*[/\\\-\s]\s*(\d{2,3})$");
+                if (!m.Success) bad["bp"] = "Write BP as upper/lower, e.g. 130/85.";
+                else
+                {
+                    int x = int.Parse(m.Groups[1].Value), y = int.Parse(m.Groups[2].Value);
+                    if (x is < 60 or > 260 || y is < 30 or > 160) bad["bp"] = "That BP can't be right: upper 60–260, lower 30–160.";
+                    else if (y >= x) bad["bp"] = "The upper number comes first and is bigger, e.g. 130/85.";
+                    else { sys = x; dia = y; }
+                }
+            }
+            var s = Bare(sugar);
+            if (s.Length > 0)
+            {
+                if (!Num(s, out var v) || v != Math.Round(v)) bad["sugar"] = "Write sugar as a whole number in mg/dL, e.g. 140.";
+                else if (v is < 20 or > 700) bad["sugar"] = "Sugar should be 20–700 mg/dL.";
+                else sug = (int)v;
+            }
+            var w = Bare(weight);
+            if (w.Length > 0)
+            {
+                if (!Num(w, out var v)) bad["weight"] = "Write weight in kg, e.g. 62.5.";
+                else if (v is < 1 or > 250) bad["weight"] = "Weight should be 1–250 kg.";
+                else wt = Math.Round(v, 1);
+            }
+            var h = (height ?? "").Trim().ToLowerInvariant();
+            if (h.Length > 0)
+            {
+                var ft = Regex.Match(h, @"^(\d)\s*(?:'|ft|feet|foot)\s*(?:(\d{1,2})\s*(?:""|in|inch|inches)?)?$");
+                decimal v;
+                if (ft.Success) v = Math.Round((int.Parse(ft.Groups[1].Value) * 12 + (ft.Groups[2].Success ? int.Parse(ft.Groups[2].Value) : 0)) * 2.54m, 1);
+                else if (!Num(Bare(h), out v)) { bad["height"] = "Write height in cm, e.g. 160, or feet like 5'4\"."; v = -1; }
+                if (!bad.ContainsKey("height"))
+                {
+                    if (v is < 30 or > 230) bad["height"] = "Height should be 30–230 cm.";
+                    else ht = Math.Round(v, 1);
+                }
+            }
+            var o = Bare(spo2);
+            if (o.Length > 0)
+            {
+                if (!Num(o, out var v) || v != Math.Round(v)) bad["spo2"] = "Write SpO2 as a whole number, e.g. 97.";
+                else if (v is < 50 or > 100) bad["spo2"] = "SpO2 should be 50–100%.";
+                else sp = (int)v;
+            }
+            var p = Bare(pulse);
+            if (p.Length > 0)
+            {
+                if (!Num(p, out var v) || v != Math.Round(v)) bad["pulse"] = "Write the pulse as beats a minute, e.g. 78.";
+                else if (v is < 30 or > 220) bad["pulse"] = "Pulse should be 30–220 a minute.";
+                else pu = (int)v;
+            }
+            var t = Bare(temp);
+            if (t.Length > 0)
+            {
+                if (!Num(t, out var v)) bad["temp"] = "Write the temperature, e.g. 98.6 (°F) or 37 (°C).";
+                else
+                {
+                    if (v <= 45) v = v * 9 / 5 + 32;   // °C
+                    if (v is < 90 or > 110) bad["temp"] = "Temperature should be 90–110 °F (32–43 °C).";
+                    else tf = Math.Round(v, 1);
+                }
+            }
+            return (new Readings(sys, dia, sug, wt, ht, sp, pu, tf), bad);
+        }
+
+        public static decimal? Bmi(decimal? kg, decimal? cm) => kg is decimal w && cm is decimal h && h > 0 ? Math.Round(w / (h / 100m * h / 100m), 1) : null;
+
+        /// <summary>
+        /// The readings added up, for the patterns page: how many were measured, how many were outside the usual range
+        /// (BP 140/90 or more, random sugar 200 or more, SpO2 under 94, temperature 100.4 °F or more, pulse over 100 or under 60,
+        /// BMI under 18.5 or 25 and over, adults only), averages, and the same by age group. Only rows for one person carry readings.
+        /// </summary>
+        public static object ReadingsSummary(List<DiseaseRecord> rows)
+        {
+            // A person may be on several rows (one per disease) with the same readings: count each reading once per person.
+            var people = rows.Where(r => r.Count == 1 && (r.BpSystolic != null || r.Sugar != null || r.WeightKg != null || r.HeightCm != null || r.Spo2 != null || r.Pulse != null || r.TempF != null))
+                .GroupBy(r => (r.BatchId, r.Date, r.AgeBand, r.Sex, r.PanchayatId ?? r.Panchayat ?? r.Block, r.BpSystolic, r.BpDiastolic, r.Sugar, r.WeightKg, r.HeightCm, r.Spo2, r.Pulse, r.TempF))
+                .Select(g => g.First()).ToList();
+            bool HighBp(DiseaseRecord r) => r.BpSystolic >= 140 || r.BpDiastolic >= 90;
+            bool HighSugar(DiseaseRecord r) => r.Sugar >= 200;
+            bool LowSpo2(DiseaseRecord r) => r.Spo2 < 94;
+            static double? Avg(IEnumerable<decimal?> xs) { var l = xs.Where(x => x != null).Select(x => (double)x!.Value).ToList(); return l.Count == 0 ? null : Math.Round(l.Average(), 1); }
+            // Adult cut-offs: children's BMI needs growth charts, so 0–14 are left out of the BMI groups.
+            var bmis = people.Where(r => r.AgeBand is not ("0-5" or "6-14")).Select(r => Bmi(r.WeightKg, r.HeightCm)).Where(b => b != null).Select(b => b!.Value).ToList();
+            return new
+            {
+                people = people.Count,
+                measured = new
+                {
+                    bp = people.Count(r => r.BpSystolic != null), sugar = people.Count(r => r.Sugar != null), weight = people.Count(r => r.WeightKg != null),
+                    height = people.Count(r => r.HeightCm != null), spo2 = people.Count(r => r.Spo2 != null), pulse = people.Count(r => r.Pulse != null), temp = people.Count(r => r.TempF != null),
+                    bmi = bmis.Count,
+                },
+                flags = new
+                {
+                    highBp = people.Count(HighBp), veryHighBp = people.Count(r => r.BpSystolic >= 180 || r.BpDiastolic >= 110),
+                    highSugar = people.Count(HighSugar), lowSpo2 = people.Count(LowSpo2), veryLowSpo2 = people.Count(r => r.Spo2 < 90),
+                    fever = people.Count(r => r.TempF >= 100.4m), fastPulse = people.Count(r => r.Pulse > 100), slowPulse = people.Count(r => r.Pulse < 60),
+                    underweight = bmis.Count(b => b < 18.5m), overweight = bmis.Count(b => b >= 25 && b < 30), obese = bmis.Count(b => b >= 30),
+                },
+                averages = new
+                {
+                    bpSystolic = Avg(people.Select(r => (decimal?)r.BpSystolic)), bpDiastolic = Avg(people.Select(r => (decimal?)r.BpDiastolic)),
+                    sugar = Avg(people.Select(r => (decimal?)r.Sugar)), weightKg = Avg(people.Select(r => r.WeightKg)), spo2 = Avg(people.Select(r => (decimal?)r.Spo2)),
+                    pulse = Avg(people.Select(r => (decimal?)r.Pulse)), tempF = Avg(people.Select(r => r.TempF)), bmi = Avg(bmis.Select(b => (decimal?)b)),
+                },
+                byAge = AgeBands.Append("unknown").Select(a =>
+                {
+                    var g = people.Where(r => r.AgeBand == a).ToList();
+                    return new
+                    {
+                        key = a, label = AgeLabel(a), people = g.Count,
+                        bp = g.Count(r => r.BpSystolic != null), highBp = g.Count(HighBp),
+                        sugar = g.Count(r => r.Sugar != null), highSugar = g.Count(HighSugar),
+                        spo2 = g.Count(r => r.Spo2 != null), lowSpo2 = g.Count(LowSpo2),
+                        weightKg = Avg(g.Select(r => r.WeightKg)),
+                    };
+                }).Where(x => x.people > 0),
+            };
+        }
+
         public static string KeyOf(DiseaseRecord r) => r.ConditionCode ?? "txt:" + r.Disease.Trim().ToLowerInvariant();
         public static string DeptOf(DiseaseRecord r) => r.ConditionCode != null ? CampBook.DeptFor(r.ConditionCode) : "Not matched to a department";
 
@@ -205,6 +353,7 @@ namespace SeemanchalOutreach.Api.Services
                 months,
                 blocks,
                 panchayats = pan,
+                readings = ReadingsSummary(rows),
             };
         }
 

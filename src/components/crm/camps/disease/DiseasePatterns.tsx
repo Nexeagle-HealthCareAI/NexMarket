@@ -21,6 +21,63 @@ interface Patterns {
   months: { month: string; n: number; diseases: Record<string, number> }[];
   blocks: { district: string; block: string; n: number; panchayats: number; diseases: Record<string, number> }[];
   panchayats: { id: string; lgd?: string | null; name: string; block: string; district: string; lat?: number | null; lng?: number | null; n: number; diseases: Record<string, number> }[];
+  readings?: ReadingsSum;
+}
+interface ReadingsSum {
+  people: number;
+  measured: { bp: number; sugar: number; weight: number; height: number; spo2: number; pulse: number; temp: number; bmi: number };
+  flags: { highBp: number; veryHighBp: number; highSugar: number; lowSpo2: number; veryLowSpo2: number; fever: number; fastPulse: number; slowPulse: number; underweight: number; overweight: number; obese: number };
+  averages: { bpSystolic?: number | null; bpDiastolic?: number | null; sugar?: number | null; weightKg?: number | null; spo2?: number | null; pulse?: number | null; tempF?: number | null; bmi?: number | null };
+  byAge: { key: string; label: string; people: number; bp: number; highBp: number; sugar: number; highSugar: number; spo2: number; lowSpo2: number; weightKg?: number | null }[];
+}
+
+/** The readings from the printed camp sheet, added up: how many were measured, and how many were outside the usual range. */
+function ReadingsPanel({ r }: { r: ReadingsSum }) {
+  const f = r.flags, m = r.measured, a = r.averages;
+  const of = (n: number, d: number) => (d ? `${n0(n)} of ${n0(d)} (${pct(n, d)}%)` : 'not measured');
+  const tile = (label: string, n: number, d: number, sub: string, tone: 'bad' | 'warn' = 'bad') => (
+    <div className={`dz-rd${d && n ? ` is-${tone}` : ''}`}>
+      <span>{label}</span><strong>{d ? `${pct(n, d)}%` : '—'}</strong><span>{of(n, d)}{sub ? ` · ${sub}` : ''}</span>
+    </div>
+  );
+  return (
+    <section className="crm-card" aria-labelledby="dz-rd-h">
+      <h2 id="dz-rd-h" className="crm-h2">Readings</h2>
+      <span className="crm-sub" style={{ fontSize: 13 }}>
+        From {n0(r.people)} {r.people === 1 ? 'person' : 'people'} whose BP, sugar, weight, SpO2 and other readings were entered (rows with a count of 1). Each person is counted once, even with several diseases.
+      </span>
+      <div className="dz-rd-grid">
+        {tile('High BP (140/90 or more)', f.highBp, m.bp, f.veryHighBp ? `${n0(f.veryHighBp)} at 180/110 or more` : a.bpSystolic ? `average ${a.bpSystolic}/${a.bpDiastolic}` : '')}
+        {tile('High sugar (200 or more)', f.highSugar, m.sugar, a.sugar ? `average ${a.sugar} mg/dL` : '')}
+        {tile('Low SpO2 (under 94%)', f.lowSpo2, m.spo2, f.veryLowSpo2 ? `${n0(f.veryLowSpo2)} under 90%` : a.spo2 ? `average ${a.spo2}%` : '')}
+        {tile('Fever (100.4 °F or more)', f.fever, m.temp, a.tempF ? `average ${a.tempF} °F` : '', 'warn')}
+        {tile('Pulse over 100', f.fastPulse, m.pulse, f.slowPulse ? `${n0(f.slowPulse)} under 60` : a.pulse ? `average ${a.pulse}` : '', 'warn')}
+        {tile('Underweight (BMI under 18.5)', f.underweight, m.bmi, 'adults', 'warn')}
+        {tile('Overweight or obese (BMI 25+)', f.overweight + f.obese, m.bmi, f.obese ? `${n0(f.obese)} obese (30+)` : a.bmi ? `average BMI ${a.bmi}` : '', 'warn')}
+        <div className="dz-rd"><span>Average weight</span><strong>{a.weightKg != null ? `${a.weightKg} kg` : '—'}</strong><span>{m.weight ? `${n0(m.weight)} weighed` : 'not measured'}{m.height ? ` · ${n0(m.height)} with height` : ''}</span></div>
+      </div>
+      {r.byAge.length > 1 && (
+        <div className="crm-table-wrap" style={{ marginTop: 12 }}>
+          <table className="crm-table">
+            <thead><tr><th scope="col">Age group</th><th scope="col" className="wb-num">People</th><th scope="col" className="wb-num">High BP</th><th scope="col" className="wb-num">High sugar</th><th scope="col" className="wb-num">Low SpO2</th><th scope="col" className="wb-num">Average weight</th></tr></thead>
+            <tbody>
+              {r.byAge.map((x) => (
+                <tr key={x.key}>
+                  <th scope="row">{x.label}</th>
+                  <td className="wb-num">{n0(x.people)}</td>
+                  <td className="wb-num">{x.bp ? `${n0(x.highBp)} of ${n0(x.bp)}` : '—'}</td>
+                  <td className="wb-num">{x.sugar ? `${n0(x.highSugar)} of ${n0(x.sugar)}` : '—'}</td>
+                  <td className="wb-num">{x.spo2 ? `${n0(x.lowSpo2)} of ${n0(x.spo2)}` : '—'}</td>
+                  <td className="wb-num">{x.weightKg != null ? `${x.weightKg} kg` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <span className="crm-cell-sub" style={{ display: 'block', marginTop: 8 }}>The usual ranges are a guide for screening, not a diagnosis. Children&apos;s BMI needs growth charts, so 0–14 year olds are not in the BMI figures.</span>
+    </section>
+  );
 }
 
 // One hue, light → dark, for magnitude (blue 250 → 650).
@@ -87,6 +144,8 @@ export function DiseasePatterns({ filters, onDisease, version }: { filters: Filt
           {t.unmatchedPlace > 0 && `${n0(t.unmatchedPlace)} people have no matched panchayat, so they show in the block table but not on the map.`}
         </span>
       )}
+
+      {d.readings && d.readings.people > 0 && <ReadingsPanel r={d.readings} />}
 
       <div className="crm-row">
         <section className="crm-card grow-1" aria-labelledby="dz-top-h" style={{ flexBasis: 360 }}>

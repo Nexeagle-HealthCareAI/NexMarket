@@ -6,10 +6,10 @@ import { crm } from '@/lib/sync/api-client';
 import { Pager } from '@/components/crm/Pager';
 import { friendlyError } from '@/components/crm/ui';
 import { readCsv, readXlsx, excelDate, writeXlsx } from './sheet';
-import { COL_LABEL, COLS, errorBody, mapHeaders, type Col, type DiseaseOptions, type GridRow } from './shared';
+import { COL_LABEL, COLS, errorBody, mapHeaders, READ_COLS, READ_HINT, type Col, type DiseaseOptions, type GridRow } from './shared';
 
 interface SaveRes { ok: boolean; batchId?: string; dryRun?: boolean; summary: Summary }
-interface Summary { rows: number; cases: number; unmatchedDisease: string[]; unmatchedPanchayat: string[] }
+interface Summary { rows: number; cases: number; withReadings?: number; unmatchedDisease: string[]; unmatchedPanchayat: string[] }
 interface SaveErr { message: string; errors?: { row: number; fields: Partial<Record<Col, string>> }[]; summary?: Summary }
 
 const PAGE = 50;
@@ -17,12 +17,15 @@ let seq = 1;
 
 /**
  * Add disease data like a spreadsheet: type rows (date and count are filled in), paste a block of cells from Excel,
- * or upload an .xlsx/.csv file and check it here before saving. No names: date, disease, age, gender, place, count.
+ * or upload an .xlsx/.csv file and check it here before saving. No names: date, disease, age, gender, place, count, and for one person
+ * the readings from the printed camp sheet (BP, sugar, weight, height, SpO2, pulse, temperature).
  */
 export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOptions; toast: (m: string) => void; onSaved: () => void }) {
   const blank = (from?: Partial<GridRow>): GridRow => ({
     key: seq++, date: from?.date ?? options.today, disease: '', age: '', sex: '', district: from?.district ?? '', block: from?.block ?? '', panchayat: '', count: '1',
+    bp: '', sugar: '', weight: '', height: '', spo2: '', pulse: '', temp: '',
   });
+  const hasReadings = (r: GridRow) => READ_COLS.some((c) => r[c].trim());
   const [rows, setRows] = useState<GridRow[]>(() => Array.from({ length: 5 }, () => blank()));
   const [errors, setErrors] = useState<Record<number, Partial<Record<Col, string>>>>({});
   const [page, setPage] = useState(1);
@@ -39,7 +42,8 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
   const panchayatsOf = (district: string, block: string) => blocksOf(district).find((b) => b.name === block)?.panchayats ?? [];
   const usedBlocks = useMemo(() => [...new Set(rows.map((r) => `${r.district}|${r.block}`).filter((k) => !k.endsWith('|')))], [rows]);
 
-  const filled = rows.filter((r) => r.disease.trim() || r.age.trim() || r.sex || r.block || r.panchayat.trim());
+  const filled = rows.filter((r) => r.disease.trim() || r.age.trim() || r.sex || r.block || r.panchayat.trim() || hasReadings(r));
+  const withReadings = filled.filter(hasReadings).length;
   const people = filled.reduce((s, r) => s + (Number(r.count) > 0 ? Number(r.count) : 0), 0);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   const pageRows = rows.slice((page - 1) * PAGE, page * PAGE);
@@ -49,6 +53,8 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
     setRows((rs) => rs.map((r, k) => {
       if (k !== i) return r;
       const next = { ...r, [col]: value };
+      // Readings belong to one person: the first reading on a row sets an empty count to 1.
+      if ((READ_COLS as readonly string[]).includes(col) && value.trim() && !r.count.trim()) next.count = '1';
       if (col === 'district' && r.block && !blocksOf(value).some((b) => b.name === r.block)) next.block = '';
       if (col === 'block' && !r.district && value) next.district = options.districts.find((d) => d.blocks.some((b) => b.name === value))?.name ?? '';
       return next;
@@ -132,7 +138,7 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
       // The header is the first of the top rows that names at least three of our columns.
       let hi = -1; let found = mapHeaders([]);
       for (let k = 0; k < Math.min(10, sheet.length); k++) { const m = mapHeaders(sheet[k] ?? []); if (Object.keys(m.map).length >= 3) { hi = k; found = m; break; } }
-      if (hi < 0) { setMsg({ tone: 'bad', text: 'Couldn\'t find the column headings. The first row should say: Date, Disease, Age, Gender, District, Block, Panchayat, Count. Download the template to see.' }); return; }
+      if (hi < 0) { setMsg({ tone: 'bad', text: 'Couldn\'t find the column headings. The first row should say: Date, Disease, Age, Gender, District, Block, Panchayat, Count (and, if you have them, BP, Sugar, Weight, Height, SpO2, Pulse, Temp). Download the template to see.' }); return; }
       if (found.map.disease == null) { setMsg({ tone: 'bad', text: 'There is no Disease (or Complaint) column in this file.' }); return; }
       const data = sheet.slice(hi + 1).filter((r) => r.some((c) => (c ?? '').trim()));
       if (data.length === 0) { setMsg({ tone: 'bad', text: 'The file has headings but no rows.' }); return; }
@@ -141,11 +147,15 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
       const loaded = data.map((r) => ({
         key: seq++, date: found.map.date == null ? options.today : excelDate(get(r, 'date')) || options.today, disease: get(r, 'disease'), age: get(r, 'age'),
         sex: get(r, 'sex'), district: get(r, 'district'), block: get(r, 'block'), panchayat: get(r, 'panchayat'), count: get(r, 'count') || '1',
+        bp: get(r, 'bp'), sugar: get(r, 'sugar'), weight: get(r, 'weight'), height: get(r, 'height'), spo2: get(r, 'spo2'), pulse: get(r, 'pulse'), temp: get(r, 'temp'),
       }));
       setRows(loaded); setErrors({}); setPage(1); setSource('upload');
-      const missing = COLS.filter((c) => found.map[c] == null && c !== 'district');
+      // Readings are optional: only the main columns are reported as missing.
+      const missing = COLS.filter((c) => found.map[c] == null && c !== 'district' && !(READ_COLS as readonly string[]).includes(c));
+      const readCols = READ_COLS.filter((c) => found.map[c] != null);
       setFileNote(`${f.name}: ${loaded.length.toLocaleString('en-IN')} rows`
         + (missing.length ? `. No ${missing.map((c) => COL_LABEL[c].toLowerCase()).join(', ')} column${missing.length === 1 ? '' : 's'}${missing.includes('date') ? ' (today\'s date is used)' : ''}${missing.includes('count') ? ' (each row counts as 1)' : ''}` : '')
+        + (readCols.length ? `. Readings: ${readCols.map((c) => COL_LABEL[c]).join(', ')}` : '')
         + (found.unknown.length ? `. Ignored: ${found.unknown.slice(0, 4).join(', ')}${found.unknown.length > 4 ? '…' : ''}` : ''));
       setMsg({ tone: 'info', text: 'File loaded into the grid. Check the rows (you can edit any cell), then save.' });
     } catch {
@@ -160,12 +170,14 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
     const d = options.districts[0]; const b = d?.blocks[0]; const p = b?.panchayats[0];
     const d2 = options.districts[1] ?? d; const b2 = d2?.blocks[0] ?? b;
     const rows: (string | number)[][] = [
-      ['Date', 'Disease', 'Age', 'Gender', 'District', 'Block', 'Panchayat', 'Count'],
-      [options.today, 'High BP', 52, 'F', d?.name ?? '', b?.name ?? '', p?.name ?? '', 3],
-      [options.today, 'Diabetes', '45-59', 'M', d?.name ?? '', b?.name ?? '', '', 2],
-      [options.today, 'Fever', '6-14', 'F', d2?.name ?? '', b2?.name ?? '', '', 5],
+      ['Date', 'Disease', 'Age', 'Gender', 'District', 'Block', 'Panchayat', 'Count', 'BP', 'Sugar', 'Weight', 'Height', 'SpO2', 'Pulse', 'Temp'],
+      // One person with the readings from the printed sheet (count 1)…
+      [options.today, 'High BP', 52, 'F', d?.name ?? '', b?.name ?? '', p?.name ?? '', 1, '150/95', 132, 64, 155, 97, 82, 98.4],
+      [options.today, 'Diabetes', 47, 'M', d?.name ?? '', b?.name ?? '', '', 1, '128/84', 236, 71.5, 168, 98, 76, ''],
+      // …or a group of people without readings.
+      [options.today, 'Fever', '6-14', 'F', d2?.name ?? '', b2?.name ?? '', '', 5, '', '', '', '', '', '', ''],
     ];
-    const url = URL.createObjectURL(writeXlsx(rows, 'Disease data', [12, 26, 10, 9, 16, 18, 20, 8]));
+    const url = URL.createObjectURL(writeXlsx(rows, 'Disease data', [12, 26, 10, 9, 16, 18, 20, 8, 10, 8, 8, 8, 7, 7, 7]));
     const a = document.createElement('a'); a.href = url; a.download = 'disease-data-template.xlsx'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const [dragging, setDragging] = useState(false);
@@ -176,7 +188,7 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
     setBusy(true); setMsg(null);
     try {
       const res = await crm.post<SaveRes>('/api/v1/camps/disease/rows', {
-        rows: rows.map(({ date, disease, age, sex, district, block, panchayat, count }) => ({ date, disease, age, sex, district, block, panchayat, count })),
+        rows: rows.map(({ key: _k, ...r }) => { void _k; return r; }),
         source, campId: campId || null, dryRun,
       });
       setErrors({});
@@ -184,7 +196,7 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
         res.summary.unmatchedDisease.length ? `Kept as typed (not one of the known diseases): ${res.summary.unmatchedDisease.join(', ')}` : '',
         res.summary.unmatchedPanchayat.length ? `Panchayat not found, counted in its block: ${res.summary.unmatchedPanchayat.join(', ')}` : '',
       ].filter(Boolean);
-      if (dryRun) { setMsg({ tone: 'ok', text: `All ${res.summary.rows} rows look right: ${res.summary.cases.toLocaleString('en-IN')} people. Save when ready.`, detail }); return; }
+      if (dryRun) { setMsg({ tone: 'ok', text: `All ${res.summary.rows} rows look right: ${res.summary.cases.toLocaleString('en-IN')} people${res.summary.withReadings ? `, ${res.summary.withReadings} with readings` : ''}. Save when ready.`, detail }); return; }
       setLast({ batchId: res.batchId!, rows: res.summary.rows, cases: res.summary.cases });
       toast(`Saved ${res.summary.rows} row${res.summary.rows === 1 ? '' : 's'}: ${res.summary.cases.toLocaleString('en-IN')} people.`);
       setMsg(detail.length ? { tone: 'info', text: 'Saved. Note:', detail } : null);
@@ -226,7 +238,7 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
         <div style={{ flex: '1 1 320px' }}>
           <h2 id="dz-entry-h" className="crm-h2">Add disease data</h2>
           <span className="crm-sub" style={{ fontSize: 13 }}>
-            One row per group of people with the same disease, age, gender and place. No names. Paste straight from Excel, or upload a file.
+            One row per person, or per group of people with the same disease, age, gender and place. No names. For one person (count 1), add the readings from the printed sheet: BP, sugar, weight, height, SpO2, pulse and temperature. Paste straight from Excel, or upload a file.
           </span>
         </div>
       </div>
@@ -237,7 +249,7 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
           <span className="dz-upload-icon"><FileUp size={22} aria-hidden /></span>
           <span>
             <strong>Upload an Excel sheet</strong> <span className="crm-sub">or drop it here</span>
-            <span className="crm-cell-sub" style={{ display: 'block' }}>Excel (.xlsx) or CSV, first sheet, up to {options.maxRows.toLocaleString('en-IN')} rows. Columns: Date, Disease, Age, Gender, District, Block, Panchayat, Count. It loads into the grid below so you can check it before saving.</span>
+            <span className="crm-cell-sub" style={{ display: 'block' }}>Excel (.xlsx) or CSV, first sheet, up to {options.maxRows.toLocaleString('en-IN')} rows. Columns: Date, Disease, Age, Gender, District, Block, Panchayat, Count, and the readings from the printed sheet if you have them: BP, Sugar, Weight, Height, SpO2, Pulse, Temp. It loads into the grid below so you can check it before saving.</span>
           </span>
         </label>
         <button type="button" className="crm-btn is-secondary is-sm" onClick={template}><Download size={15} aria-hidden /> Excel template</button>
@@ -289,7 +301,11 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
               <th scope="col" className="dz-n">
                 <input type="checkbox" checked={allPicked} aria-label="Tick all rows" onChange={() => setPicked(allPicked ? new Set() : new Set(rows.map((r) => r.key)))} />
               </th>
-              {COLS.map((c) => <th key={c} scope="col" className={`dz-c-${c}`}>{COL_LABEL[c]}</th>)}
+              {COLS.map((c) => (
+                <th key={c} scope="col" className={`dz-c-${c}${(READ_COLS as readonly string[]).includes(c) ? ' dz-read' : ''}${c === 'bp' ? ' dz-read-first' : ''}`}>
+                  {COL_LABEL[c]}{(READ_COLS as readonly string[]).includes(c) && <span className="dz-unit">{READ_HINT[c as typeof READ_COLS[number]].unit}</span>}
+                </th>
+              ))}
               <th scope="col"><span className="crm-sr">Row actions</span></th>
             </tr>
           </thead>
@@ -327,6 +343,12 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
                   </td>
                   <td><input value={r.panchayat} list={r.block ? `dz-p-${usedBlocks.indexOf(blockKey)}` : undefined} maxLength={80} placeholder="Optional" onChange={(e) => set(i, 'panchayat', e.target.value)} {...inputProps(i, 'panchayat')} /></td>
                   <td><input value={r.count} inputMode="numeric" maxLength={5} onChange={(e) => set(i, 'count', e.target.value.replace(/[^\d]/g, ''))} {...inputProps(i, 'count')} /></td>
+                  {READ_COLS.map((c) => (
+                    <td key={c} className={`dz-read${c === 'bp' ? ' dz-read-first' : ''}`}>
+                      <input value={r[c]} inputMode={c === 'bp' || c === 'height' ? 'text' : 'decimal'} maxLength={c === 'bp' ? 9 : 7} placeholder={READ_HINT[c].eg}
+                        onChange={(e) => set(i, c, e.target.value)} {...inputProps(i, c)} />
+                    </td>
+                  ))}
                   <td className="dz-act">
                     <button type="button" onClick={() => copyRow(i)} aria-label={`Copy row ${i + 1}`} title="Copy row"><Copy size={14} aria-hidden /></button>
                     <button type="button" onClick={() => removeRow(i)} aria-label={`Remove row ${i + 1}`} title="Remove row"><Trash2 size={14} aria-hidden /></button>
@@ -344,7 +366,7 @@ export function DiseaseEntry({ options, toast, onSaved }: { options: DiseaseOpti
       <div className="dz-foot">
         <button type="button" className="crm-btn is-ghost is-sm" onClick={() => addRows(5)}><Plus size={15} aria-hidden /> Add 5 rows</button>
         <span className="crm-sub" style={{ flex: 1, fontSize: 13 }}>
-          {filled.length} row{filled.length === 1 ? '' : 's'} · {people.toLocaleString('en-IN')} {people === 1 ? 'person' : 'people'}{errCount ? ` · ${errCount} to fix` : ''}
+          {filled.length} row{filled.length === 1 ? '' : 's'} · {people.toLocaleString('en-IN')} {people === 1 ? 'person' : 'people'}{withReadings ? ` · ${withReadings} with readings` : ''}{errCount ? ` · ${errCount} to fix` : ''}
         </span>
         {last && <button type="button" className="crm-btn is-ghost is-sm" onClick={() => void undo()} disabled={busy}><Undo2 size={15} aria-hidden /> Undo last save ({last.rows})</button>}
         <button type="button" className="crm-btn is-ghost is-sm" onClick={() => reset()} disabled={busy}>Clear</button>

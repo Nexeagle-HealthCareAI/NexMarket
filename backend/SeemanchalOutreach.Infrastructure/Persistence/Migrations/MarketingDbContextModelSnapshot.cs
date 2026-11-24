@@ -1447,6 +1447,12 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("Block")
                         .HasColumnType("text");
 
+                    b.Property<int?>("BpDiastolic")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BpSystolic")
+                        .HasColumnType("integer");
+
                     b.Property<Guid?>("CampId")
                         .HasColumnType("uuid");
 
@@ -1473,11 +1479,19 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("District")
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("HeightCm")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
+
                     b.Property<string>("Panchayat")
                         .HasColumnType("text");
 
                     b.Property<string>("PanchayatId")
                         .HasColumnType("text");
+
+                    b.Property<int?>("Pulse")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("RemovedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1493,9 +1507,25 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("Spo2")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("Sugar")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("TempF")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)");
+
+
+                    b.Property<decimal?>("WeightKg")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
 
                     b.HasKey("Id");
 

@@ -724,6 +724,15 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? PanchayatId { get; set; }
         public string? Panchayat { get; set; }                 // the name as entered when it didn't match a known panchayat
         public int Count { get; set; } = 1;
+        // Readings for one person (only on rows with Count 1), as on the printed camp sheet. All optional.
+        public int? BpSystolic { get; set; }                   // mmHg
+        public int? BpDiastolic { get; set; }
+        public int? Sugar { get; set; }                        // random blood sugar, mg/dL
+        public decimal? WeightKg { get; set; }
+        public decimal? HeightCm { get; set; }
+        public int? Spo2 { get; set; }                         // %
+        public int? Pulse { get; set; }                        // beats a minute
+        public decimal? TempF { get; set; }                    // °F (°C typed in is turned into °F)
         public Guid? CampId { get; set; }
         public string Source { get; set; } = "grid";           // grid | upload
         public Guid? BatchId { get; set; }                     // rows saved together (one upload or one Save)
