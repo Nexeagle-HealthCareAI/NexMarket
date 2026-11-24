@@ -71,7 +71,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/admin/coverage', label: 'Panchayat coverage', page: 'field', icon: Grid2x2Check, match: ['/admin/panchayats'] },
       { href: '/admin/field-surveys', label: 'Field mapping', page: 'field', icon: Route },
       { href: '/admin/hoardings', label: 'Hoardings', page: 'hoardings', icon: Signpost },
-      { href: '/admin/leave', label: 'Attendance & leave', page: 'field', icon: CalendarCheck },
+      { href: '/admin/leave', label: 'Team attendance', page: 'field', icon: CalendarCheck },
       { href: '/admin/agents', label: 'Field agents', page: 'field', icon: Smartphone },
       { href: '/admin/app', label: 'Field app', page: 'everyone', icon: Download },
       { href: '/admin/assignments', label: 'Block assignments', page: 'field', icon: ClipboardList },

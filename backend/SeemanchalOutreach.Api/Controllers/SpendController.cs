@@ -38,6 +38,10 @@ namespace SeemanchalOutreach.Api.Controllers
         /// <summary>"yyyy-MM": the month this salary starts from.</summary>
         public string? FromMonth { get; set; }
         public string? Note { get; set; }
+        /// <summary>Date of joining (new people): the payroll starts that month, paid from that day.</summary>
+        public DateOnly? JoinedOn { get; set; }
+        /// <summary>fixed | attendance (new people).</summary>
+        public string? PayBasis { get; set; }
     }
 
     public class TeamOffDto { public string? LastMonth { get; set; } }
@@ -241,7 +245,8 @@ namespace SeemanchalOutreach.Api.Controllers
             var staffRows = await _db.MarketingStaff.AsNoTracking().ToListAsync(ct);
             var rates = await _db.MarketingSalaryRates.AsNoTracking().ToListAsync(ct);
             var salaryPays = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.Category == "agents" && e.SalaryMonth != null).ToListAsync(ct);
-            var salaryMonths = staffRows.SelectMany(st => Spend.Months(st, rates, salaryPays, today)).ToList();
+            var payCalc = await PayCalcAsync(staffRows, rates, staffRows.SelectMany(x => MonthsOf(x, today)).Distinct().ToList(), ct);
+            var salaryMonths = staffRows.SelectMany(st => Spend.Months(st, rates, salaryPays, today, x => payCalc(st, x).Net)).ToList();
             var salaryDueThisMonth = salaryMonths.Where(x => x.Month == thisMonth).Sum(x => x.Due);
             var salaryPaidThisMonth = salaryMonths.Where(x => x.Month == thisMonth).Sum(x => x.Paid);
             var salaryLeftThis = salaryMonths.Where(x => x.Month == thisMonth).Sum(x => x.Left);
@@ -475,11 +480,12 @@ namespace SeemanchalOutreach.Api.Controllers
             var costs = Spend.ByPerson(inMonth).ToDictionary(p => p.AgentId);
             var agents = await _db.Agents.AsNoTracking().OrderBy(a => a.Name).Select(a => new { agentId = a.AgentId, name = a.Name, role = a.Role, block = a.Block, active = a.IsActive }).ToListAsync(ct);
             var byId = agents.ToDictionary(a => a.agentId);
+            var calc = await PayCalcAsync(staff, rates, staff.SelectMany(x => MonthsOf(x, today)).Append(m).Distinct().ToList(), ct);
             var rows = staff.Select(s =>
             {
-                var due = s.OnPayroll || s.ToMonth != null ? Spend.Due(s, rates, m) : 0;
+                var due = calc(s, m).Net;
                 var paid = Spend.PaidFor(s.AgentId, m, salary);
-                var owedBefore = Spend.Months(s, rates, salary, today).Where(x => string.CompareOrdinal(x.Month, m) < 0).Sum(x => x.Left);
+                var owedBefore = Spend.Months(s, rates, salary, today, x => calc(s, x).Net).Where(x => string.CompareOrdinal(x.Month, m) < 0).Sum(x => x.Left);
                 var c = costs.GetValueOrDefault(s.AgentId);
                 return new
                 {
@@ -506,6 +512,17 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             if (!await CanHandleAsync(ct)) return NotAllowed();
             var today = AttendanceService.TodayIst;
+            if (d.JoinedOn is { } jd)
+            {
+                if (jd < today.AddYears(-30) || jd > today.AddMonths(3)) return BadRequest(new { message = "Check the date of joining." });
+                // The salary starts in the month of joining (or, for joining long ago, as far back as a salary can go).
+                var jm = new DateOnly(jd.Year, jd.Month, 1);
+                var earliest = new DateOnly(today.Year, today.Month, 1).AddMonths(-24);
+                if (d.FromMonth == null || !await _db.MarketingStaff.AsNoTracking().AnyAsync(x => x.AgentId == d.AgentId, ct))
+                    d.FromMonth = Spend.Month(jm < earliest ? earliest : jm);
+            }
+            var basis = (d.PayBasis ?? "").Trim().ToLowerInvariant();
+            if (basis != "" && !Payroll.Bases.Contains(basis)) return BadRequest(new { message = "Choose fixed monthly or by attendance." });
             var err = Spend.SalaryProblem(d.Salary, d.FromMonth, today);
             if (err != null) return BadRequest(new { message = err });
             var who = Hoardings.Clean(d.AgentId, 40);
@@ -514,7 +531,12 @@ namespace SeemanchalOutreach.Api.Controllers
             var from = Spend.MonthOf(d.FromMonth)!;
             var me = User.AgentIdOf();
             var s = await _db.MarketingStaff.FirstOrDefaultAsync(x => x.AgentId == a.AgentId, ct);
-            if (s == null) { s = new MarketingStaff { AgentId = a.AgentId, FromMonth = from, CreatedBy = me }; _db.MarketingStaff.Add(s); }
+            if (s == null)
+            {
+                s = new MarketingStaff { AgentId = a.AgentId, FromMonth = from, CreatedBy = me, JoinedOn = d.JoinedOn, PayBasis = basis == "" ? "attendance" : basis };
+                if (s.PayBasis == "attendance") s.AttendanceFrom = string.CompareOrdinal(from, Spend.Month(today)) > 0 ? from : Spend.Month(today);
+                _db.MarketingStaff.Add(s);
+            }
             else if (!s.OnPayroll) { s.OnPayroll = true; s.ToMonth = null; if (string.CompareOrdinal(from, s.FromMonth) < 0) s.FromMonth = from; }
             else if (string.CompareOrdinal(from, s.FromMonth) < 0) s.FromMonth = from;
             s.Name = a.Name; s.Note = Hoardings.Clean(d.Note, 300) ?? s.Note; s.UpdatedAt = DateTime.UtcNow;
@@ -554,7 +576,8 @@ namespace SeemanchalOutreach.Api.Controllers
                 .OrderByDescending(e => e.SpentOn).ThenByDescending(e => e.CreatedAt).Take(3000).ToListAsync(ct);
             var pays = mine.Where(Spend.IsSalary).ToList();
             var other = mine.Where(e => e.SalaryMonth == null).ToList();
-            var months = s == null ? new List<Spend.MonthPay>() : Spend.Months(s, rates, pays, today);
+            var calc = s == null ? null : await PayCalcAsync(new List<MarketingStaff> { s }, rates, MonthsOf(s, today), ct);
+            var months = s == null ? new List<Spend.MonthPay>() : Spend.Months(s, rates, pays, today, x => calc!(s, x).Net);
             return Ok(new
             {
                 agentId, name = a?.Name ?? s?.Name ?? agentId, role = a?.Role, block = a?.Block,

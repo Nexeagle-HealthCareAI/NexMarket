@@ -18,7 +18,7 @@ const periodText = (p: string, every: string) => every === 'month' ? monthText(p
 
 /**
  * Constant payments: what is due every month, quarter or year (room rent, a software subscription, the phone bill),
- * this period's status, what is overdue, and each payment, in full or in parts. Salaries stay in Team and salaries.
+ * this period's status, what is overdue, and each payment, in full or in parts. Salaries stay in Salaries.
  */
 export function ConstantTab({ data, canHandle, toast, onChanged, refreshKey }: { data: Data; canHandle: boolean; toast: (m: string) => void; onChanged: () => void; refreshKey: number }) {
   const [res, setRes] = useState<ConstantRes | null>(null);

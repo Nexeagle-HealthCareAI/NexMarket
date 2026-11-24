@@ -210,7 +210,8 @@ namespace SeemanchalOutreach.Api.Services
         }
 
         /// <summary>Every month from the person's first month to this one (or their last), newest first, with what was due and paid.</summary>
-        public static List<MonthPay> Months(MarketingStaff s, IEnumerable<MarketingSalaryRate> rates, IEnumerable<MarketingExpense> expenses, DateOnly today)
+        /// <param name="due">What is due for a month (date of joining, attendance, incentives, approval); the monthly rate when null.</param>
+        public static List<MonthPay> Months(MarketingStaff s, IEnumerable<MarketingSalaryRate> rates, IEnumerable<MarketingExpense> expenses, DateOnly today, Func<string, decimal>? due = null)
         {
             var list = new List<MonthPay>();
             var first = MonthStart(s.FromMonth);
@@ -219,10 +220,10 @@ namespace SeemanchalOutreach.Api.Services
             if (s.ToMonth != null && MonthStart(s.ToMonth) is { } end && end < last) last = end;
             var rateList = rates.ToList(); var exp = expenses.ToList();
             for (var m = last; m >= first && list.Count < 60; m = m.AddMonths(-1))
-                list.Add(new MonthPay(Month(m), Due(s, rateList, Month(m)), PaidFor(s.AgentId, Month(m), exp)));
+                list.Add(new MonthPay(Month(m), due?.Invoke(Month(m)) ?? Due(s, rateList, Month(m)), PaidFor(s.AgentId, Month(m), exp)));
             // A payment recorded for a month outside those (an advance for next month, say) still shows.
             foreach (var extra in exp.Where(e => IsSalary(e) && e.ForAgentId == s.AgentId).Select(e => e.SalaryMonth!).Distinct().Where(x => list.All(l => l.Month != x)))
-                list.Add(new MonthPay(extra, Due(s, rateList, extra), PaidFor(s.AgentId, extra, exp)));
+                list.Add(new MonthPay(extra, due?.Invoke(extra) ?? Due(s, rateList, extra), PaidFor(s.AgentId, extra, exp)));
             return list.OrderByDescending(l => l.Month).ToList();
         }
     

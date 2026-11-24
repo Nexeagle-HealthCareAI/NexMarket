@@ -24,6 +24,38 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.ActivityDay", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("FirstAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("On")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "Date")
+                        .IsUnique();
+
+                    b.HasIndex("Date");
+
+                    b.ToTable("activity_days", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.AdLead", b =>
                 {
                     b.Property<Guid>("Id")
@@ -476,6 +508,50 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("app_settings", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.AttendanceMark", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LeaveType")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("MarkedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MarkedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("MarkedByName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "Date")
+                        .IsUnique();
+
+                    b.HasIndex("Date");
+
+                    b.ToTable("attendance_marks", "marketing");
                 });
 
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.AuditLog", b =>
@@ -2747,6 +2823,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("AttendanceFrom")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2758,6 +2837,12 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateOnly?>("JoinedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("LeftOn")
+                        .HasColumnType("date");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -2767,6 +2852,10 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("OnPayroll")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("PayBasis")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("ToMonth")
                         .HasColumnType("text");
@@ -3559,6 +3648,153 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("role_permissions", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SalaryIncentive", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AddedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("AddedByName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("Basis")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Details")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Month")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Removed")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RemovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SourceIds")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "Month");
+
+                    b.ToTable("salary_incentives", "marketing");
+                });
+
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SalarySlip", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AbsentDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AgentId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ApprovedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ApprovedByName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Earned")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<int>("EmployedDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HalfDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Incentives")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("Month")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("MonthDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Net")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<int>("OffDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PaidLeaveDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("PayableDays")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
+                    b.Property<decimal>("PresentDays")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
+
+                    b.Property<decimal>("Rate")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<int>("UnpaidLeaveDays")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "Month")
+                        .IsUnique();
+
+                    b.ToTable("salary_slips", "marketing");
                 });
 
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.SiteApiKey", b =>

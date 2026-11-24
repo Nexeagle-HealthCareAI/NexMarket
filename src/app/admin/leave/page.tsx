@@ -1,14 +1,18 @@
 'use client';
 
-import { Suspense, useCallback, useMemo, useState } from 'react';
-import { CalendarCheck, CalendarX2, ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { CalendarDays, CalendarX2, Inbox, Settings2, Sun } from 'lucide-react';
 import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 import { crm } from '@/lib/sync/api-client';
 import { useLiveEvents } from '@/lib/crm/live';
 import { Empty, ErrorBox, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useLoader, useToast } from '@/components/crm/ui';
+import { thisMonth, type Board as AttBoard, type Person } from '@/components/crm/attendance/shared';
+import { TodayView, type Group } from '@/components/crm/attendance/TodayView';
+import { RegisterView } from '@/components/crm/attendance/RegisterView';
+import { MarkModal, type MarkTarget } from '@/components/crm/attendance/MarkModal';
+import { PersonModal } from '@/components/crm/attendance/PersonModal';
+import { SettingsModal } from '@/components/crm/attendance/SettingsModal';
 import { Pager, usePaged } from '@/components/crm/Pager';
-
-type DayStatus = 'worked' | 'leave' | 'absent' | 'off' | 'today' | 'future';
 
 interface Board {
   month: string;
@@ -17,54 +21,50 @@ interface Board {
   kpis: { onShiftToday: number; totalAgents: number; onLeaveToday: number; pending: number; urgentPending: number; avgDaysWorked: number; workingDaysSoFar: number; noShowDays: number };
   requests: { id: string; agentId: string; name: string; block?: string; type: 'urgent' | 'holiday'; fromDate: string; toDate: string; halfDay: boolean; days: number; reason: string; createdAt: string; remaining: number; followUpsAffected: number }[];
   away: { id: string; agentId: string; name: string; block?: string; type: string; fromDate: string; toDate: string; days: number; now: boolean; decidedBy?: string | null }[];
-  team: { agentId: string; name: string; block?: string; days: { date: string; status: DayStatus; leaveType?: string | null }[]; worked: number; leave: number; absent: number }[];
 }
 
-const DAY_COLOR: Record<DayStatus, { bg: string; border?: string; label: string }> = {
-  worked: { bg: '#0f8a5f', label: 'Worked' },
-  leave: { bg: '#f5b544', label: 'Leave' },
-  absent: { bg: '#ffffff', border: '#b42318', label: 'No shift, no leave' },
-  off: { bg: '#e3e6ee', label: 'Sunday / holiday' },
-  today: { bg: '#ffffff', border: '#0a72d6', label: 'Today' },
-  future: { bg: '#f4f6fa', label: 'Upcoming' },
-};
-
 const dayFmt = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-const monthFmt = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 function range(from: string, to: string) {
   const a = dayFmt.format(new Date(`${from}T00:00:00Z`));
   return from === to ? a : `${a} – ${dayFmt.format(new Date(`${to}T00:00:00Z`))}`;
 }
-function shiftMonth(month: string, by: number) {
-  const [y, m] = month.split('-').map(Number);
-  const d = new Date(Date.UTC(y, m - 1 + by, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-}
-const thisMonth = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 7);
-
 export default function LeavePageWrap() {
   return <Suspense fallback={<main className="crm-page"><Skeleton h={480} /></main>}><LeavePage /></Suspense>;
 }
 
-const TAB_KEYS = ['requests', 'away', 'attendance'] as const;
+const TAB_KEYS = ['today', 'register', 'requests', 'away'] as const;
 
 function LeavePage() {
-  const [tab, setTab] = usePageTab(TAB_KEYS, 'requests');
+  const [tab, setTab] = usePageTab(TAB_KEYS, 'today');
   const [month, setMonth] = useState(thisMonth);
-  const board = useLoader(() => crm.get<Board>(`/api/v1/leave/board?month=${month}`), [month]);
+  const [group, setGroup] = useState<Group>('all');
+  const board = useLoader(() => crm.get<Board>('/api/v1/leave/board'), []);
+  const att = useLoader(() => crm.get<AttBoard>(`/api/v1/attendance/board?month=${month}`), [month]);
+  const [marking, setMarking] = useState<MarkTarget | null>(null);
+  const [personId, setPersonId] = useState<string | null>(null);
+  const [settings, setSettings] = useState(false);
   const [toast, showToast] = useToast();
   const [deciding, setDeciding] = useState<{ id: string; approve: boolean; name: string } | null>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const onEvent = useCallback((e: { kind: string }) => { if (e.kind === 'leave') void board.reload(); }, [board]);
+  const onEvent = useCallback((e: { kind: string }) => {
+    if (e.kind === 'leave') { void board.reload(); void att.reload(); }
+    if (e.kind === 'attendance') void att.reload();
+  }, [board, att]);
   useLiveEvents(onEvent);
+  // Who is in changes all day (shifts start, the CRM opens): refresh every minute while the page is open.
+  useEffect(() => {
+    const t = setInterval(() => { if (document.visibilityState === 'visible') void att.reload(); }, 60_000);
+    return () => clearInterval(t);
+  }, [att]);
 
   const b = board.data;
-  const dayNumbers = useMemo(() => (b?.team[0]?.days ?? []).map((d) => Number(d.date.slice(8))), [b]);
-  const pg = usePaged(b?.team ?? [], month, 25);
-  const reqPg = usePaged(b?.requests ?? [], month, 10);
-  const awayPg = usePaged(b?.away ?? [], month, 10);
+  const a = att.data;
+  const person: Person | null = useMemo(() => (personId && a ? a.people.find((p) => p.agentId === personId) ?? null : null), [personId, a]);
+  const saved = (msg: string) => { setMarking(null); showToast(msg); void att.reload(); };
+  const reqPg = usePaged(b?.requests ?? [], '', 10);
+  const awayPg = usePaged(b?.away ?? [], '', 10);
 
   const decide = async () => {
     if (!deciding) return;
@@ -77,6 +77,7 @@ function LeavePage() {
       setDeciding(null);
       setNote('');
       void board.reload();
+      void att.reload();
     } catch (e) {
       showToast(friendlyError(e));
     } finally {
@@ -86,34 +87,26 @@ function LeavePage() {
 
   return (
     <main className="crm-page">
-      <PageHead title="Attendance & leave" sub={`Days worked come from shifts in the agent app. ${b ? `Each agent gets ${b.allowance} leave days a year (urgent and holiday together).` : ''}`}>
-        <div className="crm-chips" style={{ alignItems: 'center' }}>
-          <button type="button" className="crm-btn is-secondary" aria-label="Previous month" style={{ width: 44, padding: 0 }} onClick={() => setMonth((m) => shiftMonth(m, -1))}><ChevronLeft size={18} aria-hidden /></button>
-          <span style={{ fontWeight: 700, minWidth: 130, textAlign: 'center' }}>{monthFmt.format(new Date(`${month}-01T00:00:00Z`))}</span>
-          <button type="button" className="crm-btn is-secondary" aria-label="Next month" style={{ width: 44, padding: 0 }} disabled={month >= thisMonth()} onClick={() => setMonth((m) => shiftMonth(m, 1))}><ChevronRight size={18} aria-hidden /></button>
-        </div>
+      <PageHead title="Team attendance" sub="Everyone on the team, field and office. Days come from shifts in the app and from the CRM; an admin or marketing manager can mark anyone by hand.">
+        {a?.canMark && <button type="button" className="crm-btn is-secondary" onClick={() => setSettings(true)}><Settings2 size={16} aria-hidden /> Settings</button>}
       </PageHead>
 
-      {board.error && <ErrorBox message={board.error} onRetry={board.reload} />}
+      {(att.error || board.error) && <ErrorBox message={(att.error || board.error)!} onRetry={() => { void att.reload(); void board.reload(); }} />}
 
-      {!b ? <Skeleton h={120} /> : (
-        <div className="crm-kpis">
-          <div className="crm-card crm-kpi"><span className="crm-kpi-label">On shift today</span><span className="crm-kpi-value">{b.kpis.onShiftToday}<span className="crm-kpi-unit">of {b.kpis.totalAgents}</span></span></div>
-          <div className="crm-card crm-kpi"><span className="crm-kpi-label">On leave today</span><span className="crm-kpi-value" style={{ color: 'var(--warn-ink)' }}>{b.kpis.onLeaveToday}</span></div>
-          <div className="crm-card crm-kpi" style={b.kpis.pending ? { background: 'var(--warn-soft)', borderColor: '#f0c98a' } : undefined}>
-            <span className="crm-kpi-label">Requests waiting</span>
-            <span className="crm-kpi-value" style={{ color: b.kpis.pending ? 'var(--warn-ink)' : undefined }}>{b.kpis.pending}{b.kpis.urgentPending > 0 && <span className="crm-kpi-unit">· {b.kpis.urgentPending} urgent</span>}</span>
-          </div>
-          <div className="crm-card crm-kpi"><span className="crm-kpi-label">Avg days worked</span><span className="crm-kpi-value">{b.kpis.avgDaysWorked}<span className="crm-kpi-unit">of {b.kpis.workingDaysSoFar}</span></span></div>
-          <div className="crm-card crm-kpi"><span className="crm-kpi-label">No-show days</span><span className="crm-kpi-value" style={{ color: b.kpis.noShowDays ? 'var(--bad)' : undefined }}>{b.kpis.noShowDays}</span></div>
-        </div>
-      )}
-
-      <PageTabs label="Attendance and leave" value={tab} onChange={setTab} tabs={[
+      <PageTabs label="Team attendance" value={tab} onChange={setTab} tabs={[
+        { key: 'today', label: 'Today', icon: Sun },
+        { key: 'register', label: 'Month register', icon: CalendarDays },
         { key: 'requests', label: 'Leave requests', icon: Inbox, count: b?.requests.length, hot: !!b?.requests.length },
         { key: 'away', label: 'Who’s away', icon: CalendarX2, count: b?.away.length },
-        { key: 'attendance', label: 'Team attendance', icon: CalendarCheck },
       ]} />
+
+      {tab === 'today' && (!a ? <Skeleton h={360} /> : (
+        <TodayView board={a} group={group} setGroup={setGroup} onMark={setMarking} onPerson={(p) => setPersonId(p.agentId)} onSaved={(m) => { showToast(m); void att.reload(); }} />
+      ))}
+
+      {tab === 'register' && (
+        <RegisterView board={a} loading={att.loading} month={month} setMonth={setMonth} group={group} setGroup={setGroup} onMark={setMarking} onPerson={(p) => setPersonId(p.agentId)} toast={showToast} />
+      )}
 
       {tab === 'requests' && (
         <section className="crm-card" aria-labelledby="req-h">
@@ -169,59 +162,6 @@ function LeavePage() {
         </section>
       )}
 
-      {tab === 'attendance' && (
-      <section className="crm-card" aria-labelledby="grid-h" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div className="crm-card-head" style={{ flexWrap: 'wrap', gap: 12 }}>
-          <h2 id="grid-h" className="crm-h2">Team attendance</h2>
-          <div className="crm-chips" style={{ fontSize: 12 }}>
-            {(['worked', 'leave', 'absent', 'off'] as DayStatus[]).map((s) => (
-              <span key={s} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                <span style={{ width: 12, height: 12, borderRadius: 3, background: DAY_COLOR[s].bg, border: DAY_COLOR[s].border ? `2px solid ${DAY_COLOR[s].border}` : undefined, boxSizing: 'border-box' }} />{DAY_COLOR[s].label}
-              </span>
-            ))}
-          </div>
-        </div>
-        {!b ? <Skeleton h={220} /> : b.team.length === 0 ? <Empty title="No field agents" /> : (
-          <><div className="crm-table-wrap">
-            <table className="crm-table" style={{ minWidth: 980 }}>
-              <thead>
-                <tr>
-                  <th style={{ width: 170 }}>Agent</th>
-                  <th>
-                    <span style={{ display: 'grid', gridTemplateColumns: `repeat(${dayNumbers.length}, minmax(0, 1fr))`, gap: 3, textAlign: 'center', fontSize: 10 }}>
-                      {dayNumbers.map((n) => <span key={n}>{n}</span>)}
-                    </span>
-                  </th>
-                  <th style={{ textAlign: 'right' }}>Worked</th>
-                  <th style={{ textAlign: 'right' }}>Leave</th>
-                  <th style={{ textAlign: 'right' }}>No-show</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.rows.map((t) => (
-                  <tr key={t.agentId}>
-                    <td><span className="crm-cell-main" style={{ fontWeight: 600 }}>{t.name}</span>{t.block && <span className="crm-cell-sub" style={{ display: 'block' }}>{t.block}</span>}</td>
-                    <td>
-                      <span style={{ display: 'grid', gridTemplateColumns: `repeat(${t.days.length}, minmax(0, 1fr))`, gap: 3 }}>
-                        {t.days.map((d) => (
-                          <span key={d.date} title={`${d.date} · ${DAY_COLOR[d.status].label}${d.leaveType ? ` (${d.leaveType})` : ''}`}
-                            style={{ height: 22, borderRadius: 4, background: DAY_COLOR[d.status].bg, border: DAY_COLOR[d.status].border ? `2px solid ${DAY_COLOR[d.status].border}` : undefined, boxSizing: 'border-box' }} />
-                        ))}
-                      </span>
-                    </td>
-                    <td className="num" style={{ textAlign: 'right', fontWeight: 700, color: 'var(--ok-ink)' }}>{t.worked}</td>
-                    <td className="num" style={{ textAlign: 'right' }}>{t.leave}</td>
-                    <td className="num" style={{ textAlign: 'right', color: t.absent ? 'var(--bad)' : undefined }}>{t.absent}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-            <Pager {...pg.pager} noun="agents" /></>
-        )}
-      </section>
-      )}
-
       {deciding && (
         <Modal title={deciding.approve ? `Approve leave for ${deciding.name}?` : `Reject leave for ${deciding.name}?`} onClose={() => setDeciding(null)}
           actions={<>
@@ -236,6 +176,9 @@ function LeavePage() {
           </label>
         </Modal>
       )}
+      {person && a && <PersonModal person={person} board={a} onClose={() => setPersonId(null)} onMark={(t) => { setPersonId(null); setMarking(t); }} />}
+      {marking && a && <MarkModal target={marking} today={a.today} canMark={a.canMark} onClose={() => setMarking(null)} onSaved={saved} />}
+      {settings && a && <SettingsModal config={a.config} onClose={() => setSettings(false)} onSaved={() => { setSettings(false); showToast('Settings saved.'); void att.reload(); }} />}
       {toast}
     </main>
   );

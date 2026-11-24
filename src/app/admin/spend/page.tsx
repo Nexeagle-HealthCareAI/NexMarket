@@ -1,23 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, HandCoins, Pencil, Plus, Receipt, Trash2, Undo2, UserPlus, Wallet, X } from 'lucide-react';
+import { Check, HandCoins, Pencil, Plus, Receipt, Trash2, Undo2, Wallet, X } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Modal, PageHead, Pill, Skeleton, useToast } from '@/components/crm/ui';
 import { Analytics } from '@/components/crm/spend/Analytics';
 import { ConstantTab } from '@/components/crm/spend/Constant';
 import { FundForm, ProjectsTab, ProjectView } from '@/components/crm/spend/Projects';
 import { SetupTab } from '@/components/crm/spend/Setup';
+import { MemberForm, PayForm, PayrollTab } from '@/components/crm/spend/Payroll';
 import {
   dayText, errText, MODE, money, monthText, NATURE, PAY, rs,
-  type Balance, type Data, type Expense, type Fund, type Move, type PayStatus, type Staff,
+  type Balance, type Data, type Expense, type Fund, type Move, type PayStatus,
 } from '@/components/crm/spend/shared';
 
-interface TeamRow {
-  agentId: string; name: string; role?: string | null; onPayroll: boolean; fromMonth: string; toMonth?: string | null; note?: string | null;
-  salary: number; due: number; paid: number; left: number; status: PayStatus; owedBefore: number; otherCosts: number; costs: Record<string, number>;
-}
-interface Team { month: string; thisMonth: string; today: string; rows: TeamRow[]; due: number; paid: number; left: number; owedBefore: number; candidates: Staff[] }
 interface Member {
   agentId: string; name: string; role?: string | null; block?: string | null; onTeam: boolean; onPayroll: boolean; fromMonth?: string | null; toMonth?: string | null; note?: string | null;
   salary: number; rates: { amount: number; fromMonth: string }[]; months: { month: string; due: number; paid: number; left: number; status: PayStatus }[];
@@ -41,7 +37,7 @@ type Tab = 'work' | 'projects' | 'constant' | 'team' | 'analytics' | 'setup';
 type Range = 'today' | 'week' | 'month' | 'last30' | 'quarter' | 'custom';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'work', label: 'Expenses and approvals' }, { key: 'projects', label: 'Projects' }, { key: 'constant', label: 'Constant payments' },
-  { key: 'team', label: 'Team and salaries' }, { key: 'analytics', label: 'Analytics' }, { key: 'setup', label: 'Setup' },
+  { key: 'team', label: 'Salaries' }, { key: 'analytics', label: 'Analytics' }, { key: 'setup', label: 'Setup' },
 ];
 
 /**
@@ -271,7 +267,7 @@ export default function SpendPage() {
       {tab === 'analytics' && <Analytics data={data} go={(t) => setTab(t as Tab)} openProject={setProject} openPerson={setMember} />}
       {tab === 'projects' && <ProjectsTab data={data} canHandle={editable} onOpen={setProject} onAddExpense={(id) => setForm({ projectId: id })} onAddFund={(id) => setFund({ projectId: id })} toast={showToast} refreshKey={teamKey} />}
       {tab === 'constant' && <ConstantTab data={data} canHandle={editable} toast={showToast} onChanged={() => void load()} refreshKey={teamKey} />}
-      {tab === 'team' && <TeamTab key={teamKey} editable={editable} modes={data.modes} label={label} onOpen={setMember} toast={showToast} onChanged={() => void load()} />}
+      {tab === 'team' && <PayrollTab key={teamKey} editable={editable} modes={data.modes} onOpen={setMember} toast={showToast} onChanged={() => void load()} />}
       {tab === 'setup' && <SetupTab data={data} toast={showToast} onChanged={() => void load()} />}
 
       {member && <MemberView agentId={member} editable={editable} modes={data.modes} onClose={() => setMember(null)} toast={showToast} onChanged={() => { setTeamKey((k) => k + 1); void load(); }} onBill={setBill} />}
@@ -569,151 +565,6 @@ function PersonView({ agentId, label, editable, onClose, onMove, onChanged, toas
           )}
         </>
       )}
-    </Modal>
-  );
-}
-
-/** The marketing team for one month: who is on the payroll, each salary, what is paid and left, and what else was spent on them. */
-function TeamTab({ editable, modes, label, onOpen, toast, onChanged }: { editable: boolean; modes: string[]; label: Record<string, string>; onOpen: (agentId: string) => void; toast: (m: string) => void; onChanged: () => void }) {
-  const [month, setMonth] = useState('');
-  const [t, setT] = useState<Team | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [add, setAdd] = useState<{ row?: TeamRow } | null>(null);
-  const [pay, setPay] = useState<TeamRow | null>(null);
-  const load = useCallback(async () => { try { setT(await crm.get<Team>(`/api/v1/spend/team${month ? `?month=${month}` : ''}`)); setErr(null); } catch (e) { setErr(friendlyError(e)); } }, [month]);
-  useEffect(() => { const x = setTimeout(() => void load(), 0); return () => clearTimeout(x); }, [load]);
-  const done = (m: string) => { toast(m); setAdd(null); setPay(null); void load(); onChanged(); };
-  if (err && !t) return <ErrorBox message={err} onRetry={load} />;
-  if (!t) return <Skeleton h={360} />;
-  const costLine = (r: TeamRow) => Object.entries(r.costs).filter(([k]) => k !== 'agents').sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${label[k] ?? k} ${rs(v)}`).join(' · ');
-
-  return (
-    <>
-      <div className="ms-range">
-        <label className="crm-field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>Month
-          <input className="crm-input" type="month" style={{ width: 'auto' }} value={t.month} max={t.thisMonth} onChange={(e) => { if (e.target.value) setMonth(e.target.value); }} />
-        </label>
-        {t.month !== t.thisMonth && <button type="button" className="wa-link" onClick={() => setMonth(t.thisMonth)}>Back to this month</button>}
-        {editable && <button type="button" className="crm-btn is-secondary is-sm" style={{ marginLeft: 'auto' }} onClick={() => setAdd({})}><UserPlus size={15} aria-hidden /> Add a person to the team</button>}
-      </div>
-      <div className="crm-kpis">
-        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Salaries for {monthText(t.month)}</span><span className="crm-kpi-value">{rs(t.due)}</span><span className="crm-sub">{t.rows.filter((r) => r.due > 0).length} people</span></div>
-        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Paid so far</span><span className="crm-kpi-value">{rs(t.paid)}</span><span className="crm-sub">{t.rows.filter((r) => r.status === 'full' || r.status === 'over').length} fully paid · {t.rows.filter((r) => r.status === 'part').length} partly</span></div>
-        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Still to pay</span><span className="crm-kpi-value">{rs(t.left)}</span><span className="crm-sub">{t.rows.filter((r) => r.status === 'unpaid').length} not paid at all</span></div>
-        <div className="crm-card crm-kpi"><span className="crm-kpi-label">Unpaid from earlier months</span><span className="crm-kpi-value">{rs(t.owedBefore)}</span><span className="crm-sub">Open a person to see which months</span></div>
-      </div>
-      <section className="crm-card">
-        {t.rows.length === 0 ? (
-          <Empty title="Nobody is on the marketing team yet"><span className="crm-sub">Add the people you have taken on for marketing, with their monthly salary. Then record each payment, in full or in parts.</span>{editable && <button type="button" className="crm-btn is-sm" onClick={() => setAdd({})}>Add a person to the team</button>}</Empty>
-        ) : (
-          <div className="crm-table-wrap">
-            <table className="crm-table">
-              <thead><tr><th scope="col">Person</th><th scope="col" className="wb-num">Salary</th><th scope="col" className="wb-num">Paid</th><th scope="col" className="wb-num">Left</th><th scope="col">{monthText(t.month)}</th><th scope="col">Other costs this month</th>{editable && <th scope="col"><span className="crm-sr">Actions</span></th>}</tr></thead>
-              <tbody>
-                {t.rows.map((r) => (
-                  <tr key={r.agentId}>
-                    <td><button type="button" className="wa-link" onClick={() => onOpen(r.agentId)}>{r.name}</button><span className="crm-cell-sub" style={{ display: 'block' }}>{r.agentId}{r.onPayroll ? ` · since ${monthText(r.fromMonth)}` : ` · left after ${monthText(r.toMonth)}`}</span></td>
-                    <td className="wb-num">{r.salary ? rs(r.salary) : <span className="crm-sub">—</span>}</td>
-                    <td className="wb-num">{rs(r.paid)}</td>
-                    <td className="wb-num">{r.left ? <strong>{rs(r.left)}</strong> : <span className="crm-sub">—</span>}</td>
-                    <td><Pill tone={PAY[r.status].tone}>{PAY[r.status].label}</Pill>{r.owedBefore > 0 && <span className="crm-cell-sub" style={{ display: 'block' }}>+ {rs(r.owedBefore)} from earlier months</span>}</td>
-                    <td>{r.otherCosts ? <>{rs(r.otherCosts)}<span className="crm-cell-sub" style={{ display: 'block' }}>{costLine(r)}</span></> : <span className="crm-sub">—</span>}</td>
-                    {editable && <td><span className="sp-actions ms-nowrap" style={{ justifyContent: 'flex-end' }}>
-                      <button type="button" className={`crm-btn is-sm${r.left > 0 ? '' : ' is-secondary'}`} onClick={() => setPay(r)}><Wallet size={14} aria-hidden /> Pay salary</button>
-                      <button type="button" className="crm-btn is-secondary is-sm" onClick={() => onOpen(r.agentId)}>Details</button>
-                    </span></td>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-      {add && <MemberForm candidates={t.candidates} thisMonth={t.thisMonth} onClose={() => setAdd(null)} onSaved={done} />}
-      {pay && <PayForm agentId={pay.agentId} name={pay.name} month={t.month} due={pay.due} paid={pay.paid} today={t.today} modes={modes} onClose={() => setPay(null)} onSaved={done} />}
-    </>
-  );
-}
-
-/** Put a person on the payroll, or change their salary from a month onwards. */
-function MemberForm({ candidates, fixed, salary: startSalary, thisMonth, onClose, onSaved }: { candidates?: Staff[]; fixed?: { agentId: string; name: string }; salary?: number; thisMonth: string; onClose: () => void; onSaved: (m: string) => void }) {
-  const [agentId, setAgentId] = useState(fixed?.agentId ?? '');
-  const [salary, setSalary] = useState(startSalary ? String(startSalary) : '');
-  const [fromMonth, setFromMonth] = useState(thisMonth);
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const save = async () => {
-    const n = Number(salary);
-    if (!agentId) { setErr('Pick the person.'); return; }
-    if (!salary.trim() || !Number.isFinite(n) || n <= 0) { setErr('Write the monthly salary in rupees.'); return; }
-    setBusy(true); setErr(null);
-    try { await crm.post('/api/v1/spend/team', { agentId, salary: n, fromMonth, note }); onSaved(fixed ? `Salary is ${rs(n)} a month from ${monthText(fromMonth)}.` : `Added to the marketing team at ${rs(n)} a month.`); }
-    catch (e) { setErr(errText(e)); } finally { setBusy(false); }
-  };
-  return (
-    <Modal title={fixed ? `Change salary · ${fixed.name}` : 'Add a person to the marketing team'} onClose={onClose} actions={<>
-      <button type="button" className="crm-btn is-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-      <button type="button" className="crm-btn" onClick={() => void save()} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-    </>}>
-      <div className="ms-form">
-        {!fixed && (
-          <label className="crm-field">Person
-            <select className="crm-input" value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-              <option value="">Pick a person</option>
-              {(candidates ?? []).map((s) => <option key={s.agentId} value={s.agentId}>{s.name} · {s.agentId}</option>)}
-            </select>
-            <span className="crm-sub" style={{ fontWeight: 400 }}>Only people with a login are listed. Create a new person in Field agents or Users &amp; roles first.</span>
-          </label>
-        )}
-        <div className="ms-two">
-          <label className="crm-field">Salary a month (₹)<input className="crm-input" inputMode="decimal" value={salary} onChange={(e) => setSalary(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="e.g. 12000" /></label>
-          <label className="crm-field">From month<input className="crm-input" type="month" value={fromMonth} onChange={(e) => setFromMonth(e.target.value)} /></label>
-        </div>
-        <p className="crm-sub" style={{ margin: 0 }}>{fixed ? 'Months before this one keep the salary they had.' : 'A salary is due for every month from this one. A first month is counted in full; record a smaller payment and note why if they joined late in it.'}</p>
-        <label className="crm-field">Note (optional)<input className="crm-input" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Marketing executive, Baisi block" /></label>
-        {err && <p className="ms-err" role="alert">{err}</p>}
-      </div>
-    </Modal>
-  );
-}
-
-/** Record a salary payment for a person and a month: all of it or a part. */
-function PayForm({ agentId, name, month: startMonth, due, paid, today, modes, onClose, onSaved }: { agentId: string; name: string; month: string; due: number; paid: number; today: string; modes: string[]; onClose: () => void; onSaved: (m: string) => void }) {
-  const left = Math.max(0, due - paid);
-  const [month, setMonth] = useState(startMonth);
-  const [amount, setAmount] = useState(left ? String(left) : '');
-  const [on, setOn] = useState(today);
-  const [mode, setMode] = useState('bank');
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const n = Number(amount);
-  const same = month === startMonth;
-  const save = async () => {
-    if (!amount.trim() || !Number.isFinite(n) || n <= 0) { setErr('Write the amount in rupees.'); return; }
-    setBusy(true); setErr(null);
-    try { await crm.post('/api/v1/spend/salary', { agentId, month, amount: n, on, mode, note }); onSaved(`${rs(n)} salary paid to ${name} for ${monthText(month)}. They are told.`); }
-    catch (e) { setErr(errText(e)); } finally { setBusy(false); }
-  };
-  return (
-    <Modal title={`Pay salary · ${name}`} onClose={onClose} actions={<>
-      <button type="button" className="crm-btn is-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-      <button type="button" className="crm-btn" onClick={() => void save()} disabled={busy}>{busy ? 'Saving…' : 'Record payment'}</button>
-    </>}>
-      <div className="ms-form">
-        <div className="ms-two">
-          <label className="crm-field">For the month<input className="crm-input" type="month" value={month} onChange={(e) => { if (e.target.value) setMonth(e.target.value); }} /></label>
-          <label className="crm-field">Paid on<input className="crm-input" type="date" value={on} max={today} onChange={(e) => setOn(e.target.value)} /></label>
-        </div>
-        {same && <p className="crm-sub" style={{ margin: 0 }}>{monthText(month)}: salary {rs(due)} · paid {rs(paid)} · left {rs(left)}{Number.isFinite(n) && n > 0 ? ` → after this: ${n + paid >= due ? (n + paid > due ? `paid ${rs(n + paid - due)} extra` : 'fully paid') : `${rs(due - paid - n)} still left`}` : ''}</p>}
-        <label className="crm-field">Amount (₹)<input className="crm-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="All of it or a part" /></label>
-        <fieldset className="ms-set"><legend>How</legend>
-          <div className="crm-chips">{modes.map((m) => <button key={m} type="button" className="crm-chip" aria-pressed={mode === m} onClick={() => setMode(m)}>{MODE[m] ?? m}</button>)}</div>
-        </fieldset>
-        <label className="crm-field">Note or reference (optional)<input className="crm-input" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="e.g. UPI ref 4321, or first half" /></label>
-        {err && <p className="ms-err" role="alert">{err}</p>}
-      </div>
     </Modal>
   );
 }

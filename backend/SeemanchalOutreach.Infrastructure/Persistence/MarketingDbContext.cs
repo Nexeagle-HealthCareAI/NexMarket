@@ -56,6 +56,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<Broadcast> Broadcasts => Set<Broadcast>();
         public DbSet<BroadcastRecipient> BroadcastRecipients => Set<BroadcastRecipient>();
         public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
+        public DbSet<AttendanceMark> AttendanceMarks => Set<AttendanceMark>();
+        public DbSet<ActivityDay> ActivityDays => Set<ActivityDay>();
         public DbSet<ContactNote> ContactNotes => Set<ContactNote>();
         public DbSet<AiBriefing> AiBriefings => Set<AiBriefing>();
         public DbSet<AiItem> AiItems => Set<AiItem>();
@@ -80,6 +82,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<SpendManager> SpendManagers => Set<SpendManager>();
         public DbSet<MarketingStaff> MarketingStaff => Set<MarketingStaff>();
         public DbSet<MarketingSalaryRate> MarketingSalaryRates => Set<MarketingSalaryRate>();
+        public DbSet<SalaryIncentive> SalaryIncentives => Set<SalaryIncentive>();
+        public DbSet<SalarySlip> SalarySlips => Set<SalarySlip>();
         public DbSet<SiteContent> SiteContents => Set<SiteContent>();
         public DbSet<SiteContentVersion> SiteContentVersions => Set<SiteContentVersion>();
         public DbSet<SitePublish> SitePublishes => Set<SitePublish>();
@@ -466,6 +470,22 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.Status);
             });
 
+            modelBuilder.Entity<AttendanceMark>(entity =>
+            {
+                entity.ToTable("attendance_marks");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.AgentId, e.Date }).IsUnique();
+                entity.HasIndex(e => e.Date);
+            });
+
+            modelBuilder.Entity<ActivityDay>(entity =>
+            {
+                entity.ToTable("activity_days");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.AgentId, e.Date }).IsUnique();
+                entity.HasIndex(e => e.Date);
+            });
+
             modelBuilder.Entity<ContactNote>(entity =>
             {
                 entity.ToTable("contact_notes");
@@ -763,6 +783,25 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.AgentId);
                 entity.Property(e => e.Amount).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<SalaryIncentive>(entity =>
+            {
+                entity.ToTable("salary_incentives");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.AgentId, e.Month });
+                entity.Property(e => e.Amount).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<SalarySlip>(entity =>
+            {
+                entity.ToTable("salary_slips");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.AgentId, e.Month }).IsUnique();
+                entity.Property(e => e.Rate).HasPrecision(12, 2);
+                entity.Property(e => e.PresentDays).HasPrecision(5, 1);
+                entity.Property(e => e.PayableDays).HasPrecision(5, 1);
+                entity.Property(e => e.Earned).HasPrecision(12, 2);
+                entity.Property(e => e.Incentives).HasPrecision(12, 2);
+                entity.Property(e => e.Net).HasPrecision(12, 2);
             });
             modelBuilder.Entity<MarketingMoneyMove>(entity =>
             {

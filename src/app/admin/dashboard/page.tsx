@@ -707,7 +707,7 @@ function TodaysWork({ work, ov, access }: { work: Summary['work']; ov: Overview 
       <WorkCard key="tasks" href="/admin/assignments?view=tasks" icon={<ClipboardList size={18} aria-hidden />} title="Agent tasks"
         big={`${t.open} open`} sub={`${t.doneToday} done today`} pct={t.open + t.doneToday ? Math.round((t.doneToday / (t.open + t.doneToday)) * 100) : 0} color="var(--accent)"
         tag={t.overdue > 0 ? `${t.overdue} overdue` : undefined} tagTone="bad" />,
-      <WorkCard key="leave" href="/admin/leave" icon={<CalendarCheck size={18} aria-hidden />} title="Attendance & leave"
+      <WorkCard key="leave" href="/admin/leave" icon={<CalendarCheck size={18} aria-hidden />} title="Team attendance"
         big={`${ov.leave.onLeaveToday} on leave today`} sub={ov.leave.pending > 0 ? `${ov.leave.pending} ${ov.leave.pending === 1 ? 'request' : 'requests'} to decide` : 'No requests waiting'}
         pct={0} color="var(--accent)" tag={ov.leave.pending > 0 ? 'Decide' : undefined} tagTone="warn" />,
     );
@@ -761,7 +761,7 @@ const VITA_PAGES: Record<string, { href: string; label: string; can: (a: Access)
   camps: { href: '/admin/camps', label: 'Health camps', can: (a) => canView(a, 'camps') },
   map: { href: '/admin/map', label: 'Live map', can: (a) => canView(a, 'field') },
   tasks: { href: '/admin/assignments?view=tasks', label: 'Agent tasks', can: (a) => canView(a, 'field') },
-  leave: { href: '/admin/leave', label: 'Attendance & leave', can: (a) => canView(a, 'field') },
+  leave: { href: '/admin/leave', label: 'Team attendance', can: (a) => canView(a, 'field') },
   agents: { href: '/admin/agents', label: 'Field agents', can: (a) => canView(a, 'field') },
   analytics: { href: '/admin/reports?tab=ai', label: 'AI analyst', can: (a) => canView(a, 'analytics') },
 };

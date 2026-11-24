@@ -53,6 +53,8 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<Broadcast> Broadcasts { get; }
         DbSet<BroadcastRecipient> BroadcastRecipients { get; }
         DbSet<LeaveRequest> LeaveRequests { get; }
+        DbSet<AttendanceMark> AttendanceMarks { get; }
+        DbSet<ActivityDay> ActivityDays { get; }
         DbSet<ContactNote> ContactNotes { get; }
         DbSet<AiBriefing> AiBriefings { get; }
         DbSet<AiItem> AiItems { get; }
@@ -77,6 +79,8 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<SpendManager> SpendManagers { get; }
         DbSet<MarketingStaff> MarketingStaff { get; }
         DbSet<MarketingSalaryRate> MarketingSalaryRates { get; }
+        DbSet<SalaryIncentive> SalaryIncentives { get; }
+        DbSet<SalarySlip> SalarySlips { get; }
         DbSet<SiteContent> SiteContents { get; }
         DbSet<SiteContentVersion> SiteContentVersions { get; }
         DbSet<SitePublish> SitePublishes { get; }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -117,8 +117,29 @@ namespace SeemanchalOutreach.Api.Services
                         .ExecuteUpdateAsync(u => u.SetProperty(a => a.LastActiveAt, now).SetProperty(a => a.LastActiveOn, on), ct);
                 }
                 catch (Exception) { /* "last seen" is best effort; the live view still works */ }
+                await RecordDayAsync(me, now, on, dto?.Active ?? true, ct);
             }
             return Ok(new { ok = true });
+        }
+
+        /// <summary>
+        /// The day row behind attendance for office staff: first and last time today (India) they had the CRM or the
+        /// app open. Written at most once a minute, with "last seen". A closing tab only moves "last", never starts a day.
+        /// </summary>
+        private async Task RecordDayAsync(string me, DateTime now, string on, bool active, CancellationToken ct)
+        {
+            var day = AttendanceService.IstDate(now);
+            try
+            {
+                var n = await _db.ActivityDays.Where(a => a.AgentId == me && a.Date == day)
+                    .ExecuteUpdateAsync(u => u.SetProperty(a => a.LastAt, now).SetProperty(a => a.On, on), ct);
+                if (n == 0 && active)
+                {
+                    _db.ActivityDays.Add(new Domain.Entities.ActivityDay { AgentId = me, Date = day, FirstAt = now, LastAt = now, On = on });
+                    await _db.SaveChangesAsync(ct);
+                }
+            }
+            catch (Exception) { /* two devices starting the day at once (unique row), or the table isn't there yet */ }
         }
     }
 }

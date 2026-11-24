@@ -223,6 +223,39 @@ namespace SeemanchalOutreach.Domain.Entities
         public int FollowUpsMoved { get; set; }
     }
 
+    /// <summary>
+    /// A day's attendance set by hand on the CRM (by an admin or marketing manager) for anyone on the team. It wins over
+    /// what the app or the CRM recorded for that day. Status: present | half | absent | leave | off.
+    /// </summary>
+    public class AttendanceMark
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        public DateOnly Date { get; set; }
+        public string Status { get; set; } = "present";
+        /// <summary>For leave: casual | sick | urgent | holiday | unpaid.</summary>
+        public string? LeaveType { get; set; }
+        public string? Note { get; set; }
+        public string MarkedBy { get; set; } = string.Empty;
+        public string MarkedByName { get; set; } = string.Empty;
+        public DateTime MarkedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// One row per person per India day they had the CRM or the app open: first and last heartbeat. Office staff who
+    /// don't run shifts are counted present from this.
+    /// </summary>
+    public class ActivityDay
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        public DateOnly Date { get; set; }
+        public DateTime FirstAt { get; set; }
+        public DateTime LastAt { get; set; }
+        /// <summary>web | android | ios — where they were last.</summary>
+        public string? On { get; set; }
+    }
+
     /// <summary>A dated note on a partner, written by an agent in the app (or on the CRM).</summary>
     public class ContactNote
     {
@@ -1585,10 +1618,71 @@ namespace SeemanchalOutreach.Domain.Entities
         public string FromMonth { get; set; } = string.Empty;
         /// <summary>The last month a salary is due, once they have left.</summary>
         public string? ToMonth { get; set; }
+        /// <summary>Date of joining: the first month is paid only from this day.</summary>
+        public DateOnly? JoinedOn { get; set; }
+        /// <summary>Last working day, once they have left: the last month is paid only up to this day.</summary>
+        public DateOnly? LeftOn { get; set; }
+        /// <summary>fixed (the monthly salary, by joining and leaving days) | attendance (only the days worked are paid).</summary>
+        public string PayBasis { get; set; } = "fixed";
+        /// <summary>"yyyy-MM": the first month paid by attendance (months before it are paid as fixed).</summary>
+        public string? AttendanceFrom { get; set; }
         public string? Note { get; set; }
         public string CreatedBy { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>Money added to a person's salary for a month, with what it is for. Taken out with Removed (kept for the record).</summary>
+    public class SalaryIncentive
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        /// <summary>"yyyy-MM": the salary month it is paid with.</summary>
+        public string Month { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        /// <summary>performance | referrals | target | camp | travel | festival | other</summary>
+        public string Kind { get; set; } = "performance";
+        public string Title { get; set; } = string.Empty;
+        /// <summary>How it was worked out, e.g. "12 admissions × ₹200".</summary>
+        public string? Basis { get; set; }
+        public string? Details { get; set; }
+        /// <summary>Referral incentives (Payments) brought into this salary, comma-separated ids; set back to approved if this is taken out.</summary>
+        public string? SourceIds { get; set; }
+        public string AddedBy { get; set; } = string.Empty;
+        public string AddedByName { get; set; } = string.Empty;
+        public DateTime AddedAt { get; set; } = DateTime.UtcNow;
+        public bool Removed { get; set; }
+        public string? RemovedBy { get; set; }
+        public DateTime? RemovedAt { get; set; }
+    }
+
+    /// <summary>
+    /// A month's salary checked and approved for release: the days and amounts as they were when approved. Once approved,
+    /// this is what is due for the month (attendance changed later doesn't move it); reopening deletes it.
+    /// </summary>
+    public class SalarySlip
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string AgentId { get; set; } = string.Empty;
+        public string Month { get; set; } = string.Empty;
+        public string Basis { get; set; } = "fixed";
+        public decimal Rate { get; set; }
+        public int MonthDays { get; set; }
+        public int EmployedDays { get; set; }
+        public decimal PresentDays { get; set; }
+        public int PaidLeaveDays { get; set; }
+        public int OffDays { get; set; }
+        public int AbsentDays { get; set; }
+        public int UnpaidLeaveDays { get; set; }
+        public int HalfDays { get; set; }
+        public decimal PayableDays { get; set; }
+        public decimal Earned { get; set; }
+        public decimal Incentives { get; set; }
+        public decimal Net { get; set; }
+        public string? Note { get; set; }
+        public string ApprovedBy { get; set; } = string.Empty;
+        public string ApprovedByName { get; set; } = string.Empty;
+        public DateTime ApprovedAt { get; set; } = DateTime.UtcNow;
     }
 
     /// <summary>A person's monthly salary from a month onwards. A raise is a new row, so past months keep what was due then.</summary>
