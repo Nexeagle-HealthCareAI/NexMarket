@@ -740,6 +740,105 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 
+    /// <summary>A kind of the hospital's own health card: what it costs, how long it lasts, who it covers and what it gives.</summary>
+    public class HealthCardPlan
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Name { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public int ValidMonths { get; set; } = 12;
+        /// <summary>People the card covers, the holder included (1 = just the holder).</summary>
+        public int MaxMembers { get; set; } = 1;
+        public decimal OpdDiscountPct { get; set; }
+        public decimal IpdDiscountPct { get; set; }
+        public decimal LabDiscountPct { get; set; }
+        public decimal PharmacyDiscountPct { get; set; }
+        /// <summary>Free OPD visits while the card is valid (for everyone on it together).</summary>
+        public int FreeOpdVisits { get; set; }
+        /// <summary>Anything else it gives, one per line (e.g. "Free BP and sugar check every visit").</summary>
+        public string? Extras { get; set; }
+        public string Color { get; set; } = "#0a72d6";
+        public bool Active { get; set; } = true;
+        public int Order { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>A health card given to a person (and their family, if the plan covers more than one).</summary>
+    public class HealthCard
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        /// <summary>Printed on the card, e.g. HC26-00042.</summary>
+        public string Number { get; set; } = string.Empty;
+        public Guid PlanId { get; set; }
+        public string HolderName { get; set; } = string.Empty;
+        /// <summary>10-digit mobile.</summary>
+        public string? Phone { get; set; }
+        public int? Age { get; set; }
+        public string? Sex { get; set; }
+        public string? Village { get; set; }
+        public string? Block { get; set; }
+        public string? District { get; set; }
+        /// <summary>Family members on the card: [{ "name", "age", "relation" }].</summary>
+        public string? MembersJson { get; set; }
+        public DateOnly IssuedOn { get; set; }
+        public DateOnly ValidTill { get; set; }
+        /// <summary>camp | agent | desk | other</summary>
+        public string Source { get; set; } = "desk";
+        public Guid? CampId { get; set; }
+        public Guid? CampPatientId { get; set; }
+        /// <summary>The field agent who gave it (their credit).</summary>
+        public string? AgentId { get; set; }
+        public string? PartnerClientId { get; set; }
+        /// <summary>active | cancelled (expired is worked out from ValidTill).</summary>
+        public string Status { get; set; } = "active";
+        public string? CancelReason { get; set; }
+        public int Renewals { get; set; }
+        public string? Note { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public string CreatedByName { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>Money received for a card: when it was given, or renewed.</summary>
+    public class HealthCardPayment
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid CardId { get; set; }
+        /// <summary>issue | renewal</summary>
+        public string Kind { get; set; } = "issue";
+        public decimal Amount { get; set; }
+        public DateOnly On { get; set; }
+        /// <summary>cash | upi | bank | free</summary>
+        public string? Mode { get; set; }
+        public string By { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>A visit made with a card: what was billed, the discount the card gave, and whether it was a free OPD visit.</summary>
+    public class HealthCardUse
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid CardId { get; set; }
+        public DateOnly On { get; set; }
+        /// <summary>opd | ipd | procedure | lab | pharmacy | other</summary>
+        public string Kind { get; set; } = "opd";
+        /// <summary>Who on the card came (empty = the holder).</summary>
+        public string? MemberName { get; set; }
+        /// <summary>The bill before the card's discount.</summary>
+        public decimal BillAmount { get; set; }
+        public decimal Discount { get; set; }
+        public bool FreeVisit { get; set; }
+        public string? ReferralClientId { get; set; }
+        public string? Note { get; set; }
+        public string By { get; set; } = string.Empty;
+        public string ByName { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public bool Removed { get; set; }
+    }
+
     /// <summary>
     /// One line of the disease register: how many people of one age group and gender, from one place, were seen with one
     /// disease or complaint on one day (at a health camp or elsewhere). No names or phone numbers: it is for spotting patterns.

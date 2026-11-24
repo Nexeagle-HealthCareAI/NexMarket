@@ -84,6 +84,10 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<MarketingSalaryRate> MarketingSalaryRates => Set<MarketingSalaryRate>();
         public DbSet<SalaryIncentive> SalaryIncentives => Set<SalaryIncentive>();
         public DbSet<SalarySlip> SalarySlips => Set<SalarySlip>();
+        public DbSet<HealthCardPlan> HealthCardPlans => Set<HealthCardPlan>();
+        public DbSet<HealthCard> HealthCards => Set<HealthCard>();
+        public DbSet<HealthCardPayment> HealthCardPayments => Set<HealthCardPayment>();
+        public DbSet<HealthCardUse> HealthCardUses => Set<HealthCardUse>();
         public DbSet<SiteContent> SiteContents => Set<SiteContent>();
         public DbSet<SiteContentVersion> SiteContentVersions => Set<SiteContentVersion>();
         public DbSet<SitePublish> SitePublishes => Set<SitePublish>();
@@ -191,6 +195,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.ClientId).IsUnique();
                 entity.HasIndex(e => e.ContactId);
                 entity.HasIndex(e => e.CampId);
+                entity.HasIndex(e => e.HealthCardId);
             });
 
             // ─── TrajectoryPoint ─────────────────────────────────────
@@ -784,6 +789,44 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.AgentId);
                 entity.Property(e => e.Amount).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<HealthCardPlan>(entity =>
+            {
+                entity.ToTable("health_card_plans");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Price).HasPrecision(12, 2);
+                entity.Property(e => e.OpdDiscountPct).HasPrecision(5, 2);
+                entity.Property(e => e.IpdDiscountPct).HasPrecision(5, 2);
+                entity.Property(e => e.LabDiscountPct).HasPrecision(5, 2);
+                entity.Property(e => e.PharmacyDiscountPct).HasPrecision(5, 2);
+            });
+            modelBuilder.Entity<HealthCard>(entity =>
+            {
+                entity.ToTable("health_cards");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Number).IsUnique();
+                entity.HasIndex(e => e.Phone);
+                entity.HasIndex(e => e.CampId);
+                entity.HasIndex(e => e.CampPatientId);
+                entity.HasIndex(e => e.IssuedOn);
+            });
+            modelBuilder.Entity<HealthCardPayment>(entity =>
+            {
+                entity.ToTable("health_card_payments");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.CardId);
+                entity.HasIndex(e => e.On);
+                entity.Property(e => e.Amount).HasPrecision(12, 2);
+            });
+            modelBuilder.Entity<HealthCardUse>(entity =>
+            {
+                entity.ToTable("health_card_uses");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.CardId);
+                entity.HasIndex(e => e.On);
+                entity.HasIndex(e => e.ReferralClientId);
+                entity.Property(e => e.BillAmount).HasPrecision(12, 2);
+                entity.Property(e => e.Discount).HasPrecision(12, 2);
             });
             modelBuilder.Entity<SalaryIncentive>(entity =>
             {

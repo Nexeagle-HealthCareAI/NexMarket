@@ -78,6 +78,9 @@ namespace SeemanchalOutreach.Api.Services
                 };
                 db.Referrals.Add(r);
             }
+            // A health card given at the camp goes with them.
+            if (r.HealthCardId == null)
+                r.HealthCardId = await db.HealthCards.AsNoTracking().Where(c => c.CampPatientId == p.Id && c.Status != "cancelled").Select(c => (Guid?)c.Id).FirstOrDefaultAsync(ct);
             r.PatientName = p.Name;
             r.PatientAge = p.Age;
             r.PatientSex = p.Sex;

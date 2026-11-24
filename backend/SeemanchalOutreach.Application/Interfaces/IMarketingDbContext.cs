@@ -81,6 +81,10 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<MarketingSalaryRate> MarketingSalaryRates { get; }
         DbSet<SalaryIncentive> SalaryIncentives { get; }
         DbSet<SalarySlip> SalarySlips { get; }
+        DbSet<HealthCardPlan> HealthCardPlans { get; }
+        DbSet<HealthCard> HealthCards { get; }
+        DbSet<HealthCardPayment> HealthCardPayments { get; }
+        DbSet<HealthCardUse> HealthCardUses { get; }
         DbSet<SiteContent> SiteContents { get; }
         DbSet<SiteContentVersion> SiteContentVersions { get; }
         DbSet<SitePublish> SitePublishes { get; }

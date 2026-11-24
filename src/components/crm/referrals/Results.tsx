@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Download, Tent, UserRound, Users } from 'lucide-react';
+import { CreditCard, Download, Tent, UserRound, Users } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Pill, rupees, Skeleton, useLoader } from '@/components/crm/ui';
 import { Pager, usePaged } from '@/components/crm/Pager';
@@ -13,13 +13,13 @@ export interface Tally {
 type Origin = 'all' | 'camp' | 'agent' | 'partner';
 type Outcome = 'admitted' | 'opd' | 'came' | 'lost' | 'waiting';
 interface Res {
-  from: string; to: string; origin: Origin; total: Tally; count: number;
+  from: string; to: string; origin: Origin; total: Tally; withCard?: Tally; count: number;
   byOrigin: { key: Exclude<Origin, 'all'>; label: string; tally: Tally }[];
   camps: { id: string; title: string; date: string; block?: string | null; status: string; seen: number; cost: number; tally: Tally; returnOnCost: number | null }[];
   agents: { agentId: string; name: string; block?: string | null; tally: Tally }[];
   departments: { name: string; tally: Tally }[];
   months: { month: string; camp: Tally; agent: Tally; all: Tally }[];
-  patients: { clientId: string; name: string; department: string; origin: Exclude<Origin, 'all'>; from?: string | null; referredAt: string; arrivedAt?: string | null; admittedAt?: string | null; status: string; outcome: Outcome; billed: number; collected: number }[];
+  patients: { clientId: string; name: string; department: string; origin: Exclude<Origin, 'all'>; from?: string | null; referredAt: string; arrivedAt?: string | null; admittedAt?: string | null; status: string; outcome: Outcome; billed: number; collected: number; card?: string | null }[];
 }
 
 const OUTCOME: Record<Outcome, { label: string; tone: 'ok' | 'info' | 'accent' | 'neutral' | 'bad' }> = {
@@ -89,6 +89,10 @@ export function ResultsTab({ onOpen, toast }: { onOpen: (clientId: string) => vo
         <section className="crm-card"><Empty title="No patients sent in these days">Camp patients the doctor sends to the hospital, and agents’ referrals, show here once they are on the Referral desk.</Empty></section>
       ) : <>
         <Funnel t={d.total} />
+
+        {d.withCard && d.withCard.referred > 0 && (
+          <p className="hc-ref-note"><CreditCard size={15} aria-hidden /> <strong>{d.withCard.referred}</strong> had the hospital health card: {d.withCard.came} came, {d.withCard.admitted} admitted, {rupees(d.withCard.billed)} billed.</p>
+        )}
 
         {origin === 'all' && (
           <section className="pr-origins" aria-label="By where they came from">
@@ -204,7 +208,7 @@ export function ResultsTab({ onOpen, toast }: { onOpen: (clientId: string) => vo
                 <tbody>
                   {pg.rows.map((p) => (
                     <tr key={p.clientId}>
-                      <td><button type="button" className="wa-link" onClick={() => onOpen(p.clientId)}>{p.name}</button>{p.department && <span className="crm-cell-sub" style={{ display: 'block' }}>{p.department}</span>}</td>
+                      <td><button type="button" className="wa-link" onClick={() => onOpen(p.clientId)}>{p.name}</button>{p.card && <span className="hc-badge is-static">{p.card}</span>}{p.department && <span className="crm-cell-sub" style={{ display: 'block' }}>{p.department}</span>}</td>
                       <td>{SHORT[p.origin]}{p.from && <span className="crm-cell-sub" style={{ display: 'block' }}>{p.from}</span>}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{dayText(p.referredAt)}</td>
                       <td><Pill tone={OUTCOME[p.outcome].tone}>{OUTCOME[p.outcome].label}</Pill>

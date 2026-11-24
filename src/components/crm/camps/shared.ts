@@ -23,6 +23,7 @@ export interface CampPatient {
   partnerClientId?: string | null; partnerName?: string | null; slot?: string | null; status: string; arrivedAt?: string | null; complaint?: string | null;
   symptoms: string[]; conditions: string[]; bpSystolic?: number | null; bpDiastolic?: number | null; sugar?: number | null; weightKg?: number | null; spo2?: number | null;
   advice?: string | null; referToHospital: boolean; department?: string | null; urgent: boolean; consent: boolean; leadId?: string | null; leadStatus?: string | null; flags: string[];
+  healthCard?: { id: string; number: string } | null;
 }
 export interface CampOptions {
   types: { key: string; label: string }[];

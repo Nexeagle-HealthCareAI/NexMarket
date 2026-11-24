@@ -85,11 +85,14 @@ namespace SeemanchalOutreach.Api.Controllers
                 }).ToList();
 
             var campTitles = camps.ToDictionary(c => c.Id, c => c.Title);
+            var cardIds = lines.Where(l => l.R.HealthCardId != null).Select(l => l.R.HealthCardId!.Value).Distinct().ToList();
+            var cardNumbers = await _db.HealthCards.AsNoTracking().Where(c => cardIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.Number, ct);
             var agentNames = names.ToDictionary(n => n.AgentId, n => n.Name);
             return Ok(new
             {
                 from = start.ToString("yyyy-MM-dd"), to = end.ToString("yyyy-MM-dd"), origin = origin ?? "all",
                 total = PatientResults.TallyOf(lines).Shape(),
+                withCard = PatientResults.TallyOf(lines.Where(l => l.R.HealthCardId != null)).Shape(),
                 byOrigin = new[] { "camp", "agent", "partner" }.Select(o => new { key = o, label = PatientResults.OriginLabel(o), tally = PatientResults.TallyOf(lines.Where(l => l.Origin == o)).Shape() }),
                 camps = campRows.Select(x => new
                 {
@@ -107,7 +110,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     clientId = l.R.ClientId, name = l.R.PatientName, department = l.R.Department, origin = l.Origin,
                     from = l.Origin == "camp" ? (l.R.CampId != null ? campTitles.GetValueOrDefault(l.R.CampId.Value) : null) : agentNames.GetValueOrDefault(l.R.AgentId),
                     referredAt = l.R.CreatedAt, arrivedAt = l.R.ArrivedAt, admittedAt = l.R.AdmittedAt, status = l.R.Status, outcome = l.Outcome,
-                    billed = l.Billed, collected = l.Collected,
+                    billed = l.Billed, collected = l.Collected, card = l.R.HealthCardId != null ? cardNumbers.GetValueOrDefault(l.R.HealthCardId.Value) : null,
                 }),
                 count = lines.Count,
             });

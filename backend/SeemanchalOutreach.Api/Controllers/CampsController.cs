@@ -328,15 +328,19 @@ namespace SeemanchalOutreach.Api.Controllers
             var partners = pids.Count == 0 ? new Dictionary<string, string>() : await _db.Contacts.AsNoTracking().Where(c => pids.Contains(c.ClientId)).ToDictionaryAsync(c => c.ClientId, c => c.Name, ct);
             var lids = rows.Where(r => r.LeadId != null).Select(r => r.LeadId!.Value).ToList();
             var leads = lids.Count == 0 ? new Dictionary<Guid, string>() : await _db.Leads.AsNoTracking().Where(l => lids.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.Status, ct);
+            var rowIds = rows.Select(r => (Guid?)r.Id).ToList();
+            var cards = (await _db.HealthCards.AsNoTracking().Where(c => rowIds.Contains(c.CampPatientId) && c.Status != "cancelled").Select(c => new { c.CampPatientId, c.Id, c.Number }).ToListAsync(ct))
+                .GroupBy(c => c.CampPatientId!.Value).ToDictionary(g => g.Key, g => g.First());
             return Ok(new
             {
-                items = rows.Select(p => PatientRow(p, partners, leads)),
+                items = rows.Select(p => PatientRow(p, partners, leads, cards.TryGetValue(p.Id, out var hc) ? (hc.Id, hc.Number) : null)),
                 total, page, pageSize, counts, referred = referredCount,
             });
         }
 
-        private static object PatientRow(CampPatient p, Dictionary<string, string> partners, Dictionary<Guid, string> leads) => new
+        private static object PatientRow(CampPatient p, Dictionary<string, string> partners, Dictionary<Guid, string> leads, (Guid Id, string Number)? card = null) => new
         {
+            healthCard = card == null ? null : new { id = card.Value.Id, number = card.Value.Number },
             id = p.Id, token = p.Token, name = p.Name, phone = p.Phone, age = p.Age, sex = p.Sex, village = p.Village, source = p.Source,
             partnerClientId = p.PartnerClientId, partnerName = p.PartnerClientId != null ? partners.GetValueOrDefault(p.PartnerClientId) : null,
             slot = p.Slot, status = p.Status, arrivedAt = p.ArrivedAt, complaint = p.Complaint,

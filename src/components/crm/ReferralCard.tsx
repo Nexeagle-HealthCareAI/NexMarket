@@ -5,6 +5,7 @@ import { Check, Phone, Smartphone } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { useAccess } from '@/lib/crm/access';
 import { ReferralMoney } from '@/components/crm/ReferralMoney';
+import { ReferralCardBox } from '@/components/crm/cards/ReferralCardBox';
 import { contactTypeLabel, fmt, friendlyError, initials, Pill, Skeleton, STAGES, stageTone, useLoader } from '@/components/crm/ui';
 
 export interface ReferralRow {
@@ -100,6 +101,8 @@ export function ReferralCard({ r, editable, onUpdated }: { r: ReferralRow; edita
           {error && <div className="crm-error" role="alert">{error}</div>}
         </div>
       ) : <div className="crm-note">You can view referrals but not change their stage.</div>}
+
+      <ReferralCardBox clientId={r.clientId} editable={editable} patient={{ name: r.patientName, phone: r.clientPhone, age: r.patientAge, sex: r.patientSex }} />
 
       <ReferralMoney clientId={r.clientId} partnerName={r.contactName} editable={editable} isAdmin={!!access?.isAdmin} />
 

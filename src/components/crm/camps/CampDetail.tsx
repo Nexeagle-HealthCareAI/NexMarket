@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowLeft, CalendarDays, CheckCircle2, ClipboardList, MapPin, Megaphone, Pencil, Plus, QrCode, Search, Stethoscope, UserPlus, Users,
+  ArrowLeft, CalendarDays, CheckCircle2, ClipboardList, MapPin, Megaphone, Pencil, Plus, QrCode, Search, Stethoscope, UserPlus, Users, CreditCard,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Pager } from '@/components/crm/Pager';
@@ -12,6 +12,8 @@ import { QrPosterModal } from '@/components/crm/QrPoster';
 import { Empty, ErrorBox, friendlyError, Pill, rupees, Skeleton } from '@/components/crm/ui';
 import { CampForm } from './CampForm';
 import { PatientForm } from './PatientForm';
+import { IssueCard } from '@/components/crm/cards/IssueCard';
+import { CardView } from '@/components/crm/cards/CardView';
 import {
   CAMP_STATUS, campDate, daysTo, PATIENT_STATUS, pct, PHASES, SOURCE_LABEL,
   type CampDetail as Detail, type CampOptions, type CampPatient, type ChecklistItem, type CountRow,
@@ -152,6 +154,8 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
   const [data, setData] = useState<PatientsRes | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<{ mode: 'book' | 'register' | 'screen'; p?: CampPatient } | null>(null);
+  const [giveCard, setGiveCard] = useState<CampPatient | null>(null);
+  const [openCard, setOpenCard] = useState<string | null>(null);
   const [depts, setDepts] = useState<string[]>([]);
   useEffect(() => { const t = setTimeout(() => setQd(q.trim()), 300); return () => clearTimeout(t); }, [q]);
   useEffect(() => { crm.get<{ name: string }[]>('/api/v1/departments').then((x) => setDepts(x.map((y) => y.name))).catch(() => undefined); }, []);
@@ -201,6 +205,7 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
                     <td><span className="rt-num">{p.token}</span></td>
                     <td>
                       <strong>{p.name}</strong>
+                      {p.healthCard && <button type="button" className="hc-badge" onClick={() => setOpenCard(p.healthCard!.id)} title="Hospital health card">{p.healthCard.number}</button>}
                       <span className="crm-cell-sub wl-sub">{[p.age != null ? `${p.age} y` : null, p.sex === 'F' ? 'F' : p.sex === 'M' ? 'M' : null, p.village, p.phone ? `+${p.phone.slice(0, 2)} ${p.phone.slice(2)}` : null].filter(Boolean).join(' · ')}</span>
                       <span className="crm-cell-sub wl-sub">{SOURCE_LABEL[p.source] ?? p.source}{p.partnerName ? ` · via ${p.partnerName}` : ''}{p.slot ? ` · ${p.slot}` : ''}</span>
                     </td>
@@ -221,6 +226,7 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
                       {canEdit && <>
                         <button type="button" className="crm-btn is-sm" onClick={() => setForm({ mode: 'screen', p })}><Stethoscope size={14} aria-hidden /> {p.status === 'attended' ? 'Screening' : 'Screen'}</button>
                         {p.status === 'booked' && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => void mark(p, 'attended')}><CheckCircle2 size={14} aria-hidden /> Arrived</button>}
+                        {p.status === 'attended' && !p.healthCard && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setGiveCard(p)}><CreditCard size={14} aria-hidden /> Health card</button>}
                         {p.status === 'booked' && camp.camp.status === 'done' && <button type="button" className="nt-link is-muted" onClick={() => void mark(p, 'no_show')}>Didn&apos;t come</button>}
                       </>}
                     </div></td>
@@ -232,6 +238,9 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
         </div>
       )}
       {data && <Pager page={page} pages={Math.max(1, Math.ceil(data.total / size))} total={data.total} size={size} onPage={setPage} onSize={(n) => { setSize(n); setPage(1); }} noun="people" />}
+      {giveCard && <IssueCard prefill={{ holderName: giveCard.name, phone: giveCard.phone, age: giveCard.age, sex: giveCard.sex, village: giveCard.village, campPatientId: giveCard.id, campId: camp.camp.id, campTitle: camp.camp.title, source: 'camp' }}
+        onClose={() => setGiveCard(null)} onIssued={(c) => { setGiveCard(null); toast(`Card ${c.number} given to ${c.holderName}.`); void load(); }} />}
+      {openCard && <CardView id={openCard} editable={canEdit} onClose={() => setOpenCard(null)} onChanged={() => void load()} toast={toast} />}
       {form && <PatientForm campId={camp.camp.id} patient={form.p} mode={form.mode} options={options} departments={depts.length ? depts : camp.camp.departments}
         onClose={() => setForm(null)} onSaved={(m) => { setForm(null); toast(m); void load(); onChanged(); }} />}
     </div>
