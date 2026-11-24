@@ -4,12 +4,13 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
-  AlertTriangle, ArrowRight, BellOff, Columns3, Copy, Inbox, List, Phone, RefreshCw, Search, Smartphone, Wifi, WifiOff,
+  AlertTriangle, ArrowRight, BellOff, Columns3, Copy, Inbox, List, Phone, RefreshCw, Search, Smartphone, TrendingUp, Wifi, WifiOff,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canEdit, canView, useAccess } from '@/lib/crm/access';
 import { timeAgo, useLiveEvents, useNow } from '@/lib/crm/live';
 import { ReferralCard, sourceText, type ReferralRow } from '@/components/crm/ReferralCard';
+import { ResultsTab } from '@/components/crm/referrals/Results';
 import { PageTabs, usePageTab, type PageTab } from '@/components/crm/PageTabs';
 import { Pager, usePaged } from '@/components/crm/Pager';
 import {
@@ -18,7 +19,7 @@ import {
 
 // ─── Types and helpers ───────────────────────────────────────────────────
 
-type BoardTab = 'desk' | 'pipeline' | 'list' | 'app';
+type BoardTab = 'desk' | 'pipeline' | 'list' | 'results' | 'app';
 interface Summary { expected: number; late: number; referredToday: number; arrivedToday: number; admittedToday: number; inHospital: number; admittedMonth: number; referredMonth: number }
 interface AppAgent {
   agentId: string; name: string; block?: string | null; state: 'ok' | 'quiet' | 'offline' | 'never'; lastOnlineAt?: string | null; push: boolean; devices: number;
@@ -70,7 +71,7 @@ function ReferralsBoard() {
   const router = useRouter();
   const editable = canEdit(access, 'desk') || canEdit(access, 'pipeline');
   const deskFirst = !!access && (access.role === 'HospitalRep' || !canView(access, 'pipeline'));
-  const keys: BoardTab[] = ['desk', 'pipeline', 'list', 'app'];
+  const keys: BoardTab[] = ['desk', 'pipeline', 'list', 'results', 'app'];
   const [tab, setTab] = usePageTab(keys, deskFirst ? 'desk' : 'pipeline');
   const [q, setQ] = useState('');
   const [days, setDays] = useState(30);
@@ -139,13 +140,14 @@ function ReferralsBoard() {
     { key: 'desk', label: 'Front desk', icon: Inbox, count: s?.expected ?? null },
     { key: 'pipeline', label: 'Pipeline', icon: Columns3 },
     { key: 'list', label: 'List', icon: List },
+    { key: 'results', label: 'Patients & earnings', icon: TrendingUp },
     { key: 'app', label: 'App link', icon: Smartphone, count: al ? al.offline || null : null, hot: true },
   ];
 
   return (
     <main className="crm-page" style={tab === 'pipeline' ? { maxWidth: 'none' } : undefined}>
       <PageHead title="Referrals"
-        sub="The front desk and the pipeline in one place. Every stage you set reaches the agent's app."
+        sub="Patients from field agents, partners and health camps: the front desk, the pipeline, and what they brought in. Every stage you set reaches the agent's app."
         badge={<span className={`crm-live${live === 'live' ? '' : ' is-polling'}`}><span className="crm-live-dot" aria-hidden="true" />{live === 'live' ? 'LIVE' : 'AUTO-REFRESH'}</span>}>
         <label className="crm-search rf-search">
           <Search size={16} color="#5a6478" aria-hidden />
@@ -172,6 +174,7 @@ function ReferralsBoard() {
           editable={editable} onOpen={setOpen} onMove={move} searching={q.trim().length >= 2} />
       )}
       {tab === 'app' && <AppLinkTab data={appLink.data} error={appLink.error} reload={appLink.reload} />}
+      {tab === 'results' && <ResultsTab toast={showToast} onOpen={(id) => { crm.get<ReferralRow>(`/api/v1/referrals/${encodeURIComponent(id)}`).then(setOpen).catch(() => showToast('Could not open that patient.')); }} />}
 
       {open && (
         <Modal title="Referral" onClose={closeOpen} wide>

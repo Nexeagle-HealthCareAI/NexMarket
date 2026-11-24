@@ -136,10 +136,20 @@ namespace SeemanchalOutreach.Api.Controllers
 
         public class Stat { public int Booked; public int Attended; public int Referred; public int Arrived; }
 
+        /// <summary>Camp patients the Referral desk has marked as come (arrived, OPD or admitted).</summary>
+        private async Task<HashSet<Guid>> CameAsync(List<Guid> campIds, CancellationToken ct)
+        {
+            var refs = await _db.Referrals.AsNoTracking().Where(r => r.CampId != null && campIds.Contains(r.CampId.Value)
+                    && (r.ArrivedAt != null || PatientResults.CameStages.Contains(r.Status)))
+                .Select(r => r.ClientId).ToListAsync(ct);
+            return refs.Select(id => Guid.TryParse(id.Replace("camp-", ""), out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty).ToHashSet();
+        }
+
         private async Task<Dictionary<Guid, Stat>> StatsAsync(List<Guid> ids, CancellationToken ct)
         {
             var pts = await _db.CampPatients.AsNoTracking().Where(p => ids.Contains(p.CampId) && p.Status != "cancelled")
-                .Select(p => new { p.CampId, p.Status, p.ReferToHospital, p.LeadId }).ToListAsync(ct);
+                .Select(p => new { p.Id, p.CampId, p.Status, p.ReferToHospital, p.LeadId }).ToListAsync(ct);
+            var came = await CameAsync(ids, ct);
             var leadIds = pts.Where(p => p.LeadId != null).Select(p => p.LeadId!.Value).Distinct().ToList();
             var arrived = leadIds.Count == 0 ? new HashSet<Guid>() : (await _db.Leads.AsNoTracking().Where(l => leadIds.Contains(l.Id) && (l.Status == "arrived" || l.Status == "admitted")).Select(l => l.Id).ToListAsync(ct)).ToHashSet();
             return pts.GroupBy(p => p.CampId).ToDictionary(g => g.Key, g => new Stat
@@ -147,7 +157,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 Booked = g.Count(),
                 Attended = g.Count(p => p.Status == "attended"),
                 Referred = g.Count(p => p.ReferToHospital),
-                Arrived = g.Count(p => p.ReferToHospital && p.LeadId != null && arrived.Contains(p.LeadId.Value)),
+                Arrived = g.Count(p => p.ReferToHospital && (came.Contains(p.Id) || (p.LeadId != null && arrived.Contains(p.LeadId.Value)))),
             });
         }
 
@@ -392,6 +402,7 @@ namespace SeemanchalOutreach.Api.Controllers
             p.Token = await CampBook.NextTokenAsync(_db, id, ct);
             if (dto.Status == "attended") p.ArrivedAt = DateTime.UtcNow;
             _db.CampPatients.Add(p);
+            if (p.ReferToHospital) await PatientResults.EnsureCampReferralAsync(_db, p, ct);
             await _db.SaveChangesAsync(ct);
             if (p.Status == "attended") { await DiseaseRegister.SyncCampAsync(_db, id, ct); await _db.SaveChangesAsync(ct); }
             return Ok(new { id = p.Id, token = p.Token, existed = false });
@@ -406,6 +417,8 @@ namespace SeemanchalOutreach.Api.Controllers
             if (err != null) return BadRequest(new { message = err });
             // Referred to the hospital: make sure the desk follows up.
             if (p.ReferToHospital && p.LeadId == null && p.Phone != null && p.Consent) await FollowUpAsync(p, ct);
+            // The Referral desk follows the patient from here: arrived, OPD or admitted, and the bills.
+            await PatientResults.EnsureCampReferralAsync(_db, p, ct);
             await _db.SaveChangesAsync(ct);
             await DiseaseRegister.SyncCampAsync(_db, p.CampId, ct);
             await _db.SaveChangesAsync(ct);
@@ -458,7 +471,8 @@ namespace SeemanchalOutreach.Api.Controllers
             var camps = await _db.HealthCamps.AsNoTracking().Where(c => c.Date >= from && c.Status != "cancelled").ToListAsync(ct);
             var ids = camps.Select(c => c.Id).ToList();
             var pts = await _db.CampPatients.AsNoTracking().Where(p => ids.Contains(p.CampId) && p.Status == "attended")
-                .Select(p => new { p.CampId, p.Symptoms, p.Conditions, p.Age, p.Sex, p.ReferToHospital, p.LeadId, p.Source }).ToListAsync(ct);
+                .Select(p => new { p.Id, p.CampId, p.Symptoms, p.Conditions, p.Age, p.Sex, p.ReferToHospital, p.LeadId, p.Source }).ToListAsync(ct);
+            var came = await CameAsync(ids, ct);
             var leadIds = pts.Where(p => p.LeadId != null).Select(p => p.LeadId!.Value).Distinct().ToList();
             var arrived = leadIds.Count == 0 ? new HashSet<Guid>() : (await _db.Leads.AsNoTracking().Where(l => leadIds.Contains(l.Id) && (l.Status == "arrived" || l.Status == "admitted")).Select(l => l.Id).ToListAsync(ct)).ToHashSet();
             var byCamp = camps.ToDictionary(c => c.Id);
@@ -477,7 +491,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 camps = camps.Count,
                 attended = pts.Count,
                 referred = pts.Count(p => p.ReferToHospital),
-                arrived = pts.Count(p => p.ReferToHospital && p.LeadId != null && arrived.Contains(p.LeadId.Value)),
+                arrived = pts.Count(p => p.ReferToHospital && (came.Contains(p.Id) || (p.LeadId != null && arrived.Contains(p.LeadId.Value)))),
                 prebookedShare = pts.Count > 0 ? Math.Round(100.0 * pts.Count(p => p.Source != "walk_in") / pts.Count) : 0,
                 spent = camps.Sum(c => c.Spent),
                 symptoms = pts.SelectMany(p => CampBook.Codes(p.Symptoms)).GroupBy(x => x).Select(g => new { code = g.Key, label = CampBook.SymptomLabel(g.Key), n = g.Count() }).OrderByDescending(x => x.n).Take(15),

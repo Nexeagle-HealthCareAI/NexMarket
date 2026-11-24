@@ -4080,3 +4080,76 @@ strong.is-ok { color: var(--ok-ink); }
   .py-incs li { grid-template-columns: minmax(0, 1fr) auto; } .py-inc-kind { grid-column: 1 / -1; justify-self: start; }
 }
 .crm-modal > .py-calc, .crm-modal > .py-incs, .crm-modal > .py-tiles, .crm-modal > .py-terms, .crm-modal > .py-inc-form, .crm-modal > .at-cal, .crm-modal > .at-hist, .crm-modal > .at-stats, .crm-modal > .at-seg, .crm-modal > .at-hols { flex-shrink: 0; }
+
+/* ── Referrals: patients & earnings ──────────────────────────── */
+.pr-wrap { display: flex; flex-direction: column; gap: 16px; }
+.pr-tools { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.pr-dates { display: inline-flex; align-items: center; gap: 6px; }
+.pr-dates .crm-input { width: auto; height: 36px; }
+.pr-funnel { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; }
+.pr-f-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border: 1px solid var(--border); border-radius: 16px; background: #fff; overflow: hidden; }
+.pr-f { display: flex; flex-direction: column; gap: 2px; padding: 16px; position: relative; border-left: 1px solid var(--line); min-width: 0; }
+.pr-f:first-child { border-left: 0; }
+.pr-f span, .pr-f-money span { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.pr-f strong { font-size: 30px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.pr-f em, .pr-f-money em { font-style: normal; font-size: 12px; color: var(--text-2); line-height: 1.35; }
+.pr-f.is-came strong { color: var(--info-ink); }
+.pr-f.is-opd strong { color: #1f6fbf; }
+.pr-f.is-adm { background: var(--ok-soft); } .pr-f.is-adm strong { color: var(--ok-ink); }
+.pr-f-money { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-radius: 16px; background: var(--ink); color: #fff; overflow: hidden; }
+.pr-f-money > div { display: flex; flex-direction: column; gap: 2px; padding: 16px; border-left: 1px solid rgba(255,255,255,.1); min-width: 0; }
+.pr-f-money > div:first-child { border-left: 0; }
+.pr-f-money span, .pr-f-money em { color: #c9d1e3; }
+.pr-f-money strong { font-size: 20px; font-variant-numeric: tabular-nums; color: #fff; white-space: nowrap; }
+.pr-f-money strong.is-ok { color: var(--brand-mint); }
+.pr-origins { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.pr-origin-card { display: flex; flex-direction: column; gap: 10px; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.pr-origin-card:hover { border-color: #c9cedb; }
+.pr-oc-head { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; }
+.pr-origin-card.is-camp .pr-oc-head svg { color: #0e7490; }
+.pr-origin-card.is-agent .pr-oc-head svg { color: var(--accent); }
+.pr-oc-bar { display: flex; height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; gap: 2px; }
+.pr-oc-bar i { display: block; height: 100%; }
+.pr-oc-bar .is-adm { background: var(--ok); } .pr-oc-bar .is-opd { background: #7cb6ea; }
+.pr-oc-nums { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); }
+.pr-oc-nums b { color: var(--text); font-size: 15px; margin-right: 4px; font-variant-numeric: tabular-nums; }
+.pr-oc-money { font-size: 13px; color: var(--text-2); }
+.pr-oc-money strong { color: var(--text); font-size: 16px; }
+.pr-sec { display: flex; flex-direction: column; gap: 10px; }
+.pr-sec .crm-h2 { display: inline-flex; align-items: center; gap: 8px; }
+.pr-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pr-table th.num { text-align: right; }
+.pr-table .is-ok { color: var(--ok-ink); font-weight: 700; }
+.pr-pts-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.pr-depts { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pr-depts li { display: grid; grid-template-columns: minmax(120px, 190px) minmax(60px, 1fr) minmax(150px, auto) 100px; gap: 12px; align-items: center; font-size: 13.5px; }
+.pr-dep-name { font-weight: 600; }
+.pr-dep-bar { position: relative; height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.pr-dep-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: #a9cdf0; border-radius: 999px; }
+.pr-dep-bar i.is-adm { background: var(--ok); }
+.pr-dep-nums { color: var(--text-2); font-size: 12.5px; }
+.pr-dep-money { text-align: right; font-variant-numeric: tabular-nums; }
+.pr-legend { display: inline-flex; gap: 14px; font-size: 12.5px; color: var(--text-2); }
+.pr-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.pr-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.pr-legend .is-camp, .pr-m-bars .is-camp { background: #0e7490; }
+.pr-legend .is-agent, .pr-m-bars .is-agent { background: var(--accent); }
+.pr-months { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(84px, 1fr); gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.pr-month { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; color: var(--text-2); }
+.pr-m-bars { display: flex; align-items: flex-end; justify-content: center; gap: 4px; height: 120px; width: 100%; border-bottom: 1px solid var(--border); }
+.pr-m-bars span { width: 18px; border-radius: 4px 4px 0 0; }
+.pr-month strong { color: var(--text); font-size: 13px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.pr-month em { font-style: normal; font-size: 11.5px; }
+@media (max-width: 1199px) { .pr-funnel { grid-template-columns: 1fr; } }
+@media (max-width: 767px) {
+  .pr-f-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pr-f:nth-child(3) { border-left: 0; }
+  .pr-f:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .pr-f strong { font-size: 24px; }
+  .pr-f-money { grid-template-columns: 1fr; }
+  .pr-f-money > div { border-left: 0; border-top: 1px solid rgba(255,255,255,.1); }
+  .pr-f-money > div:first-child { border-top: 0; }
+  .pr-depts li { grid-template-columns: minmax(0, 1fr) auto; }
+  .pr-dep-bar { grid-column: 1 / -1; grid-row: 2; }
+  .pr-dep-nums { grid-column: 1 / -1; }
+}

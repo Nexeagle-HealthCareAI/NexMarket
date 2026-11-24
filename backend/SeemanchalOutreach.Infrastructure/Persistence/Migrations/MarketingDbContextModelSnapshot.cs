@@ -3420,6 +3420,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("ArrivedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CampId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ClientId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -3475,6 +3478,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ClientId")
                         .IsUnique();
+
+                    b.HasIndex("CampId");
 
                     b.HasIndex("ContactId");
 

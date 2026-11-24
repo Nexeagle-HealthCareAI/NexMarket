@@ -352,11 +352,25 @@ namespace SeemanchalOutreach.Api.Controllers
         /// </summary>
         private async Task SyncReferralAsync(Lead l, string status, string me, DateTime now, CancellationToken ct)
         {
+            string? stage = status switch { "appointment" => "pending", "arrived" => "arrived", "admitted" => "admitted", "lost" => "lost", _ => null };
+            if (stage == null) return;
+            // A patient a health camp sent: their place on the Referral desk is the camp's referral.
+            var campIds = await _db.CampPatients.AsNoTracking().Where(p => p.LeadId == l.Id && p.ReferToHospital).Select(p => p.Id).ToListAsync(ct);
+            if (campIds.Count > 0)
+            {
+                var ids = campIds.Select(PatientResults.CampClientId).ToList();
+                var camp = await _db.Referrals.Where(x => ids.Contains(x.ClientId)).OrderByDescending(x => x.CreatedAt).FirstOrDefaultAsync(ct);
+                if (camp == null || camp.Status == stage || (stage == "pending" && camp.Status != "pending")) return;
+                camp.Status = stage;
+                if (stage is "arrived" or "admitted" && camp.ArrivedAt == null) camp.ArrivedAt = now;
+                if (stage == "admitted" && camp.AdmittedAt == null) camp.AdmittedAt = now;
+                camp.UpdatedAt = now;
+                _db.ReferralStatusEntries.Add(new ReferralStatusEntry { ReferralClientId = camp.ClientId, Status = stage, ChangedBy = me, ChangedAt = now, Note = "From the leads inbox" });
+                return;
+            }
             if (l.PartnerClientId == null) return;
             var refId = "lead-" + l.Id;
             var r = await _db.Referrals.FirstOrDefaultAsync(x => x.ClientId == refId, ct);
-            string? stage = status switch { "appointment" => "pending", "arrived" => "arrived", "admitted" => "admitted", "lost" => "lost", _ => null };
-            if (stage == null) return;
             if (r == null)
             {
                 if (stage == "lost") return;

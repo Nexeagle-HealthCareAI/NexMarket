@@ -190,6 +190,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.ClientId).IsUnique();
                 entity.HasIndex(e => e.ContactId);
+                entity.HasIndex(e => e.CampId);
             });
 
             // ─── TrajectoryPoint ─────────────────────────────────────

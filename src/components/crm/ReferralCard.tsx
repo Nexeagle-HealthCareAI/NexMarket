@@ -12,12 +12,14 @@ export interface ReferralRow {
   agentId: string; agentName: string; patientName: string; patientAge?: number | null; patientSex?: string | null; urgent: boolean;
   department: string; notes?: string | null; clientPhone?: string | null; referralDate?: string | null; status: string; stageLabel: string;
   arrivedAt?: string | null; admittedAt?: string | null; createdAt: string;
-  updatedAt?: string | null; source?: 'app' | 'leads' | 'crm'; syncDelayMinutes?: number | null; serverReceivedAt?: string | null;
+  updatedAt?: string | null; source?: 'app' | 'leads' | 'crm' | 'camp'; syncDelayMinutes?: number | null; serverReceivedAt?: string | null;
+  campId?: string | null; campTitle?: string | null; campDate?: string | null;
   money?: { billed: number; collected: number; payoutsPaid: number; payoutsOpen: number; payouts: number; incentivesPaid: number; incentivesOpen: number } | null;
 }
 
 /** "From the agent's app", and whether it waited on the phone (no signal) before reaching the hospital. */
 export function sourceText(r: ReferralRow): string {
+  if (r.source === 'camp') return `Sent by the doctor at the health camp${r.campTitle ? ` “${r.campTitle}”` : ''}${r.campDate ? ` (${new Date(`${r.campDate}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})` : ''}`;
   if (r.source === 'leads') return 'From the Leads inbox (QR code / WhatsApp)';
   if (r.source === 'crm') return 'Added in the CRM';
   const d = r.syncDelayMinutes ?? 0;
@@ -63,7 +65,7 @@ export function ReferralCard({ r, editable, onUpdated }: { r: ReferralRow; edita
       <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
         <Info label="Department" value={r.department || '—'} />
         <Info label="Referred by" value={`${r.contactName}${r.contactRole ? ` (${contactTypeLabel(r.contactRole)})` : ''}`} />
-        <Info label="Field agent" value={r.agentName} />
+        <Info label={r.source === 'camp' ? 'Came through' : 'Field agent'} value={r.agentName} />
         <Info label="Referred on" value={fmt.dateTime(r.createdAt)} />
         {r.arrivedAt && <Info label="Arrived" value={fmt.dateTime(r.arrivedAt)} />}
         {r.admittedAt && <Info label="Admitted" value={fmt.dateTime(r.admittedAt)} />}
@@ -77,7 +79,7 @@ export function ReferralCard({ r, editable, onUpdated }: { r: ReferralRow; edita
 
       {editable ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>Update stage · the agent gets a notification and sees it in their app</span>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>{r.source === 'camp' ? 'Update stage · the camp’s lead in the Leads inbox follows' : 'Update stage · the agent gets a notification and sees it in their app'}</span>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
             {STAGES.filter((s) => s.key !== 'pending').map((s) => {
               const current = r.status === s.key || (r.status === 'converted' && s.key === 'admitted');

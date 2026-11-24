@@ -60,6 +60,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/admin/whatsapp', label: 'WhatsApp', page: 'wa', icon: MessageCircle, match: ['/admin/broadcasts', '/admin/whatsapp-setup'] },
       { href: '/admin/social', label: 'Facebook & Instagram', page: 'social', icon: AtSign },
       { href: '/admin/google', label: 'Google', page: 'social', icon: Search },
+      { href: '/admin/website', label: 'Website', page: 'website', icon: Globe },
     ],
   },
   {
@@ -82,7 +83,6 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/payments', label: 'Payments', page: 'payments', icon: Wallet },
       { href: '/admin/spend', label: 'Marketing spend', page: 'payments', icon: IndianRupee },
-      { href: '/admin/website', label: 'Website', page: 'website', icon: Globe },
       { href: '/admin/reports', label: 'Analytics', page: 'analytics', icon: BarChart3 },
       { href: '/admin/surveys', label: 'Surveys', page: 'analytics', icon: ListChecks },
     ],

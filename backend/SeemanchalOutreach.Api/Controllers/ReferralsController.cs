@@ -234,6 +234,21 @@ namespace SeemanchalOutreach.Api.Controllers
                 ChangedAt = now,
             });
 
+            // A camp patient's lead in the Leads inbox follows the desk.
+            if (referral.DeviceId == PatientResults.CampDevice && Guid.TryParse(referral.ClientId.Replace("camp-", ""), out var campPatientId))
+            {
+                var leadId = await _context.CampPatients.AsNoTracking().Where(p => p.Id == campPatientId).Select(p => p.LeadId).FirstOrDefaultAsync();
+                var lead = leadId == null ? null : await _context.Leads.FirstOrDefaultAsync(l => l.Id == leadId);
+                var leadStatus = status switch { "arrived" or "opd" => "arrived", "admitted" or "procedure" or "discharged" => "admitted", "lost" => "lost", _ => null };
+                if (lead != null && leadStatus != null && lead.Status != leadStatus && !(leadStatus == "arrived" && lead.Status == "admitted"))
+                {
+                    _context.LeadActivities.Add(new LeadActivity { LeadId = lead.Id, Kind = "status", By = User.AgentIdOf(), CreatedAt = now, Text = $"{LeadInbox.StatusLabel(lead.Status)} → {LeadInbox.StatusLabel(leadStatus)} (Referral desk)" });
+                    lead.Status = leadStatus;
+                    lead.ClosedAt = leadStatus is "admitted" or "lost" ? now : null;
+                    lead.LastActivityAt = now;
+                }
+            }
+
             // The agent's incentive under the hospital's rule (still needs an admin's approval).
             await PatientMoney.ApplyRuleAsync(_context, _settings, referral,
                 !hadArrived && referral.ArrivedAt != null, !hadAdmitted && referral.AdmittedAt != null, User.AgentIdOf(), HttpContext.RequestAborted);
@@ -463,21 +478,26 @@ namespace SeemanchalOutreach.Api.Controllers
                 .ToDictionaryAsync(p => p.PanchayatId, p => p.Block);
             var contactMap = contacts.ToDictionary(c => c.ClientId);
             var money = await PatientMoney.TotalsAsync(_context, referrals.Select(r => r.ClientId).ToList(), HttpContext.RequestAborted);
+            var campIds = referrals.Where(r => r.CampId != null).Select(r => r.CampId!.Value).Distinct().ToList();
+            var camps = campIds.Count == 0 ? new Dictionary<Guid, (string Title, DateOnly Date, string? Block)>()
+                : (await _context.HealthCamps.AsNoTracking().Where(c => campIds.Contains(c.Id)).Select(c => new { c.Id, c.Title, c.Date, c.Block }).ToListAsync())
+                    .ToDictionary(c => c.Id, c => (c.Title, c.Date, c.Block));
 
             return referrals.Select(r =>
             {
                 contactMap.TryGetValue(r.ContactId, out var c);
                 money.TryGetValue(r.ClientId, out var m);
+                (string Title, DateOnly Date, string? Block)? camp = r.CampId != null && camps.TryGetValue(r.CampId.Value, out var cc) ? cc : null;
                 return (object)new
                 {
                     r.Id,
                     r.ClientId,
                     r.ContactId,
-                    ContactName = c?.Name ?? "Unknown contact",
+                    ContactName = c?.Name ?? (camp != null ? camp.Value.Title : "Unknown contact"),
                     ContactRole = c?.Role,
-                    Block = c != null ? blocks.GetValueOrDefault(c.PanchayatId) : null,
+                    Block = c != null ? blocks.GetValueOrDefault(c.PanchayatId) : camp?.Block,
                     r.AgentId,
-                    AgentName = agents.GetValueOrDefault(r.AgentId, "Unknown agent"),
+                    AgentName = string.IsNullOrEmpty(r.AgentId) && camp != null ? "Health camp" : agents.GetValueOrDefault(r.AgentId, "Unknown agent"),
                     r.PatientName,
                     r.PatientAge,
                     r.PatientSex,
@@ -493,8 +513,11 @@ namespace SeemanchalOutreach.Api.Controllers
                     r.CreatedAt,
                     r.UpdatedAt,
                     // Where it came from, and how long it sat on the phone before it reached the server (no signal).
-                    Source = r.DeviceId == "crm-leads" ? "leads" : r.DeviceId == "crm" ? "crm" : "app",
-                    SyncDelayMinutes = r.DeviceId == "crm-leads" || r.DeviceId == "crm" ? (int?)null : Math.Max(0, (int)(r.ServerReceivedAt - r.CreatedAt).TotalMinutes),
+                    Source = r.DeviceId == PatientResults.CampDevice ? "camp" : r.DeviceId == "crm-leads" ? "leads" : r.DeviceId == "crm" ? "crm" : "app",
+                    CampId = r.CampId,
+                    CampTitle = camp?.Title,
+                    CampDate = camp?.Date.ToString("yyyy-MM-dd"),
+                    SyncDelayMinutes = r.DeviceId == "crm-leads" || r.DeviceId == "crm" || r.DeviceId == PatientResults.CampDevice ? (int?)null : Math.Max(0, (int)(r.ServerReceivedAt - r.CreatedAt).TotalMinutes),
                     r.ServerReceivedAt,
                     Money = m == null ? null : new
                     {

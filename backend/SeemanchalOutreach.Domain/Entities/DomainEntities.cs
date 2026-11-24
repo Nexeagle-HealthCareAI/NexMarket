@@ -257,6 +257,8 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
         public DateTime ServerReceivedAt { get; set; } = DateTime.UtcNow;
+        /// <summary>The health camp the patient was referred from (DeviceId "crm-camp", ClientId "camp-{camp patient id}").</summary>
+        public Guid? CampId { get; set; }
     }
 
     public class TrajectoryPoint
