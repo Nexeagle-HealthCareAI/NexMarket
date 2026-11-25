@@ -1,7 +1,7 @@
 import { AppState, type NativeEventSubscription } from 'react-native';
 import * as Network from 'expo-network';
 import { ApiError, get, OfflineError, post } from './api';
-import { db, kvGet, kvJson, kvSet, notifyChange, q, type OutboxRow } from './db';
+import { db, kvGet, kvJson, kvSet, notifyChange, q, type OutboxRow, type Reading } from './db';
 import { SYNC_INTERVAL_MS } from './config';
 import { errorMessage, nowIso, uuid } from './util';
 import { me } from './repo';
@@ -200,6 +200,7 @@ interface PullResponse {
   contactNotes: { clientId: string; contactId: string; text: string; source: string; createdAt: string; lat?: number | null; lng?: number | null; accuracyM?: number | null; agentId?: string | null; editedAt?: string | null }[];
   referrals: { clientId: string; contactId: string; status: string; notes: string | null; createdAt: string; patientName?: string; department?: string; urgent?: boolean; updatedAt?: string; arrivedAt?: string | null; admittedAt?: string | null }[];
   surveys: { clientId: string; contactId: string; panchayatId: string; answersJson: string; createdAt: string }[];
+  readings?: (Omit<Reading, 'note'> & { note?: string | null })[];
 }
 
 function pending(): Set<string> {
@@ -267,6 +268,8 @@ function applyPull(r: PullResponse) {
     }
     for (const x of r.referrals ?? []) {
       if (skip.has(x.clientId)) continue;
+      const extra = x as typeof x & { kind?: string | null; panchayatId?: string | null; block?: string | null; district?: string | null;
+        complaint?: string | null; complaintAt?: string | null; patientAge?: number | null; patientSex?: string | null; clientPhone?: string | null; referralDate?: string | null };
       // The hospital's stage, its notes ("admitted to ward 3…") and when the patient arrived / was admitted.
       // Name and department stay as the agent typed them.
       d.runSync(
@@ -281,6 +284,24 @@ function applyPull(r: PullResponse) {
            updatedAt = excluded.updatedAt`,
         x.clientId, x.contactId, x.patientName ?? null, x.department ?? null, x.urgent ? 1 : 0, x.notes, x.status === 'converted' ? 'admitted' : x.status,
         x.createdAt, x.updatedAt ?? nowIso(), x.arrivedAt ?? null, x.admittedAt ?? null);
+      // An appointment: who, where, and the complaint (unless a newer one written here is still waiting to go).
+      if (extra.kind === 'appointment') {
+        d.runSync(`UPDATE referrals SET kind = 'appointment', panchayatId = COALESCE(panchayatId, ?), block = COALESCE(block, ?), district = COALESCE(district, ?),
+            patientAge = COALESCE(patientAge, ?), patientSex = COALESCE(patientSex, ?), clientPhone = COALESCE(clientPhone, ?), visitDate = COALESCE(visitDate, ?)
+          WHERE clientId = ?`,
+          extra.panchayatId ?? null, extra.block ?? null, extra.district ?? null, extra.patientAge ?? null, extra.patientSex ?? null, extra.clientPhone ?? null,
+          extra.referralDate ?? null, x.clientId);
+      }
+      if (extra.complaintAt && !skip.has(`complaint-${x.clientId}`)) {
+        d.runSync('UPDATE referrals SET complaint = ?, complaintAt = ? WHERE clientId = ?', extra.complaint ?? null, extra.complaintAt, x.clientId);
+      }
+    }
+    for (const g of r.readings ?? []) {
+      d.runSync(
+        `INSERT OR IGNORE INTO readings (clientId, referralClientId, takenAt, bpSystolic, bpDiastolic, pulse, tempF, spo2, respRate, weightKg, heightCm, sugar, sugarKind, hba1c, note)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        g.clientId, g.referralClientId, g.takenAt, g.bpSystolic ?? null, g.bpDiastolic ?? null, g.pulse ?? null, g.tempF ?? null, g.spo2 ?? null, g.respRate ?? null,
+        g.weightKg ?? null, g.heightCm ?? null, g.sugar ?? null, g.sugarKind ?? null, g.hba1c ?? null, g.note ?? null);
     }
     for (const s of r.surveys ?? []) {
       d.runSync('INSERT OR IGNORE INTO surveys (clientId, contactId, panchayatId, answersJson, createdAt) VALUES (?, ?, ?, ?, ?)',

@@ -15,6 +15,7 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<OutreachContact> Contacts { get; }
         DbSet<ContactHistoryEntry> ContactHistory { get; }
         DbSet<PatientReferral> Referrals { get; }
+        DbSet<PatientReading> PatientReadings { get; }
         DbSet<TrajectoryPoint> TrajectoryPoints { get; }
         DbSet<SurveyResponse> SurveyResponses { get; }
         DbSet<BlockAssignment> BlockAssignments { get; }

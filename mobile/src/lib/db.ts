@@ -16,7 +16,7 @@ export function db(): SQLite.SQLiteDatabase {
   return _db;
 }
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 function migrate(d: SQLite.SQLiteDatabase) {
   const row = d.getFirstSync<{ user_version: number }>('PRAGMA user_version');
@@ -91,6 +91,20 @@ function migrate(d: SQLite.SQLiteDatabase) {
       try { d.execSync(`ALTER TABLE referrals ADD COLUMN ${col}`); } catch { /* already there */ }
     }
     if (v > 0) d.runSync("DELETE FROM kv WHERE key = 'pullSince'");
+  }
+  if (v < 6) {
+    // Appointments the agent books (no partner): where the patient lives and their complaint; and the vitals the
+    // agent takes for any patient, as many times as needed.
+    for (const col of ['kind TEXT', 'panchayatId TEXT', 'block TEXT', 'district TEXT', 'complaint TEXT', 'complaintAt TEXT', 'visitDate TEXT']) {
+      try { d.execSync(`ALTER TABLE referrals ADD COLUMN ${col}`); } catch { /* already there */ }
+    }
+    d.execSync(`
+      CREATE TABLE IF NOT EXISTS readings (
+        clientId TEXT PRIMARY KEY NOT NULL, referralClientId TEXT NOT NULL, takenAt TEXT NOT NULL,
+        bpSystolic INTEGER, bpDiastolic INTEGER, pulse INTEGER, tempF REAL, spo2 INTEGER, respRate INTEGER,
+        weightKg REAL, heightCm REAL, sugar INTEGER, sugarKind TEXT, hba1c REAL, note TEXT);
+      CREATE INDEX IF NOT EXISTS ix_readings_ref ON readings(referralClientId, takenAt);
+    `);
   }
   if (v < SCHEMA_VERSION) d.execSync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
@@ -174,7 +188,14 @@ export interface Note {
 }
 export interface Shift { clientId: string; startTime: string; startLat: number; startLng: number; endTime: string | null; endLat: number | null; endLng: number | null }
 export interface Visit { clientId: string; panchayatId: string; shiftId: string | null; checkInAt: string; checkInLat: number; checkInLng: number; checkOutAt: string | null; checkOutLat: number | null; checkOutLng: number | null }
-export interface Referral { clientId: string; contactId: string; patientName: string; patientAge: number | null; patientSex: string | null; clientPhone: string | null; department: string; urgent: number; notes: string | null; status: string; createdAt: string; updatedAt: string | null; arrivedAt?: string | null; admittedAt?: string | null }
+export interface Referral { clientId: string; contactId: string; patientName: string; patientAge: number | null; patientSex: string | null; clientPhone: string | null; department: string; urgent: number; notes: string | null; status: string; createdAt: string; updatedAt: string | null; arrivedAt?: string | null; admittedAt?: string | null
+  kind?: string | null; panchayatId?: string | null; block?: string | null; district?: string | null; complaint?: string | null; complaintAt?: string | null; visitDate?: string | null;
+}
+/** Vitals and a sugar test the agent took for a patient. */
+export interface Reading {
+  clientId: string; referralClientId: string; takenAt: string; bpSystolic: number | null; bpDiastolic: number | null; pulse: number | null; tempF: number | null;
+  spo2: number | null; respRate: number | null; weightKg: number | null; heightCm: number | null; sugar: number | null; sugarKind: string | null; hba1c: number | null; note: string | null;
+}
 export interface Question { id: string; questionId: string; text: string; type: string; optionsJson: string | null; section: string; isOptional: number; ord: number }
 export interface Panchayat { id: string; name: string; block: string; district: string; lat: number | null; lng: number | null }
 export interface Assigned { panchayatId: string; name: string; visited: number; lastVisitedAt: string | null; lat: number | null; lng: number | null; source: string | null; visitCount: number | null; localVisits?: number; localLastAt?: string | null }
@@ -208,6 +229,9 @@ export const q = {
   lastNote: (contactId: string) =>
     db().getFirstSync<Note>('SELECT * FROM notes WHERE contactId = ? ORDER BY createdAt DESC LIMIT 1', contactId),
   referrals: () => db().getAllSync<Referral>('SELECT * FROM referrals ORDER BY createdAt DESC'),
+  referral: (clientId: string) => db().getFirstSync<Referral>('SELECT * FROM referrals WHERE clientId = ?', clientId),
+  readingsFor: (referralClientId: string) =>
+    db().getAllSync<Reading>('SELECT * FROM readings WHERE referralClientId = ? ORDER BY takenAt DESC', referralClientId),
   referralsFor: (contactId: string) =>
     db().getAllSync<Referral>('SELECT * FROM referrals WHERE contactId = ? ORDER BY createdAt DESC', contactId),
   activeShift: () => db().getFirstSync<Shift>('SELECT * FROM shifts WHERE endTime IS NULL ORDER BY startTime DESC LIMIT 1'),
@@ -237,7 +261,7 @@ export const q = {
 export function wipeAll() {
   db().execSync(`
     DELETE FROM kv; DELETE FROM panchayats; DELETE FROM assigned; DELETE FROM contacts; DELETE FROM notes;
-    DELETE FROM shifts; DELETE FROM visits; DELETE FROM referrals; DELETE FROM questions; DELETE FROM surveys;
+    DELETE FROM shifts; DELETE FROM visits; DELETE FROM referrals; DELETE FROM readings; DELETE FROM questions; DELETE FROM surveys;
     DELETE FROM trajectory; DELETE FROM outbox;
   `);
   notifyChange();

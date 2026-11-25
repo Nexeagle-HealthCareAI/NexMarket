@@ -261,6 +261,42 @@ namespace SeemanchalOutreach.Domain.Entities
         public Guid? CampId { get; set; }
         /// <summary>The hospital health card the patient came with, when the desk linked one.</summary>
         public Guid? HealthCardId { get; set; }
+        /// <summary>"appointment": a field agent booked the patient themself (no partner); null for a partner's referral.</summary>
+        public string? Kind { get; set; }
+        /// <summary>Where the patient lives (an appointment's panchayat, block and district).</summary>
+        public string? PanchayatId { get; set; }
+        public string? Block { get; set; }
+        public string? District { get; set; }
+        /// <summary>What the patient complains of, in their words. The agent can add it later.</summary>
+        public string? Complaint { get; set; }
+        public DateTime? ComplaintAt { get; set; }
+    }
+
+    /// <summary>
+    /// Vitals and a sugar test a field agent took for a patient (an appointment or a referral), any number of times.
+    /// Linked by the referral's ClientId, so it works before the referral itself reaches the server.
+    /// </summary>
+    public class PatientReading
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string ClientId { get; set; } = string.Empty;
+        public string ReferralClientId { get; set; } = string.Empty;
+        public string AgentId { get; set; } = string.Empty;
+        public DateTime TakenAt { get; set; }
+        public int? BpSystolic { get; set; }
+        public int? BpDiastolic { get; set; }
+        public int? Pulse { get; set; }
+        public decimal? TempF { get; set; }
+        public int? Spo2 { get; set; }
+        public int? RespRate { get; set; }
+        public decimal? WeightKg { get; set; }
+        public decimal? HeightCm { get; set; }
+        /// <summary>Blood sugar in mg/dL, and how it was taken: random | fasting | pp (after food).</summary>
+        public int? Sugar { get; set; }
+        public string? SugarKind { get; set; }
+        public decimal? Hba1c { get; set; }
+        public string? Note { get; set; }
+        public DateTime ServerReceivedAt { get; set; } = DateTime.UtcNow;
     }
 
     public class TrajectoryPoint

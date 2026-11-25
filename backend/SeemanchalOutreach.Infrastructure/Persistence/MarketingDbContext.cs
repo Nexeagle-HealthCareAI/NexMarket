@@ -18,6 +18,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<OutreachContact> Contacts => Set<OutreachContact>();
         public DbSet<ContactHistoryEntry> ContactHistory => Set<ContactHistoryEntry>();
         public DbSet<PatientReferral> Referrals => Set<PatientReferral>();
+        public DbSet<PatientReading> PatientReadings => Set<PatientReading>();
         public DbSet<TrajectoryPoint> TrajectoryPoints => Set<TrajectoryPoint>();
         public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
         public DbSet<BlockAssignment> BlockAssignments => Set<BlockAssignment>();
@@ -196,6 +197,19 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.ContactId);
                 entity.HasIndex(e => e.CampId);
                 entity.HasIndex(e => e.HealthCardId);
+                entity.HasIndex(e => e.PanchayatId);
+            });
+            modelBuilder.Entity<PatientReading>(entity =>
+            {
+                entity.ToTable("patient_readings");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.ClientId).IsUnique();
+                entity.HasIndex(e => e.ReferralClientId);
+                entity.HasIndex(e => new { e.AgentId, e.TakenAt });
+                entity.Property(e => e.TempF).HasPrecision(5, 1);
+                entity.Property(e => e.WeightKg).HasPrecision(6, 2);
+                entity.Property(e => e.HeightCm).HasPrecision(6, 1);
+                entity.Property(e => e.Hba1c).HasPrecision(4, 1);
             });
 
             // ─── TrajectoryPoint ─────────────────────────────────────

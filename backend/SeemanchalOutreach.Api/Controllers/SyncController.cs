@@ -139,6 +139,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 .OrderBy(r => r.Id)
                 .Skip(skip).Take(take)
                 .ToListAsync(cancellationToken);
+            // Vitals the agent took (so a reinstalled phone shows them again).
+            var readings = await _db.PatientReadings.AsNoTracking()
+                .Where(x => x.AgentId == request.AgentId && x.ServerReceivedAt >= request.Since)
+                .OrderBy(x => x.Id)
+                .Skip(skip).Take(take)
+                .ToListAsync(cancellationToken);
             var myContactIds = _db.Contacts.Where(c => c.AgentId == request.AgentId).Select(c => c.ClientId);
             var contactNotes = await _db.ContactNotes.AsNoTracking()
                 .Where(n => n.ServerReceivedAt >= request.Since && myContactIds.Contains(n.ContactClientId))
@@ -160,7 +166,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Skip(skip).Take(take)
                 .ToListAsync(cancellationToken);
                 
-            bool hasMore = contactNotes.Count == take || contacts.Count == take || visits.Count == take || shifts.Count == take || referrals.Count == take || panchayats.Count == take || surveys.Count == take || surveyQuestions.Count == take;
+            bool hasMore = readings.Count == take || contactNotes.Count == take || contacts.Count == take || visits.Count == take || shifts.Count == take || referrals.Count == take || panchayats.Count == take || surveys.Count == take || surveyQuestions.Count == take;
 
             return Ok(new
             {
@@ -244,6 +250,19 @@ namespace SeemanchalOutreach.Api.Controllers
                     arrivedAt = r.ArrivedAt?.ToString("o"),
                     admittedAt = r.AdmittedAt?.ToString("o"),
                     createdAt = r.CreatedAt.ToString("o"),
+                    clientPhone = r.ClientPhone,
+                    kind = r.Kind,
+                    panchayatId = r.PanchayatId,
+                    block = r.Block,
+                    district = r.District,
+                    complaint = r.Complaint,
+                    complaintAt = r.ComplaintAt?.ToString("o"),
+                }),
+                readings = readings.Select(x => new
+                {
+                    clientId = x.ClientId, referralClientId = x.ReferralClientId, takenAt = x.TakenAt.ToString("o"),
+                    bpSystolic = x.BpSystolic, bpDiastolic = x.BpDiastolic, pulse = x.Pulse, tempF = x.TempF, spo2 = x.Spo2, respRate = x.RespRate,
+                    weightKg = x.WeightKg, heightCm = x.HeightCm, sugar = x.Sugar, sugarKind = x.SugarKind, hba1c = x.Hba1c, note = x.Note,
                 }),
                 panchayats = panchayats.Select(p => new
                 {

@@ -1,4 +1,4 @@
-import { db, kvGet, notifyChange, q, type Contact, type Note, type Referral } from './db';
+import { db, kvGet, notifyChange, q, type Contact, type Note, type Reading, type Referral } from './db';
 import { nowIso, uuid, ymd } from './util';
 import type { Priority } from '../theme';
 
@@ -271,6 +271,73 @@ export function addReferral(input: NewReferralInput): string {
 }
 
 export type { Referral };
+
+// ─── Appointments the agent books, and vitals / complaint for any patient ──────
+
+export interface NewAppointmentInput {
+  patientName: string;
+  patientAge: number;
+  patientSex: 'M' | 'F' | 'O';
+  clientPhone: string;
+  panchayatId: string | null;
+  block: string | null;
+  district: string | null;
+  visitDate: string;
+  complaint: string;
+}
+
+/**
+ * An appointment: a patient the agent met and booked for the hospital, without a partner. It goes to the hospital's
+ * Referral desk like a referral (so it is followed: arrived, OPD, admitted) and shows in my Patients.
+ */
+export function addAppointment(input: NewAppointmentInput): string {
+  const { agentId, deviceId } = me();
+  const clientId = uuid();
+  const at = nowIso();
+  const complaint = input.complaint.trim() || null;
+  db().runSync(
+    `INSERT INTO referrals (clientId, contactId, patientName, patientAge, patientSex, clientPhone, department, urgent, notes, status, createdAt,
+       kind, panchayatId, block, district, complaint, complaintAt, visitDate)
+     VALUES (?, '', ?, ?, ?, ?, '', 0, NULL, 'pending', ?, 'appointment', ?, ?, ?, ?, ?, ?)`,
+    clientId, input.patientName.trim(), input.patientAge, input.patientSex, input.clientPhone.trim() || null, at,
+    input.panchayatId, input.block, input.district, complaint, complaint ? at : null, input.visitDate);
+  enqueue('referral_new', clientId, {
+    clientId, deviceId, agentId, contactId: '', patientName: input.patientName.trim(), department: '', notes: '',
+    clientPhone: input.clientPhone.trim() || null, referralDate: input.visitDate, status: 'pending',
+    patientAge: input.patientAge, patientSex: input.patientSex, urgent: false, consent: true, createdAt: at,
+    kind: 'appointment', panchayatId: input.panchayatId ?? '', block: input.block ?? '', district: input.district ?? '', complaint: complaint ?? '',
+  });
+  notifyChange();
+  return clientId;
+}
+
+export type ReadingInput = Omit<Reading, 'clientId' | 'referralClientId' | 'takenAt'>;
+
+/** One set of vitals (and a sugar test) for a patient. Kept on the phone, sent with the next sync. */
+export function addReading(referralClientId: string, x: ReadingInput): string {
+  const { agentId, deviceId } = me();
+  const clientId = uuid();
+  const at = nowIso();
+  db().runSync(
+    `INSERT INTO readings (clientId, referralClientId, takenAt, bpSystolic, bpDiastolic, pulse, tempF, spo2, respRate, weightKg, heightCm, sugar, sugarKind, hba1c, note)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    clientId, referralClientId, at, x.bpSystolic, x.bpDiastolic, x.pulse, x.tempF, x.spo2, x.respRate, x.weightKg, x.heightCm, x.sugar, x.sugarKind, x.hba1c, x.note);
+  enqueue('patient_reading', clientId, { clientId, deviceId, agentId, referralClientId, takenAt: at, ...x });
+  notifyChange();
+  return clientId;
+}
+
+/** The patient's complaint, written now or changed later. */
+export function setComplaint(referralClientId: string, text: string) {
+  const { agentId, deviceId } = me();
+  const at = nowIso();
+  const complaint = text.trim();
+  db().runSync('UPDATE referrals SET complaint = ?, complaintAt = ? WHERE clientId = ?', complaint || null, at, referralClientId);
+  // One queued change per patient: a newer wording replaces one not yet sent.
+  const opId = `complaint-${referralClientId}`;
+  enqueue('referral_complaint', opId, { clientId: opId, deviceId, agentId, referralClientId, complaint, createdAt: at }, ['referral_complaint']);
+  notifyChange();
+}
 
 // ─── Survey ────────────────────────────────────────────────────────────────
 

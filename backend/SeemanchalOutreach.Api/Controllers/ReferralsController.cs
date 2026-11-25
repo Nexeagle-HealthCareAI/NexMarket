@@ -463,6 +463,21 @@ namespace SeemanchalOutreach.Api.Controllers
                 .ToDictionaryAsync(a => a.AgentId, a => a.Name);
         }
 
+        private static object ReadingShape(PatientReading x) => new
+        {
+            x.TakenAt, x.BpSystolic, x.BpDiastolic, x.Pulse, x.TempF, x.Spo2, x.RespRate, x.WeightKg, x.HeightCm, x.Sugar, x.SugarKind, x.Hba1c, x.Note,
+            Bmi = x.WeightKg != null && x.HeightCm is > 0 ? Math.Round(x.WeightKg.Value / (x.HeightCm.Value / 100 * (x.HeightCm.Value / 100)), 1) : (decimal?)null,
+        };
+
+        /// <summary>Every set of vitals the field agent took for this patient, newest first.</summary>
+        [HttpGet("{clientId}/readings")]
+        public async Task<IActionResult> Readings(string clientId)
+        {
+            var rows = await _context.PatientReadings.AsNoTracking().Where(x => x.ReferralClientId == clientId).OrderByDescending(x => x.TakenAt).Take(200).ToListAsync(HttpContext.RequestAborted);
+            var agents = await NamesAsync(rows.Select(x => x.AgentId));
+            return Ok(rows.Select(x => new { reading = ReadingShape(x), by = agents.GetValueOrDefault(x.AgentId, x.AgentId) }));
+        }
+
         private async Task<List<object>> EnrichAsync(List<PatientReferral> referrals)
         {
             var agents = await NamesAsync(referrals.Select(r => r.AgentId));
@@ -472,7 +487,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 .Where(c => contactIds.Contains(c.ClientId))
                 .Select(c => new { c.ClientId, c.Name, c.Role, c.PanchayatId })
                 .ToListAsync();
-            var panchayatIds = contacts.Select(c => c.PanchayatId).Distinct().ToList();
+            var panchayatIds = contacts.Select(c => c.PanchayatId).Concat(referrals.Where(r => r.PanchayatId != null).Select(r => r.PanchayatId!)).Distinct().ToList();
+            var pnames = await _context.Panchayats.AsNoTracking().Where(p => panchayatIds.Contains(p.PanchayatId)).ToDictionaryAsync(p => p.PanchayatId, p => p.Name);
+            // The newest vitals an agent took for each patient, and how many times.
+            var refIds = referrals.Select(r => r.ClientId).ToList();
+            var readings = await _context.PatientReadings.AsNoTracking().Where(x => refIds.Contains(x.ReferralClientId)).ToListAsync();
+            var readingsBy = readings.GroupBy(x => x.ReferralClientId).ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.TakenAt).ToList());
             var blocks = await _context.Panchayats.AsNoTracking()
                 .Where(p => panchayatIds.Contains(p.PanchayatId))
                 .ToDictionaryAsync(p => p.PanchayatId, p => p.Block);
@@ -493,9 +513,16 @@ namespace SeemanchalOutreach.Api.Controllers
                     r.Id,
                     r.ClientId,
                     r.ContactId,
-                    ContactName = c?.Name ?? (camp != null ? camp.Value.Title : "Unknown contact"),
+                    ContactName = c?.Name ?? (camp != null ? camp.Value.Title : r.Kind == "appointment" ? "Booked by the agent" : "Unknown contact"),
                     ContactRole = c?.Role,
-                    Block = c != null ? blocks.GetValueOrDefault(c.PanchayatId) : camp?.Block,
+                    Block = r.Block ?? (c != null ? blocks.GetValueOrDefault(c.PanchayatId) : camp?.Block),
+                    r.Kind,
+                    Panchayat = r.PanchayatId != null ? pnames.GetValueOrDefault(r.PanchayatId) : null,
+                    r.District,
+                    r.Complaint,
+                    r.ComplaintAt,
+                    Readings = readingsBy.GetValueOrDefault(r.ClientId)?.Count ?? 0,
+                    LastReading = readingsBy.GetValueOrDefault(r.ClientId)?.Select(ReadingShape).FirstOrDefault(),
                     r.AgentId,
                     AgentName = string.IsNullOrEmpty(r.AgentId) && camp != null ? "Health camp" : agents.GetValueOrDefault(r.AgentId, "Unknown agent"),
                     r.PatientName,

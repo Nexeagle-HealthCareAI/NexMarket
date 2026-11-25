@@ -15,6 +15,8 @@ export interface ReferralRow {
   arrivedAt?: string | null; admittedAt?: string | null; createdAt: string;
   updatedAt?: string | null; source?: 'app' | 'leads' | 'crm' | 'camp'; syncDelayMinutes?: number | null; serverReceivedAt?: string | null;
   campId?: string | null; campTitle?: string | null; campDate?: string | null;
+  kind?: string | null; panchayat?: string | null; district?: string | null; complaint?: string | null; complaintAt?: string | null;
+  readings?: number; lastReading?: Reading | null;
   money?: { billed: number; collected: number; payoutsPaid: number; payoutsOpen: number; payouts: number; incentivesPaid: number; incentivesOpen: number } | null;
 }
 
@@ -23,9 +25,57 @@ export function sourceText(r: ReferralRow): string {
   if (r.source === 'camp') return `Sent by the doctor at the health camp${r.campTitle ? ` “${r.campTitle}”` : ''}${r.campDate ? ` (${new Date(`${r.campDate}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})` : ''}`;
   if (r.source === 'leads') return 'From the Leads inbox (QR code / WhatsApp)';
   if (r.source === 'crm') return 'Added in the CRM';
+  if (r.kind === 'appointment') {
+    const d0 = r.syncDelayMinutes ?? 0;
+    return `Appointment booked by ${r.agentName} in the field${d0 >= 60 ? ` · reached us ${d0 >= 1440 ? `${Math.round(d0 / 1440)} day${d0 >= 2880 ? 's' : ''}` : `${Math.round(d0 / 60)} h`} later (no signal)` : ''}`;
+  }
   const d = r.syncDelayMinutes ?? 0;
   if (d >= 60) return `From ${r.agentName}'s app · reached us ${d >= 1440 ? `${Math.round(d / 1440)} day${d >= 2880 ? 's' : ''}` : `${Math.round(d / 60)} h`} after it was made (no signal on the phone)`;
   return `From ${r.agentName}'s app · reached us ${d <= 1 ? 'straight away' : `in ${d} min`}`;
+}
+
+export interface Reading {
+  takenAt: string; bpSystolic?: number | null; bpDiastolic?: number | null; pulse?: number | null; tempF?: number | null; spo2?: number | null; respRate?: number | null;
+  weightKg?: number | null; heightCm?: number | null; sugar?: number | null; sugarKind?: string | null; hba1c?: number | null; note?: string | null; bmi?: number | null;
+}
+const SUGAR: Record<string, string> = { random: 'random', fasting: 'fasting', pp: 'after food' };
+/** "BP 150/95 · Pulse 88 · Sugar 210 (fasting)…" for a reading; high values are marked. */
+export function readingParts(x: Reading): { text: string; high: boolean }[] {
+  const out: { text: string; high: boolean }[] = [];
+  if (x.bpSystolic) out.push({ text: `BP ${x.bpSystolic}/${x.bpDiastolic ?? '–'}`, high: x.bpSystolic >= 140 || (x.bpDiastolic ?? 0) >= 90 });
+  if (x.pulse) out.push({ text: `Pulse ${x.pulse}`, high: x.pulse > 100 || x.pulse < 50 });
+  if (x.tempF) out.push({ text: `Temp ${x.tempF}°F`, high: x.tempF >= 100.4 });
+  if (x.spo2) out.push({ text: `SpO2 ${x.spo2}%`, high: x.spo2 < 94 });
+  if (x.respRate) out.push({ text: `Breaths ${x.respRate}/min`, high: x.respRate > 24 });
+  if (x.sugar) out.push({ text: `Sugar ${x.sugar}${x.sugarKind ? ` (${SUGAR[x.sugarKind] ?? x.sugarKind})` : ''}`, high: x.sugarKind === 'fasting' ? x.sugar >= 126 : x.sugar >= 200 });
+  if (x.hba1c) out.push({ text: `HbA1c ${x.hba1c}%`, high: x.hba1c >= 6.5 });
+  if (x.weightKg) out.push({ text: `${x.weightKg} kg`, high: false });
+  if (x.heightCm) out.push({ text: `${x.heightCm} cm`, high: false });
+  if (x.bmi) out.push({ text: `BMI ${x.bmi}`, high: x.bmi >= 30 || x.bmi < 18.5 });
+  return out;
+}
+
+function Vitals({ clientId, count }: { clientId: string; count: number }) {
+  const list = useLoader(() => (count > 0 ? crm.get<{ reading: Reading; by: string }[]>(`/api/v1/referrals/${encodeURIComponent(clientId)}/readings`) : Promise.resolve([])), [clientId, count]);
+  if (count === 0) return null;
+  return (
+    <div className="rf-vitals">
+      <h3>Vitals taken by the agent <span className="crm-cell-sub">{count} time{count === 1 ? '' : 's'}</span></h3>
+      {!list.data ? <Skeleton h={60} /> : (
+        <ul>
+          {list.data.map(({ reading, by }, i) => (
+            <li key={i}>
+              <span className="rf-vitals-when">{fmt.dateTime(reading.takenAt)}<em>{by}</em></span>
+              <span className="rf-vitals-vals">
+                {readingParts(reading).map((p) => <span key={p.text} className={p.high ? 'is-high' : undefined}>{p.text}</span>)}
+                {reading.note && <em>{reading.note}</em>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 interface HistoryItem { status: string; label: string; note?: string | null; by: string; at: string }
@@ -57,17 +107,19 @@ export function ReferralCard({ r, editable, onUpdated }: { r: ReferralRow; edita
         <span className="crm-initials" style={{ width: 56, height: 56, borderRadius: 16, fontSize: 19, fontWeight: 800 }}>{initials(r.patientName)}</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, marginRight: 'auto' }}>
           <h2 style={{ fontSize: 22, fontWeight: 800 }}>{r.patientName}</h2>
-          <span className="crm-sub">{[r.patientSex, r.patientAge ? `${r.patientAge} yrs` : null, r.clientPhone, r.block].filter(Boolean).join(' · ') || 'No patient details'}</span>
+          <span className="crm-sub">{[r.patientSex, r.patientAge ? `${r.patientAge} yrs` : null, r.clientPhone].filter(Boolean).join(' · ') || 'No patient details'}</span>
+          {(r.panchayat || r.block || r.district) && <span className="crm-sub">{[r.panchayat, r.block, r.district].filter(Boolean).join(', ')}</span>}
         </div>
+        {r.kind === 'appointment' && <Pill tone="info">Appointment</Pill>}
         {r.urgent && <Pill tone="bad">Urgent</Pill>}
         <Pill tone={stageTone(r.status)} dot>{r.stageLabel}</Pill>
       </div>
 
       <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
         <Info label="Department" value={r.department || '—'} />
-        <Info label="Referred by" value={`${r.contactName}${r.contactRole ? ` (${contactTypeLabel(r.contactRole)})` : ''}`} />
+        {r.kind !== 'appointment' && <Info label="Referred by" value={`${r.contactName}${r.contactRole ? ` (${contactTypeLabel(r.contactRole)})` : ''}`} />}
         <Info label={r.source === 'camp' ? 'Came through' : 'Field agent'} value={r.agentName} />
-        <Info label="Referred on" value={fmt.dateTime(r.createdAt)} />
+        <Info label={r.kind === 'appointment' ? 'Booked on' : 'Referred on'} value={fmt.dateTime(r.createdAt)} />
         {r.arrivedAt && <Info label="Arrived" value={fmt.dateTime(r.arrivedAt)} />}
         {r.admittedAt && <Info label="Admitted" value={fmt.dateTime(r.admittedAt)} />}
       </dl>
@@ -76,7 +128,9 @@ export function ReferralCard({ r, editable, onUpdated }: { r: ReferralRow; edita
         <span>{sourceText(r)}</span>
         {r.clientPhone && <a className="crm-btn is-secondary is-sm" href={`tel:${r.clientPhone.replace(/[^\d+]/g, '')}`} style={{ marginLeft: 'auto' }}><Phone size={14} aria-hidden /> Call patient</a>}
       </div>
+      {r.complaint && <div className="rf-complaint"><strong>Complaint</strong><span>{r.complaint}</span></div>}
       {r.notes && <div className="crm-note" style={{ whiteSpace: 'pre-line' }}>{r.notes}</div>}
+      <Vitals clientId={r.clientId} count={r.readings ?? 0} />
 
       {editable ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

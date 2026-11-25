@@ -252,6 +252,13 @@ namespace SeemanchalOutreach.Application.Handlers
             return response;
         }
 
+        /// <summary>Trimmed text cut to a length; null when empty.</summary>
+        private static string? Clip(string? s, int max)
+        {
+            var t = (s ?? "").Trim();
+            return t.Length == 0 ? null : t.Length > max ? t[..max] : t;
+        }
+
         private async Task<SyncResultDto> ProcessItemAsync(
             OutboxItemDto item,
             string agentId,
@@ -581,12 +588,64 @@ namespace SeemanchalOutreach.Application.Handlers
                             PatientSex = root.TryGetProperty("patientSex", out var sexProp) && sexProp.ValueKind == JsonValueKind.String ? sexProp.GetString() : null,
                             Urgent = GetBool(root, "urgent", false),
                             CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
-                            ServerReceivedAt = syncedAt
+                            ServerReceivedAt = syncedAt,
+                            // An appointment the agent booked: where the patient lives and what they complain of.
+                            Kind = GetString(root, "kind", "") == "appointment" ? "appointment" : null,
+                            PanchayatId = Clip(GetString(root, "panchayatId", ""), 40),
+                            Block = Clip(GetString(root, "block", ""), 80),
+                            District = Clip(GetString(root, "district", ""), 80),
+                            Complaint = Clip(GetString(root, "complaint", ""), 1000),
                         };
+                        if (refObj.Complaint != null) refObj.ComplaintAt = refObj.CreatedAt;
                         _db.Referrals.Add(refObj);
                         return Result(clientId, deviceId, refObj.Id, syncedAt, "created");
                     }
                     return Result(clientId, deviceId, existing.Id, syncedAt, "already_exists");
+                }
+
+                case "referral_complaint":
+                {
+                    // The patient's complaint, added or changed later from the app. The newest wording wins.
+                    string clientId = GetString(root, "clientId", item.ClientId);
+                    string referralId = GetString(root, "referralClientId", "");
+                    var referral = await _db.Referrals.FirstOrDefaultAsync(r => r.ClientId == referralId && r.AgentId == agentId, cancellationToken);
+                    // Sent before its appointment reached the server: try again on the next sync.
+                    if (referral == null) return new SyncResultDto { ClientId = item.ClientId, DeviceId = deviceId, Status = "error", ErrorMessage = "Waiting for the appointment to reach the server." };
+                    var at = GetDateTime(root, "createdAt", DateTime.UtcNow);
+                    if (referral.ComplaintAt == null || at >= referral.ComplaintAt)
+                    {
+                        referral.Complaint = Clip(GetString(root, "complaint", ""), 1000);
+                        referral.ComplaintAt = at;
+                        referral.UpdatedAt = DateTime.UtcNow;
+                    }
+                    return Result(clientId, deviceId, referral.Id, syncedAt, "created");
+                }
+
+                case "patient_reading":
+                {
+                    // Vitals and a sugar test the agent took. Kept as given; each reading is its own row.
+                    string clientId = GetString(root, "clientId", item.ClientId);
+                    var existingReading = await _db.PatientReadings.FirstOrDefaultAsync(x => x.ClientId == clientId, cancellationToken);
+                    if (existingReading != null) return Result(clientId, deviceId, existingReading.Id, syncedAt, "already_exists");
+                    int? I(string k, int min, int max) => root.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var n) && n >= min && n <= max ? n : null;
+                    decimal? D(string k, decimal min, decimal max) => root.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDecimal(out var n) && n >= min && n <= max ? Math.Round(n, 2) : null;
+                    var kind = GetString(root, "sugarKind", "");
+                    var reading = new PatientReading
+                    {
+                        ClientId = clientId,
+                        ReferralClientId = GetString(root, "referralClientId", ""),
+                        AgentId = agentId,
+                        TakenAt = GetDateTime(root, "takenAt", DateTime.UtcNow),
+                        BpSystolic = I("bpSystolic", 50, 300), BpDiastolic = I("bpDiastolic", 30, 200), Pulse = I("pulse", 20, 250),
+                        TempF = D("tempF", 85, 110), Spo2 = I("spo2", 50, 100), RespRate = I("respRate", 4, 80),
+                        WeightKg = D("weightKg", 1, 300), HeightCm = D("heightCm", 30, 250),
+                        Sugar = I("sugar", 20, 900), SugarKind = kind is "random" or "fasting" or "pp" ? kind : null, Hba1c = D("hba1c", 3, 20),
+                        Note = Clip(GetString(root, "note", ""), 500),
+                        ServerReceivedAt = syncedAt,
+                    };
+                    if (reading.ReferralClientId.Length == 0) return Result(clientId, deviceId, Guid.Empty, syncedAt, "skipped");
+                    _db.PatientReadings.Add(reading);
+                    return Result(clientId, deviceId, reading.Id, syncedAt, "created");
                 }
 
                 case "panchayat_new":

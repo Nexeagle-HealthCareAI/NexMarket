@@ -46,6 +46,8 @@ export function AddSheetHost() {
       onPress: () => go(() => router.push({ pathname: '/partner-new', params: visit ? { panchayatId: visit.panchayatId } : {} })) },
     { key: 'refer', icon: 'hospital', title: t('uxAddRefer'), sub: t('uxAddReferSub'), bg: C.warnSoft, fg: C.warnInk,
       onPress: () => go(() => router.push('/refer')) },
+    { key: 'appointment', icon: 'calendar', title: t('apBook'), sub: t('apBookSub'), bg: C.infoSoft, fg: C.infoInk,
+      onPress: () => go(() => router.push({ pathname: '/appointment', params: visit ? { panchayatId: visit.panchayatId } : {} })) },
     // A note always belongs to a partner: choose one first, then speak.
     { key: 'note', icon: 'mic', title: t('uxAddNote'), sub: t('uxAddNoteSub'), bg: C.purpleSoft, fg: C.purple,
       onPress: () => go(() => later(() => setPicking(true))) },
@@ -70,7 +72,7 @@ export function AddSheetHost() {
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           {tiles.map((it) => (
             <Pressable key={it.key} onPress={it.onPress} accessibilityRole="button" accessibilityLabel={`${it.title}. ${it.sub}`}
-              style={({ pressed }) => ({ width: '48.5%', minHeight: 132, borderRadius: 20, padding: 16, gap: 10,
+              style={({ pressed }) => ({ width: tiles.length % 2 === 1 && it.key === tiles[tiles.length - 1].key ? '100%' : '48.5%', minHeight: tiles.length % 2 === 1 && it.key === tiles[tiles.length - 1].key ? 96 : 132, borderRadius: 20, padding: 16, gap: 10,
                 justifyContent: 'space-between', backgroundColor: it.bg, transform: [{ scale: pressed ? 0.97 : 1 }] })}>
               <Icon name={it.icon} size={34} color={it.fg} />
               <View style={{ gap: 2 }}>

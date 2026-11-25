@@ -8,6 +8,7 @@ import uxPartners from './ux-partners';
 import uxChat from './ux-chat';
 import uxHoardings from './ux-hoardings';
 import uxSpend from './ux-spend';
+import uxPatients from './ux-patients';
 
 export type Lang = 'hi' | 'hinglish' | 'bn' | 'en';
 
@@ -23,7 +24,7 @@ export const LANGS: { code: Lang; label: string; short: string }[] = [
  * their own ux file; every key works with t() and is type-checked.
  */
 type BaseKey = keyof Strings;
-type UxKey = keyof typeof uxCommon.en | keyof typeof uxToday.en | keyof typeof uxPartners.en | keyof typeof uxChat.en | keyof typeof uxHoardings.en | keyof typeof uxSpend.en;
+type UxKey = keyof typeof uxCommon.en | keyof typeof uxToday.en | keyof typeof uxPartners.en | keyof typeof uxChat.en | keyof typeof uxHoardings.en | keyof typeof uxSpend.en | keyof typeof uxPatients.en;
 export type StringKey = BaseKey | UxKey;
 
 // A ux key may not reuse a key from the big files or another ux file (tsc points here if one does).
@@ -32,11 +33,12 @@ type Dupes = Extract<keyof typeof uxCommon.en, BaseKey | keyof typeof uxToday.en
   | Extract<keyof typeof uxPartners.en, BaseKey | keyof typeof uxChat.en>
   | Extract<keyof typeof uxChat.en, BaseKey>
   | Extract<keyof typeof uxHoardings.en, BaseKey | keyof typeof uxCommon.en | keyof typeof uxToday.en | keyof typeof uxPartners.en | keyof typeof uxChat.en>
-  | Extract<keyof typeof uxSpend.en, BaseKey | keyof typeof uxCommon.en | keyof typeof uxToday.en | keyof typeof uxPartners.en | keyof typeof uxChat.en | keyof typeof uxHoardings.en>;
+  | Extract<keyof typeof uxSpend.en, BaseKey | keyof typeof uxCommon.en | keyof typeof uxToday.en | keyof typeof uxPartners.en | keyof typeof uxChat.en | keyof typeof uxHoardings.en>
+  | Extract<keyof typeof uxPatients.en, BaseKey | keyof typeof uxCommon.en | keyof typeof uxToday.en | keyof typeof uxPartners.en | keyof typeof uxChat.en | keyof typeof uxHoardings.en | keyof typeof uxSpend.en>;
 const noDuplicateKeys: [Dupes] extends [never] ? true : { duplicateKey: Dupes } = true;
 void noDuplicateKeys;
 
-const UX = [uxCommon, uxToday, uxPartners, uxChat, uxHoardings, uxSpend];
+const UX = [uxCommon, uxToday, uxPartners, uxChat, uxHoardings, uxSpend, uxPatients];
 const BASE: Record<Lang, Strings> = { hi, hinglish, bn, en };
 const TABLES = {} as Record<Lang, Record<string, string>>;
 for (const l of ['hi', 'hinglish', 'bn', 'en'] as Lang[]) {

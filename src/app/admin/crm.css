@@ -4525,3 +4525,18 @@ strong.is-ok { color: var(--ok-ink); }
   .cd-for .cq-seg { min-width: 0; flex: 1 1 100%; }
   .cd-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Agent appointments on the Referral desk: complaint and vitals ──────── */
+.rf-tag.is-appt { background: var(--info-soft); color: var(--info-ink); }
+.rf-tag.is-high { background: var(--bad-soft); color: var(--bad); }
+.rf-complaint { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border-radius: 12px; background: var(--warn-soft); color: var(--text); font-size: 14px; white-space: pre-line; }
+.rf-complaint strong { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--warn-ink); }
+.rf-vitals { display: flex; flex-direction: column; gap: 8px; }
+.rf-vitals h3 { margin: 0; font-size: 15px; font-weight: 700; display: flex; gap: 8px; align-items: baseline; }
+.rf-vitals ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rf-vitals li { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--bg); font-size: 13.5px; }
+.rf-vitals-when { display: flex; flex-direction: column; color: var(--text-2); font-size: 12.5px; }
+.rf-vitals-when em, .rf-vitals-vals em { font-style: normal; color: var(--text-3); font-size: 12px; }
+.rf-vitals-vals { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-variant-numeric: tabular-nums; font-weight: 600; }
+.rf-vitals-vals .is-high { color: var(--bad); }
+@media (max-width: 560px) { .rf-vitals li { grid-template-columns: 1fr; gap: 4px; } }

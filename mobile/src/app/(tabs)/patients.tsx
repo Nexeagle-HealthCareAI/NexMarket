@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
 import { router } from 'expo-router';
-import { Card, Empty, MainHeader, Pill, Screen, T } from '../../components/ui';
+import { Btn, Card, Empty, MainHeader, Pill, Screen, T } from '../../components/ui';
 import { Icon } from '../../components/Icon';
 import { useDb, useSession } from '../../lib/session';
 import { db, type Referral } from '../../lib/db';
@@ -14,7 +14,7 @@ import { inr, statusLine, type MyMoney } from '../../lib/money';
 import type { Lang, TFn } from '../../i18n';
 
 type Filter = 'all' | 'inTransit' | 'arrived' | 'notCame';
-type Row = Referral & { partnerName: string | null; partnerPhone: string | null; unsent: number };
+type Row = Referral & { partnerName: string | null; partnerPhone: string | null; unsent: number; nReadings: number; lastBpS: number | null; lastBpD: number | null; lastSugar: number | null; lastSugarKind: string | null };
 
 export default function Patients() {
   const { t, lang } = useSession();
@@ -23,7 +23,12 @@ export default function Patients() {
   const money = useMoney();
   const rows = useDb(() => db().getAllSync<Row>(
     `SELECT r.*, c.name AS partnerName, c.phone AS partnerPhone,
-            EXISTS(SELECT 1 FROM outbox o WHERE o.clientId = r.clientId) AS unsent
+            EXISTS(SELECT 1 FROM outbox o WHERE o.clientId = r.clientId) AS unsent,
+            (SELECT COUNT(*) FROM readings g WHERE g.referralClientId = r.clientId) AS nReadings,
+            (SELECT g.bpSystolic FROM readings g WHERE g.referralClientId = r.clientId AND g.bpSystolic IS NOT NULL ORDER BY g.takenAt DESC LIMIT 1) AS lastBpS,
+            (SELECT g.bpDiastolic FROM readings g WHERE g.referralClientId = r.clientId AND g.bpSystolic IS NOT NULL ORDER BY g.takenAt DESC LIMIT 1) AS lastBpD,
+            (SELECT g.sugar FROM readings g WHERE g.referralClientId = r.clientId AND g.sugar IS NOT NULL ORDER BY g.takenAt DESC LIMIT 1) AS lastSugar,
+            (SELECT g.sugarKind FROM readings g WHERE g.referralClientId = r.clientId AND g.sugar IS NOT NULL ORDER BY g.takenAt DESC LIMIT 1) AS lastSugarKind
        FROM referrals r LEFT JOIN contacts c ON c.clientId = r.contactId ORDER BY r.createdAt DESC`));
   const inFilter = (r: Row, f: Filter) =>
     f === 'all' ? true
@@ -78,6 +83,11 @@ export default function Patients() {
         data={list}
         keyExtractor={(r) => r.clientId}
         renderItem={({ item }) => <PatientCard r={item} t={t} lang={lang} steps={steps} onThank={setThank} money={byPatient.get(item.clientId)} />}
+        ListHeaderComponent={
+          <View style={{ marginBottom: 12 }}>
+            <Btn kind="ok" icon="calendar" label={t('apBook')} onPress={() => router.push('/appointment')} style={{ minHeight: 56, borderRadius: 16 }} />
+          </View>
+        }
         ListEmptyComponent={<Empty text={t('noPatients')} icon="patients" />}
         ItemSeparatorComponent={Gap}
         contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
@@ -118,15 +128,20 @@ const PatientCard = React.memo(function PatientCard({ r, t, lang, steps, onThank
   const waiting = r.status === 'pending' ? Math.floor((Date.now() - new Date(r.createdAt).getTime()) / 86400000) : 0;
   const hospitalNote = lastHospitalNote(r.notes);
   const statusText = r.status === 'pending' ? t('inTransit') : stageText(t, r.status);
+  const appt = r.kind === 'appointment';
+  const sugarHigh = r.lastSugar != null && (r.lastSugarKind === 'fasting' ? r.lastSugar >= 126 : r.lastSugar >= 200);
+  const bpHigh = r.lastBpS != null && (r.lastBpS >= 140 || (r.lastBpD ?? 0) >= 90);
   return (
-    <Card>
+    <Card onPress={() => router.push({ pathname: '/patient/[id]', params: { id: r.clientId } })}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <T style={{ fontSize: 16, fontWeight: '700', flexShrink: 1 }}>{r.patientName || '—'}</T>
             {r.urgent ? <Pill label={t('urgent')} tone="bad" /> : null}
+            {appt ? <Pill label={t('apAppointment')} tone="info" /> : null}
           </View>
-          <T style={{ color: C.text2, fontSize: 13 }}>{[r.department, dayShort(lang, new Date(r.createdAt))].filter(Boolean).join(' · ')}</T>
+          <T style={{ color: C.text2, fontSize: 13 }}>{[r.patientAge != null && appt ? `${r.patientAge}` : null, appt ? r.block : null, r.department || null, dayShort(lang, new Date(r.createdAt))].filter(Boolean).join(' · ')}</T>
+          {r.complaint ? <T style={{ color: C.text, fontSize: 14 }} numberOfLines={1}>{r.complaint}</T> : null}
           {r.partnerName ? (
             <T style={{ color: C.blueInk, fontSize: 13, fontWeight: '600' }} onPress={() => router.push({ pathname: '/partner/[id]', params: { id: r.contactId } })}>
               {t('referredBy')}: {r.partnerName}
@@ -143,6 +158,16 @@ const PatientCard = React.memo(function PatientCard({ r, t, lang, steps, onThank
           </View>
         ) : null}
         <T style={{ fontSize: 14.5, fontWeight: '700', color: lost ? C.bad : step === 0 ? C.blueInk : C.okInk }}>{statusText}</T>
+      </View>
+
+      {/* The newest BP and sugar the agent took; a tap opens the patient to add more. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        {r.lastBpS != null ? <Pill label={`${t('apBp')} ${r.lastBpS}/${r.lastBpD ?? '–'}`} tone={bpHigh ? 'bad' : 'muted'} /> : null}
+        {r.lastSugar != null ? <Pill label={`Sugar ${r.lastSugar}`} tone={sugarHigh ? 'bad' : 'muted'} /> : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+          <Icon name="plus" size={14} color={C.blue} />
+          <T style={{ color: C.blue, fontWeight: '700', fontSize: 14 }}>{r.nReadings > 0 ? `${t('apAddVitals')} (${r.nReadings})` : t('apAddVitals')}</T>
+        </View>
       </View>
 
       {r.arrivedAt || r.admittedAt ? (
