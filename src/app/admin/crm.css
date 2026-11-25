@@ -4356,7 +4356,7 @@ strong.is-ok { color: var(--ok-ink); }
   .pd-acts { grid-column: 2 / -1; justify-content: flex-end; flex-wrap: wrap; }
   .pd-search { margin-left: 0; max-width: none; flex: 1 1 100%; }
   .crm-btn.pd-save { align-self: stretch; }
-  .pd-undo { bottom: calc(84px + env(safe-area-inset-bottom)); width: calc(100vw - 32px); }
+  .pd-undo { bottom: calc(140px + env(safe-area-inset-bottom)); width: calc(100vw - 32px); }
   .pd-undo > span { flex: 1; min-width: 0; }
 }
 
@@ -4414,4 +4414,20 @@ strong.is-ok { color: var(--ok-ink); }
   .pc-empty { flex-wrap: wrap; }
   .cm-acts { width: 100%; }
   .cm-acts .crm-select { flex: 1; max-width: none; }
+}
+
+/* Quick add: buttons under the money strip; on phones they float above the bottom menu, always in reach. */
+.pd-quickbar { display: flex; gap: 10px; flex-wrap: wrap; position: sticky; top: 64px; z-index: 20; margin: -4px 0; padding: 8px 0; background: var(--bg); }
+.pd-quickbar .crm-btn.pd-quick { padding: 11px 22px; font-size: 15px; gap: 8px; border-radius: 12px; }
+.pd-save-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pd-save-row .crm-btn.pd-save { align-self: auto; }
+.crm-modal .pd-switch { margin-bottom: 4px; }
+@media (max-width: 767px) {
+  .pd-wrap { padding-bottom: 72px; }
+  .pd-quickbar { position: fixed; left: 12px; right: 12px; top: auto; margin: 0; bottom: calc(78px + env(safe-area-inset-bottom)); z-index: 55; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    padding: 6px; border-radius: 16px; background: rgba(255, 255, 255, .92); backdrop-filter: blur(8px); box-shadow: 0 6px 24px rgba(14, 21, 37, .18); }
+  .pd-quickbar .crm-btn.pd-quick { justify-content: center; }
+  .pd-save-row { flex-direction: column; align-items: stretch; }
+  body:has(.pd-quickbar) .crm-toast { bottom: calc(200px + env(safe-area-inset-bottom)); }
+  .pd-save-row .crm-btn { justify-content: center; }
 }

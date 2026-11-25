@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Check, FileImage, Lock, Pencil, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
-import { ErrorBox, friendlyError, Pill, Skeleton } from '@/components/crm/ui';
+import { ErrorBox, friendlyError, Modal, Pill, Skeleton } from '@/components/crm/ui';
 import { ProjectForm, type ProjectRow } from './Projects';
 import { ProjectCampsBand, type ProjectCamps } from './ProjectCamps';
 import { dayText, errText, MODE, money, monthText, NATURE, rs, type Data, type Expense, type Fund, type Kind } from './shared';
@@ -27,15 +27,16 @@ export function ProjectDesk({ id, data, canHandle, startMode, onBack, onChanged,
 }) {
   const [d, setD] = useState<Detail | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [mode, setMode] = useState<Mode>(startMode ?? 'out');
-  const [editing, setEditing] = useState<{ type: 'in'; f: Fund } | { type: 'out'; e: Expense } | null>(null);
+  // The quick entry popup: money in or spend, or correcting one entry. Opened straight away from a card's Money in / Spend.
+  const [entry, setEntry] = useState<{ mode: Mode; editing?: { type: 'in'; f: Fund } | { type: 'out'; e: Expense } } | null>(startMode ? { mode: startMode } : null);
+  const editing = entry?.editing ?? null;
+  const mode = entry?.mode ?? 'out';
   const [filter, setFilter] = useState<Filter>('all');
   const [q, setQ] = useState('');
   const [undo, setUndo] = useState<{ text: string; run: () => Promise<void> } | null>(null);
   const [changing, setChanging] = useState(false);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const entryRef = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async () => { try { setD(await crm.get<Detail>(`/api/v1/spend/projects/${id}`)); setErr(null); } catch (e) { setErr(friendlyError(e)); } }, [id]);
   useEffect(() => { const t = setTimeout(() => void load(), 0); return () => clearTimeout(t); }, [load]);
@@ -86,7 +87,6 @@ export function ProjectDesk({ id, data, canHandle, startMode, onBack, onChanged,
         await crm.post(`/api/v1/spend/${r.e.id}/remove`);
         showUndo(`Removed ${rs(r.e.amount)} · ${kinds[r.e.category]?.label ?? r.e.category}.`, async () => { await crm.post(`/api/v1/spend/${r.e.id}/restore`); });
       }
-      if (editing && ((editing.type === 'in' && r.type === 'in' && editing.f.id === r.f.id) || (editing.type === 'out' && r.type === 'out' && editing.e.id === r.e.id))) setEditing(null);
       await changed();
     } catch (e) { toast(errText(e)); }
   };
@@ -102,11 +102,7 @@ export function ProjectDesk({ id, data, canHandle, startMode, onBack, onChanged,
     if (status === 'closed' && !window.confirm('Close this project? It stays in the records and reports; no new money can be added to it. You can open it again.')) return;
     try { await crm.put(`/api/v1/spend/projects/${id}`, { status }); toast(status === 'closed' ? 'Project closed.' : 'Project open again.'); await changed(); } catch (e) { toast(errText(e)); }
   };
-  const startEdit = (r: Row) => {
-    setEditing(r.type === 'in' ? { type: 'in', f: r.f } : { type: 'out', e: r.e });
-    setMode(r.type);
-    entryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  const startEdit = (r: Row) => setEntry({ mode: r.type, editing: r.type === 'in' ? { type: 'in', f: r.f } : { type: 'out', e: r.e } });
 
   if (err && !d) return <ErrorBox message={err} onRetry={load} />;
   if (!d) return <Skeleton h={480} />;
@@ -151,6 +147,13 @@ export function ProjectDesk({ id, data, canHandle, startMode, onBack, onChanged,
         </div>
       </section>
 
+      {canHandle && open && (
+        <div className="pd-quickbar" role="group" aria-label="Quick add">
+          <button type="button" className="crm-btn pd-quick is-in" onClick={() => setEntry({ mode: 'in' })}><ArrowDownLeft size={18} aria-hidden /> Money in</button>
+          <button type="button" className="crm-btn pd-quick is-out" onClick={() => setEntry({ mode: 'out' })}><ArrowUpRight size={18} aria-hidden /> Spend</button>
+        </div>
+      )}
+
       {pending.length > 0 && (
         <p className="pd-wait">{pending.length} expense{pending.length === 1 ? '' : 's'} ({rs(pending.reduce((s, e) => s + e.amount, 0))}) sent from the app {pending.length === 1 ? 'is' : 'are'} waiting for approval. <button type="button" className="wa-link" onClick={() => setFilter('waiting')}>Show</button></p>
       )}
@@ -159,23 +162,6 @@ export function ProjectDesk({ id, data, canHandle, startMode, onBack, onChanged,
 
       <div className="pd-grid">
         <div className="pd-main">
-          {canHandle && open && (
-            <section className="crm-card pd-entry" ref={entryRef} aria-label={editing ? 'Correct an entry' : 'Add money in or out'}>
-              {editing ? (
-                <div className="pd-entry-head"><strong>Correct {editing.type === 'in' ? 'money received' : 'expense'}</strong><button type="button" className="crm-btn is-ghost is-sm" onClick={() => setEditing(null)}><X size={14} aria-hidden /> Stop correcting</button></div>
-              ) : (
-                <div className="pd-switch" role="tablist" aria-label="Kind of entry">
-                  <button type="button" role="tab" aria-selected={mode === 'in'} className="is-in" onClick={() => setMode('in')}><ArrowDownLeft size={17} aria-hidden /> Money in</button>
-                  <button type="button" role="tab" aria-selected={mode === 'out'} className="is-out" onClick={() => setMode('out')}><ArrowUpRight size={17} aria-hidden /> Spend</button>
-                </div>
-              )}
-              {mode === 'in'
-                ? <InForm key={editing?.type === 'in' ? editing.f.id : 'new-in'} data={data} projectId={p.id} edit={editing?.type === 'in' ? editing.f : undefined} sources={d.funds.map((f) => f.source)}
-                    onSaved={async (m) => { toast(m); setEditing(null); await changed(); }} />
-                : <OutForm key={editing?.type === 'out' ? editing.e.id : 'new-out'} data={data} projectId={p.id} edit={editing?.type === 'out' ? editing.e : undefined} used={Object.keys(d.byKind)}
-                    onSaved={async (m) => { toast(m); setEditing(null); await changed(); }} />}
-            </section>
-          )}
           {!open && <p className="crm-sub pd-closed"><Lock size={14} aria-hidden /> This project is closed. Open it again to add or correct money.</p>}
 
           <section className="crm-card pd-book" aria-labelledby="pd-book-h">
@@ -189,7 +175,7 @@ export function ProjectDesk({ id, data, canHandle, startMode, onBack, onChanged,
               <label className="crm-search pd-search"><Search size={15} aria-hidden /><span className="crm-sr">Search entries</span>
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" /></label>
             </div>
-            {shown.length === 0 ? <p className="crm-sub" style={{ margin: 0 }}>{rows.length === 0 ? 'Nothing yet. Add the first money received or the first expense above.' : 'Nothing matches.'}</p> : (
+            {shown.length === 0 ? <p className="crm-sub" style={{ margin: 0 }}>{rows.length === 0 ? 'Nothing yet. Use Money in or Spend to add the first entry.' : 'Nothing matches.'}</p> : (
               <ul className="pd-rows">
                 {shown.map((r) => {
                   const isIn = r.type === 'in';
@@ -278,6 +264,22 @@ export function ProjectDesk({ id, data, canHandle, startMode, onBack, onChanged,
         </aside>
       </div>
 
+      {entry && canHandle && open && (
+        <Modal title={editing ? `Correct ${editing.type === 'in' ? 'money received' : 'expense'}` : p.name} onClose={() => setEntry(null)}>
+          {!editing && (
+            <div className="pd-switch" role="tablist" aria-label="Kind of entry">
+              <button type="button" role="tab" aria-selected={mode === 'in'} className="is-in" onClick={() => setEntry({ mode: 'in' })}><ArrowDownLeft size={17} aria-hidden /> Money in</button>
+              <button type="button" role="tab" aria-selected={mode === 'out'} className="is-out" onClick={() => setEntry({ mode: 'out' })}><ArrowUpRight size={17} aria-hidden /> Spend</button>
+            </div>
+          )}
+          {mode === 'in'
+            ? <InForm key={editing?.type === 'in' ? editing.f.id : 'new-in'} data={data} projectId={p.id} edit={editing?.type === 'in' ? editing.f : undefined} sources={d.funds.map((f) => f.source)}
+                onSaved={async (m, more) => { toast(m); if (!more) setEntry(null); await changed(); }} />
+            : <OutForm key={editing?.type === 'out' ? editing.e.id : 'new-out'} data={data} projectId={p.id} edit={editing?.type === 'out' ? editing.e : undefined} used={Object.keys(d.byKind)}
+                onSaved={async (m, more) => { toast(m); if (!more) setEntry(null); await changed(); }} />}
+        </Modal>
+      )}
+
       {undo && (
         <div className="pd-undo" role="status">
           <span>{undo.text}</span>
@@ -301,7 +303,7 @@ function RejectInline({ onCancel, onReject }: { onCancel: () => void; onReject: 
 }
 
 /** Money received for this project. Stays open after saving, ready for the next one. */
-function InForm({ data, projectId, edit, sources, onSaved }: { data: Data; projectId: string; edit?: Fund; sources: string[]; onSaved: (m: string) => Promise<void> }) {
+function InForm({ data, projectId, edit, sources, onSaved }: { data: Data; projectId: string; edit?: Fund; sources: string[]; onSaved: (m: string, more: boolean) => Promise<void> }) {
   const managers = data.staff.filter((s) => data.managers.includes(s.agentId));
   const recent = useMemo(() => {
     const all = [...sources, ...data.funds.map((f) => f.source), 'Hospital management'];
@@ -316,7 +318,7 @@ function InForm({ data, projectId, edit, sources, onSaved }: { data: Data; proje
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const amountRef = useRef<HTMLInputElement | null>(null);
-  const save = async () => {
+  const save = async (more = false) => {
     const n = money(amount);
     if (n == null) { setErr('Write the amount received.'); amountRef.current?.focus(); return; }
     if (!source.trim()) { setErr('Write who it came from.'); return; }
@@ -324,8 +326,8 @@ function InForm({ data, projectId, edit, sources, onSaved }: { data: Data; proje
     const body = { projectId, amount: n, on, source, mode, note, receivedBy: who || null };
     try {
       if (edit) await crm.put(`/api/v1/spend/funds/${edit.id}`, body); else await crm.post('/api/v1/spend/funds', body);
-      await onSaved(edit ? 'Corrected.' : `+ ${rs(n)} received from ${source.trim()}.`);
-      if (!edit) { setAmount(''); setNote(''); amountRef.current?.focus(); }
+      await onSaved(edit ? 'Corrected.' : `+ ${rs(n)} received from ${source.trim()}.`, more);
+      if (more) { setAmount(''); setNote(''); amountRef.current?.focus(); }
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   return (
@@ -351,13 +353,16 @@ function InForm({ data, projectId, edit, sources, onSaved }: { data: Data; proje
       </div>
       <label className="crm-field">Note (optional)<input className="crm-input" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="e.g. first part of the budget" /></label>
       {err && <p className="ms-err" role="alert">{err}</p>}
-      <button type="submit" className="crm-btn pd-save is-in" disabled={busy}><ArrowDownLeft size={16} aria-hidden /> {busy ? 'Saving…' : edit ? 'Save correction' : `Add${money(amount) ? ` ${rs(money(amount))}` : ''} received`}</button>
+      <div className="pd-save-row">
+        <button type="submit" className="crm-btn pd-save is-in" disabled={busy}><ArrowDownLeft size={16} aria-hidden /> {busy ? 'Saving…' : edit ? 'Save correction' : `Add${money(amount) ? ` ${rs(money(amount))}` : ''} received`}</button>
+        {!edit && <button type="button" className="crm-btn is-secondary" disabled={busy} onClick={() => void save(true)}>Save and add another</button>}
+      </div>
     </form>
   );
 }
 
 /** An expense in this project. Kinds already used here come first. Stays open after saving. */
-function OutForm({ data, projectId, edit, used, onSaved }: { data: Data; projectId: string; edit?: Expense; used: string[]; onSaved: (m: string) => Promise<void> }) {
+function OutForm({ data, projectId, edit, used, onSaved }: { data: Data; projectId: string; edit?: Expense; used: string[]; onSaved: (m: string, more: boolean) => Promise<void> }) {
   const open = data.categories.filter((k) => (!k.archived || k.key === edit?.category) && k.key !== 'agents');
   const ordered = useMemo(() => [...open].sort((a, b) => (used.includes(b.key) ? 1 : 0) - (used.includes(a.key) ? 1 : 0)), [open, used]);
   const first = ordered.slice(0, 10);
@@ -375,7 +380,7 @@ function OutForm({ data, projectId, edit, used, onSaved }: { data: Data; project
   const amountRef = useRef<HTMLInputElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const fromApp = !!edit?.fromApp;
-  const save = async () => {
+  const save = async (more = false) => {
     const n = money(amount);
     if (n == null) { setErr('Write the amount spent.'); amountRef.current?.focus(); return; }
     if (paidBy === 'person' && !agentId) { setErr('Pick the person who paid.'); return; }
@@ -384,8 +389,8 @@ function OutForm({ data, projectId, edit, used, onSaved }: { data: Data; project
     try {
       const saved = edit ? await crm.put<Expense>(`/api/v1/spend/${edit.id}`, body) : await crm.post<Expense>('/api/v1/spend', body);
       if (file) { const f = new FormData(); f.append('file', file); await crm.upload(`/api/v1/spend/${saved.id}/bill`, f); }
-      await onSaved(edit ? 'Corrected.' : `− ${rs(n)} spent on ${data.categories.find((k) => k.key === category)?.label ?? category}.`);
-      if (!edit) { setAmount(''); setNote(''); setFile(null); if (fileRef.current) fileRef.current.value = ''; amountRef.current?.focus(); }
+      await onSaved(edit ? 'Corrected.' : `− ${rs(n)} spent on ${data.categories.find((k) => k.key === category)?.label ?? category}.`, more);
+      if (more) { setAmount(''); setNote(''); setFile(null); if (fileRef.current) fileRef.current.value = ''; amountRef.current?.focus(); }
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   return (
@@ -428,7 +433,10 @@ function OutForm({ data, projectId, edit, used, onSaved }: { data: Data; project
         <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
       </label>
       {err && <p className="ms-err" role="alert">{err}</p>}
-      <button type="submit" className="crm-btn pd-save is-out" disabled={busy}><ArrowUpRight size={16} aria-hidden /> {busy ? 'Saving…' : edit ? 'Save correction' : `Add${money(amount) ? ` ${rs(money(amount))}` : ''} expense`}</button>
+      <div className="pd-save-row">
+        <button type="submit" className="crm-btn pd-save is-out" disabled={busy}><ArrowUpRight size={16} aria-hidden /> {busy ? 'Saving…' : edit ? 'Save correction' : `Add${money(amount) ? ` ${rs(money(amount))}` : ''} expense`}</button>
+        {!edit && <button type="button" className="crm-btn is-secondary" disabled={busy} onClick={() => void save(true)}>Save and add another</button>}
+      </div>
     </form>
   );
 }
