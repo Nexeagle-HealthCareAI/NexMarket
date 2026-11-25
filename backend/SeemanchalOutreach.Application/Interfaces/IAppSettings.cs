@@ -41,6 +41,7 @@ namespace SeemanchalOutreach.Application.Interfaces
             ("camp_invite", "Broadcast: health camp invite", new[] { "Name", "Place", "Date", "Details" }),
             ("general_update", "Broadcast: general update", new[] { "Name", "Message" }),
             ("form_welcome", "Facebook/Instagram form: instant thank-you", new[] { "Person's first name", "Hospital name" }),
+            ("camp_booked", "Health camp: token for a person an agent booked", new[] { "Person's first name", "Camp", "Date and time", "Place", "Token" }),
         };
 
         /// <summary>Setting key → server configuration key it falls back to.</summary>

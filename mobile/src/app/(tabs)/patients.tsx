@@ -10,6 +10,7 @@ import { WhatsAppSheet } from '../../components/WhatsAppSheet';
 import { stageStep } from '../../components/stage';
 import { C } from '../../theme';
 import { useMoney } from '../../lib/useMoney';
+import { myBookings } from '../../lib/camps';
 import { inr, statusLine, type MyMoney } from '../../lib/money';
 import type { Lang, TFn } from '../../i18n';
 
@@ -21,6 +22,7 @@ export default function Patients() {
   const [filter, setFilter] = useState<Filter>('all');
   const [thank, setThank] = useState<{ name: string; phone: string } | null>(null);
   const money = useMoney();
+  const campBooked = useDb(() => myBookings().length);
   const rows = useDb(() => db().getAllSync<Row>(
     `SELECT r.*, c.name AS partnerName, c.phone AS partnerPhone,
             EXISTS(SELECT 1 FROM outbox o WHERE o.clientId = r.clientId) AS unsent,
@@ -84,8 +86,18 @@ export default function Patients() {
         keyExtractor={(r) => r.clientId}
         renderItem={({ item }) => <PatientCard r={item} t={t} lang={lang} steps={steps} onThank={setThank} money={byPatient.get(item.clientId)} />}
         ListHeaderComponent={
-          <View style={{ marginBottom: 12 }}>
+          <View style={{ marginBottom: 12, gap: 8 }}>
             <Btn kind="ok" icon="calendar" label={t('apBook')} onPress={() => router.push('/appointment')} style={{ minHeight: 56, borderRadius: 16 }} />
+            {/* Health camps: book people for a camp, and the camp day. */}
+            <Pressable onPress={() => router.push('/camps')} accessibilityRole="button"
+              style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingHorizontal: 14, borderRadius: 16, backgroundColor: C.card, borderWidth: 1, borderColor: C.border }, pressed && { opacity: 0.85 }]}>
+              <Icon name="flag" size={20} color={C.okInk} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <T style={{ fontSize: 16, fontWeight: '800' }}>{t('cmCamps')}</T>
+                <T style={{ fontSize: 13, color: C.text2 }} numberOfLines={1}>{campBooked > 0 ? `${t('cmMyBookings')}: ${campBooked}` : t('cmCampsSub')}</T>
+              </View>
+              <Icon name="chevron" size={18} color={C.text3} />
+            </Pressable>
           </View>
         }
         ListEmptyComponent={<Empty text={t('noPatients')} icon="patients" />}

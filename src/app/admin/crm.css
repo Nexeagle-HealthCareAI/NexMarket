@@ -4540,3 +4540,10 @@ strong.is-ok { color: var(--ok-ink); }
 .rf-vitals-vals { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-variant-numeric: tabular-nums; font-weight: 600; }
 .rf-vitals-vals .is-high { color: var(--bad); }
 @media (max-width: 560px) { .rf-vitals li { grid-template-columns: 1fr; gap: 4px; } }
+
+/* Camp: bookings made by field agents from the app */
+.cp-agents { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 10px 12px; border-radius: 12px; background: var(--ok-soft); }
+.cp-agents-title { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ok-ink); margin-right: 4px; }
+.cp-agent { font-size: 13px; padding: 3px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+.cp-wa.is-ok { color: var(--ok-ink); }
+.cp-wa.is-bad { color: var(--warn-ink); }

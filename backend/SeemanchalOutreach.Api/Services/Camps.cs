@@ -167,3 +167,55 @@ namespace SeemanchalOutreach.Api.Services
         }
     }
 }
+
+namespace SeemanchalOutreach.Api.Services
+{
+    /// <summary>
+    /// Camp bookings made by field agents, and arrival marks on the camp day (from the app or the CRM, one list).
+    /// </summary>
+    public static class CampDesk
+    {
+        public static string When(HealthCamp c) => $"{c.Date:d MMM}, {c.StartTime}–{c.EndTime}";
+        public static string Place(HealthCamp c) =>
+            string.Join(", ", new[] { c.Venue, c.Block }.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct()) is { Length: > 0 } s ? s : c.District ?? "";
+
+        /// <summary>Who marked them arrived (or not come, or undid it), and whether from the app or the CRM.</summary>
+        public static void Marked(CampPatient p, string? by, string via)
+        {
+            p.StatusBy = by;
+            p.StatusVia = via;
+            p.StatusAt = DateTime.UtcNow;
+        }
+
+        /// <summary>
+        /// The token goes to them on WhatsApp by itself, with the template chosen for "Health camp: token" in WhatsApp → Setup.
+        /// Nothing is sent without a mobile. What happened is kept on the booking (and in the WhatsApp log). Caller saves.
+        /// </summary>
+        public static async Task SendTokenAsync(WhatsAppOutbox outbox, HealthCamp c, CampPatient p, CancellationToken ct)
+        {
+            if (string.IsNullOrEmpty(p.Phone)) return;
+            var first = p.Name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? p.Name;
+            var values = new[] { first, c.Title, When(c), Place(c), p.Token.ToString() };
+            var preview = $"Camp token {p.Token}: {c.Title}, {When(c)}, {Place(c)}";
+            try
+            {
+                var msg = await outbox.SendUseAsync(p.Phone, "camp_booked", "hi", values, preview, "camp", p.CreatedBy, p.LeadId, null, ct);
+                p.WaStatus = msg.Status;
+                p.WaError = msg.Error;
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                p.WaStatus = "failed";
+                p.WaError = "Could not reach WhatsApp.";
+            }
+        }
+
+        /// <summary>Names of the agents and staff with these ids.</summary>
+        public static async Task<Dictionary<string, string>> NamesAsync(IMarketingDbContext db, IEnumerable<string?> ids, CancellationToken ct)
+        {
+            var list = ids.Where(x => !string.IsNullOrEmpty(x)).Select(x => x!).Distinct().ToList();
+            if (list.Count == 0) return new();
+            return await db.Agents.AsNoTracking().Where(a => list.Contains(a.AgentId)).ToDictionaryAsync(a => a.AgentId, a => a.Name, ct);
+        }
+    }
+}

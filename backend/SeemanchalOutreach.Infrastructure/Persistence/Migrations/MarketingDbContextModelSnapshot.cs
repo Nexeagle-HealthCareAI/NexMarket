@@ -975,6 +975,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("CampId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ClientId")
+                        .HasColumnType("text");
+
                     b.Property<string>("Complaint")
                         .HasColumnType("text");
 
@@ -1000,11 +1003,17 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PanchayatId")
+                        .HasColumnType("text");
+
                     b.Property<string>("PartnerClientId")
                         .HasColumnType("text");
 
                     b.Property<string>("Phone")
                         .HasColumnType("text");
+
+                    b.Property<int?>("Pulse")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("ReferToHospital")
                         .HasColumnType("boolean");
@@ -1026,11 +1035,27 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("StatusAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StatusBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StatusVia")
+                        .HasColumnType("text");
+
                     b.Property<int?>("Sugar")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SugarKind")
+                        .HasColumnType("text");
+
                     b.Property<string>("Symptoms")
                         .HasColumnType("text");
+
+                    b.Property<decimal?>("TempF")
+                        .HasPrecision(5, 1)
+                        .HasColumnType("numeric(5,1)");
 
                     b.Property<int>("Token")
                         .HasColumnType("integer");
@@ -1044,11 +1069,22 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("Village")
                         .HasColumnType("text");
 
+                    b.Property<string>("WaError")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WaStatus")
+                        .HasColumnType("text");
+
                     b.Property<decimal?>("WeightKg")
                         .HasPrecision(5, 1)
                         .HasColumnType("numeric(5,1)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ClientId")
+                        .IsUnique();
+
+                    b.HasIndex("CreatedBy");
 
                     b.HasIndex("LeadId");
 

@@ -8,6 +8,7 @@ import { Icon, type IconName } from '../../components/Icon';
 import { SyncStrip, useSyncSummary } from '../../components/SyncStrip';
 import { NextStepCard, type StepAction, type StepTone } from '../../components/NextStepCard';
 import { TaskSheet, TasksSection, dueLabel } from '../../components/TaskCard';
+import { CampTodayCard } from '../../components/CampTodayCard';
 import { useDb, useSession } from '../../lib/session';
 import { useHere } from '../../lib/useHere';
 import { assignment } from '../../lib/sync';
@@ -139,6 +140,8 @@ export default function Today() {
             secondary={card.secondary ?? (data.step.kind === 'task' ? { label: t('tdOpenTask'), onPress: () => setTaskId((data.step as { task: Task }).task.id) } : null)} />
 
           <AlsoToday data={data} chatUnread={chatUnread} t={t} lang={lang} onOpenTask={setTaskId} />
+
+          <CampTodayCard />
 
           {/* Three numbers instead of the old rings. */}
           <View style={{ flexDirection: 'row', backgroundColor: C.card, borderWidth: 1, borderColor: C.border, borderRadius: 16, paddingVertical: 6 }}>

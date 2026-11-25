@@ -604,6 +604,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.Phone);
                 entity.HasIndex(e => e.LeadId);
                 entity.Property(e => e.WeightKg).HasPrecision(5, 1);
+                entity.Property(e => e.TempF).HasPrecision(5, 1);
+                entity.HasIndex(e => e.ClientId).IsUnique();
+                entity.HasIndex(e => e.CreatedBy);
             });
             modelBuilder.Entity<SocialConversation>(entity =>
             {

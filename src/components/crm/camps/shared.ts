@@ -13,10 +13,12 @@ export interface CampDetail {
   host?: { clientId: string; name: string; role: string } | null;
   checklist: ChecklistItem[];
   stats: {
-    booked: number; attended: number; referred: number; arrived: number; prebooked: number; walkIn: number; noShow: number;
+    booked: number; attended: number; referred: number; arrived: number; prebooked: number; walkIn: number; noShow: number; byAgents?: number; byWhatsApp?: number;
     women: number; men: number; over60: number; children: number; highBp: number; highSugar: number; costPerAttendee?: number | null; costPerArrival?: number | null;
   };
   symptoms: CountRow[]; conditions: CountRow[];
+  /** Field agents who booked people from the app: how many each, and how many of those came. */
+  agents?: { agentId: string; name: string; booked: number; came: number }[];
   link: { message: string; waLink: string | null; displayPhone?: string | null; hospital: string };
 }
 export interface CampPatient {
@@ -25,6 +27,11 @@ export interface CampPatient {
   symptoms: string[]; conditions: string[]; bpSystolic?: number | null; bpDiastolic?: number | null; sugar?: number | null; weightKg?: number | null; spo2?: number | null;
   advice?: string | null; referToHospital: boolean; department?: string | null; urgent: boolean; consent: boolean; leadId?: string | null; leadStatus?: string | null; flags: string[];
   healthCard?: { id: string; number: string } | null;
+  /** Booked from the field app: by whom; the token sent on WhatsApp by itself (sent | failed | blocked). */
+  bookedBy?: string | null; waStatus?: string | null; waError?: string | null;
+  /** Who marked them arrived / didn't come, from the app or the CRM, and when. */
+  statusBy?: string | null; statusVia?: string | null; statusAt?: string | null;
+  pulse?: number | null; tempF?: number | null; sugarKind?: string | null;
 }
 export interface CampOptions {
   types: { key: string; label: string }[];

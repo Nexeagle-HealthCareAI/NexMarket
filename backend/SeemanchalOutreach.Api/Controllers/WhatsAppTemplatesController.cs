@@ -269,6 +269,12 @@ namespace SeemanchalOutreach.Api.Controllers
                 }, "form_welcome"),
                 (new WaTemplateDto
                 {
+                    Name = "nx_camp_token", Category = "UTILITY",
+                    Body = "नमस्ते {{1}}, {{2}} में आपका नाम लिख लिया गया है।\nतारीख और समय: {{3}}\nजगह: {{4}}\nआपका टोकन नंबर: {{5}}\nकृपया पुरानी रिपोर्ट और दवाइयाँ साथ लाएं। - " + h,
+                    Examples = new() { "रीना", "निःशुल्क हड्डी और जोड़ जांच शिविर", "29 नवंबर, सुबह 9 से 2 बजे", "पंचायत भवन, कसबा", "87" },
+                }, "camp_booked"),
+                (new WaTemplateDto
+                {
                     Name = "nx_appointment_confirm", Category = "UTILITY",
                     Body = "नमस्ते {{1}}, " + h + " में आपका अपॉइंटमेंट {{2}} को {{3}} बजे {{4}} के साथ तय है। कृपया पुरानी रिपोर्ट और पर्चे साथ लाएं।",
                     Examples = new() { "रीना", "12 नवंबर", "11", "डॉ. अहमद" },

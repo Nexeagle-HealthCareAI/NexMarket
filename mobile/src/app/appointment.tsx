@@ -1,11 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Btn, Chip, Field, Screen, Sheet, T, TopBar, liveText, toast, useTextScale } from '../components/ui';
+import { Btn, Chip, Field, Pill, Screen, T, Toggle, TopBar, liveText, toast, useTextScale } from '../components/ui';
 import { VoiceField } from '../components/MicButton';
 import { Icon } from '../components/Icon';
 import { sortPanchayats } from '../components/PanchayatList';
 import { PanchayatPicker, recentPanchayats, rememberPanchayat } from '../components/PanchayatPicker';
+import { CampCard, CampPickSheet } from '../components/CampPicker';
+import { VitalsSheet } from '../components/VitalsSheet';
+import { bookCamp, campList, campVitals, refreshCamps, sortCamps, vitalBits, type CampVitals } from '../lib/camps';
 import { useDb, useSession } from '../lib/session';
 import { kvGet, kvSet, q } from '../lib/db';
 import { addAppointment } from '../lib/repo';
@@ -18,20 +21,33 @@ import { C } from '../theme';
 const K_LAST_PLACE = 'appt.lastPanchayat';
 
 /**
- * Book an appointment for a patient met in the field: name, age, gender, mobile (optional) and where they live. The
+ * Book a patient met in the field, for the hospital or for a health camp. For the hospital: name, age, gender, mobile (optional) and where they live. The
  * panchayat is filled in only when it is sure (where the agent is checked in, else the last one used); otherwise the
  * agent picks it: one tap on a suggestion, or search any panchayat in any block. Block and district come from it.
  * The complaint can be written now or later; vitals and a sugar test are added on the patient's screen.
+ * For a camp: pick the camp (every upcoming one, mine first); there is no visit day, the camp's date is it. The token
+ * goes to them on WhatsApp by itself. Complaint and vitals are optional, now or later, or on the camp day.
  */
 export default function Appointment() {
   const { t } = useSession();
   const scale = useTextScale();
-  const params = useLocalSearchParams<{ panchayatId?: string }>();
+  const params = useLocalSearchParams<{ panchayatId?: string; camp?: string; name?: string; walkIn?: string }>();
   const here = useHere();
   const visit = useDb(() => q.activeVisit());
   const assigned = useDb(() => q.assigned());
   const mine = assignment();
-  const [name, setName] = useState('');
+  const [name, setName] = useState(params.name ?? '');
+  const camps = useDb(() => { const l = campList(); return { today: l?.today ?? null, list: sortCamps(l?.camps ?? [], mine.block) }; }, [mine.block]);
+  const [where, setWhere] = useState<'hospital' | 'camp'>(params.camp ? 'camp' : 'hospital');
+  const [campId, setCampId] = useState<string | null>(params.camp ?? null);
+  const [pickingCamp, setPickingCamp] = useState(false);
+  const [vitals, setVitals] = useState<Partial<CampVitals> | null>(null);
+  const [addingVitals, setAddingVitals] = useState(false);
+  const [walkIn, setWalkIn] = useState(params.walkIn === '1');
+  useEffect(() => { refreshCamps().catch(() => undefined); }, []);
+  const camp = camps.list.find((c) => c.id === campId) ?? (where === 'camp' && !params.camp ? camps.list[0] : undefined) ?? null;
+  const forCamp = where === 'camp';
+  const campToday = !!camp && camp.date === camps.today;
   const [age, setAge] = useState('');
   const [sex, setSex] = useState<'F' | 'M' | 'O' | null>(null);
   const [phone, setPhone] = useState('');
@@ -68,6 +84,16 @@ export default function Appointment() {
     if (!panchayatId && !(editPlace && placeTyped.trim() && block.trim())) e.place = t('apNeedPlace');
     setErrors(e);
     if (Object.keys(e).length) { toast(Object.values(e)[0]); return; }
+    if (forCamp) {
+      if (!camp) { toast(t('cmPickCamp')); setPickingCamp(true); return; }
+      void bookCamp({
+        campId: camp.id, name: name.trim(), age: n, sex: sex!, phone: digits, panchayatId, village: !panchayatId && placeTyped.trim() ? placeTyped.trim() : null,
+        complaint: complaint.trim(), vitals, arrived: walkIn && campToday,
+      }).then((clientId) => router.replace({ pathname: '/camp-booked', params: { id: clientId, ...(params.walkIn === '1' ? { day: camp.id } : {}) } }));
+      if (panchayatId) { kvSet(K_LAST_PLACE, panchayatId); rememberPanchayat(panchayatId); }
+      savedFeedback();
+      return;
+    }
     const visitDate = ymd(new Date(Date.now() + day * 86400000));
     const id = addAppointment({
       patientName: name, patientAge: n, patientSex: sex!, clientPhone: digits, panchayatId, block: block.trim() || null, district: district.trim() || null,
@@ -81,12 +107,37 @@ export default function Appointment() {
   };
 
   return (
-    <Screen header={<TopBar title={t('apTitle')} explain={t('apExplain')} />}
+    <Screen header={<TopBar title={forCamp ? t('cmSave') : t('apTitle')} explain={forCamp ? t('cmCampsExplain') : t('apExplain')} />}
       footer={
         <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: C.card, borderTopWidth: 1, borderTopColor: C.border }}>
-          <Btn kind="ok" icon="calendar" label={t('apSave')} onPress={save} style={{ minHeight: 58, borderRadius: 16 }} />
+          <Btn kind="ok" icon="calendar" label={forCamp ? t('cmSave') : t('apSave')} onPress={save} style={{ minHeight: 58, borderRadius: 16 }} />
         </View>
       }>
+      {/* Hospital or a health camp: shown once the office has a camp coming up. */}
+      {camps.list.length > 0 || params.camp ? (
+        <View style={{ gap: 6 }}>
+          <T style={{ fontSize: 15, fontWeight: '700' }}>{t('cmWhere')}</T>
+          <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="radiogroup">
+            {([['hospital', t('cmHospital'), 'hospital'], ['camp', t('cmCamp'), 'flag']] as const).map(([k, l, ic]) => {
+              const on = where === k;
+              const tone = k === 'camp' ? C.ok : C.blue;
+              return (
+                <Pressable key={k} onPress={() => setWhere(k)} accessibilityRole="radio" accessibilityState={{ selected: on }}
+                  style={({ pressed }) => [{ flex: 1, minHeight: 54, borderRadius: 14, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: on ? tone : C.card, borderWidth: 1, borderColor: on ? tone : C.borderStrong }, pressed && { opacity: 0.85 }]}>
+                  <Icon name={ic} size={18} color={on ? '#fff' : C.text3} />
+                  <T style={{ fontSize: 16, fontWeight: '800', color: on ? '#fff' : C.text }} numberOfLines={1}>{l}</T>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+      {forCamp ? (
+        camp ? <CampCard camp={camp} today={camps.today} onPress={() => setPickingCamp(true)} />
+          : <Btn kind="secondary" icon="flag" label={t('cmPickCamp')} onPress={() => setPickingCamp(true)} />
+      ) : null}
+
       <VoiceField voice="name" label={t('apName')} value={name} onChangeText={setName} error={errors.name} autoCapitalize="words" autoFocus />
 
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
@@ -111,7 +162,7 @@ export default function Appointment() {
       </View>
 
       <View style={{ gap: 6 }}>
-        <T style={{ fontSize: 15, fontWeight: '700' }}>{t('apMobile')} <T style={{ fontWeight: '500', color: C.text2 }}>{t('apOptional')}</T></T>
+        <T style={{ fontSize: 15, fontWeight: '700' }}>{t('apMobile')} <T style={{ fontWeight: '500', color: C.text2 }}>{forCamp ? `(${t('apOptional').replace(/[()]/g, '')} · ${t('cmTokenAuto')})` : t('apOptional')}</T></T>
         <View style={{ flexDirection: 'row', alignItems: 'stretch', minHeight: 52, borderWidth: 1, borderColor: errors.phone ? C.bad : C.borderStrong, borderRadius: 14, backgroundColor: C.card, overflow: 'hidden' }}>
           <View style={{ paddingHorizontal: 12, justifyContent: 'center', backgroundColor: C.bg, borderRightWidth: 1, borderRightColor: C.borderStrong }}>
             <T style={{ fontSize: 17, fontWeight: '700', color: C.text3 }}>+91</T>
@@ -157,14 +208,32 @@ export default function Appointment() {
         ) : null}
       </View>
 
-      <View style={{ gap: 6 }}>
-        <T style={{ fontSize: 15, fontWeight: '700' }}>{t('apVisitDay')}</T>
-        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-          {days.map((d, i) => <Chip key={d} label={d} selected={day === i} onPress={() => setDay(i)} big />)}
+      {!forCamp ? (
+        <View style={{ gap: 6 }}>
+          <T style={{ fontSize: 15, fontWeight: '700' }}>{t('apVisitDay')}</T>
+          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            {days.map((d, i) => <Chip key={d} label={d} selected={day === i} onPress={() => setDay(i)} big />)}
+          </View>
         </View>
-      </View>
+      ) : null}
 
       <VoiceField voice="note" label={`${t('apComplaint')} ${t('apOptional')}`} value={complaint} onChangeText={setComplaint} placeholder={t('apComplaintPh')} multiline />
+
+      {/* For a camp, vitals can be taken now (optional); otherwise later, or on the camp day. */}
+      {forCamp ? (
+        <Pressable onPress={() => setAddingVitals(true)} accessibilityRole="button"
+          style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 54, paddingHorizontal: 14, borderRadius: 14, borderWidth: 1, borderColor: C.borderStrong, backgroundColor: C.card }, pressed && { opacity: 0.85 }]}>
+          <Icon name="plus" size={18} color={C.blue} />
+          <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+            {vitals ? vitalBits(vitals).map((b) => <Pill key={b} label={b} />) : <T style={{ color: C.blue, fontWeight: '700', fontSize: 15.5 }}>{t('cmVitalsAdd')}</T>}
+          </View>
+        </Pressable>
+      ) : null}
+      {forCamp && campToday ? <Toggle label={t('cmWalkIn')} value={walkIn} onChange={setWalkIn} /> : null}
+
+      <CampPickSheet visible={pickingCamp} onClose={() => setPickingCamp(false)} camps={camps.list} selected={camp?.id ?? null} myBlock={mine.block} today={camps.today}
+        onPick={(c) => { setCampId(c.id); setWhere('camp'); setPickingCamp(false); }} />
+      <VitalsSheet short visible={addingVitals} onClose={() => setAddingVitals(false)} onSave={(v) => { setVitals(campVitals(v)); setAddingVitals(false); }} />
 
       <PanchayatPicker visible={picking} onClose={() => setPicking(false)} selected={panchayatId} here={here}
         onPick={(pp) => { setPanchayatId(pp.id); setEditPlace(false); setBlockTyped(null); setDistrictTyped(null); setPicking(false); }}

@@ -737,6 +737,20 @@ namespace SeemanchalOutreach.Domain.Entities
         public bool Urgent { get; set; }
         public Guid? LeadId { get; set; }                      // the follow-up lead in the Leads inbox
         public bool Consent { get; set; }                      // agreed to their details being kept and to be contacted
+        /// <summary>The field app's own id for a booking made on the phone, so sending it twice books once.</summary>
+        public string? ClientId { get; set; }
+        /// <summary>Where they live, when picked from the panchayat list (Village then holds its name).</summary>
+        public string? PanchayatId { get; set; }
+        public int? Pulse { get; set; }
+        public decimal? TempF { get; set; }
+        public string? SugarKind { get; set; }                 // random | fasting | pp
+        /// <summary>Who last marked them arrived or not come, and from where (app | crm).</summary>
+        public string? StatusBy { get; set; }
+        public string? StatusVia { get; set; }
+        public DateTime? StatusAt { get; set; }
+        /// <summary>The token sent to them on WhatsApp by itself when an agent booked them: sent | failed | blocked.</summary>
+        public string? WaStatus { get; set; }
+        public string? WaError { get; set; }
         public string? CreatedBy { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

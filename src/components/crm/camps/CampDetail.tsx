@@ -22,7 +22,7 @@ import {
 } from './shared';
 import { place } from '@/lib/crm/access';
 
-interface PatientsRes { items: CampPatient[]; total: number; counts: Record<string, number>; referred: number }
+interface PatientsRes { items: CampPatient[]; total: number; counts: Record<string, number>; referred: number; byAgents?: number }
 
 export function CampDetail({ id, options, canEdit, onBack, toast }: { id: string; options: CampOptions | null; canEdit: boolean; onBack: () => void; toast: (m: string) => void }) {
   const [tab, setTab] = usePageTab(['people', 'disease', 'plan'] as const, 'people', 'view');
@@ -67,7 +67,7 @@ export function CampDetail({ id, options, canEdit, onBack, toast }: { id: string
       </header>
 
       <section className="ld-kpis" aria-label="Camp numbers">
-        <Kpi label="Booked / registered" value={s.booked} sub={`${pct(s.booked, c.capacity)}% of ${c.capacity} slots · ${s.prebooked} pre-booked`} />
+        <Kpi label="Booked / registered" value={s.booked} sub={`${pct(s.booked, c.capacity)}% of ${c.capacity} slots · ${s.prebooked} pre-booked${s.byAgents ? ` · ${s.byAgents} by field agents` : ''}`} />
         <Kpi label="Seen" value={s.attended} sub={`Target ${c.targetRegistrations}${s.noShow ? ` · ${s.noShow} didn't come` : ''}`} tone={s.attended >= c.targetRegistrations && s.attended > 0 ? 'ok' : undefined} />
         <Kpi label={`Sent to ${place()}`} value={s.referred} sub={`Target ${c.targetReferrals} · ${pct(s.referred, s.attended)}% of seen`} />
         <Kpi label={`Came to ${place()}`} value={s.arrived} sub={`${pct(s.arrived, s.referred)}% of referred`} tone={s.arrived > 0 ? 'ok' : undefined} />
@@ -147,7 +147,9 @@ function Checklist({ campId, items, canEdit, onSaved, toast }: { campId: string;
   );
 }
 
-const FILTERS = [{ key: '', label: 'Everyone' }, { key: 'booked', label: 'Booked' }, { key: 'attended', label: 'Seen' }, { key: 'referred', label: `To ${place()}` }, { key: 'no_show', label: "Didn't come" }] as const;
+const FILTERS = [{ key: '', label: 'Everyone' }, { key: 'booked', label: 'Waiting' }, { key: 'attended', label: 'Arrived / seen' }, { key: 'no_show', label: "Didn't come" }, { key: 'referred', label: `To ${place()}` }, { key: 'agent', label: 'Booked by agents' }] as const;
+
+const time = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
 
 function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; options: CampOptions | null; canEdit: boolean; onChanged: () => void; toast: (m: string) => void }) {
   const [filter, setFilter] = useState('');
@@ -165,7 +167,7 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
   useEffect(() => { crm.get<{ name: string }[]>('/api/v1/departments').then((x) => setDepts(x.map((y) => y.name))).catch(() => undefined); }, []);
   const qs = useMemo(() => {
     const sp = new URLSearchParams({ page: String(page), pageSize: String(size) });
-    if (filter === 'referred') sp.set('referred', 'true'); else if (filter) sp.set('status', filter);
+    if (filter === 'referred') sp.set('referred', 'true'); else if (filter === 'agent') sp.set('source', 'agent'); else if (filter) sp.set('status', filter);
     if (qd) sp.set('q', qd);
     return sp.toString();
   }, [filter, qd, page, size]);
@@ -180,7 +182,9 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
   // From the camp day on, walk-ins and check-ups are the main work; before it, bookings are.
   const onDay = daysTo(camp.camp.date) <= 0;
   const villages = useMemo(() => [...new Set((data?.items ?? []).map((p) => p.village).filter((v): v is string => !!v))], [data]);
-  const count = (k: string) => (k === '' ? Object.values(data?.counts ?? {}).reduce((a, b) => a + b, 0) : k === 'referred' ? data?.referred ?? 0 : data?.counts[k] ?? 0);
+  const count = (k: string) => (k === '' ? Object.values(data?.counts ?? {}).reduce((a, b) => a + b, 0) : k === 'referred' ? data?.referred ?? 0 : k === 'agent' ? data?.byAgents ?? 0 : data?.counts[k] ?? 0);
+  // Arrived / didn't come are marked here or in the field app; the camp day and after.
+  const live = onDay && camp.camp.status !== 'cancelled';
 
   return (
     <div className="crm-card cp-people">
@@ -194,9 +198,17 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
           </button>
         </div>
       )}
+      {(camp.agents?.length ?? 0) > 0 && (
+        <div className="cp-agents" aria-label="Booked by field agents">
+          <span className="cp-agents-title">Booked by field agents</span>
+          {camp.agents!.map((a) => (
+            <span key={a.agentId} className="cp-agent"><strong>{a.name}</strong> {a.booked} booked{onDay ? ` · ${a.came} came` : ''}</span>
+          ))}
+        </div>
+      )}
       <label className="ch-search" style={{ margin: 0 }}>
         <Search size={16} aria-hidden /><span className="crm-sr">Search people</span>
-        <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Name, mobile, village or token" />
+        <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Name, mobile, panchayat or token" />
       </label>
       <div className="crm-chips">
         {FILTERS.map((f) => <button key={f.key} type="button" className="crm-chip" aria-pressed={filter === f.key} onClick={() => { setFilter(f.key); setPage(1); }}>{f.label}<span className="ld-chip-n">{count(f.key)}</span></button>)}
@@ -218,27 +230,42 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
                       <strong>{p.name}</strong>
                       {p.healthCard && <button type="button" className="hc-badge" onClick={() => setOpenCard(p.healthCard!.id)} title="Hospital health card">{p.healthCard.number}</button>}
                       <span className="crm-cell-sub wl-sub">{[p.age != null ? `${p.age} y` : null, p.sex === 'F' ? 'F' : p.sex === 'M' ? 'M' : null, p.village, p.phone ? `+${p.phone.slice(0, 2)} ${p.phone.slice(2)}` : null].filter(Boolean).join(' · ')}</span>
-                      <span className="crm-cell-sub wl-sub">{SOURCE_LABEL[p.source] ?? p.source}{p.partnerName ? ` · via ${p.partnerName}` : ''}{p.slot ? ` · ${p.slot}` : ''}</span>
+                      <span className="crm-cell-sub wl-sub">
+                        {p.bookedBy ? <>Booked by <strong>{p.bookedBy}</strong> · agent app</> : SOURCE_LABEL[p.source] ?? p.source}{p.partnerName ? ` · via ${p.partnerName}` : ''}{p.slot ? ` · ${p.slot}` : ''}
+                        {p.source === 'agent' && p.phone ? (p.waStatus === 'sent' || p.waStatus === 'delivered' || p.waStatus === 'read'
+                          ? <span className="cp-wa is-ok" title="The token went on WhatsApp by itself"> · token on WhatsApp ✓</span>
+                          : p.waStatus ? <span className="cp-wa is-bad" title={p.waError ?? undefined}> · WhatsApp token not sent</span> : null) : null}
+                      </span>
                     </td>
                     <td className="cp-cell-text">{p.complaint ?? <span className="crm-cell-sub">—</span>}</td>
                     <td><div className="cp-cell-vitals">
                       {p.bpSystolic ? <span className={p.flags.includes('hypertension') ? 'is-high' : undefined}>BP {p.bpSystolic}/{p.bpDiastolic ?? '–'}</span> : null}
-                      {p.sugar ? <span className={p.flags.includes('diabetes') ? 'is-high' : undefined}>Sugar {p.sugar}</span> : null}
+                      {p.sugar ? <span className={p.flags.includes('diabetes') ? 'is-high' : undefined}>Sugar {p.sugar}{p.sugarKind === 'fasting' ? ' (fasting)' : p.sugarKind === 'pp' ? ' (after food)' : ''}</span> : null}
                       {p.spo2 ? <span className={p.flags.includes('asthma_copd') ? 'is-high' : undefined}>SpO2 {p.spo2}%</span> : null}
-                      {!p.bpSystolic && !p.sugar && !p.spo2 && <span className="crm-cell-sub">—</span>}
+                      {p.pulse ? <span>Pulse {p.pulse}</span> : null}
+                      {p.tempF ? <span className={p.tempF >= 100.4 ? 'is-high' : undefined}>{p.tempF}°F</span> : null}
+                      {!p.bpSystolic && !p.sugar && !p.spo2 && !p.pulse && !p.tempF && <span className="crm-cell-sub">—</span>}
                     </div></td>
                     <td className="cp-cell-text">
                       {p.conditions.length ? p.conditions.map(condLabel).join(', ') : <span className="crm-cell-sub">—</span>}
                       {p.referToHospital && <span className="wl-sub"><Pill tone={p.urgent ? 'bad' : 'accent'}>{p.urgent ? 'Urgent · ' : ''}{p.department ?? 'Hospital'}</Pill>
                         {p.leadId && <Link className="wa-link" style={{ lineHeight: 1.6, marginLeft: 6, fontSize: 12 }} href={`/admin/leads?id=${p.leadId}`}>{p.leadStatus === 'arrived' || p.leadStatus === 'admitted' ? 'Came\u00a0✓' : 'Follow-up\u00a0→'}</Link>}</span>}
                     </td>
-                    <td><Pill tone={ps.tone}>{ps.label}</Pill></td>
+                    <td>
+                      <Pill tone={ps.tone}>{p.status === 'attended' && !p.conditions.length && !p.advice ? 'Arrived' : ps.label}</Pill>
+                      {p.status !== 'booked' && (p.statusBy || p.arrivedAt) && (
+                        <span className="crm-cell-sub wl-sub">{[p.status === 'attended' && p.arrivedAt ? time(p.arrivedAt) : null, p.statusBy ? `by ${p.statusBy}${p.statusVia === 'app' ? ' (app)' : ''}` : null].filter(Boolean).join(' · ')}</span>
+                      )}
+                    </td>
                     <td><div className="cp-actions">
                       {canEdit && <>
                         <button type="button" className={`crm-btn is-sm${p.status === 'attended' ? ' is-secondary' : ''}`} onClick={() => setForm({ mode: 'screen', p })}><Stethoscope size={14} aria-hidden /> {p.status === 'attended' ? 'Check-up' : 'Check up'}</button>
                         {p.status === 'booked' && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => void mark(p, 'attended')}><CheckCircle2 size={14} aria-hidden /> Arrived</button>}
                         {p.status === 'attended' && !p.healthCard && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setGiveCard(p)}><CreditCard size={14} aria-hidden /> Health card</button>}
-                        {p.status === 'booked' && camp.camp.status === 'done' && <button type="button" className="nt-link is-muted" onClick={() => void mark(p, 'no_show')}>Didn&apos;t come</button>}
+                        {p.status === 'booked' && (live || camp.camp.status === 'done') && <button type="button" className="nt-link is-muted" onClick={() => void mark(p, 'no_show')}>Didn&apos;t come</button>}
+                        {(p.status === 'no_show' || (p.status === 'attended' && !p.conditions.length && !p.advice && !p.healthCard)) && live && (
+                          <button type="button" className="nt-link is-muted" title="Marked by mistake: back to waiting" onClick={() => void mark(p, 'booked')}>Undo</button>
+                        )}
                       </>}
                     </div></td>
                   </tr>

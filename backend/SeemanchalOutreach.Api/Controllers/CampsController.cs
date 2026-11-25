@@ -57,6 +57,10 @@ namespace SeemanchalOutreach.Api.Controllers
         public int? Sugar { get; set; }
         public decimal? WeightKg { get; set; }
         public int? Spo2 { get; set; }
+        public int? Pulse { get; set; }
+        public decimal? TempF { get; set; }
+        public string? SugarKind { get; set; }
+        public string? PanchayatId { get; set; }
         public string? Advice { get; set; }
         public bool? ReferToHospital { get; set; }
         public string? Department { get; set; }
@@ -282,7 +286,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 stats = new
                 {
                     booked = stats?.Booked ?? 0, attended = stats?.Attended ?? 0, referred = stats?.Referred ?? 0, arrived = stats?.Arrived ?? 0,
-                    prebooked = pts.Count(p => p.Source != "walk_in"), walkIn = pts.Count(p => p.Source == "walk_in"),
+                    prebooked = pts.Count(p => p.Source != "walk_in"), walkIn = pts.Count(p => p.Source == "walk_in"), byAgents = pts.Count(p => p.Source == "agent"), byWhatsApp = pts.Count(p => p.Source == "whatsapp"),
                     noShow = pts.Count(p => p.Status == "no_show"),
                     women = attended.Count(p => p.Sex == "F"), men = attended.Count(p => p.Sex == "M"),
                     over60 = attended.Count(p => p.Age >= 60), children = attended.Count(p => p.Age < 15),
@@ -291,8 +295,18 @@ namespace SeemanchalOutreach.Api.Controllers
                     costPerArrival = (stats?.Arrived ?? 0) > 0 && spent > 0 ? Math.Round(spent / stats!.Arrived) : (decimal?)null,
                 },
                 symptoms, conditions,
+                agents = await AgentTallyAsync(pts, ct),
                 link = new { message, waLink = LeadInbox.WaLink(wa, message), displayPhone = LeadInbox.DisplayPhone(wa), hospital = wa.HospitalName },
             });
+        }
+
+        /// <summary>Field agents who booked people into the camp from the app: how many each, and how many of those came.</summary>
+        private async Task<object> AgentTallyAsync(List<CampPatient> pts, CancellationToken ct)
+        {
+            var mine = pts.Where(p => p.Source == "agent" && p.CreatedBy != null).ToList();
+            var names = await CampDesk.NamesAsync(_db, mine.Select(p => p.CreatedBy), ct);
+            return mine.GroupBy(p => p.CreatedBy!).Select(g => new { agentId = g.Key, name = names.GetValueOrDefault(g.Key) ?? g.Key, booked = g.Count(), came = g.Count(p => p.Status == "attended") })
+                .OrderByDescending(x => x.booked).ThenBy(x => x.name).ToList();
         }
 
         [HttpPut("{id:guid}/checklist")]
@@ -321,7 +335,7 @@ namespace SeemanchalOutreach.Api.Controllers
 
         // ─── People at the camp ───
         [HttpGet("{id:guid}/patients")]
-        public async Task<IActionResult> Patients(Guid id, [FromQuery] string? status, [FromQuery] string? q, [FromQuery] bool referred = false,
+        public async Task<IActionResult> Patients(Guid id, [FromQuery] string? status, [FromQuery] string? q, [FromQuery] bool referred = false, [FromQuery] string? source = null,
             [FromQuery] int page = 1, [FromQuery] int pageSize = 25, CancellationToken ct = default)
         {
             page = Math.Max(1, page);
@@ -335,9 +349,11 @@ namespace SeemanchalOutreach.Api.Controllers
             }
             var counts = await all.GroupBy(p => p.Status).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
             var referredCount = await all.CountAsync(p => p.ReferToHospital, ct);
+            var agentCount = await all.CountAsync(p => p.Source == "agent", ct);
             var list = all;
             if (!string.IsNullOrWhiteSpace(status)) list = list.Where(p => p.Status == status);
             if (referred) list = list.Where(p => p.ReferToHospital);
+            if (!string.IsNullOrWhiteSpace(source)) list = list.Where(p => p.Source == source);
             var total = await list.CountAsync(ct);
             var rows = await list.OrderBy(p => p.Token).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
             var pids = rows.Where(r => r.PartnerClientId != null).Select(r => r.PartnerClientId!).Distinct().ToList();
@@ -347,15 +363,21 @@ namespace SeemanchalOutreach.Api.Controllers
             var rowIds = rows.Select(r => (Guid?)r.Id).ToList();
             var cards = (await _db.HealthCards.AsNoTracking().Where(c => rowIds.Contains(c.CampPatientId) && c.Status != "cancelled").Select(c => new { c.CampPatientId, c.Id, c.Number }).ToListAsync(ct))
                 .GroupBy(c => c.CampPatientId!.Value).ToDictionary(g => g.Key, g => g.First());
+            var people = await CampDesk.NamesAsync(_db, rows.SelectMany(r => new[] { r.CreatedBy, r.StatusBy }), ct);
             return Ok(new
             {
-                items = rows.Select(p => PatientRow(p, partners, leads, cards.TryGetValue(p.Id, out var hc) ? (hc.Id, hc.Number) : null)),
-                total, page, pageSize, counts, referred = referredCount,
+                items = rows.Select(p => PatientRow(p, partners, leads, cards.TryGetValue(p.Id, out var hc) ? (hc.Id, hc.Number) : null, people)),
+                total, page, pageSize, counts, referred = referredCount, byAgents = agentCount,
             });
         }
 
-        private static object PatientRow(CampPatient p, Dictionary<string, string> partners, Dictionary<Guid, string> leads, (Guid Id, string Number)? card = null) => new
+        private static object PatientRow(CampPatient p, Dictionary<string, string> partners, Dictionary<Guid, string> leads, (Guid Id, string Number)? card = null, Dictionary<string, string>? people = null) => new
         {
+            // Booked from the field app: by whom, and whether the token went on WhatsApp. Who marked them arrived, and where.
+            bookedBy = p.Source == "agent" && p.CreatedBy != null ? people?.GetValueOrDefault(p.CreatedBy) ?? p.CreatedBy : null,
+            waStatus = p.WaStatus, waError = p.WaError,
+            statusBy = p.StatusBy != null ? people?.GetValueOrDefault(p.StatusBy) ?? p.StatusBy : null, statusVia = p.StatusVia, statusAt = p.StatusAt,
+            pulse = p.Pulse, tempF = p.TempF, sugarKind = p.SugarKind, panchayatId = p.PanchayatId,
             healthCard = card == null ? null : new { id = card.Value.Id, number = card.Value.Number },
             id = p.Id, token = p.Token, name = p.Name, phone = p.Phone, age = p.Age, sex = p.Sex, village = p.Village, source = p.Source,
             partnerClientId = p.PartnerClientId, partnerName = p.PartnerClientId != null ? partners.GetValueOrDefault(p.PartnerClientId) : null,
@@ -367,7 +389,9 @@ namespace SeemanchalOutreach.Api.Controllers
             flags = CampBook.Flags(p),
         };
 
-        private string? ApplyPatient(CampPatient p, CampPatientDto d)
+        /// <summary>Checks and applies what was sent. Shared with the field app's camp bookings (MyCampsController).</summary>
+        [NonAction]
+        public static string? ApplyPatient(CampPatient p, CampPatientDto d)
         {
             if (d.Name != null) { var n = d.Name.Trim(); if (n.Length == 0 || n.Length > 120) return "Enter the person's name."; p.Name = n; }
             if (d.Phone != null)
@@ -385,6 +409,7 @@ namespace SeemanchalOutreach.Api.Controllers
             {
                 if (!CampBook.PatientStatuses.Contains(d.Status)) return "Unknown status.";
                 if (d.Status == "attended" && p.Status != "attended") p.ArrivedAt = DateTime.UtcNow;
+                if (d.Status is "booked" or "no_show") p.ArrivedAt = null; // a mark undone, or they didn't come after all
                 p.Status = d.Status;
             }
             if (d.Complaint != null) p.Complaint = d.Complaint.Trim().Length == 0 ? null : d.Complaint.Trim()[..Math.Min(500, d.Complaint.Trim().Length)];
@@ -395,6 +420,10 @@ namespace SeemanchalOutreach.Api.Controllers
             if (d.Sugar != null) { if (d.Sugar is < 20 or > 800) return "Sugar looks wrong."; p.Sugar = d.Sugar; }
             if (d.WeightKg != null) { if (d.WeightKg is < 1 or > 300) return "Weight looks wrong."; p.WeightKg = d.WeightKg; }
             if (d.Spo2 != null) { if (d.Spo2 is < 50 or > 100) return "SpO2 looks wrong."; p.Spo2 = d.Spo2; }
+            if (d.Pulse != null) { if (d.Pulse is < 20 or > 250) return "Pulse looks wrong."; p.Pulse = d.Pulse; }
+            if (d.TempF != null) { if (d.TempF is < 90 or > 110) return "Temperature looks wrong (°F)."; p.TempF = d.TempF; }
+            if (d.SugarKind != null) { if (d.SugarKind is not ("" or "random" or "fasting" or "pp")) return "Unknown sugar test."; p.SugarKind = d.SugarKind == "" ? null : d.SugarKind; }
+            if (d.PanchayatId != null) p.PanchayatId = d.PanchayatId.Length == 0 ? null : d.PanchayatId;
             if (d.Advice != null) p.Advice = d.Advice.Trim().Length == 0 ? null : d.Advice.Trim()[..Math.Min(1000, d.Advice.Trim().Length)];
             if (d.ReferToHospital != null) p.ReferToHospital = d.ReferToHospital.Value;
             if (d.Department != null) p.Department = d.Department.Trim().Length == 0 ? null : d.Department.Trim();
@@ -420,7 +449,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 if (dup != null) return Ok(new { id = dup.Id, token = dup.Token, existed = true });
             }
             p.Token = await CampBook.NextTokenAsync(_db, id, ct);
-            if (dto.Status == "attended") p.ArrivedAt = DateTime.UtcNow;
+            if (dto.Status == "attended") { p.ArrivedAt = DateTime.UtcNow; CampDesk.Marked(p, User.AgentIdOf(), "crm"); }
             _db.CampPatients.Add(p);
             // A walk-in checked and referred in one go: the desk follows them up, as when a screening is saved.
             if (p.ReferToHospital && p.Phone != null && p.Consent) await FollowUpAsync(p, ct);
@@ -435,8 +464,10 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             var p = await _db.CampPatients.FirstOrDefaultAsync(x => x.Id == pid, ct);
             if (p == null) return NotFound();
+            var before = p.Status;
             var err = ApplyPatient(p, dto);
             if (err != null) return BadRequest(new { message = err });
+            if (p.Status != before) CampDesk.Marked(p, User.AgentIdOf(), "crm");
             // Referred to the hospital: make sure the desk follows up.
             if (p.ReferToHospital && p.LeadId == null && p.Phone != null && p.Consent) await FollowUpAsync(p, ct);
             // The Referral desk follows the patient from here: arrived, OPD or admitted, and the bills.

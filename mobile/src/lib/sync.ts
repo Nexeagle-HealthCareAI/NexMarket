@@ -12,6 +12,7 @@ import { refreshMoney } from './money';
 import { refreshFieldSurveys, syncFieldSurveys } from './fieldSurvey';
 import { flushHoardings, refreshHoardings } from './hoardings';
 import { flushSpend, refreshSpend } from './spend';
+import { flushCamps, refreshCamps } from './camps';
 
 /**
  * The sync engine. Pushes the outbox in order (oldest first), then pulls what changed
@@ -78,6 +79,9 @@ async function run() {
     // My expenses: send the ones waiting on the phone, and get what the office decided and my balance.
     await flushSpend();
     await refreshSpend().catch(() => undefined);
+    // Health camps: bookings and camp-day marks waiting on the phone, and the camps coming up.
+    await flushCamps();
+    await refreshCamps().catch(() => undefined);
     // Chat: anything typed during the sync, and the unread badge.
     if (pendingCount() > 0) await flushChat().catch(() => undefined);
     await refreshUnread().catch(() => undefined);
