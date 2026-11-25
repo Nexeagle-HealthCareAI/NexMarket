@@ -8,7 +8,8 @@ export interface CampRow {
 export interface ChecklistItem { id: string; phase: 'before' | 'week' | 'day' | 'after'; text: string; done: boolean; doneBy?: string | null; doneAt?: string | null }
 export interface CountRow { code: string; label: string; n: number; dept?: string }
 export interface CampDetail {
-  camp: CampRow & { departments: string[]; doctors: string[]; panchayatId?: string | null; hostPartnerClientId?: string | null; notes?: string | null; outcome?: string | null; createdAt: string };
+  project?: import('./CampMoney').CampProject | null;
+  camp: CampRow & { ownSpent?: number; departments: string[]; doctors: string[]; panchayatId?: string | null; hostPartnerClientId?: string | null; notes?: string | null; outcome?: string | null; createdAt: string };
   host?: { clientId: string; name: string; role: string } | null;
   checklist: ChecklistItem[];
   stats: {

@@ -5,12 +5,14 @@ import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Check, FileImage, Lock, Pencil,
 import { crm } from '@/lib/sync/api-client';
 import { ErrorBox, friendlyError, Pill, Skeleton } from '@/components/crm/ui';
 import { ProjectForm, type ProjectRow } from './Projects';
+import { ProjectCampsBand, type ProjectCamps } from './ProjectCamps';
 import { dayText, errText, MODE, money, monthText, NATURE, rs, type Data, type Expense, type Fund, type Kind } from './shared';
 
 interface Detail {
   project: ProjectRow; funds: Fund[]; expenses: Expense[]; byKind: Record<string, number>;
   byPerson: { agentId: string; name: string; total: number }[]; byMonth: { month: string; constant: number; variable: number }[];
   recurring: { id: string; title: string; amount: number; every: string; active: boolean }[];
+  camps?: ProjectCamps;
 }
 type Mode = 'in' | 'out';
 type Row = { key: string; date: string; at: string; type: 'in'; f: Fund } | { key: string; date: string; at: string; type: 'out'; e: Expense };
@@ -152,6 +154,8 @@ export function ProjectDesk({ id, data, canHandle, startMode, onBack, onChanged,
       {pending.length > 0 && (
         <p className="pd-wait">{pending.length} expense{pending.length === 1 ? '' : 's'} ({rs(pending.reduce((s, e) => s + e.amount, 0))}) sent from the app {pending.length === 1 ? 'is' : 'are'} waiting for approval. <button type="button" className="wa-link" onClick={() => setFilter('waiting')}>Show</button></p>
       )}
+
+      <ProjectCampsBand projectId={p.id} projectName={p.name} spent={p.spent} data={d.camps} canHandle={canHandle} open={open} toast={toast} onChanged={changed} />
 
       <div className="pd-grid">
         <div className="pd-main">

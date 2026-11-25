@@ -578,6 +578,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.Code).IsUnique();
                 entity.HasIndex(e => e.Date);
+                entity.HasIndex(e => e.SpendProjectId);
                 entity.Property(e => e.Budget).HasPrecision(12, 2);
                 entity.Property(e => e.Spent).HasPrecision(12, 2);
             });

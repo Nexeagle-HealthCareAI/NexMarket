@@ -697,6 +697,8 @@ namespace SeemanchalOutreach.Domain.Entities
         public int TargetReferrals { get; set; } = 15;
         public decimal Budget { get; set; }
         public decimal Spent { get; set; }
+        /// <summary>The Marketing spend project whose money this camp is counted in (one project can hold several camps).</summary>
+        public Guid? SpendProjectId { get; set; }
         public string? ChecklistJson { get; set; }             // the marketing plan: [{ "id", "phase", "text", "done", "doneBy", "doneAt" }]
         public string? Notes { get; set; }
         public string? Outcome { get; set; }                   // what went well / what to change, written after the camp

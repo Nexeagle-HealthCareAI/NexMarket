@@ -36,6 +36,8 @@ namespace SeemanchalOutreach.Api.Controllers
         public string? Color { get; set; }
         /// <summary>active | closed</summary>
         public string? Status { get; set; }
+        /// <summary>Health camps to put in the project (added to those already in it).</summary>
+        public List<Guid>? CampIds { get; set; }
     }
 
     public class SpendFundDto
@@ -177,7 +179,7 @@ namespace SeemanchalOutreach.Api.Controllers
 
         // ── Projects ────────────────────────────────────────────────────────────
 
-        private async Task<object> ProjectRowAsync(SpendProject p, List<MarketingExpense> expenses, List<SpendFund> funds, List<Spend.Kind> kinds)
+        private async Task<object> ProjectRowAsync(SpendProject p, List<MarketingExpense> expenses, List<SpendFund> funds, List<Spend.Kind> kinds, List<string>? camps = null)
         {
             var m = Spend.MoneyOf(p, expenses, funds, kinds);
             await Task.CompletedTask;
@@ -186,6 +188,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 id = p.Id, name = p.Name, description = p.Description, budget = p.Budget, startDate = p.StartDate?.ToString("yyyy-MM-dd"), endDate = p.EndDate?.ToString("yyyy-MM-dd"),
                 status = p.Status, leadId = p.LeadId, leadName = p.LeadName, color = p.Color,
                 received = m.Received, spent = m.Spent, constant = m.Constant, variable = m.Variable, pending = m.Pending, left = m.Left, usedPct = m.UsedPct, entries = m.Entries,
+                camps = camps ?? new List<string>(),
             };
         }
 
@@ -197,8 +200,9 @@ namespace SeemanchalOutreach.Api.Controllers
             var expenses = await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.ProjectId != null).ToListAsync(ct);
             var funds = await _db.SpendFunds.AsNoTracking().Where(f => !f.Removed).ToListAsync(ct);
             var kinds = await KindsAsync(ct);
+            var camps = await CampNamesAsync(ct);
             var rows = new List<object>();
-            foreach (var p in projects) rows.Add(await ProjectRowAsync(p, expenses, funds, kinds));
+            foreach (var p in projects) rows.Add(await ProjectRowAsync(p, expenses, funds, kinds, camps.GetValueOrDefault(p.Id)));
             return Ok(rows);
         }
 
@@ -238,6 +242,7 @@ namespace SeemanchalOutreach.Api.Controllers
             var err = await ApplyProjectAsync(p, d, ct);
             if (err != null) return BadRequest(new { message = err });
             _db.SpendProjects.Add(p);
+            await LinkAsync(p.Id, d.CampIds, ct);
             await _db.SaveChangesAsync(ct);
             return Ok(await ProjectRowAsync(p, new(), new(), await KindsAsync(ct)));
         }
@@ -252,6 +257,7 @@ namespace SeemanchalOutreach.Api.Controllers
             if (p == null) return NotFound(new { message = "That project isn't here any more." });
             var err = await ApplyProjectAsync(p, d, ct);
             if (err != null) return BadRequest(new { message = err });
+            await LinkAsync(p.Id, d.CampIds, ct);
             await _db.SaveChangesAsync(ct);
             return Ok(new { ok = true });
         }
@@ -268,9 +274,11 @@ namespace SeemanchalOutreach.Api.Controllers
             var kinds = await KindsAsync(ct);
             var names = (await _db.Agents.AsNoTracking().Select(a => new { a.AgentId, a.Name }).ToListAsync(ct)).GroupBy(a => a.AgentId).ToDictionary(g => g.Key, g => g.First().Name);
             var counted = expenses.Where(Spend.Counts).ToList();
+            var campNames = (await CampNamesAsync(ct)).GetValueOrDefault(id);
             return Ok(new
             {
-                project = await ProjectRowAsync(p, expenses, funds, kinds),
+                project = await ProjectRowAsync(p, expenses, funds, kinds, campNames),
+                camps = await ProjectCampsAsync(id, counted.Sum(e => e.Amount), ct),
                 funds = funds.Select(FundShape),
                 expenses = expenses.Select(SpendFiles.Shape),
                 byKind = Spend.ByCategory(counted),

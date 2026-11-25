@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight, FolderKanban, HandCoins, Plus } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, FolderKanban, HandCoins, Plus, Tent } from 'lucide-react';
+import { CampChecklist, useLinkableCamps } from './CampLink';
 import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Modal, Pill, Skeleton } from '@/components/crm/ui';
 import { dayText, errText, MODE, money, NATURE, PALETTE, rs, type Data, type Staff } from './shared';
@@ -10,6 +11,7 @@ export interface ProjectRow {
   id: string; name: string; description?: string | null; budget?: number | null; startDate?: string | null; endDate?: string | null;
   status: 'active' | 'closed'; leadId?: string | null; leadName?: string | null; color: string;
   received: number; spent: number; constant: number; variable: number; pending: number; left?: number | null; usedPct?: number | null; entries: number;
+  camps?: string[];
 }
 
 /** A project's budget as a bar: spent against the budget, with what was received marked. */
@@ -83,6 +85,7 @@ export function ProjectsTab({ data, canHandle, onOpen, onAddFund, toast, refresh
                 {p.status === 'closed' && <Pill>Closed</Pill>}
               </div>
               <p className="crm-sub mp-meta">{[p.leadName ? `Led by ${p.leadName}` : null, p.startDate ? `${dayText(p.startDate)}${p.endDate ? ` – ${dayText(p.endDate)}` : ''}` : null].filter(Boolean).join(' · ') || 'No lead or dates yet'}</p>
+              {(p.camps?.length ?? 0) > 0 && <p className="mp-camps"><Tent size={14} aria-hidden /> {p.camps!.length === 1 ? p.camps![0] : `${p.camps!.length} health camps: ${p.camps!.join(', ')}`}</p>}
               <BudgetBar p={p} />
               <div className="mp-hand"><span>In hand</span><strong className={p.received - p.spent < 0 ? 'is-neg' : ''}>{p.received - p.spent < 0 ? `− ${rs(p.spent - p.received)}` : rs(p.received - p.spent)}</strong></div>
               <dl className="mp-nums">
@@ -117,6 +120,9 @@ export function ProjectForm({ staff, edit, onClose, onSaved }: { staff: Staff[];
   const [lead, setLead] = useState(edit?.leadId ?? '');
   const [desc, setDesc] = useState(edit?.description ?? '');
   const [color, setColor] = useState(edit?.color ?? '');
+  const [campIds, setCampIds] = useState<string[]>([]);
+  const [showCamps, setShowCamps] = useState(!edit);
+  const { camps } = useLinkableCamps();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const save = async () => {
@@ -124,10 +130,10 @@ export function ProjectForm({ staff, edit, onClose, onSaved }: { staff: Staff[];
     const b = budget.trim() ? money(budget) : null;
     if (budget.trim() && b == null) { setErr('Write the budget in rupees, or leave it empty.'); return; }
     setBusy(true); setErr(null);
-    const body = { name, description: desc, budget: b ?? (edit?.budget != null ? -1 : null), startDate: start || null, endDate: end || null, leadId: lead, color: color || null };
+    const body = { name, description: desc, budget: b ?? (edit?.budget != null ? -1 : null), startDate: start || null, endDate: end || null, leadId: lead, color: color || null, campIds };
     try {
       if (edit) await crm.put(`/api/v1/spend/projects/${edit.id}`, body); else await crm.post('/api/v1/spend/projects', body);
-      onSaved(edit ? 'Project saved.' : `Project “${name.trim()}” made. Pick it when you add an expense.`);
+      onSaved(edit ? (campIds.length ? 'Project saved and camps linked.' : 'Project saved.') : `Project “${name.trim()}” made${campIds.length ? ` with ${campIds.length === 1 ? 'its camp' : `${campIds.length} camps`}` : ''}. Pick it when you add an expense.`);
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   return (
@@ -136,6 +142,21 @@ export function ProjectForm({ staff, edit, onClose, onSaved }: { staff: Staff[];
       <button type="button" className="crm-btn" onClick={() => void save()} disabled={busy}>{busy ? 'Saving…' : edit ? 'Save' : 'Make project'}</button>
     </>}>
       <div className="ms-form">
+        {showCamps ? (
+          <fieldset className="ms-set"><legend>{edit ? 'Add health camps to it (optional)' : 'Is it for a health camp? (optional)'}</legend>
+            <CampChecklist projectId={edit?.id} picked={campIds} camps={camps} onChange={(ids, first) => {
+              setCampIds(ids);
+              if (first && !edit && ids.length === 1) {
+                if (!name.trim()) setName(first.title);
+                if (!start) setStart(first.date);
+                if (!end) setEnd(first.date);
+                if (!budget.trim() && first.budget > 0) setBudget(String(first.budget));
+              }
+            }} />
+          </fieldset>
+        ) : (
+          <button type="button" className="crm-btn is-secondary is-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setShowCamps(true)}><Tent size={14} aria-hidden /> Add health camps to it</button>
+        )}
         <label className="crm-field">Name<input className="crm-input" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="e.g. Purnia health camp, December" /></label>
         <div className="ms-two">
           <label className="crm-field">Budget (₹, optional)<input className="crm-input" inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="e.g. 50000" /></label>

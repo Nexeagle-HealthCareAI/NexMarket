@@ -65,6 +65,13 @@ export default function SpendPage() {
   const [person, setPerson] = useState<string | null>(null);
   const [project, setProjectState] = useState<{ id: string; mode?: 'in' | 'out' } | null>(null);
   const setProject = (id: string | null, mode?: 'in' | 'out') => { setProjectState(id ? { id, mode } : null); if (id) { setTab('projects'); window.scrollTo({ top: 0 }); } };
+  // Opened from a health camp (?project=…): go straight to that project.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('project');
+    if (!id) return;
+    const t = setTimeout(() => { setProjectState({ id }); setTab('projects'); }, 0);
+    return () => clearTimeout(t);
+  }, []);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [member, setMember] = useState<string | null>(null);
   const [teamKey, setTeamKey] = useState(0);

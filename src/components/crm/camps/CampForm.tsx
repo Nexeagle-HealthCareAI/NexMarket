@@ -17,7 +17,7 @@ export function CampForm({ camp, options, onClose, onSaved }: {
     district: camp?.district ?? '', block: camp?.block ?? '', venue: camp?.venue ?? '', status: camp?.status ?? 'planned',
     departments: (camp?.departments ?? []).join(', '), doctors: (camp?.doctors ?? []).join(', '),
     capacity: String(camp?.capacity ?? 150), targetRegistrations: String(camp?.targetRegistrations ?? 100), targetReferrals: String(camp?.targetReferrals ?? 15),
-    budget: String(camp?.budget ?? 0), spent: String(camp?.spent ?? 0), notes: camp?.notes ?? '', outcome: camp?.outcome ?? '',
+    budget: String(camp?.budget ?? 0), spent: String(camp?.ownSpent ?? camp?.spent ?? 0), notes: camp?.notes ?? '', outcome: camp?.outcome ?? '',
   });
   const [host, setHost] = useState<{ clientId: string; name: string } | null>(camp?.hostPartnerClientId ? { clientId: camp.hostPartnerClientId, name: 'Current host' } : null);
   const [pq, setPq] = useState('');

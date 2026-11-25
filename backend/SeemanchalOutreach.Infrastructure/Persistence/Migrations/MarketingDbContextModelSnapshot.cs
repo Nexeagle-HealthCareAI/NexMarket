@@ -2220,6 +2220,9 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<string>("PanchayatId")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("SpendProjectId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("Spent")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)");
@@ -2254,6 +2257,8 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.HasIndex("Date");
+
+                    b.HasIndex("SpendProjectId");
 
                     b.ToTable("health_camps", "marketing");
                 });

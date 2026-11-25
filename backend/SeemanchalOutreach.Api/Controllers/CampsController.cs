@@ -250,6 +250,21 @@ namespace SeemanchalOutreach.Api.Controllers
             var symptoms = pts.SelectMany(p => CampBook.Codes(p.Symptoms)).GroupBy(x => x).Select(g => new { code = g.Key, label = CampBook.SymptomLabel(g.Key), n = g.Count() }).OrderByDescending(x => x.n).ToList();
             var conditions = pts.SelectMany(p => CampBook.Codes(p.Conditions)).GroupBy(x => x).Select(g => new { code = g.Key, label = CampBook.ConditionLabel(g.Key), n = g.Count() }).OrderByDescending(x => x.n).ToList();
             var attended = pts.Where(p => p.Status == "attended").ToList();
+            // Its Marketing spend project: when the camp is the only one in it, the project's spending is the camp's cost.
+            object? project = null;
+            var spent = c.Spent;
+            if (c.SpendProjectId is Guid pid)
+            {
+                var sp = await _db.SpendProjects.AsNoTracking().FirstOrDefaultAsync(x => x.Id == pid, ct);
+                if (sp != null)
+                {
+                    var pSpent = (await _db.MarketingExpenses.AsNoTracking().Where(e => !e.Removed && e.Status == "approved" && e.ProjectId == pid).Select(e => e.Amount).ToListAsync(ct)).Sum();
+                    var pIn = (await _db.SpendFunds.AsNoTracking().Where(f => !f.Removed && f.ProjectId == pid).Select(f => f.Amount).ToListAsync(ct)).Sum();
+                    var others = await _db.HealthCamps.AsNoTracking().CountAsync(x => x.SpendProjectId == pid && x.Id != id, ct);
+                    if (others == 0 && pSpent > 0) spent = pSpent;
+                    project = new { id = sp.Id, name = sp.Name, color = sp.Color, status = sp.Status, budget = sp.Budget, received = pIn, spent = pSpent, otherCamps = others, usedForCost = others == 0 && pSpent > 0 };
+                }
+            }
             return Ok(new
             {
                 camp = new
@@ -259,8 +274,9 @@ namespace SeemanchalOutreach.Api.Controllers
                     date = c.Date.ToString("yyyy-MM-dd"), startTime = c.StartTime, endTime = c.EndTime,
                     district = c.District, block = c.Block, panchayatId = c.PanchayatId, venue = c.Venue, hostPartnerClientId = c.HostPartnerClientId,
                     status = c.Status, capacity = c.Capacity, targetRegistrations = c.TargetRegistrations, targetReferrals = c.TargetReferrals,
-                    budget = c.Budget, spent = c.Spent, notes = c.Notes, outcome = c.Outcome, createdAt = c.CreatedAt,
+                    budget = c.Budget, spent, ownSpent = c.Spent, notes = c.Notes, outcome = c.Outcome, createdAt = c.CreatedAt,
                 },
+                project,
                 host,
                 checklist = CampBook.ReadChecklist(c),
                 stats = new
@@ -271,8 +287,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     women = attended.Count(p => p.Sex == "F"), men = attended.Count(p => p.Sex == "M"),
                     over60 = attended.Count(p => p.Age >= 60), children = attended.Count(p => p.Age < 15),
                     highBp = attended.Count(p => p.BpSystolic >= 140 || p.BpDiastolic >= 90), highSugar = attended.Count(p => p.Sugar >= 200),
-                    costPerAttendee = attended.Count > 0 && c.Spent > 0 ? Math.Round(c.Spent / attended.Count) : (decimal?)null,
-                    costPerArrival = (stats?.Arrived ?? 0) > 0 && c.Spent > 0 ? Math.Round(c.Spent / stats!.Arrived) : (decimal?)null,
+                    costPerAttendee = attended.Count > 0 && spent > 0 ? Math.Round(spent / attended.Count) : (decimal?)null,
+                    costPerArrival = (stats?.Arrived ?? 0) > 0 && spent > 0 ? Math.Round(spent / stats!.Arrived) : (decimal?)null,
                 },
                 symptoms, conditions,
                 link = new { message, waLink = LeadInbox.WaLink(wa, message), displayPhone = LeadInbox.DisplayPhone(wa), hospital = wa.HospitalName },

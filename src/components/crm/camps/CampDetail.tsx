@@ -14,6 +14,7 @@ import { CampForm } from './CampForm';
 import { PatientForm } from './PatientForm';
 import { IssueCard } from '@/components/crm/cards/IssueCard';
 import { CardView } from '@/components/crm/cards/CardView';
+import { CampMoney } from './CampMoney';
 import {
   CAMP_STATUS, campDate, daysTo, PATIENT_STATUS, pct, PHASES, SOURCE_LABEL,
   type CampDetail as Detail, type CampOptions, type CampPatient, type ChecklistItem, type CountRow,
@@ -71,6 +72,8 @@ export function CampDetail({ id, options, canEdit, onBack, toast }: { id: string
         <Kpi label={`Came to ${place()}`} value={s.arrived} sub={`${pct(s.arrived, s.referred)}% of referred`} tone={s.arrived > 0 ? 'ok' : undefined} />
         <Kpi label="Spent" value={rupees(c.spent)} sub={s.costPerArrival ? `${rupees(s.costPerArrival)} per ${place()} visit` : c.budget ? `Budget ${rupees(c.budget)}` : undefined} />
       </section>
+
+      <CampMoney campId={c.id} campTitle={c.title} campDate={c.date} campBudget={c.budget} project={d.project} canEdit={canEdit} onChanged={() => void load()} toast={toast} />
 
       <PageTabs label="Camp views" value={tab} onChange={setTab} tabs={[
         { key: 'plan', label: 'Marketing plan', icon: ClipboardList, count: d.checklist.filter((i) => !i.done).length },
