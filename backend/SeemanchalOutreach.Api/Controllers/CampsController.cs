@@ -417,11 +417,11 @@ namespace SeemanchalOutreach.Api.Controllers
             if (d.Conditions != null) p.Conditions = CampBook.CleanCodes(d.Conditions, CampBook.Conditions.Select(s => s.Code));
             if (d.BpSystolic != null) { if (d.BpSystolic is < 50 or > 300) return "BP (upper) looks wrong."; p.BpSystolic = d.BpSystolic; }
             if (d.BpDiastolic != null) { if (d.BpDiastolic is < 30 or > 200) return "BP (lower) looks wrong."; p.BpDiastolic = d.BpDiastolic; }
-            if (d.Sugar != null) { if (d.Sugar is < 20 or > 800) return "Sugar looks wrong."; p.Sugar = d.Sugar; }
+            if (d.Sugar != null) { if (d.Sugar is < 20 or > 900) return "Sugar looks wrong."; p.Sugar = d.Sugar; }
             if (d.WeightKg != null) { if (d.WeightKg is < 1 or > 300) return "Weight looks wrong."; p.WeightKg = d.WeightKg; }
             if (d.Spo2 != null) { if (d.Spo2 is < 50 or > 100) return "SpO2 looks wrong."; p.Spo2 = d.Spo2; }
             if (d.Pulse != null) { if (d.Pulse is < 20 or > 250) return "Pulse looks wrong."; p.Pulse = d.Pulse; }
-            if (d.TempF != null) { if (d.TempF is < 90 or > 110) return "Temperature looks wrong (°F)."; p.TempF = d.TempF; }
+            if (d.TempF != null) { if (d.TempF is < 85 or > 110) return "Temperature looks wrong (°F)."; p.TempF = d.TempF; }
             if (d.SugarKind != null) { if (d.SugarKind is not ("" or "random" or "fasting" or "pp")) return "Unknown sugar test."; p.SugarKind = d.SugarKind == "" ? null : d.SugarKind; }
             if (d.PanchayatId != null) p.PanchayatId = d.PanchayatId.Length == 0 ? null : d.PanchayatId;
             if (d.Advice != null) p.Advice = d.Advice.Trim().Length == 0 ? null : d.Advice.Trim()[..Math.Min(1000, d.Advice.Trim().Length)];

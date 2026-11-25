@@ -19,7 +19,7 @@ export function CampTodayCard() {
   const pick = useDb(() => {
     const l = campList();
     if (!l) return null;
-    const sorted = sortCamps(l.camps, block);
+    const sorted = sortCamps(l.camps ?? [], block);
     const today = sorted.find((c) => c.date === l.today);
     if (today) return { camp: today, today: true, day: l.today };
     const week = new Date(`${l.today}T12:00:00`); week.setDate(week.getDate() + 7);
