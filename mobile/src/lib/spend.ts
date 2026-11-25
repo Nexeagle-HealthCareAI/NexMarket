@@ -16,14 +16,20 @@ export interface SpendBalance { given: number; returned: number; spent: number; 
 export interface MyExpense {
   id: string; spentOn: string; category: string; amount: number; note?: string | null;
   status: 'pending' | 'approved' | 'rejected'; rejectReason?: string | null; hasBill: boolean; createdAt: string;
+  projectId?: string | null;
 }
+/** An open Marketing spend project an expense can be put in (the office closes it when the work is over). */
+export interface SpendProjectLite { id: string; name: string; color?: string | null }
 export interface MoneyMove { id: string; kind: 'given' | 'returned'; amount: number; on: string; mode?: string | null; note?: string | null }
-export interface MySpend { today: string; daysBack: number; balance: SpendBalance; items: MyExpense[]; moves: MoneyMove[] }
+export interface MySpend {
+  today: string; daysBack: number; balance: SpendBalance; items: MyExpense[]; moves: MoneyMove[];
+  projects?: SpendProjectLite[]; projectNames?: Record<string, string>;
+}
 
 /** An expense added on the phone that the server doesn't have yet (or whose bill photo is still to go). */
 export interface ExpenseDraft {
   clientId: string; spentOn: string; category: string; amount: number; note: string; photoUri: string | null;
-  createdAt: string; serverId?: string | null; error?: string | null;
+  createdAt: string; serverId?: string | null; error?: string | null; projectId?: string | null;
 }
 
 const K_CACHE = 'spend.cache';
@@ -58,7 +64,7 @@ export function flushSpend(): Promise<void> {
       try {
         let id = d.serverId ?? null;
         if (!id) {
-          const e = await post<MyExpense>('/api/v1/me/spend', { clientId: d.clientId, spentOn: d.spentOn, category: d.category, amount: d.amount, note: d.note }, 30000);
+          const e = await post<MyExpense>('/api/v1/me/spend', { clientId: d.clientId, spentOn: d.spentOn, category: d.category, amount: d.amount, note: d.note, projectId: d.projectId ?? null }, 30000);
           id = e.id;
           set({ serverId: id, error: null });
         }
@@ -81,6 +87,21 @@ export function flushSpend(): Promise<void> {
 
 /** A draft the server refused (e.g. a day too far back): the agent can remove it from the phone. */
 export function dropExpenseDraft(clientId: string) { saveDrafts(expenseDrafts().filter((x) => x.clientId !== clientId)); }
+
+/** Correct an expense the office hasn't decided on yet (needs signal). A new bill photo replaces the old one. */
+export async function editExpense(id: string, d: { spentOn: string; category: string; amount: number; note: string; projectId: string | null; photoUri?: string | null }): Promise<void> {
+  await api<MyExpense>(`/api/v1/me/spend/${id}`, { method: 'PUT', body: JSON.stringify({ spentOn: d.spentOn, category: d.category, amount: d.amount, note: d.note, projectId: d.projectId }), timeoutMs: 30000 });
+  if (d.photoUri) {
+    const form = new FormData();
+    form.append('file', { uri: d.photoUri, name: `bill-${id}.jpg`, type: 'image/jpeg' } as unknown as Blob);
+    await api<MyExpense>(`/api/v1/me/spend/${id}/bill`, { method: 'POST', body: form, timeoutMs: 120000 });
+  }
+  await refreshSpend();
+}
+
+/** The project I used last, so the next expense starts there (if it is still open). */
+export const lastProject = (): string | null => kvJson<string | null>('spend.lastProject', null);
+export const setLastProject = (id: string | null) => kvSet('spend.lastProject', id ? JSON.stringify(id) : null);
 
 /** Take back an expense the office hasn't decided on yet. */
 export async function takeBackExpense(id: string): Promise<void> {

@@ -727,7 +727,9 @@ namespace SeemanchalOutreach.Api.Controllers
                 today = AttendanceService.TodayIst.ToString("yyyy-MM-dd"),
                 daysBack = Spend.AgentDaysBack,
                 categories = Spend.KindsOf(await _db.SpendCategories.AsNoTracking().ToListAsync(ct)).Where(k => k.AgentCanUse && !k.Archived && k.Key != "agents").Select(k => new { key = k.Key, label = k.Label }),
-                projects = await _db.SpendProjects.AsNoTracking().Where(p => p.Status == "active").OrderBy(p => p.Name).Select(p => new { id = p.Id, name = p.Name }).ToListAsync(ct),
+                // Open projects an expense can be added to; and the names of every project my entries are in (closed ones too).
+                projects = await _db.SpendProjects.AsNoTracking().Where(p => p.Status == "active").OrderBy(p => p.Name).Select(p => new { id = p.Id, name = p.Name, color = p.Color }).ToListAsync(ct),
+                projectNames = await ProjectNamesAsync(expenses.Where(e => e.ProjectId != null).Select(e => e.ProjectId!.Value).Distinct().ToList(), ct),
                 balance = SpendFiles.Shape(Spend.BalanceOf(me, moves, expenses, await _db.SpendFunds.AsNoTracking().Where(f => !f.Removed && f.ReceivedBy == me).ToListAsync(ct))),
                 items = expenses.Take(200).Select(SpendFiles.Shape),
                 moves = moves.Take(100).Select(SpendFiles.Shape),
@@ -750,7 +752,12 @@ namespace SeemanchalOutreach.Api.Controllers
             var kinds = Spend.KindsOf(await _db.SpendCategories.AsNoTracking().ToListAsync(ct));
             var cat = Spend.KindOf(d.Category, kinds);
             if (cat == "agents" || !kinds.Any(k => k.Key == cat && k.AgentCanUse)) cat = "other";
-            Guid? project = d.ProjectId is Guid pid && pid != Guid.Empty && await _db.SpendProjects.AnyAsync(p => p.Id == pid && p.Status == "active", ct) ? pid : null;
+            Guid? project = null;
+            if (d.ProjectId is Guid pid && pid != Guid.Empty)
+            {
+                if (!await _db.SpendProjects.AnyAsync(p => p.Id == pid && p.Status == "active", ct)) return BadRequest(new { message = "That project is closed now. Pick another, or no project." });
+                project = pid;
+            }
             var name = await _db.Agents.AsNoTracking().Where(a => a.AgentId == me).Select(a => a.Name).FirstOrDefaultAsync(ct) ?? me;
             var e = new MarketingExpense
             {
@@ -768,6 +775,38 @@ namespace SeemanchalOutreach.Api.Controllers
                 Body = e.Note ?? "Approve it, or say why not.",
                 Link = "spend", RefId = e.Id.ToString(),
             });
+            return Ok(SpendFiles.Shape(e));
+        }
+
+        private async Task<Dictionary<string, string>> ProjectNamesAsync(List<Guid> ids, CancellationToken ct) =>
+            ids.Count == 0 ? new() : (await _db.SpendProjects.AsNoTracking().Where(p => ids.Contains(p.Id)).Select(p => new { p.Id, p.Name }).ToListAsync(ct))
+                .ToDictionary(p => p.Id.ToString(), p => p.Name);
+
+        /// <summary>
+        /// Correct my expense while the office hasn't decided on it: amount, day, kind, note and project. An expense can be
+        /// put in a project only while that project is open; one already in a closed project can stay there.
+        /// </summary>
+        [HttpPut("{id:guid}")]
+        public async Task<IActionResult> Edit(Guid id, [FromBody] ExpenseDto d, CancellationToken ct)
+        {
+            var me = User.AgentIdOf();
+            var e = await _db.MarketingExpenses.FirstOrDefaultAsync(x => x.Id == id && x.AgentId == me && !x.Removed, ct);
+            if (e == null) return NotFound(new { message = "That entry isn't yours." });
+            if (e.Status != "pending") return BadRequest(new { message = "The office has already decided on this one." });
+            var err = Spend.Problem(d.Amount, d.SpentOn, AttendanceService.TodayIst, Spend.AgentDaysBack);
+            if (err != null) return BadRequest(new { message = err });
+            var kinds = Spend.KindsOf(await _db.SpendCategories.AsNoTracking().ToListAsync(ct));
+            var cat = Spend.KindOf(d.Category, kinds);
+            if (cat == "agents" || !kinds.Any(k => k.Key == cat && k.AgentCanUse)) cat = "other";
+            Guid? project = null;
+            if (d.ProjectId is Guid pid && pid != Guid.Empty)
+            {
+                if (pid != e.ProjectId && !await _db.SpendProjects.AnyAsync(p => p.Id == pid && p.Status == "active", ct)) return BadRequest(new { message = "That project is closed now. Pick another, or no project." });
+                project = pid;
+            }
+            e.Amount = d.Amount!.Value; e.SpentOn = d.SpentOn!.Value; e.Category = cat; e.Note = Hoardings.Clean(d.Note, 500); e.ProjectId = project;
+            e.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
             return Ok(SpendFiles.Shape(e));
         }
 

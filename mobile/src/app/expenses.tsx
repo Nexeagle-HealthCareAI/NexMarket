@@ -7,8 +7,8 @@ import { OfflineError } from '../lib/api';
 import { takePhoto, type Photo } from '../lib/photo';
 import { inr } from '../lib/money';
 import {
-  addExpense, billPhoto, dayBefore, dropExpenseDraft, expenseDrafts, flushSpend, mySpend, phoneToday, refreshSpend, SPEND_KEY, SPEND_KINDS, takeBackExpense,
-  type MyExpense,
+  addExpense, billPhoto, dayBefore, dropExpenseDraft, editExpense, expenseDrafts, flushSpend, lastProject, mySpend, phoneToday, refreshSpend, setLastProject,
+  SPEND_KEY, SPEND_KINDS, takeBackExpense, type MyExpense, type SpendProjectLite,
 } from '../lib/spend';
 import type { StringKey } from '../i18n';
 import { C } from '../theme';
@@ -35,7 +35,14 @@ export default function Expenses() {
   const [adding, setAdding] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+  const [editing, setEditing] = useState<MyExpense | null>(null);
+  const [only, setOnly] = useState<string>('all');
   const open = data?.items.find((e) => e.id === openId) ?? null;
+  const projects = data?.projects ?? [];
+  const pname = (id?: string | null) => (id ? data?.projectNames?.[id] ?? projects.find((p) => p.id === id)?.name ?? null : null);
+  // My spending by project, for the chips above the list (only when I have put something in a project).
+  const used = [...new Set((data?.items ?? []).map((e) => e.projectId).filter((x): x is string => !!x))];
+  const items = (data?.items ?? []).filter((e) => only === 'all' || (only === 'none' ? !e.projectId : e.projectId === only));
 
   const reload = async () => {
     setBusy(true);
@@ -106,7 +113,15 @@ export default function Expenses() {
         ) : null}
 
         {data && data.items.length > 0 ? <T style={{ fontSize: 15, fontWeight: '800', marginTop: 4 }}>{t('exMine')}</T> : null}
-        {(!data || data.items.length === 0) && drafts.length === 0 ? <Empty text={t('exEmpty')} icon="tag" /> : (data?.items ?? []).map((e) => {
+        {used.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {[{ k: 'all', l: t('exAllProjects') }, ...used.map((id) => ({ k: id, l: pname(id) ?? '—' })), { k: 'none', l: t('exNoProject') }].map((c) => {
+              const sum = (data?.items ?? []).filter((e) => e.status !== 'rejected' && (c.k === 'all' || (c.k === 'none' ? !e.projectId : e.projectId === c.k))).reduce((a, e) => a + e.amount, 0);
+              return <Chip key={c.k} label={`${c.l} · ${rs(sum)}`} selected={only === c.k} onPress={() => setOnly(c.k)} />;
+            })}
+          </ScrollView>
+        ) : null}
+        {(!data || data.items.length === 0) && drafts.length === 0 ? <Empty text={t('exEmpty')} icon="tag" /> : items.map((e) => {
           const st = STATUS[e.status] ?? STATUS.pending;
           return (
             <Card key={e.id} onPress={() => setOpenId(e.id)}>
@@ -114,6 +129,7 @@ export default function Expenses() {
                 <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
                   <T style={{ fontSize: 16, fontWeight: '700' }}>{rs(e.amount)} · {t(SPEND_KEY[e.category] ?? 'exCatOther')}</T>
                   <T style={{ color: C.text2, fontSize: 13 }} numberOfLines={1}>{[day(e.spentOn), e.note].filter(Boolean).join(' · ')}</T>
+                  {pname(e.projectId) ? <T style={{ color: C.blueInk, fontSize: 13, fontWeight: '700' }} numberOfLines={1}>{t('exProjectTag', { name: pname(e.projectId)! })}</T> : null}
                 </View>
                 <Pill label={t(st.label)} tone={st.tone} />
               </View>
@@ -128,25 +144,35 @@ export default function Expenses() {
           <View style={{ gap: 12 }}>
             <Pill label={t(STATUS[open.status].label)} tone={STATUS[open.status].tone} />
             <T style={{ fontSize: 15 }}>{[day(open.spentOn), open.note].filter(Boolean).join(' · ')}</T>
+            {pname(open.projectId) ? <T style={{ fontSize: 15, fontWeight: '700', color: C.blueInk }}>{t('exProjectTag', { name: pname(open.projectId)! })}</T> : null}
             {open.status === 'rejected' && open.rejectReason ? <T style={{ color: C.bad, fontSize: 15, fontWeight: '600' }}>{t('exWhyNot', { reason: open.rejectReason })}</T> : null}
             {open.hasBill ? <Image source={billPhoto(open.id)} resizeMode="contain" style={{ width: '100%', height: 320, borderRadius: 12, backgroundColor: C.line }} /> : null}
+            {open.status === 'pending' ? <Btn kind="secondary" icon="pencil" label={t('exEdit')} onPress={() => { setEditing(open); setOpenId(null); }} /> : null}
             {open.status === 'pending' ? <Btn kind="danger" icon="trash" label={t('exTakeBack')} loading={working} onPress={() => takeBack(open)} /> : null}
           </View>
         ) : null}
       </Sheet>
 
-      <AddSheet visible={adding} today={data?.today ?? phoneToday()} onClose={() => setAdding(false)} />
+      <AddSheet key={`${editing?.id ?? 'new'}-${projects.length}`} visible={adding || !!editing} edit={editing} projects={projects} projectName={pname}
+        today={data?.today ?? phoneToday()} onClose={() => { setAdding(false); setEditing(null); }} />
     </Screen>
   );
 }
 
 /** The form: amount, what it was for, which day, a few words and a photo of the bill. */
-function AddSheet({ visible, today, onClose }: { visible: boolean; today: string; onClose: () => void }) {
+function AddSheet({ visible, today, onClose, edit, projects, projectName }: {
+  visible: boolean; today: string; onClose: () => void; edit?: MyExpense | null; projects: SpendProjectLite[]; projectName: (id?: string | null) => string | null;
+}) {
   const { t } = useSession();
-  const [amount, setAmount] = useState('');
-  const [kind, setKind] = useState<string>('food');
-  const [back, setBack] = useState(0);
-  const [note, setNote] = useState('');
+  const daysAgo = (d: string) => Math.max(0, Math.round((Date.parse(`${today}T12:00:00`) - Date.parse(`${d}T12:00:00`)) / 86400000));
+  const [amount, setAmount] = useState(edit ? String(edit.amount) : '');
+  const [kind, setKind] = useState<string>(edit?.category ?? 'food');
+  const [back, setBack] = useState(edit ? Math.min(6, daysAgo(edit.spentOn)) : 0);
+  const [note, setNote] = useState(edit?.note ?? '');
+  // New: the project used last, while it is still open. A correction keeps its own (even a closed one).
+  const [projectId, setProjectId] = useState<string | null>(() => (edit ? edit.projectId ?? null : projects.some((p) => p.id === lastProject()) ? lastProject() : null));
+  const choices: SpendProjectLite[] = edit?.projectId && !projects.some((p) => p.id === edit.projectId)
+    ? [{ id: edit.projectId, name: projectName(edit.projectId) ?? '—' }, ...projects] : projects;
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -161,7 +187,21 @@ function AddSheet({ visible, today, onClose }: { visible: boolean; today: string
     const n = Math.round(Number(amount) * 100) / 100;
     if (!amount.trim() || !Number.isFinite(n) || n <= 0) { setErr(t('exNeedAmount')); return; }
     setBusy(true);
-    const sent = await addExpense({ spentOn: dayBefore(today, back), category: kind, amount: n, note: note.trim(), photoUri: photo?.uri ?? null });
+    setLastProject(projectId);
+    if (edit) {
+      try {
+        await editExpense(edit.id, { spentOn: dayBefore(today, back), category: kind, amount: n, note: note.trim(), projectId, photoUri: photo?.uri ?? null });
+        toast(t('exChanged'));
+      } catch (e) {
+        setBusy(false);
+        Alert.alert(t('exTitle'), e instanceof OfflineError ? t('exNeedInternet') : e instanceof Error ? e.message : t('exNeedInternet'));
+        return;
+      }
+      setBusy(false);
+      onClose();
+      return;
+    }
+    const sent = await addExpense({ spentOn: dayBefore(today, back), category: kind, amount: n, note: note.trim(), photoUri: photo?.uri ?? null, projectId });
     setBusy(false);
     toast(t(sent ? 'exSent' : 'exSaved'));
     setAmount(''); setNote(''); setPhoto(null); setBack(0); setKind('food'); setErr(null);
@@ -169,7 +209,7 @@ function AddSheet({ visible, today, onClose }: { visible: boolean; today: string
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={t('exAdd')}>
+    <Sheet visible={visible} onClose={onClose} title={edit ? t('exEdit') : t('exAdd')}>
       <View style={{ gap: 14 }}>
         <Field label={t('exAmount')} value={amount} onChangeText={(v) => { setAmount(v.replace(/[^0-9.]/g, '')); setErr(null); }} keyboardType="decimal-pad" maxLength={9} error={err} placeholder="0" />
         <View style={{ gap: 8 }}>
@@ -178,6 +218,15 @@ function AddSheet({ visible, today, onClose }: { visible: boolean; today: string
             {SPEND_KINDS.map((k) => <Chip key={k} label={t(SPEND_KEY[k])} selected={kind === k} onPress={() => setKind(k)} />)}
           </View>
         </View>
+        {choices.length > 0 ? (
+          <View style={{ gap: 8 }}>
+            <T style={{ fontSize: 14, fontWeight: '600', color: C.text3 }}>{t('exProject')}</T>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <Chip label={t('exNoProject')} selected={!projectId} onPress={() => setProjectId(null)} />
+              {choices.map((p) => <Chip key={p.id} label={p.name} selected={projectId === p.id} onPress={() => setProjectId(p.id)} />)}
+            </View>
+          </View>
+        ) : null}
         <View style={{ gap: 8 }}>
           <T style={{ fontSize: 14, fontWeight: '600', color: C.text3 }}>{t('exDay')}</T>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -198,7 +247,7 @@ function AddSheet({ visible, today, onClose }: { visible: boolean; today: string
             <T style={{ fontSize: 13, color: C.text2, textAlign: 'center' }}>{t('exBillHint')}</T>
           </Pressable>
         )}
-        <Btn label={t('exSend')} icon="send" loading={busy} onPress={() => void send()} />
+        <Btn label={edit ? t('exSaveChanges') : t('exSend')} icon={edit ? 'check' : 'send'} loading={busy} onPress={() => void send()} />
       </View>
     </Sheet>
   );
