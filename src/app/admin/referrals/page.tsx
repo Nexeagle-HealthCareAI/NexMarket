@@ -442,13 +442,14 @@ function PipeCard({ r, dup, now, editable, dragging, onDragStart, onDragEnd, onO
           {r.department && <span className="rf-tag is-dept">{r.department}</span>}
           {r.source === 'leads' && <span className="rf-tag is-leads" title="Came through WhatsApp or a partner QR code">Leads inbox</span>}
           {r.kind === 'appointment' && <span className="rf-tag is-appt" title="Booked by the field agent">Appointment</span>}
+          {r.kind === 'self' && <span className="rf-tag is-appt" title="The field agent referred this patient directly, without a partner">By agent</span>}
           {r.lastReading && readingParts(r.lastReading).filter((x) => x.high).slice(0, 2).map((x) => <span key={x.text} className="rf-tag is-high" title="From the agent's vitals">{x.text}</span>)}
           {slowSync && <span className="rf-tag is-warn" title={sourceText(r)}><WifiOff size={11} aria-hidden /> synced late</span>}
           {dup && dup.length > 0 && <span className="rf-tag is-dup" title={`Also referred: ${dup.map((d) => `${fmt.date(d.createdAt)} by ${d.agentName}`).join('; ')}`}><Copy size={11} aria-hidden /> also referred</span>}
         </span>
         <span className="rf-card-foot">
           <span className="rf-avatar" title={r.agentName}>{initials(r.agentName)}</span>
-          <span className="rf-card-via">{r.kind === 'appointment' ? `booked by ${r.agentName}` : `via ${r.contactName}`}</span>
+          <span className="rf-card-via">{r.kind === 'appointment' ? `booked by ${r.agentName}` : r.kind === 'self' ? `referred by ${r.agentName}` : `via ${r.contactName}`}</span>
           <span className={`rf-card-age${late ? ' is-late' : ''}`} title={`Referred ${fmt.dateTime(r.createdAt)}${r.status !== 'pending' ? ` · in this stage ${ageText(inStage)}` : ''}`}>
             {r.status === 'pending' ? ageText(age) : ageText(inStage)}
           </span>

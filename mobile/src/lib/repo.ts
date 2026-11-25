@@ -249,6 +249,8 @@ export interface NewReferralInput {
   department: string;
   urgent: boolean;
   notes: string;
+  /** The agent referred the patient directly, without a partner (contactId is then empty). */
+  byMe?: boolean;
 }
 
 export function addReferral(input: NewReferralInput): string {
@@ -256,12 +258,12 @@ export function addReferral(input: NewReferralInput): string {
   const clientId = uuid();
   const at = nowIso();
   db().runSync(
-    `INSERT INTO referrals (clientId, contactId, patientName, patientAge, patientSex, clientPhone, department, urgent, notes, status, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
-    clientId, input.contactId, input.patientName.trim(), input.patientAge, input.patientSex, input.clientPhone.trim() || null,
-    input.department, input.urgent ? 1 : 0, input.notes.trim() || null, at);
+    `INSERT INTO referrals (clientId, contactId, patientName, patientAge, patientSex, clientPhone, department, urgent, notes, status, createdAt, kind)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+    clientId, input.byMe ? '' : input.contactId, input.patientName.trim(), input.patientAge, input.patientSex, input.clientPhone.trim() || null,
+    input.department, input.urgent ? 1 : 0, input.notes.trim() || null, at, input.byMe ? 'self' : null);
   enqueue('referral_new', clientId, {
-    clientId, deviceId, agentId, contactId: input.contactId, patientName: input.patientName.trim(),
+    clientId, deviceId, agentId, contactId: input.byMe ? '' : input.contactId, kind: input.byMe ? 'self' : undefined, patientName: input.patientName.trim(),
     department: input.department, notes: input.notes.trim(), clientPhone: input.clientPhone.trim() || null,
     referralDate: ymd(), status: 'pending', patientAge: input.patientAge, patientSex: input.patientSex,
     urgent: input.urgent, consent: true, createdAt: at,

@@ -139,6 +139,7 @@ const PatientCard = React.memo(function PatientCard({ r, t, lang, steps, onThank
             <T style={{ fontSize: 16, fontWeight: '700', flexShrink: 1 }}>{r.patientName || '—'}</T>
             {r.urgent ? <Pill label={t('urgent')} tone="bad" /> : null}
             {appt ? <Pill label={t('apAppointment')} tone="info" /> : null}
+            {r.kind === 'self' ? <Pill label={t('rfByMeTag')} tone="ok" /> : null}
           </View>
           <T style={{ color: C.text2, fontSize: 13 }}>{[r.patientAge != null && appt ? `${r.patientAge}` : null, appt ? r.block : null, r.department || null, dayShort(lang, new Date(r.createdAt))].filter(Boolean).join(' · ')}</T>
           {r.complaint ? <T style={{ color: C.text, fontSize: 14 }} numberOfLines={1}>{r.complaint}</T> : null}

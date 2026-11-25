@@ -285,6 +285,7 @@ function applyPull(r: PullResponse) {
         x.clientId, x.contactId, x.patientName ?? null, x.department ?? null, x.urgent ? 1 : 0, x.notes, x.status === 'converted' ? 'admitted' : x.status,
         x.createdAt, x.updatedAt ?? nowIso(), x.arrivedAt ?? null, x.admittedAt ?? null);
       // An appointment: who, where, and the complaint (unless a newer one written here is still waiting to go).
+      if (extra.kind === 'self') d.runSync("UPDATE referrals SET kind = 'self' WHERE clientId = ?", x.clientId);
       if (extra.kind === 'appointment') {
         d.runSync(`UPDATE referrals SET kind = 'appointment', panchayatId = COALESCE(panchayatId, ?), block = COALESCE(block, ?), district = COALESCE(district, ?),
             patientAge = COALESCE(patientAge, ?), patientSex = COALESCE(patientSex, ?), clientPhone = COALESCE(clientPhone, ?), visitDate = COALESCE(visitDate, ?)

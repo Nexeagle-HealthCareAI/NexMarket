@@ -590,7 +590,8 @@ namespace SeemanchalOutreach.Application.Handlers
                             CreatedAt = GetDateTime(root, "createdAt", DateTime.UtcNow),
                             ServerReceivedAt = syncedAt,
                             // An appointment the agent booked: where the patient lives and what they complain of.
-                            Kind = GetString(root, "kind", "") == "appointment" ? "appointment" : null,
+                            // appointment (booked by the agent) | self (referred by the agent directly, no partner) | null (a partner's referral)
+                            Kind = GetString(root, "kind", "") is "appointment" or "self" ? GetString(root, "kind", "") : null,
                             PanchayatId = Clip(GetString(root, "panchayatId", ""), 40),
                             Block = Clip(GetString(root, "block", ""), 80),
                             District = Clip(GetString(root, "district", ""), 80),

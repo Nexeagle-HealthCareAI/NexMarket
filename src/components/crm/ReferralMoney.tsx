@@ -37,8 +37,10 @@ export function statusPill(status: string, overdue?: boolean) {
  * Everything to do with money for one referred patient: the hospital's bills (what was billed and collected),
  * the referring partner's service payments for this patient, and the field agent's incentive.
  */
-export function ReferralMoney({ clientId, partnerName, editable, isAdmin, onChanged }: {
+export function ReferralMoney({ clientId, partnerName, editable, isAdmin, onChanged, noPartner }: {
   clientId: string; partnerName: string; editable: boolean; isAdmin: boolean; onChanged?: () => void;
+  /** The field agent referred or booked the patient themself: no partner to pay. */
+  noPartner?: boolean;
 }) {
   const { data, error, reload } = useLoader(() => crm.get<Money>(`/api/v1/referrals/${encodeURIComponent(clientId)}/money`), [clientId]);
   const [form, setForm] = useState<'bill' | 'payout' | null>(null);
@@ -56,7 +58,7 @@ export function ReferralMoney({ clientId, partnerName, editable, isAdmin, onChan
         {editable && (
           <span className="rm-actions">
             <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setForm(form === 'bill' ? null : 'bill')} aria-expanded={form === 'bill'}><Receipt size={14} aria-hidden /> Add bill</button>
-            <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setForm(form === 'payout' ? null : 'payout')} aria-expanded={form === 'payout'}><Wallet size={14} aria-hidden /> Partner service payment</button>
+            {!noPartner && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setForm(form === 'payout' ? null : 'payout')} aria-expanded={form === 'payout'}><Wallet size={14} aria-hidden /> Partner service payment</button>}
           </span>
         )}
       </div>
@@ -69,7 +71,7 @@ export function ReferralMoney({ clientId, partnerName, editable, isAdmin, onChan
             <Total label="Collected" value={rupees(data.collected)} tone="ok" />
             <Total label="Still due" value={rupees(data.due)} tone={data.due > 0 ? 'warn' : undefined} />
           </div>
-          {(() => {
+          {!noPartner && (() => {
             const pp = data.partnerForPatient ?? { total: data.partnerPayments.reduce((a, p) => a + p.amount, 0), paid: data.partnerPayments.filter((p) => p.status === 'paid').reduce((a, p) => a + p.amount, 0), pending: 0, unconfirmed: 0 };
             const pending = data.partnerForPatient ? pp.pending : pp.total - pp.paid;
             return (
@@ -99,8 +101,8 @@ export function ReferralMoney({ clientId, partnerName, editable, isAdmin, onChan
             </ul>
           )}
 
-          <h4 className="rm-sub">Payments to {partnerName} for this patient</h4>
-          {data.partnerPayments.length === 0 ? <p className="crm-sub rm-empty">None. Payments are for services such as travel with the patient, an escort or an ambulance, and need an admin&apos;s approval.</p> : (
+          {!noPartner && <h4 className="rm-sub">Payments to {partnerName} for this patient</h4>}
+          {noPartner ? null : data.partnerPayments.length === 0 ? <p className="crm-sub rm-empty">None. Payments are for services such as travel with the patient, an escort or an ambulance, and need an admin&apos;s approval.</p> : (
             <ul className="rm-list">
               {data.partnerPayments.map((p) => (
                 <li key={p.id}>

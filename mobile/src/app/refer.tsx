@@ -6,7 +6,7 @@ import { Avatar, Btn, Chip, Field, Screen, T, TopBar, liveText, toast, useTextSc
 import { Icon } from '../components/Icon';
 import { PartnerPicker } from '../components/PartnerPicker';
 import { useDb, useSession } from '../lib/session';
-import { db, q } from '../lib/db';
+import { db, kvGet, kvSet, q } from '../lib/db';
 import { addReferral } from '../lib/repo';
 import { departments } from '../lib/sync';
 import { savedFeedback } from '../lib/prefs';
@@ -33,6 +33,10 @@ export default function Refer() {
   const params = useLocalSearchParams<{ contactId?: string }>();
   const visit = useDb(() => q.activeVisit());
   const [contactId, setContactId] = useState(params.contactId || '');
+  // Through a partner, or the agent themself (met the patient on the ground). Opened from a partner: through them.
+  // The agent's last choice is remembered (some refer mostly through partners, others mostly themselves).
+  const [byMe, setByMeState] = useState(() => !params.contactId && kvGet('refer.byMe') === '1');
+  const setByMe = (v: boolean) => { setByMeState(v); kvSet('refer.byMe', v ? '1' : '0'); };
   const partner = useDb(() => (contactId ? q.contact(contactId) : null), [contactId]);
   const place = useDb(() => (partner?.panchayatId ? q.assignedOne(partner.panchayatId)?.name ?? q.panchayat(partner.panchayatId)?.name ?? '' : ''), [partner?.panchayatId]);
   const [picking, setPicking] = useState(false);
@@ -68,7 +72,7 @@ export default function Refer() {
 
   const send = () => {
     const e: Record<string, string> = {};
-    if (!contactId) e.partner = t('needPartner');
+    if (!byMe && !contactId) e.partner = t('needPartner');
     if (!name.trim()) e.name = t('needPatientName');
     if (!dept) e.dept = t('needDept');
     if (!consent) e.consent = t('consentNeeded');
@@ -77,7 +81,7 @@ export default function Refer() {
     // No exact age: the group goes at the top of the notes so the front desk still sees it.
     const ageNote = !exactOk && band ? t('ptAgeNote', { band: t(band) }) : '';
     addReferral({
-      contactId, patientName: name, patientAge: exactOk ? exact : null, patientSex: sex,
+      contactId, byMe, patientName: name, patientAge: exactOk ? exact : null, patientSex: sex,
       clientPhone: phone, department: dept!, urgent, notes: [ageNote, notes.trim()].filter(Boolean).join('\n'),
     });
     savedFeedback();
@@ -94,7 +98,29 @@ export default function Refer() {
           <T style={{ textAlign: 'center', color: C.text2, fontSize: 14 }}>{t('ptReferHint')}</T>
         </View>
       }>
-      {partner ? (
+      <View style={{ gap: 6 }}>
+        <T style={{ fontSize: 15, fontWeight: '700' }}>{t('rfWho')}</T>
+        <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="radiogroup">
+          {([[false, t('rfViaPartner'), 'users'], [true, t('rfByMe'), 'user']] as const).map(([v, l, ic]) => {
+            const on = byMe === v;
+            return (
+              <Pressable key={l} onPress={() => setByMe(v)} accessibilityRole="radio" accessibilityState={{ selected: on }}
+                style={({ pressed }) => [{ flex: 1, minHeight: 54, borderRadius: 14, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6,
+                  backgroundColor: on ? C.blue : C.card, borderWidth: 1, borderColor: on ? C.blue : C.borderStrong }, pressed && { opacity: 0.85 }]}>
+                <Icon name={ic} size={18} color={on ? '#fff' : C.text3} />
+                <T style={{ fontSize: 16, fontWeight: '800', color: on ? '#fff' : C.text }} numberOfLines={1}>{l}</T>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      {byMe ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, backgroundColor: C.okSoft }}>
+          <Icon name="user" size={22} color={C.okInk} />
+          <T style={{ flex: 1, fontSize: 14.5, color: C.okInk, lineHeight: 20 }}>{t('rfByMeSub')}</T>
+        </View>
+      ) : partner ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, backgroundColor: C.blueSoft }}>
           <Avatar name={partner.name} size={40} bg={C.star} />
           <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
@@ -110,7 +136,7 @@ export default function Refer() {
         <Btn kind="secondary" icon="users" label={t('choosePartner')} onPress={() => setPicking(true)}
           style={errors.partner ? { borderColor: C.bad } : undefined} />
       )}
-      {errors.partner ? <T style={{ color: C.bad }}>{errors.partner}</T> : null}
+      {!byMe && errors.partner ? <T style={{ color: C.bad }}>{errors.partner}</T> : null}
 
       <VoiceField voice="name" label={t('patientName')} value={name} onChangeText={setName} error={errors.name} autoCapitalize="words" />
 

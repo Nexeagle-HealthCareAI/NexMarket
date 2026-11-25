@@ -25,6 +25,7 @@ export function sourceText(r: ReferralRow): string {
   if (r.source === 'camp') return `Sent by the doctor at the health camp${r.campTitle ? ` “${r.campTitle}”` : ''}${r.campDate ? ` (${new Date(`${r.campDate}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})` : ''}`;
   if (r.source === 'leads') return 'From the Leads inbox (QR code / WhatsApp)';
   if (r.source === 'crm') return 'Added in the CRM';
+  if (r.kind === 'self') return `Referred directly by ${r.agentName} in the field (no partner)`;
   if (r.kind === 'appointment') {
     const d0 = r.syncDelayMinutes ?? 0;
     return `Appointment booked by ${r.agentName} in the field${d0 >= 60 ? ` · reached us ${d0 >= 1440 ? `${Math.round(d0 / 1440)} day${d0 >= 2880 ? 's' : ''}` : `${Math.round(d0 / 60)} h`} later (no signal)` : ''}`;
@@ -117,7 +118,7 @@ export function ReferralCard({ r, editable, onUpdated }: { r: ReferralRow; edita
 
       <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
         <Info label="Department" value={r.department || '—'} />
-        {r.kind !== 'appointment' && <Info label="Referred by" value={`${r.contactName}${r.contactRole ? ` (${contactTypeLabel(r.contactRole)})` : ''}`} />}
+        {r.kind !== 'appointment' && <Info label="Referred by" value={r.kind === 'self' ? `${r.agentName} (field agent, directly)` : `${r.contactName}${r.contactRole ? ` (${contactTypeLabel(r.contactRole)})` : ''}`} />}
         <Info label={r.source === 'camp' ? 'Came through' : 'Field agent'} value={r.agentName} />
         <Info label={r.kind === 'appointment' ? 'Booked on' : 'Referred on'} value={fmt.dateTime(r.createdAt)} />
         {r.arrivedAt && <Info label="Arrived" value={fmt.dateTime(r.arrivedAt)} />}
@@ -158,7 +159,7 @@ export function ReferralCard({ r, editable, onUpdated }: { r: ReferralRow; edita
 
       <ReferralCardBox clientId={r.clientId} editable={editable} patient={{ name: r.patientName, phone: r.clientPhone, age: r.patientAge, sex: r.patientSex }} />
 
-      <ReferralMoney clientId={r.clientId} partnerName={r.contactName} editable={editable} isAdmin={!!access?.isAdmin} />
+      <ReferralMoney clientId={r.clientId} partnerName={r.contactName} editable={editable} isAdmin={!!access?.isAdmin} noPartner={!r.contactId && r.source !== 'camp'} />
 
       <div style={{ borderTop: '1px solid var(--line)', paddingTop: 14 }}>
         <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>History</h3>

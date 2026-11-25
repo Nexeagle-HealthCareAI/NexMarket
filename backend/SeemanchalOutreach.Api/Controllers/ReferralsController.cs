@@ -513,7 +513,7 @@ namespace SeemanchalOutreach.Api.Controllers
                     r.Id,
                     r.ClientId,
                     r.ContactId,
-                    ContactName = c?.Name ?? (camp != null ? camp.Value.Title : r.Kind == "appointment" ? "Booked by the agent" : "Unknown contact"),
+                    ContactName = c?.Name ?? (camp != null ? camp.Value.Title : r.Kind == "appointment" ? "Booked by the agent" : r.Kind == "self" ? "Referred by the agent" : "Unknown contact"),
                     ContactRole = c?.Role,
                     Block = r.Block ?? (c != null ? blocks.GetValueOrDefault(c.PanchayatId) : camp?.Block),
                     r.Kind,

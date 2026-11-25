@@ -69,6 +69,11 @@ const en = {
   apBookedOn: 'Booked {d}',
   apVisitOn: 'Visit {d}',
   apPatientNotFound: 'This patient is not on the phone any more.',
+  rfWho: 'Who is referring?',
+  rfViaPartner: 'A partner',
+  rfByMe: 'Myself',
+  rfByMeSub: 'You met the patient in the field. The hospital sees it as referred by you.',
+  rfByMeTag: 'Referred by me',
 };
 
 const t: UxTable<typeof en> = {
@@ -140,6 +145,11 @@ const t: UxTable<typeof en> = {
     apBookedOn: '{d} को बुक हुआ',
     apVisitOn: '{d} को आना है',
     apPatientNotFound: 'यह मरीज़ अब फ़ोन में नहीं है।',
+    rfWho: 'कौन भेज रहा है?',
+    rfViaPartner: 'पार्टनर',
+    rfByMe: 'मैं ख़ुद',
+    rfByMeSub: 'मरीज़ आपको फ़ील्ड में मिला। अस्पताल को दिखेगा कि आपने भेजा।',
+    rfByMeTag: 'मैंने भेजा',
   },
   hinglish: {
     apBook: 'Appointment book karein',
@@ -208,6 +218,11 @@ const t: UxTable<typeof en> = {
     apBookedOn: '{d} ko book hua',
     apVisitOn: '{d} ko aana hai',
     apPatientNotFound: 'Yeh mareez ab phone mein nahi hai.',
+    rfWho: 'Kaun bhej raha hai?',
+    rfViaPartner: 'Partner',
+    rfByMe: 'Main khud',
+    rfByMeSub: 'Mareez aapko field mein mila. Hospital ko dikhega ki aapne bheja.',
+    rfByMeTag: 'Maine bheja',
   },
   bn: {
     apBook: 'অ্যাপয়েন্টমেন্ট বুক করুন',
@@ -276,6 +291,11 @@ const t: UxTable<typeof en> = {
     apBookedOn: '{d} বুক হয়েছে',
     apVisitOn: '{d} আসবেন',
     apPatientNotFound: 'এই রোগী আর ফোনে নেই।',
+    rfWho: 'কে পাঠাচ্ছেন?',
+    rfViaPartner: 'পার্টনার',
+    rfByMe: 'আমি নিজে',
+    rfByMeSub: 'রোগীকে আপনি মাঠে পেয়েছেন। হাসপাতাল দেখবে আপনি পাঠিয়েছেন।',
+    rfByMeTag: 'আমি পাঠিয়েছি',
   },
 };
 
