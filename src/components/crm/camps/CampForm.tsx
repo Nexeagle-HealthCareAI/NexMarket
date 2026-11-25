@@ -43,7 +43,7 @@ export function CampForm({ camp, options, onClose, onSaved }: {
     setBusy(true);
     setError(null);
     const body = {
-      title: f.title, campType: f.campType, date: f.date, startTime: f.startTime, endTime: f.endTime, district: f.district, block: f.block, venue: f.venue,
+      title: f.title.trim() || autoName, campType: f.campType, date: f.date, startTime: f.startTime, endTime: f.endTime, district: f.district, block: f.block, venue: f.venue,
       status: f.status, departments: list(f.departments), doctors: list(f.doctors), capacity: num(f.capacity), targetRegistrations: num(f.targetRegistrations),
       targetReferrals: num(f.targetReferrals), budget: num(f.budget), spent: num(f.spent), notes: f.notes, outcome: f.outcome, hostPartnerClientId: host?.clientId ?? '',
     };
@@ -53,46 +53,38 @@ export function CampForm({ camp, options, onClose, onSaved }: {
     } catch (e) { setError(friendlyError(e)); setBusy(false); }
   };
 
+  // A new camp gets a name from its type and place until one is typed.
+  const typeLabel = (options?.types ?? []).find((t) => t.key === f.campType)?.label ?? 'Health';
+  const typeWord = typeLabel.replace(/ health$/, '');
+  const autoName = `Free ${typeWord.charAt(0).toLowerCase() + typeWord.slice(1)} camp${f.block || f.venue ? `, ${f.block || f.venue}` : ''}`.replace('Free general camp', 'Free health camp');
+  const nameShown = f.title || (camp ? '' : autoName);
+  const [more, setMore] = useState(!!camp);
+
   return (
     <Modal title={camp ? 'Edit camp' : 'Plan a health camp'} onClose={onClose} wide
       actions={<>
         <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
-        <button type="button" className="crm-btn" disabled={busy || !f.title.trim() || !f.date} onClick={() => void save()}>{busy ? 'Saving…' : camp ? 'Save' : 'Create camp'}</button>
+        <button type="button" className="crm-btn" disabled={busy || !nameShown.trim() || !f.date} onClick={() => void save()}>{busy ? 'Saving…' : camp ? 'Save' : 'Create camp'}</button>
       </>}>
       <div className="cp-form">
-        <label className="crm-field cp-span2">Name
-          <input className="crm-input" value={f.title} onChange={set('title')} maxLength={120} placeholder="e.g. Free bone & joint camp, Kasba" autoFocus />
-        </label>
-        <label className="crm-field">Type
-          <select className="crm-select" value={f.campType} onChange={set('campType')}>
-            {(options?.types ?? [{ key: 'general', label: 'General health' }]).map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-          </select>
-        </label>
-        <label className="crm-field">Status
-          <select className="crm-select" value={f.status} onChange={set('status')}>
-            <option value="planned">Planned</option><option value="confirmed">Confirmed</option><option value="done">Done</option><option value="cancelled">Cancelled</option>
-          </select>
-        </label>
-        <label className="crm-field">Date<input type="date" className="crm-input" value={f.date} onChange={set('date')} /></label>
+        <div className="crm-field cp-span2">Type of camp
+          <div className="crm-chips">
+            {(options?.types ?? [{ key: 'general', label: 'General health' }]).map((t) => (
+              <button key={t.key} type="button" className="crm-chip" aria-pressed={f.campType === t.key} onClick={() => setF((x) => ({ ...x, campType: t.key }))}>{t.label}</button>
+            ))}
+          </div>
+        </div>
+        <label className="crm-field">Date<input type="date" className="crm-input" value={f.date} onChange={set('date')} autoFocus={!camp} /></label>
         <div className="cp-two">
           <label className="crm-field">From<input type="time" className="crm-input" value={f.startTime} onChange={set('startTime')} /></label>
           <label className="crm-field">To<input type="time" className="crm-input" value={f.endTime} onChange={set('endTime')} /></label>
         </div>
-        <label className="crm-field">District<input className="crm-input" value={f.district} onChange={set('district')} placeholder="Kishanganj" /></label>
-        <label className="crm-field">Block<input className="crm-input" value={f.block} onChange={set('block')} placeholder="Kochadhaman" /></label>
-        <label className="crm-field cp-span2">Venue<input className="crm-input" value={f.venue} onChange={set('venue')} placeholder="Panchayat bhawan, school, PHC…" /></label>
-        <div className="crm-field cp-span2">Hosted with (optional)
-          {host ? (
-            <span className="ld-picked">{host.name}<button type="button" onClick={() => setHost(null)} aria-label="Remove host">×</button></span>
-          ) : (
-            <>
-              <input className="crm-input" value={pq} onChange={(e) => setPq(e.target.value)} placeholder="Mukhiya, ASHA, school, RMP who helps run it" />
-              {pq.trim().length >= 2 && hits.length > 0 && (
-                <ul className="ld-hits">{hits.map((h) => <li key={h.clientId}><button type="button" onClick={() => { setHost({ clientId: h.clientId, name: h.name }); setPq(''); }}>{h.name} <span className="crm-sub">{[h.type, h.panchayat].filter(Boolean).join(' · ')}</span></button></li>)}</ul>
-              )}
-            </>
-          )}
-        </div>
+        <label className="crm-field">Block<input className="crm-input" value={f.block} onChange={set('block')} placeholder="e.g. Kochadhaman" /></label>
+        <label className="crm-field">Venue<input className="crm-input" value={f.venue} onChange={set('venue')} placeholder="Panchayat bhawan, school, PHC…" /></label>
+        <label className="crm-field cp-span2">Name
+          <input className="crm-input" value={f.title} onChange={set('title')} maxLength={120} placeholder={autoName} />
+          {!camp && !f.title && <span className="crm-cell-sub">Leave it empty to use “{autoName}”.</span>}
+        </label>
         <div className="crm-field cp-span2">Departments
           {depts.length > 0 ? (
             <div className="crm-chips">
@@ -105,19 +97,45 @@ export function CampForm({ camp, options, onClose, onSaved }: {
           ) : <input className="crm-input" value={f.departments} onChange={set('departments')} placeholder="Orthopaedics, General Medicine" />}
         </div>
         <label className="crm-field cp-span2">Doctors<input className="crm-input" value={f.doctors} onChange={set('doctors')} placeholder="Dr. Ahmad, Dr. Kumari" /></label>
-        <div className="cp-three cp-span2">
-          <label className="crm-field">Booking slots<input type="number" min={0} className="crm-input" value={f.capacity} onChange={set('capacity')} /></label>
-          <label className="crm-field">Target: people seen<input type="number" min={0} className="crm-input" value={f.targetRegistrations} onChange={set('targetRegistrations')} /></label>
-          <label className="crm-field">Target: to {place()}<input type="number" min={0} className="crm-input" value={f.targetReferrals} onChange={set('targetReferrals')} /></label>
-        </div>
-        <div className="cp-two cp-span2">
-          <label className="crm-field">Budget (₹)<input type="number" min={0} className="crm-input" value={f.budget} onChange={set('budget')} /></label>
-          <label className="crm-field">Spent (₹)<input type="number" min={0} className="crm-input" value={f.spent} onChange={set('spent')} /></label>
-        </div>
-        <label className="crm-field cp-span2">Notes<textarea className="crm-textarea" rows={2} value={f.notes} onChange={set('notes')} placeholder="Tent, chairs, mic, banner, lunch for the team…" /></label>
-        {camp && <label className="crm-field cp-span2">After the camp: what worked, what to change<textarea className="crm-textarea" rows={2} value={f.outcome} onChange={set('outcome')} /></label>}
       </div>
-      {!camp && <p className="crm-sub" style={{ margin: 0, fontSize: 13 }}>The camp gets a code for its WhatsApp QR poster, and a marketing checklist to follow.</p>}
+
+      <button type="button" className="cq-more" aria-expanded={more} onClick={() => setMore((m) => !m)}>
+        {more ? '− Fewer details' : '+ More details'} <span className="crm-cell-sub">status, district, host partner, slots and targets, budget, notes</span>
+      </button>
+      {more && (
+        <div className="cp-form">
+          <label className="crm-field">Status
+            <select className="crm-select" value={f.status} onChange={set('status')}>
+              <option value="planned">Planned</option><option value="confirmed">Confirmed</option><option value="done">Done</option><option value="cancelled">Cancelled</option>
+            </select>
+          </label>
+          <label className="crm-field">District<input className="crm-input" value={f.district} onChange={set('district')} placeholder="Kishanganj" /></label>
+          <div className="crm-field cp-span2">Hosted with
+            {host ? (
+              <span className="ld-picked">{host.name}<button type="button" onClick={() => setHost(null)} aria-label="Remove host">×</button></span>
+            ) : (
+              <>
+                <input className="crm-input" value={pq} onChange={(e) => setPq(e.target.value)} placeholder="Mukhiya, ASHA, school, RMP who helps run it" />
+                {pq.trim().length >= 2 && hits.length > 0 && (
+                  <ul className="ld-hits">{hits.map((h) => <li key={h.clientId}><button type="button" onClick={() => { setHost({ clientId: h.clientId, name: h.name }); setPq(''); }}>{h.name} <span className="crm-sub">{[h.type, h.panchayat].filter(Boolean).join(' · ')}</span></button></li>)}</ul>
+                )}
+              </>
+            )}
+          </div>
+          <div className="cp-three cp-span2">
+            <label className="crm-field">Booking slots<input type="number" min={0} className="crm-input" value={f.capacity} onChange={set('capacity')} /></label>
+            <label className="crm-field">Target: people seen<input type="number" min={0} className="crm-input" value={f.targetRegistrations} onChange={set('targetRegistrations')} /></label>
+            <label className="crm-field">Target: to {place()}<input type="number" min={0} className="crm-input" value={f.targetReferrals} onChange={set('targetReferrals')} /></label>
+          </div>
+          <div className="cp-two cp-span2">
+            <label className="crm-field">Budget (₹)<input type="number" min={0} className="crm-input" value={f.budget} onChange={set('budget')} /></label>
+            <label className="crm-field">Spent (₹)<input type="number" min={0} className="crm-input" value={f.spent} onChange={set('spent')} /></label>
+          </div>
+          <label className="crm-field cp-span2">Notes<textarea className="crm-textarea" rows={2} value={f.notes} onChange={set('notes')} placeholder="Tent, chairs, mic, banner, lunch for the team…" /></label>
+          {camp && <label className="crm-field cp-span2">After the camp: what worked, what to change<textarea className="crm-textarea" rows={2} value={f.outcome} onChange={set('outcome')} /></label>}
+        </div>
+      )}
+      {!camp && <p className="crm-sub" style={{ margin: 0, fontSize: 13 }}>The camp gets a booking code for its WhatsApp QR poster, and a marketing checklist.</p>}
       {error && <div className="crm-error" role="alert">{error}</div>}
     </Modal>
   );

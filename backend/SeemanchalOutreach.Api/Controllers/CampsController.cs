@@ -422,6 +422,8 @@ namespace SeemanchalOutreach.Api.Controllers
             p.Token = await CampBook.NextTokenAsync(_db, id, ct);
             if (dto.Status == "attended") p.ArrivedAt = DateTime.UtcNow;
             _db.CampPatients.Add(p);
+            // A walk-in checked and referred in one go: the desk follows them up, as when a screening is saved.
+            if (p.ReferToHospital && p.Phone != null && p.Consent) await FollowUpAsync(p, ct);
             if (p.ReferToHospital) await PatientResults.EnsureCampReferralAsync(_db, p, ct);
             await _db.SaveChangesAsync(ct);
             if (p.Status == "attended") { await DiseaseRegister.SyncCampAsync(_db, id, ct); await _db.SaveChangesAsync(ct); }
@@ -478,6 +480,43 @@ namespace SeemanchalOutreach.Api.Controllers
             {
                 To = await LeadInbox.DeskPeopleAsync(_db, _perms, ct), Except = me, Kind = "lead",
                 Title = $"{(p.Urgent ? "Urgent: " : "")}{p.Name} referred from {camp?.Title}", Body = LeadInbox.Shorten(note, 200), Link = $"lead:{lead.Id}", RefId = lead.Id.ToString(),
+            });
+        }
+
+        /// <summary>
+        /// The camp's disease data: what the doctors found in the people screened here, plus counts added from the camp's
+        /// paper sheets (no names), and the sheet entries so a wrong one can be taken out.
+        /// </summary>
+        [HttpGet("{id:guid}/disease")]
+        public async Task<IActionResult> Disease(Guid id, CancellationToken ct)
+        {
+            var c = await _db.HealthCamps.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (c == null) return NotFound();
+            var rows = await _db.DiseaseRecords.AsNoTracking().Where(r => r.CampId == id && r.Status == "active").ToListAsync(ct);
+            string key(DiseaseRecord r) => r.ConditionCode ?? "txt:" + r.Disease.Trim().ToLowerInvariant();
+            var byDisease = rows.GroupBy(key).Select(g => new
+            {
+                key = g.Key, code = g.First().ConditionCode, label = g.First().ConditionCode != null ? CampBook.ConditionLabel(g.First().ConditionCode!) : g.First().Disease.Trim(),
+                fromPeople = g.Where(r => r.Source == "camp").Sum(r => r.Count), fromSheets = g.Where(r => r.Source != "camp").Sum(r => r.Count), total = g.Sum(r => r.Count),
+                women = g.Where(r => r.Sex == "F").Sum(r => r.Count), men = g.Where(r => r.Sex == "M").Sum(r => r.Count),
+            }).OrderByDescending(x => x.total).ToList();
+            var sheets = rows.Where(r => r.Source != "camp").OrderByDescending(r => r.CreatedAt).Take(300).ToList();
+            var who = sheets.Select(r => r.CreatedBy).Distinct().ToList();
+            var names = await _db.Agents.AsNoTracking().Where(a => who.Contains(a.AgentId)).Select(a => new { a.AgentId, a.Name }).ToListAsync(ct);
+            var today = DateOnly.FromDateTime(IstClock.NowIst);
+            return Ok(new
+            {
+                total = rows.Sum(r => r.Count), fromPeople = rows.Where(r => r.Source == "camp").Sum(r => r.Count), fromSheets = rows.Where(r => r.Source != "camp").Sum(r => r.Count),
+                byDisease,
+                sheets = sheets.Select(r => new
+                {
+                    id = r.Id, disease = r.Disease, ageBand = r.AgeBand, age = DiseaseRegister.AgeLabel(r.AgeBand), sex = r.Sex, count = r.Count, batchId = r.BatchId,
+                    at = r.CreatedAt, by = names.FirstOrDefault(n => n.AgentId == r.CreatedBy)?.Name ?? r.CreatedBy,
+                }),
+                // Sheet counts are dated on the camp day and placed in its block, so the camp needs both.
+                canAdd = c.Date <= today && (c.Block != null || c.PanchayatId != null) && c.Status != "cancelled",
+                why = c.Status == "cancelled" ? "The camp was cancelled." : c.Date > today ? "Counts can be added from the camp day." : c.Block == null && c.PanchayatId == null ? "Add the camp's block first (Edit camp)." : null,
+                ageBands = DiseaseRegister.AgeBands.Select(a => new { key = a, label = DiseaseRegister.AgeLabel(a) }),
             });
         }
 

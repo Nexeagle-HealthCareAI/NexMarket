@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowLeft, CalendarDays, CheckCircle2, ClipboardList, MapPin, Megaphone, Pencil, Plus, QrCode, Search, Stethoscope, UserPlus, Users, CreditCard,
+  Activity, ArrowLeft, CalendarDays, CheckCircle2, ClipboardList, MapPin, Megaphone, Pencil, Plus, QrCode, Search, Stethoscope, UserPlus, Users, CreditCard,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Pager } from '@/components/crm/Pager';
@@ -15,16 +15,17 @@ import { PatientForm } from './PatientForm';
 import { IssueCard } from '@/components/crm/cards/IssueCard';
 import { CardView } from '@/components/crm/cards/CardView';
 import { CampMoney } from './CampMoney';
+import { CampDisease } from './CampDisease';
 import {
   CAMP_STATUS, campDate, daysTo, PATIENT_STATUS, pct, PHASES, SOURCE_LABEL,
-  type CampDetail as Detail, type CampOptions, type CampPatient, type ChecklistItem, type CountRow,
+  type CampDetail as Detail, type CampOptions, type CampPatient, type ChecklistItem,
 } from './shared';
 import { place } from '@/lib/crm/access';
 
 interface PatientsRes { items: CampPatient[]; total: number; counts: Record<string, number>; referred: number }
 
 export function CampDetail({ id, options, canEdit, onBack, toast }: { id: string; options: CampOptions | null; canEdit: boolean; onBack: () => void; toast: (m: string) => void }) {
-  const [tab, setTab] = usePageTab(['plan', 'people', 'results'] as const, 'plan', 'view');
+  const [tab, setTab] = usePageTab(['people', 'disease', 'plan'] as const, 'people', 'view');
   const [d, setD] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -76,14 +77,14 @@ export function CampDetail({ id, options, canEdit, onBack, toast }: { id: string
       <CampMoney campId={c.id} campTitle={c.title} campDate={c.date} campBudget={c.budget} project={d.project} canEdit={canEdit} onChanged={() => void load()} toast={toast} />
 
       <PageTabs label="Camp views" value={tab} onChange={setTab} tabs={[
+        { key: 'people', label: 'Bookings & check-ups', icon: Users, count: s.booked },
+        { key: 'disease', label: 'Disease data', icon: Activity, count: d.conditions.reduce((a, x) => a + x.n, 0) || undefined },
         { key: 'plan', label: 'Marketing plan', icon: ClipboardList, count: d.checklist.filter((i) => !i.done).length },
-        { key: 'people', label: 'People', icon: Users, count: s.booked },
-        { key: 'results', label: 'Findings', icon: Stethoscope, count: d.conditions.reduce((a, x) => a + x.n, 0) },
       ]} />
 
-      {tab === 'plan' && <Checklist campId={id} items={d.checklist} canEdit={canEdit} onSaved={load} toast={toast} />}
       {tab === 'people' && <People camp={d} options={options} canEdit={canEdit} onChanged={load} toast={toast} />}
-      {tab === 'results' && <Findings d={d} />}
+      {tab === 'disease' && <CampDisease d={d} options={options} canEdit={canEdit} toast={toast} />}
+      {tab === 'plan' && <Checklist campId={id} items={d.checklist} canEdit={canEdit} onSaved={load} toast={toast} />}
 
       {editing && <CampForm camp={c} options={options} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); toast('Camp saved.'); void load(); }} />}
       {qr && <QrPosterModal onClose={() => setQr(false)} info={{ title: c.title, sub: `${campDate(c.date)} · ${[c.venue, c.block].filter(Boolean).join(', ')}`, waLink: d.link.waLink, message: d.link.message, displayPhone: d.link.displayPhone, hospital: d.link.hospital }}
@@ -176,20 +177,27 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
     try { await crm.patch(`/api/v1/camps/patients/${p.id}`, { status }); await load(); onChanged(); } catch (e) { toast(friendlyError(e)); }
   };
   const condLabel = (c: string) => options?.conditions.find((x) => x.code === c)?.en ?? c;
+  // From the camp day on, walk-ins and check-ups are the main work; before it, bookings are.
+  const onDay = daysTo(camp.camp.date) <= 0;
+  const villages = useMemo(() => [...new Set((data?.items ?? []).map((p) => p.village).filter((v): v is string => !!v))], [data]);
   const count = (k: string) => (k === '' ? Object.values(data?.counts ?? {}).reduce((a, b) => a + b, 0) : k === 'referred' ? data?.referred ?? 0 : data?.counts[k] ?? 0);
 
   return (
     <div className="crm-card cp-people">
-      <div className="wl-filters" style={{ borderBottom: 0, padding: 0 }}>
-        <label className="ch-search" style={{ margin: 0, flex: '1 1 220px' }}>
-          <Search size={16} aria-hidden /><span className="crm-sr">Search people</span>
-          <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Name, mobile, village or token" />
-        </label>
-        {canEdit && <>
-          <button type="button" className="crm-btn is-secondary" onClick={() => setForm({ mode: 'book' })}><CalendarDays size={16} aria-hidden /> Book someone</button>
-          <button type="button" className="crm-btn" onClick={() => setForm({ mode: 'register' })}><UserPlus size={16} aria-hidden /> Register walk-in</button>
-        </>}
-      </div>
+      {canEdit && camp.camp.status !== 'cancelled' && (
+        <div className="cq-desk">
+          <button type="button" className={`crm-btn cq-big${onDay ? ' is-secondary' : ''}`} onClick={() => setForm({ mode: 'book' })}>
+            <CalendarDays size={20} aria-hidden /><span><strong>Book a person</strong><em>Name, mobile, age · takes seconds</em></span>
+          </button>
+          <button type="button" className={`crm-btn cq-big${onDay ? '' : ' is-secondary'}`} onClick={() => setForm({ mode: 'register' })}>
+            <UserPlus size={20} aria-hidden /><span><strong>Walk-in</strong><em>Register and check up at once</em></span>
+          </button>
+        </div>
+      )}
+      <label className="ch-search" style={{ margin: 0 }}>
+        <Search size={16} aria-hidden /><span className="crm-sr">Search people</span>
+        <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Name, mobile, village or token" />
+      </label>
       <div className="crm-chips">
         {FILTERS.map((f) => <button key={f.key} type="button" className="crm-chip" aria-pressed={filter === f.key} onClick={() => { setFilter(f.key); setPage(1); }}>{f.label}<span className="ld-chip-n">{count(f.key)}</span></button>)}
       </div>
@@ -227,7 +235,7 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
                     <td><Pill tone={ps.tone}>{ps.label}</Pill></td>
                     <td><div className="cp-actions">
                       {canEdit && <>
-                        <button type="button" className="crm-btn is-sm" onClick={() => setForm({ mode: 'screen', p })}><Stethoscope size={14} aria-hidden /> {p.status === 'attended' ? 'Screening' : 'Screen'}</button>
+                        <button type="button" className={`crm-btn is-sm${p.status === 'attended' ? ' is-secondary' : ''}`} onClick={() => setForm({ mode: 'screen', p })}><Stethoscope size={14} aria-hidden /> {p.status === 'attended' ? 'Check-up' : 'Check up'}</button>
                         {p.status === 'booked' && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => void mark(p, 'attended')}><CheckCircle2 size={14} aria-hidden /> Arrived</button>}
                         {p.status === 'attended' && !p.healthCard && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setGiveCard(p)}><CreditCard size={14} aria-hidden /> Health card</button>}
                         {p.status === 'booked' && camp.camp.status === 'done' && <button type="button" className="nt-link is-muted" onClick={() => void mark(p, 'no_show')}>Didn&apos;t come</button>}
@@ -244,57 +252,8 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
       {giveCard && <IssueCard prefill={{ holderName: giveCard.name, phone: giveCard.phone, age: giveCard.age, sex: giveCard.sex, village: giveCard.village, campPatientId: giveCard.id, campId: camp.camp.id, campTitle: camp.camp.title, source: 'camp' }}
         onClose={() => setGiveCard(null)} onIssued={(c) => { setGiveCard(null); toast(`Card ${c.number} given to ${c.holderName}.`); void load(); }} />}
       {openCard && <CardView id={openCard} editable={canEdit} onClose={() => setOpenCard(null)} onChanged={() => void load()} toast={toast} />}
-      {form && <PatientForm campId={camp.camp.id} patient={form.p} mode={form.mode} options={options} departments={depts.length ? depts : camp.camp.departments}
-        onClose={() => setForm(null)} onSaved={(m) => { setForm(null); toast(m); void load(); onChanged(); }} />}
-    </div>
-  );
-}
-
-function Bars({ rows, tone }: { rows: CountRow[]; tone: string }) {
-  const max = Math.max(1, ...rows.map((r) => r.n));
-  if (rows.length === 0) return <span className="crm-cell-sub">Nothing recorded yet. Screen people under People.</span>;
-  return (
-    <div className="cp-bars">
-      {rows.map((r) => (
-        <div key={r.code} className="cp-bar-row">
-          <span>{r.label}</span>
-          <span className="crm-bar"><span style={{ width: `${pct(r.n, max)}%`, background: tone }} /></span>
-          <strong>{r.n}</strong>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Findings({ d }: { d: Detail }) {
-  const s = d.stats;
-  return (
-    <div className="cp-findings">
-      <div className="crm-row">
-        <section className="crm-card grow-1" style={{ flexBasis: 360 }}>
-          <div className="crm-card-head"><h3 className="crm-h2">What the doctors found</h3></div>
-          <Bars rows={d.conditions} tone="var(--accent)" />
-        </section>
-        <section className="crm-card grow-1" style={{ flexBasis: 360 }}>
-          <div className="crm-card-head"><h3 className="crm-h2">What people came with</h3></div>
-          <Bars rows={d.symptoms} tone="#7c3aed" />
-        </section>
-      </div>
-      <section className="crm-card">
-        <div className="crm-card-head"><h3 className="crm-h2">Who came</h3></div>
-        <div className="pt-stats cp-who">
-          <span><span>Women</span><strong>{s.women}</strong></span>
-          <span><span>Men</span><strong>{s.men}</strong></span>
-          <span><span>Over 60</span><strong>{s.over60}</strong></span>
-          <span><span>Children</span><strong>{s.children}</strong></span>
-          <span><span>High BP</span><strong>{s.highBp}</strong></span>
-          <span><span>High sugar</span><strong>{s.highSugar}</strong></span>
-          <span><span>Cost per person seen</span><strong>{s.costPerAttendee ? rupees(s.costPerAttendee) : '—'}</strong></span>
-        </div>
-        <p className="crm-sub" style={{ fontSize: 13, marginTop: 10 }}>
-          Use this for the next camp here: the most common findings tell you which department and doctor to bring, and what to say on the invitation.
-        </p>
-      </section>
+      {form && <PatientForm campId={camp.camp.id} patient={form.p} mode={form.mode} options={options} departments={depts.length ? depts : camp.camp.departments} villages={villages}
+        onClose={() => setForm(null)} onSaved={(m, keep) => { if (!keep) setForm(null); toast(m); void load(); onChanged(); }} />}
     </div>
   );
 }
