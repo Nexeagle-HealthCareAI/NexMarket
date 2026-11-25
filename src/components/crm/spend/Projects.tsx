@@ -1,20 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { FolderKanban, HandCoins, Pencil, Plus } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, FolderKanban, HandCoins, Plus } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Modal, Pill, Skeleton } from '@/components/crm/ui';
-import { dayText, errText, MODE, money, monthText, NATURE, PALETTE, rs, type Data, type Expense, type Fund, type Staff } from './shared';
+import { dayText, errText, MODE, money, NATURE, PALETTE, rs, type Data, type Staff } from './shared';
 
 export interface ProjectRow {
   id: string; name: string; description?: string | null; budget?: number | null; startDate?: string | null; endDate?: string | null;
   status: 'active' | 'closed'; leadId?: string | null; leadName?: string | null; color: string;
   received: number; spent: number; constant: number; variable: number; pending: number; left?: number | null; usedPct?: number | null; entries: number;
-}
-interface ProjectDetail {
-  project: ProjectRow; funds: Fund[]; expenses: Expense[]; byKind: Record<string, number>;
-  byPerson: { agentId: string; name: string; total: number }[]; byMonth: { month: string; constant: number; variable: number }[];
-  recurring: { id: string; title: string; amount: number; every: string; active: boolean }[];
 }
 
 /** A project's budget as a bar: spent against the budget, with what was received marked. */
@@ -34,8 +29,8 @@ function BudgetBar({ p }: { p: ProjectRow }) {
 }
 
 /** Every project as a card: its budget, money received and spent (constant and variable), and what is left. */
-export function ProjectsTab({ data, canHandle, onOpen, onAddExpense, onAddFund, toast, refreshKey }: {
-  data: Data; canHandle: boolean; onOpen: (id: string) => void; onAddExpense: (projectId: string) => void; onAddFund: (projectId?: string) => void;
+export function ProjectsTab({ data, canHandle, onOpen, onAddFund, toast, refreshKey }: {
+  data: Data; canHandle: boolean; onOpen: (id: string, mode?: 'in' | 'out') => void; onAddFund: (projectId?: string) => void;
   toast: (m: string) => void; refreshKey: number;
 }) {
   const [rows, setRows] = useState<ProjectRow[] | null>(null);
@@ -89,19 +84,20 @@ export function ProjectsTab({ data, canHandle, onOpen, onAddExpense, onAddFund, 
               </div>
               <p className="crm-sub mp-meta">{[p.leadName ? `Led by ${p.leadName}` : null, p.startDate ? `${dayText(p.startDate)}${p.endDate ? ` – ${dayText(p.endDate)}` : ''}` : null].filter(Boolean).join(' · ') || 'No lead or dates yet'}</p>
               <BudgetBar p={p} />
+              <div className="mp-hand"><span>In hand</span><strong className={p.received - p.spent < 0 ? 'is-neg' : ''}>{p.received - p.spent < 0 ? `− ${rs(p.spent - p.received)}` : rs(p.received - p.spent)}</strong></div>
               <dl className="mp-nums">
-                <div><dt>Received</dt><dd>{rs(p.received)}</dd></div>
-                <div><dt>Spent</dt><dd>{rs(p.spent)}</dd></div>
+                <div><dt>Received</dt><dd className="is-in">{rs(p.received)}</dd></div>
+                <div><dt>Spent</dt><dd className="is-out">{rs(p.spent)}</dd></div>
                 <div><dt><i style={{ background: NATURE.constant.color }} aria-hidden />Constant</dt><dd>{rs(p.constant)}</dd></div>
                 <div><dt><i style={{ background: NATURE.variable.color }} aria-hidden />Variable</dt><dd>{rs(p.variable)}</dd></div>
               </dl>
               {p.pending > 0 && <p className="crm-sub" style={{ margin: 0 }}>{rs(p.pending)} more waiting for approval</p>}
               <div className="mp-card-acts">
-                <button type="button" className="crm-btn is-secondary is-sm" onClick={() => onOpen(p.id)}>Open</button>
                 {canHandle && p.status === 'active' && <>
-                  <button type="button" className="crm-btn is-secondary is-sm" onClick={() => onAddFund(p.id)}>Money received</button>
-                  <button type="button" className="crm-btn is-secondary is-sm" onClick={() => onAddExpense(p.id)}>Add expense</button>
+                  <button type="button" className="crm-btn is-sm pd-quick is-in" onClick={() => onOpen(p.id, 'in')}><ArrowDownLeft size={15} aria-hidden /> Money in</button>
+                  <button type="button" className="crm-btn is-sm pd-quick is-out" onClick={() => onOpen(p.id, 'out')}><ArrowUpRight size={15} aria-hidden /> Spend</button>
                 </>}
+                <button type="button" className="crm-btn is-secondary is-sm" onClick={() => onOpen(p.id)}>Open passbook{p.entries ? ` · ${p.entries}` : ''}</button>
               </div>
             </article>
           ))}
@@ -222,119 +218,3 @@ export function FundForm({ data, projectId, onClose, onSaved }: { data: Data; pr
   );
 }
 
-/** One project in full: its money, month by month, by kind and person, every fund received and every expense. */
-export function ProjectView({ id, data, canHandle, onClose, onChanged, onAddExpense, onAddFund, toast, onBill }: {
-  id: string; data: Data; canHandle: boolean; onClose: () => void; onChanged: () => void; onAddExpense: (projectId: string) => void; onAddFund: (projectId: string) => void;
-  toast: (m: string) => void; onBill: (e: Expense) => void;
-}) {
-  const [d, setD] = useState<ProjectDetail | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [edit, setEdit] = useState(false);
-  const load = useCallback(async () => { try { setD(await crm.get<ProjectDetail>(`/api/v1/spend/projects/${id}`)); setErr(null); } catch (e) { setErr(friendlyError(e)); } }, [id]);
-  useEffect(() => { const t = setTimeout(() => void load(), 0); return () => clearTimeout(t); }, [load]);
-  const kinds = Object.fromEntries(data.categories.map((k) => [k.key, k])) as Record<string, (typeof data.categories)[number]>;
-  const setStatus = async (status: 'active' | 'closed') => {
-    if (status === 'closed' && !window.confirm('Close this project? It stays in the records and reports; no new expenses can be added to it. You can open it again.')) return;
-    try { await crm.put(`/api/v1/spend/projects/${id}`, { status }); toast(status === 'closed' ? 'Project closed.' : 'Project open again.'); await load(); onChanged(); } catch (e) { toast(errText(e)); }
-  };
-  const takeOutFund = async (f: Fund) => {
-    if (!window.confirm(`Take this ${rs(f.amount)} from ${f.source} out? It is kept in the records, not deleted.`)) return;
-    try { await crm.post(`/api/v1/spend/funds/${f.id}/remove`); toast('Taken out.'); await load(); onChanged(); } catch (e) { toast(errText(e)); }
-  };
-  if (edit && d) return <ProjectForm staff={data.staff} edit={d.project} onClose={() => setEdit(false)} onSaved={(m) => { toast(m); setEdit(false); void load(); onChanged(); }} />;
-  const p = d?.project;
-  const top = Math.max(1, ...(d?.byMonth ?? []).map((m) => m.constant + m.variable));
-
-  return (
-    <Modal title={p?.name ?? 'Project'} onClose={onClose} wide actions={p && canHandle ? <>
-      <button type="button" className="crm-btn is-secondary" onClick={() => void setStatus(p.status === 'active' ? 'closed' : 'active')}>{p.status === 'active' ? 'Close project' : 'Open again'}</button>
-      <button type="button" className="crm-btn is-secondary" onClick={() => setEdit(true)}><Pencil size={14} aria-hidden /> Change</button>
-      {p.status === 'active' && <button type="button" className="crm-btn is-secondary" onClick={() => onAddFund(p.id)}>Money received</button>}
-      {p.status === 'active' && <button type="button" className="crm-btn" onClick={() => onAddExpense(p.id)}>Add expense</button>}
-    </> : undefined}>
-      {err ? <ErrorBox message={err} /> : !d || !p ? <Skeleton h={320} /> : (
-        <>
-          <p className="crm-sub" style={{ margin: 0 }}>{[p.status === 'closed' ? 'Closed' : 'Open', p.leadName ? `led by ${p.leadName}` : null, p.startDate ? `${dayText(p.startDate, true)}${p.endDate ? ` to ${dayText(p.endDate, true)}` : ''}` : null, p.description].filter(Boolean).join(' · ')}</p>
-          <BudgetBar p={p} />
-          <div className="ms-acct">
-            <div><span className="crm-sub">Received</span><strong>{rs(p.received)}</strong></div>
-            <div><span className="crm-sub">Spent</span><strong>{rs(p.spent)}</strong></div>
-            <div><span className="crm-sub">Constant · variable</span><strong>{rs(p.constant)} · {rs(p.variable)}</strong></div>
-            <div><span className="crm-sub">Waiting for approval</span><strong>{rs(p.pending)}</strong></div>
-          </div>
-
-          {d.byMonth.length > 0 && <>
-            <h3 className="ms-h3">Month by month</h3>
-            <ul className="mp-months">
-              {d.byMonth.map((m) => (
-                <li key={m.month}>
-                  <span>{monthText(m.month, true)}</span>
-                  <span className="mp-mbar" role="img" aria-label={`Constant ${rs(m.constant)}, variable ${rs(m.variable)}`}>
-                    <span style={{ width: `${(m.constant / top) * 100}%`, background: NATURE.constant.color }} />
-                    <span style={{ width: `${(m.variable / top) * 100}%`, background: NATURE.variable.color }} />
-                  </span>
-                  <strong>{rs(m.constant + m.variable)}</strong>
-                </li>
-              ))}
-            </ul>
-          </>}
-
-          <div className="ma-two is-tight">
-            <div>
-              <h3 className="ms-h3">By kind</h3>
-              {Object.keys(d.byKind).length === 0 ? <p className="crm-sub">Nothing yet.</p> : (
-                <ul className="mp-list">{Object.entries(d.byKind).sort((a, b) => b[1] - a[1]).map(([k, v]) => (
-                  <li key={k}><span className="ms-cat-name"><i style={{ background: kinds[k]?.color ?? '#6b7280' }} aria-hidden />{kinds[k]?.label ?? k}</span><em>{kinds[k] ? NATURE[kinds[k].nature].label : ''}</em><strong>{rs(v)}</strong></li>
-                ))}</ul>
-              )}
-            </div>
-            <div>
-              <h3 className="ms-h3">On whom</h3>
-              {d.byPerson.length === 0 ? <p className="crm-sub">Nothing tagged to a person.</p> : (
-                <ul className="mp-list">{d.byPerson.map((x) => <li key={x.agentId}><span>{x.name}</span><strong>{rs(x.total)}</strong></li>)}</ul>
-              )}
-            </div>
-          </div>
-
-          <h3 className="ms-h3">Money received · {d.funds.length}</h3>
-          {d.funds.length === 0 ? <p className="crm-sub" style={{ margin: 0 }}>None recorded yet.</p> : (
-            <div className="crm-table-wrap">
-              <table className="crm-table">
-                <thead><tr><th scope="col">Day</th><th scope="col">From</th><th scope="col">Held by</th><th scope="col" className="wb-num">Amount</th>{canHandle && <th scope="col"><span className="crm-sr">Actions</span></th>}</tr></thead>
-                <tbody>{d.funds.map((f) => (
-                  <tr key={f.id}>
-                    <td style={{ whiteSpace: 'nowrap' }}>{dayText(f.on)}</td>
-                    <td>{f.source}{f.note && <span className="crm-cell-sub" style={{ display: 'block' }}>{f.note}</span>}</td>
-                    <td>{f.receivedByName ?? 'Organisation'}{f.mode && <span className="crm-cell-sub" style={{ display: 'block' }}>{MODE[f.mode] ?? f.mode}</span>}</td>
-                    <td className="wb-num"><strong>{rs(f.amount)}</strong></td>
-                    {canHandle && <td className="wb-num"><button type="button" className="wa-link" style={{ whiteSpace: 'nowrap' }} onClick={() => void takeOutFund(f)}>Entered by mistake</button></td>}
-                  </tr>
-                ))}</tbody>
-              </table>
-            </div>
-          )}
-
-          <h3 className="ms-h3">Expenses · {d.expenses.length}</h3>
-          {d.expenses.length === 0 ? <p className="crm-sub" style={{ margin: 0 }}>No expenses in this project yet.</p> : (
-            <div className="crm-table-wrap">
-              <table className="crm-table">
-                <thead><tr><th scope="col">Day</th><th scope="col">Kind</th><th scope="col">For</th><th scope="col">Paid by</th><th scope="col" className="wb-num">Amount</th><th scope="col">Bill</th></tr></thead>
-                <tbody>{d.expenses.map((e) => (
-                  <tr key={e.id} className={e.status === 'rejected' ? 'ms-rejected' : undefined}>
-                    <td style={{ whiteSpace: 'nowrap' }}>{dayText(e.spentOn)}</td>
-                    <td><span className="ms-cat-name"><i style={{ background: kinds[e.category]?.color ?? '#6b7280' }} aria-hidden />{kinds[e.category]?.label ?? e.category}</span></td>
-                    <td>{e.note || <span className="crm-sub">—</span>}{e.status !== 'approved' && <span className="crm-cell-sub" style={{ display: 'block' }}>{e.status === 'pending' ? 'waiting for approval' : `not approved: ${e.rejectReason ?? ''}`}</span>}</td>
-                    <td>{e.paidBy === 'person' ? e.agentName : 'Organisation'}</td>
-                    <td className="wb-num">{e.status === 'approved' ? <strong>{rs(e.amount)}</strong> : <span className="crm-sub">{rs(e.amount)}</span>}</td>
-                    <td>{e.hasBill ? <button type="button" className="wa-link" onClick={() => onBill(e)}>See bill</button> : <span className="crm-sub">—</span>}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            </div>
-          )}
-          {d.recurring.length > 0 && <p className="crm-sub" style={{ margin: 0 }}>Constant payments in this project: {d.recurring.map((r) => `${r.title} ${rs(r.amount)}${r.active ? '' : ' (stopped)'}`).join(' · ')}</p>}
-        </>
-      )}
-    </Modal>
-  );
-}

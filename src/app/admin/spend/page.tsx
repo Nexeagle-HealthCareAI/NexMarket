@@ -6,7 +6,8 @@ import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Modal, PageHead, Pill, Skeleton, useToast } from '@/components/crm/ui';
 import { Analytics } from '@/components/crm/spend/Analytics';
 import { ConstantTab } from '@/components/crm/spend/Constant';
-import { FundForm, ProjectsTab, ProjectView } from '@/components/crm/spend/Projects';
+import { FundForm, ProjectsTab } from '@/components/crm/spend/Projects';
+import { ProjectDesk } from '@/components/crm/spend/ProjectDesk';
 import { SetupTab } from '@/components/crm/spend/Setup';
 import { MemberForm, PayForm, PayrollTab } from '@/components/crm/spend/Payroll';
 import {
@@ -62,7 +63,8 @@ export default function SpendPage() {
   const [reject, setReject] = useState<Expense | null>(null);
   const [bill, setBill] = useState<Expense | null>(null);
   const [person, setPerson] = useState<string | null>(null);
-  const [project, setProject] = useState<string | null>(null);
+  const [project, setProjectState] = useState<{ id: string; mode?: 'in' | 'out' } | null>(null);
+  const setProject = (id: string | null, mode?: 'in' | 'out') => { setProjectState(id ? { id, mode } : null); if (id) { setTab('projects'); window.scrollTo({ top: 0 }); } };
   const [busyId, setBusyId] = useState<string | null>(null);
   const [member, setMember] = useState<string | null>(null);
   const [teamKey, setTeamKey] = useState(0);
@@ -122,7 +124,7 @@ export default function SpendPage() {
 
       <div className="crm-tabs ms-tabs" role="tablist" aria-label="Marketing spend views">
         {TABS.map((t) => (
-          <button key={t.key} type="button" role="tab" className="crm-tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}>
+          <button key={t.key} type="button" role="tab" className="crm-tab" aria-selected={tab === t.key} onClick={() => { setTab(t.key); if (t.key === 'projects') setProjectState(null); }}>
             {t.label}
             {t.key === 'work' && data.waiting.length > 0 && <span className="an-count">{data.waiting.length}</span>}
             {t.key === 'analytics' && bad > 0 && <span className="an-count is-bad" aria-label={`${bad} things need attention`}>{bad}</span>}
@@ -264,15 +266,16 @@ export default function SpendPage() {
         </>
       )}
 
-      {tab === 'analytics' && <Analytics data={data} go={(t) => setTab(t as Tab)} openProject={setProject} openPerson={setMember} />}
-      {tab === 'projects' && <ProjectsTab data={data} canHandle={editable} onOpen={setProject} onAddExpense={(id) => setForm({ projectId: id })} onAddFund={(id) => setFund({ projectId: id })} toast={showToast} refreshKey={teamKey} />}
+      {tab === 'analytics' && <Analytics data={data} go={(t) => setTab(t as Tab)} openProject={(id: string) => setProject(id)} openPerson={setMember} />}
+      {tab === 'projects' && (project
+        ? <ProjectDesk key={`${project.id}-${project.mode ?? ''}`} id={project.id} startMode={project.mode} data={data} canHandle={editable} onBack={() => setProject(null)}
+            onChanged={() => { setTeamKey((k) => k + 1); void load(); }} toast={showToast} onBill={setBill} />
+        : <ProjectsTab data={data} canHandle={editable} onOpen={(id, mode) => setProject(id, mode)} onAddFund={(id) => setFund({ projectId: id })} toast={showToast} refreshKey={teamKey} />)}
       {tab === 'constant' && <ConstantTab data={data} canHandle={editable} toast={showToast} onChanged={() => void load()} refreshKey={teamKey} />}
       {tab === 'team' && <PayrollTab key={teamKey} editable={editable} modes={data.modes} onOpen={setMember} toast={showToast} onChanged={() => void load()} />}
       {tab === 'setup' && <SetupTab data={data} toast={showToast} onChanged={() => void load()} />}
 
       {member && <MemberView agentId={member} editable={editable} modes={data.modes} onClose={() => setMember(null)} toast={showToast} onChanged={() => { setTeamKey((k) => k + 1); void load(); }} onBill={setBill} />}
-      {project && <ProjectView id={project} data={data} canHandle={editable} onClose={() => setProject(null)} onChanged={() => { setTeamKey((k) => k + 1); void load(); }}
-        onAddExpense={(id) => { setProject(null); setForm({ projectId: id }); }} onAddFund={(id) => { setProject(null); setFund({ projectId: id }); }} toast={showToast} onBill={setBill} />}
       {form && <ExpenseForm data={data} edit={form.edit} day={form.day} projectId={form.projectId} onClose={() => setForm(null)} onSaved={done} />}
       {move && <MoveForm data={data} start={move} onClose={() => setMove(null)} onSaved={done} />}
       {fund && <FundForm data={data} projectId={fund.projectId} onClose={() => setFund(null)} onSaved={done} />}

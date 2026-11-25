@@ -345,6 +345,46 @@ namespace SeemanchalOutreach.Api.Controllers
             return Ok(new { ok = true });
         }
 
+        /// <summary>Puts back money received that was taken out (Undo).</summary>
+        [HttpPost("funds/{id:guid}/restore")]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
+        public async Task<IActionResult> RestoreFund(Guid id, CancellationToken ct)
+        {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
+            var f = await _db.SpendFunds.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (f == null) return NotFound(new { message = "That entry isn't here any more." });
+            f.Removed = false;
+            await _db.SaveChangesAsync(ct);
+            return Ok(FundShape(f));
+        }
+
+        /// <summary>Correct money received: amount, day, from whom, how, who holds it, the project and the note.</summary>
+        [HttpPut("funds/{id:guid}")]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
+        public async Task<IActionResult> EditFund(Guid id, [FromBody] SpendFundDto d, CancellationToken ct)
+        {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
+            var f = await _db.SpendFunds.FirstOrDefaultAsync(x => x.Id == id && !x.Removed, ct);
+            if (f == null) return NotFound(new { message = "That entry isn't here any more." });
+            var err = Spend.Problem(d.Amount, d.On, AttendanceService.TodayIst, Spend.OfficeDaysBack);
+            if (err != null) return BadRequest(new { message = err.Replace("Write the amount.", "Write the amount received.") });
+            var source = Hoardings.Clean(d.Source, 120);
+            if (source == null) return BadRequest(new { message = "Write who it came from, e.g. Hospital management." });
+            if (d.ProjectId != null && d.ProjectId != Guid.Empty && !await _db.SpendProjects.AnyAsync(p => p.Id == d.ProjectId, ct)) return BadRequest(new { message = "That project isn't here any more." });
+            var who = Hoardings.Clean(d.ReceivedBy, 40);
+            if (who != null)
+            {
+                var a = await _db.Agents.AsNoTracking().Where(x => x.AgentId == who).Select(x => new { x.AgentId, x.Name }).FirstOrDefaultAsync(ct);
+                if (a == null) return BadRequest(new { message = "Pick the person who received it." });
+                f.ReceivedBy = a.AgentId; f.ReceivedByName = a.Name;
+            }
+            else { f.ReceivedBy = null; f.ReceivedByName = null; }
+            f.Amount = d.Amount!.Value; f.On = d.On!.Value; f.Source = source; f.Mode = Spend.ModeOf(d.Mode); f.Note = Hoardings.Clean(d.Note, 300);
+            f.ProjectId = d.ProjectId == Guid.Empty ? null : d.ProjectId;
+            await _db.SaveChangesAsync(ct);
+            return Ok(FundShape(f));
+        }
+
         // ── Constant payments ───────────────────────────────────────────────────
 
         private static object RecurringShape(SpendRecurring r, List<Spend.Period> periods, DateOnly today, string? projectName)

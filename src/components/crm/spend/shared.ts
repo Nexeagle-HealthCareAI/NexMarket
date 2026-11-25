@@ -14,7 +14,7 @@ export interface Move {
 }
 export interface Fund {
   id: string; projectId?: string | null; amount: number; on: string; source: string; mode?: string | null; note?: string | null;
-  receivedBy?: string | null; receivedByName?: string | null; createdByName: string;
+  receivedBy?: string | null; receivedByName?: string | null; createdByName: string; createdAt?: string;
 }
 export interface Person { agentId: string; name: string; role?: string | null; manager?: boolean; balance: Balance }
 export interface Staff { agentId: string; name: string; role: string; block?: string | null }

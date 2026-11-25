@@ -421,6 +421,19 @@ namespace SeemanchalOutreach.Api.Controllers
             return Ok(new { ok = true });
         }
 
+        /// <summary>Puts back an entry that was taken out (Undo).</summary>
+        [HttpPost("{id:guid}/restore")]
+        [PageAccess(Pages.Payments, Level = Pages.View)]
+        public async Task<IActionResult> Restore(Guid id, CancellationToken ct)
+        {
+            if (!await CanHandleAsync(ct)) return NotAllowed();
+            var e = await _db.MarketingExpenses.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (e == null) return NotFound(new { message = "That entry isn't here any more." });
+            e.Removed = false; e.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            return Ok(SpendFiles.Shape(e));
+        }
+
         [HttpPost("{id:guid}/bill")]
         [RequestSizeLimit(12_000_000)]
         [PageAccess(Pages.Payments, Level = Pages.View)]
