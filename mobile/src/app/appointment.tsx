@@ -4,7 +4,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Btn, Chip, Field, Screen, Sheet, T, TopBar, liveText, toast, useTextScale } from '../components/ui';
 import { VoiceField } from '../components/MicButton';
 import { Icon } from '../components/Icon';
-import { PanchayatList, sortPanchayats } from '../components/PanchayatList';
+import { sortPanchayats } from '../components/PanchayatList';
+import { PanchayatPicker, recentPanchayats, rememberPanchayat } from '../components/PanchayatPicker';
 import { useDb, useSession } from '../lib/session';
 import { kvGet, kvSet, q } from '../lib/db';
 import { addAppointment } from '../lib/repo';
@@ -18,7 +19,8 @@ const K_LAST_PLACE = 'appt.lastPanchayat';
 
 /**
  * Book an appointment for a patient met in the field: name, age, gender, mobile (optional) and where they live. The
- * panchayat comes from where the agent is checked in (or the last one used); block and district fill in from it.
+ * panchayat is filled in only when it is sure (where the agent is checked in, else the last one used); otherwise the
+ * agent picks it: one tap on a suggestion, or search any panchayat in any block. Block and district come from it.
  * The complaint can be written now or later; vitals and a sugar test are added on the patient's screen.
  */
 export default function Appointment() {
@@ -33,18 +35,22 @@ export default function Appointment() {
   const [age, setAge] = useState('');
   const [sex, setSex] = useState<'F' | 'M' | 'O' | null>(null);
   const [phone, setPhone] = useState('');
-  const [picked, setPanchayatId] = useState<string | null>(() => params.panchayatId || visit?.panchayatId || kvGet(K_LAST_PLACE) || null);
+  const [panchayatId, setPanchayatId] = useState<string | null>(() => params.panchayatId || visit?.panchayatId || kvGet(K_LAST_PLACE) || null);
   const [picking, setPicking] = useState(false);
   const [editPlace, setEditPlace] = useState(false);
+  const [placeTyped, setPlaceTyped] = useState('');
   const [blockTyped, setBlockTyped] = useState<string | null>(null);
   const [districtTyped, setDistrictTyped] = useState<string | null>(null);
   const [day, setDay] = useState(0);
   const [complaint, setComplaint] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const list = useMemo(() => sortPanchayats(assigned, here), [assigned, here]);
-  // Nothing chosen yet (not checked in, never booked here): the nearest panchayat of my block.
-  const panchayatId = picked ?? list[0]?.panchayatId ?? null;
+  // One-tap suggestions under the field: where I am, the ones used lately, then the nearest of my block.
+  const suggestions = useMemo(() => {
+    const ids = [visit?.panchayatId, ...recentPanchayats(), ...sortPanchayats(assigned, here).map((a) => a.panchayatId)].filter((x): x is string => !!x);
+    return [...new Set(ids)].filter((id) => id !== panchayatId).slice(0, 3)
+      .map((id) => ({ id, name: q.assignedOne(id)?.name ?? q.panchayat(id)?.name ?? null })).filter((x): x is { id: string; name: string } => !!x.name);
+  }, [visit?.panchayatId, assigned, here, panchayatId]);
   const p = useDb(() => (panchayatId ? q.panchayat(panchayatId) : null), [panchayatId]);
   const pName = useDb(() => (panchayatId ? q.assignedOne(panchayatId)?.name ?? q.panchayat(panchayatId)?.name ?? null : null), [panchayatId]);
   const block = blockTyped ?? p?.block ?? mine.block ?? '';
@@ -59,15 +65,15 @@ export default function Appointment() {
     if (!Number.isFinite(n) || n < 0 || n > 120) e.age = t('apNeedAge');
     if (!sex) e.sex = t('apNeedGender');
     if (digits && digits.length !== 10) e.phone = t('apPhoneBad');
-    if (!panchayatId && !block.trim()) e.place = t('apNeedPlace');
+    if (!panchayatId && !(editPlace && placeTyped.trim() && block.trim())) e.place = t('apNeedPlace');
     setErrors(e);
     if (Object.keys(e).length) { toast(Object.values(e)[0]); return; }
     const visitDate = ymd(new Date(Date.now() + day * 86400000));
     const id = addAppointment({
       patientName: name, patientAge: n, patientSex: sex!, clientPhone: digits, panchayatId, block: block.trim() || null, district: district.trim() || null,
-      visitDate, complaint,
+      visitDate, complaint: [editPlace && !panchayatId && placeTyped.trim() ? `${t('apPanchayat')}: ${placeTyped.trim()}` : '', complaint.trim()].filter(Boolean).join('\n'),
     });
-    if (panchayatId) kvSet(K_LAST_PLACE, panchayatId);
+    if (panchayatId) { kvSet(K_LAST_PLACE, panchayatId); rememberPanchayat(panchayatId); }
     savedFeedback();
     toast(t('apBooked', { name: name.trim() }));
     // Straight on to the patient: the vitals and sugar test are usually taken right after booking.
@@ -117,30 +123,38 @@ export default function Appointment() {
         {errors.phone ? <T style={{ color: C.bad, fontSize: 13 }}>{errors.phone}</T> : null}
       </View>
 
-      {/* Where they live: the panchayat picked, block and district filled in from it. */}
-      <View style={{ gap: 8, padding: 14, borderRadius: 16, backgroundColor: C.blueSoft, borderWidth: errors.place ? 1 : 0, borderColor: C.bad }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Icon name="pin" size={20} color={C.blueInk} />
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <T style={{ fontSize: 13, color: C.blueInk, fontWeight: '700', textTransform: 'uppercase' }}>{t('apPlace')}</T>
-            <T style={{ fontSize: 17, fontWeight: '800' }} numberOfLines={2}>{pName ?? t('apPickPanchayat')}</T>
-            <T style={{ fontSize: 14, color: C.text2 }} numberOfLines={1}>{[block && `${t('apBlock')}: ${block}`, district && `${t('apDistrict')}: ${district}`].filter(Boolean).join(' · ')}</T>
-          </View>
-          <Pressable onPress={() => setPicking(true)} accessibilityRole="button" accessibilityLabel={`${t('apChangePlace')}: ${t('apPanchayat')}`} hitSlop={6}
-            style={{ minHeight: 48, paddingHorizontal: 10, justifyContent: 'center' }}>
-            <T style={{ fontSize: 15, fontWeight: '700', color: C.blue }}>{t('apChangePlace')}</T>
-          </Pressable>
-        </View>
-        {editPlace ? (
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <View style={{ flex: 1 }}><Field label={t('apBlock')} value={block} onChangeText={setBlockTyped} /></View>
-            <View style={{ flex: 1 }}><Field label={t('apDistrict')} value={district} onChangeText={setDistrictTyped} /></View>
+      {/* Where they live: a required field like the others. Block and district come from the panchayat. */}
+      <View style={{ gap: 6 }}>
+        <T style={{ fontSize: 15, fontWeight: '700' }}>{t('apPanchayat')}</T>
+        {editPlace && !panchayatId ? (
+          <View style={{ gap: 8 }}>
+            <Field label={t('apPanchayatName')} value={placeTyped} onChangeText={setPlaceTyped} error={errors.place && !placeTyped.trim() ? errors.place : undefined} />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={{ flex: 1 }}><Field label={t('apBlock')} value={block} onChangeText={setBlockTyped} /></View>
+              <View style={{ flex: 1 }}><Field label={t('apDistrict')} value={district} onChangeText={setDistrictTyped} /></View>
+            </View>
+            <Pressable onPress={() => { setEditPlace(false); setPicking(true); }} accessibilityRole="button" style={{ alignSelf: 'flex-start', minHeight: 40, justifyContent: 'center' }}>
+              <T style={{ color: C.blue, fontWeight: '700', fontSize: 15 }}>{t('apPickPanchayat')}</T>
+            </Pressable>
           </View>
         ) : (
-          <Pressable onPress={() => setEditPlace(true)} accessibilityRole="button" hitSlop={4} style={{ alignSelf: 'flex-start', minHeight: 36, justifyContent: 'center' }}>
-            <T style={{ color: C.blue, fontWeight: '700', fontSize: 14 }}>{`${t('apEdit')} ${t('apBlock').toLowerCase()} / ${t('apDistrict').toLowerCase()}`}</T>
+          <Pressable onPress={() => setPicking(true)} accessibilityRole="button" accessibilityLabel={`${t('apPanchayat')}: ${pName ?? t('apPickPanchayat')}`}
+            style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14,
+              borderWidth: 1, borderColor: errors.place ? C.bad : panchayatId ? C.blue : C.borderStrong, backgroundColor: panchayatId ? C.blueSoft : C.card }, pressed && { opacity: 0.85 }]}>
+            <Icon name="pin" size={20} color={panchayatId ? C.blueInk : C.text3} />
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <T style={{ fontSize: 17, fontWeight: panchayatId ? '800' : '600', color: panchayatId ? C.text : C.muted }} numberOfLines={1}>{pName ?? t('apPickPanchayat')}</T>
+              {panchayatId ? <T style={{ fontSize: 14, color: C.text2 }} numberOfLines={1}>{[block && `${t('apBlock')}: ${block}`, district].filter(Boolean).join(' · ')}</T> : null}
+            </View>
+            <Icon name="chevron" size={18} color={C.text3} />
           </Pressable>
         )}
+        {errors.place && !editPlace ? <T style={{ color: C.bad, fontSize: 13 }}>{errors.place}</T> : null}
+        {!editPlace && suggestions.length > 0 ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {suggestions.map((s0) => <Chip key={s0.id} label={s0.name} icon="pin" onPress={() => { setPanchayatId(s0.id); setBlockTyped(null); setDistrictTyped(null); }} />)}
+          </View>
+        ) : null}
       </View>
 
       <View style={{ gap: 6 }}>
@@ -152,10 +166,9 @@ export default function Appointment() {
 
       <VoiceField voice="note" label={`${t('apComplaint')} ${t('apOptional')}`} value={complaint} onChangeText={setComplaint} placeholder={t('apComplaintPh')} multiline />
 
-      <Sheet visible={picking} onClose={() => setPicking(false)} title={t('apPickPanchayat')}>
-        <PanchayatList list={list} here={here} selected={panchayatId} current={visit?.panchayatId ?? null}
-          onPick={(id) => { setPanchayatId(id); setBlockTyped(null); setDistrictTyped(null); setPicking(false); }} />
-      </Sheet>
+      <PanchayatPicker visible={picking} onClose={() => setPicking(false)} selected={panchayatId} here={here}
+        onPick={(pp) => { setPanchayatId(pp.id); setEditPlace(false); setBlockTyped(null); setDistrictTyped(null); setPicking(false); }}
+        onWrite={() => { setPanchayatId(null); setEditPlace(true); setPicking(false); }} />
     </Screen>
   );
 }
