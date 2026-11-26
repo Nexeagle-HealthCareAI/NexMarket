@@ -164,7 +164,7 @@ function LeadsPage() {
         <div className="ld-banner">
           <MessageCircle size={18} aria-hidden />
           <span><strong>WhatsApp isn&apos;t connected yet.</strong> Add calls, walk-ins and camp sign-ups here now. Once the {place()}&apos;s WhatsApp Business number is connected, every message to it lands here too, and you can reply from this page.
-            {access?.isAdmin ? <> <Link href="/admin/whatsapp?tab=setup" style={{ fontWeight: 700 }}>Set up WhatsApp →</Link></> : ' An admin can connect it in WhatsApp → Setup.'}</span>
+            {access?.isAdmin ? <> <Link href="/admin/whatsapp?tab=setup" style={{ fontWeight: 700 }}>Set up WhatsApp →</Link></> : ' An admin can connect it in WhatsApp → Account setup.'}</span>
         </div>
       )}
 

@@ -188,7 +188,7 @@ namespace SeemanchalOutreach.Api.Services
         }
 
         /// <summary>
-        /// The token goes to them on WhatsApp by itself, with the template chosen for "Health camp: token" in WhatsApp → Setup.
+        /// The token goes to them on WhatsApp by itself, with the template chosen for "Health camp: token" in WhatsApp → Account setup.
         /// Nothing is sent without a mobile. What happened is kept on the booking (and in the WhatsApp log). Caller saves.
         /// </summary>
         public static async Task SendTokenAsync(WhatsAppOutbox outbox, HealthCamp c, CampPatient p, CancellationToken ct)

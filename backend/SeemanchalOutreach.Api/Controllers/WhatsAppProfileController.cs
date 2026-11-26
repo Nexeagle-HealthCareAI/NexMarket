@@ -28,7 +28,7 @@ namespace SeemanchalOutreach.Api.Controllers
     }
 
     /// <summary>
-    /// WhatsApp → Setup → Business profile: what patients see when they open the hospital's chat (photo, about line,
+    /// WhatsApp → Account setup → Business profile: what patients see when they open the hospital's chat (photo, about line,
     /// description, address, email, websites, category), read from and saved to Meta. The display name itself can only
     /// be changed in Meta (it is reviewed), so it is shown with its review state and a link.
     /// </summary>
@@ -117,7 +117,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> Get(CancellationToken ct)
         {
             var cfg = LeadInbox.Wa(_settings, _config);
-            if (!cfg.IsConfigured) return BadRequest(new { message = "Connect WhatsApp first (steps 1 and 2)." });
+            if (!cfg.IsConfigured) return BadRequest(new { message = "Connect WhatsApp first (Account setup, steps 1 and 2)." });
             var r = await _wa.GraphGetAsync($"{cfg.PhoneNumberId}/whatsapp_business_profile?fields={Fields}", null, null, ct);
             if (!r.Ok) return BadRequest(new { message = r.Error });
             using var doc = JsonDocument.Parse(r.Json!);
@@ -147,7 +147,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> Save([FromBody] WhatsAppProfileDto dto, CancellationToken ct)
         {
             var cfg = LeadInbox.Wa(_settings, _config);
-            if (!cfg.IsConfigured) return BadRequest(new { message = "Connect WhatsApp first (steps 1 and 2)." });
+            if (!cfg.IsConfigured) return BadRequest(new { message = "Connect WhatsApp first (Account setup, steps 1 and 2)." });
             var err = Validate(dto, out var body);
             if (err != null) return BadRequest(new { message = err });
             var r = await _wa.GraphPostAsync($"{cfg.PhoneNumberId}/whatsapp_business_profile", body, ct);
@@ -164,7 +164,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> Photo([FromForm] IFormFile? file, [FromForm] string? appId, CancellationToken ct)
         {
             var cfg = LeadInbox.Wa(_settings, _config);
-            if (!cfg.IsConfigured) return BadRequest(new { message = "Connect WhatsApp first (steps 1 and 2)." });
+            if (!cfg.IsConfigured) return BadRequest(new { message = "Connect WhatsApp first (Account setup, steps 1 and 2)." });
             if (file == null || file.Length == 0) return BadRequest(new { message = "Choose a picture." });
             if (file.Length > MaxPhoto) return BadRequest(new { message = "The picture must be under 5 MB." });
 

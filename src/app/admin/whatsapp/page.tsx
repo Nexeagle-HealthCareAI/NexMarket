@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertTriangle, Bot, Inbox, ListChecks, Megaphone, Pause, Play, ScrollText, Settings2, Wallet, Workflow } from 'lucide-react';
+import { AlertTriangle, Bot, Inbox, ListChecks, Megaphone, Pause, Play, ScrollText, Settings2, Store, Wallet, Workflow } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { canView, useAccess, place } from '@/lib/crm/access';
 import { friendlyError, PageHead, Pill, Skeleton, useToast } from '@/components/crm/ui';
@@ -12,6 +12,7 @@ import { WaTemplates } from '@/components/crm/wa/WaTemplates';
 import { WaAutomation } from '@/components/crm/wa/WaAutomation';
 import { WaBroadcasts } from '@/components/crm/wa/WaBroadcasts';
 import { WaSetup } from '@/components/crm/wa/WaSetup';
+import { WaProfile } from '@/components/crm/wa/WaProfile';
 import { WaBilling } from '@/components/crm/wa/WaBilling';
 import AnalystPanel from '@/components/crm/AnalystPanel';
 import { showPhone, when, type WaStatus } from '@/components/crm/wa/shared';
@@ -25,7 +26,8 @@ const TABS = [
   { key: 'automation', label: 'Automation', icon: Workflow, who: 'all' },
   { key: 'ai', label: 'AI analyst', icon: Bot, who: 'analytics' },
   { key: 'billing', label: 'Billing', icon: Wallet, who: 'manage' },
-  { key: 'setup', label: 'Setup', icon: Settings2, who: 'admin' },
+  { key: 'profile', label: 'Profile setup', icon: Store, who: 'admin' },
+  { key: 'setup', label: 'Account setup', icon: Settings2, who: 'admin' },
 ] as const;
 
 export default function WhatsAppHubWrap() {
@@ -117,7 +119,7 @@ function WhatsAppHub() {
           </div>
         )}
         {status && !status.connected && tab !== 'setup' && (
-          <div className="ld-banner"><span><strong>WhatsApp isn&apos;t connected yet.</strong> {status.isAdmin ? <button type="button" className="wa-link" style={{ lineHeight: 'inherit' }} onClick={() => go({ tab: 'setup', c: null })}>Connect it in Setup →</button> : 'An admin can connect it in the Setup tab.'}</span></div>
+          <div className="ld-banner"><span><strong>WhatsApp isn&apos;t connected yet.</strong> {status.isAdmin ? <button type="button" className="wa-link" style={{ lineHeight: 'inherit' }} onClick={() => go({ tab: 'setup', c: null })}>Connect it in Account setup →</button> : 'An admin can connect it in the Account setup tab.'}</span></div>
         )}
         <nav className="crm-tabs wh-tabs" role="tablist" aria-label="WhatsApp">
           {tabs.map((t) => {
@@ -148,6 +150,7 @@ function WhatsAppHub() {
             'Are opt-outs going up, and what is causing them?',
           ]} />
       )}
+      {tab === 'profile' && <WaProfile connected={status ? status.connected : null} onToast={showToast} onSetup={() => go({ tab: 'setup', c: null })} />}
       {tab === 'setup' && <WaSetup onSaved={loadStatus} />}
       {toast}
     </main>

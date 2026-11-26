@@ -42,7 +42,7 @@ async function squareJpeg(file: File): Promise<Blob> {
 }
 
 /** What patients see when they open the hospital's WhatsApp chat: photo, about, description, address, websites. Saved straight to Meta. */
-export function WaProfile({ connected, onToast }: { connected: boolean; onToast: (m: string) => void }) {
+export function WaProfile({ connected, onToast, onSetup }: { connected: boolean | null; onToast: (m: string) => void; onSetup?: () => void }) {
   const [p, setP] = useState<Profile | null>(null);
   const [form, setForm] = useState<Form | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -62,7 +62,13 @@ export function WaProfile({ connected, onToast }: { connected: boolean; onToast:
   useEffect(() => { if (connected) void load(); }, [connected, load]);
   useEffect(() => () => { if (photo) URL.revokeObjectURL(photo.url); }, [photo]);
 
-  if (!connected) return null;
+  if (connected === null) return <Skeleton h={320} />;
+  if (!connected) return (
+    <section className="crm-card wa-step">
+      <span className="wa-err"><AlertTriangle size={14} aria-hidden /> Connect the WhatsApp number first, then come back to set up its profile.</span>
+      {onSetup && <button type="button" className="crm-btn" style={{ alignSelf: 'flex-start' }} onClick={onSetup}>Go to Account setup</button>}
+    </section>
+  );
 
   const set = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f) => (f ? { ...f, [k]: e.target.value } : f));
   const dirty = !!p && !!form && JSON.stringify(form) !== JSON.stringify(toForm(p));
@@ -118,7 +124,7 @@ export function WaProfile({ connected, onToast }: { connected: boolean; onToast:
         <span className="wa-num" aria-hidden><Store size={17} /></span>
         <div>
           <h2 className="crm-h2">Business profile on WhatsApp</h2>
-          <p className="crm-sub">What patients see when they tap the {p?.hospitalName ?? 'hospital'} name in a chat. Saved straight to Meta; it doesn&apos;t need the Save changes button below.</p>
+          <p className="crm-sub">What patients see when they tap the {p?.hospitalName ?? 'hospital'} name in a chat. Saved straight to WhatsApp; phones show changes within a few minutes.</p>
         </div>
       </div>
 

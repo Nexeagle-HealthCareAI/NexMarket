@@ -110,7 +110,7 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> Media([FromForm] IFormFile? file, CancellationToken ct)
         {
             var cfg = _outbox.Config;
-            if (!cfg.IsConfigured) return BadRequest(new { message = "WhatsApp isn't connected yet (WhatsApp → Setup)." });
+            if (!cfg.IsConfigured) return BadRequest(new { message = "WhatsApp isn't connected yet (WhatsApp → Account setup)." });
             if (file == null || file.Length == 0) return BadRequest(new { message = "Choose a file." });
             if (file.Length > 16L << 20) return BadRequest(new { message = "The file must be under 16 MB." });
             await using var ms = new MemoryStream();

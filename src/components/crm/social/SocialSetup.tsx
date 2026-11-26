@@ -247,7 +247,7 @@ export function SocialSetup({ onSaved, toast }: { onSaved: () => void; toast: (m
             <p className="crm-sub">Every new form lead gets a WhatsApp message within seconds, so they know the {place()} will call and can reply straight away.</p>
             {data.instantWhatsApp.template
               ? <span className="wa-ok"><CheckCircle2 size={15} aria-hidden /> On · sends <code>{data.instantWhatsApp.template}</code></span>
-              : <span className="wa-wait"><AlertTriangle size={15} aria-hidden /> Off. In <a href="/admin/whatsapp?tab=setup">WhatsApp → Setup</a>, pick an approved template for &ldquo;Facebook/Instagram form: instant thank-you&rdquo; (the NexEagle set has <code>nx_form_thanks</code>).</span>}
+              : <span className="wa-wait"><AlertTriangle size={15} aria-hidden /> Off. In <a href="/admin/whatsapp?tab=setup">WhatsApp → Account setup</a>, pick an approved template for &ldquo;Facebook/Instagram form: instant thank-you&rdquo; (the NexEagle set has <code>nx_form_thanks</code>).</span>}
           </div>
         </div>
 

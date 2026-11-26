@@ -41,7 +41,7 @@ namespace SeemanchalOutreach.Api.Controllers
     }
 
     /// <summary>
-    /// WhatsApp → Setup: an admin connects the hospital's WhatsApp Business number from the CRM, checks it works,
+    /// WhatsApp → Account setup: an admin connects the hospital's WhatsApp Business number from the CRM, checks it works,
     /// picks the approved templates and writes the automatic messages. No server changes needed.
     /// </summary>
     [ApiController]

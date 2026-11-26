@@ -205,7 +205,7 @@ namespace SeemanchalOutreach.Api.Services
                 if (!sender.IsConfigured)
                 {
                     b.Status = "failed";
-                    b.Error = "WhatsApp is not connected yet. An admin can connect the hospital's WhatsApp Business number in WhatsApp → Setup.";
+                    b.Error = "WhatsApp is not connected yet. An admin can connect the hospital's WhatsApp Business number in WhatsApp → Account setup.";
                     await db.SaveChangesAsync(ct);
                     continue;
                 }

@@ -323,7 +323,7 @@ namespace SeemanchalOutreach.Api.Services
             await _db.SaveChangesAsync(ct);
 
             // The first minute matters most: a new form lead gets a WhatsApp thank-you straight away, when a template is chosen
-            // for it (WhatsApp → Setup → "Facebook/Instagram form: instant thank-you"). Their reply opens a normal chat.
+            // for it (WhatsApp → Account setup → "Facebook/Instagram form: instant thank-you"). Their reply opens a normal chat.
             if (lead != null && isNew && _outbox.Config.Template("form_welcome") != null)
             {
                 try

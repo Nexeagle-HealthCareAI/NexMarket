@@ -158,7 +158,7 @@ namespace SeemanchalOutreach.Api.Services
         /// <summary>Why a message can't go out right now, or null when it can.</summary>
         public async Task<string?> BlockedAsync(string phone, bool template, CancellationToken ct)
         {
-            if (!_wa.IsConfigured) return "WhatsApp isn't connected yet (WhatsApp → Setup).";
+            if (!_wa.IsConfigured) return "WhatsApp isn't connected yet (WhatsApp → Account setup).";
             var rules = Rules;
             if (rules.Paused) return "WhatsApp sending is paused (WhatsApp → Automation).";
             var conv = _db.WaConversations.Local.FirstOrDefault(x => x.Phone == phone) ?? await _db.WaConversations.AsNoTracking().FirstOrDefaultAsync(x => x.Phone == phone, ct);
@@ -274,7 +274,7 @@ namespace SeemanchalOutreach.Api.Services
             return msg;
         }
 
-        /// <summary>A template chosen for a use (lead_followup, camp_invite…) in WhatsApp → Setup.</summary>
+        /// <summary>A template chosen for a use (lead_followup, camp_invite…) in WhatsApp → Account setup.</summary>
         public async Task<WaMessage> SendUseAsync(string phone, string use, string lang, IReadOnlyList<string> values, string preview,
             string source, string? by, Guid? leadId, Guid? broadcastId, CancellationToken ct)
         {
@@ -285,7 +285,7 @@ namespace SeemanchalOutreach.Api.Services
                 var msg = new WaMessage
                 {
                     Phone = phone, LeadId = leadId, Direction = "out", Type = "template", Text = preview, Source = source, SentBy = by, BroadcastId = broadcastId,
-                    Status = "blocked", Error = "No approved template is chosen for this message yet (WhatsApp → Setup).", CreatedAt = DateTime.UtcNow,
+                    Status = "blocked", Error = "No approved template is chosen for this message yet (WhatsApp → Account setup).", CreatedAt = DateTime.UtcNow,
                 };
                 await RecordAsync(msg, ct);
                 return msg;

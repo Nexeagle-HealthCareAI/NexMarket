@@ -96,7 +96,7 @@ ${info.displayPhone ? `<div class="ph">${web ? 'सहायता / Help' : 'Wh
       {intro}
       {!link ? (
         <div className="crm-error" role="alert">
-          The {place()}&apos;s WhatsApp number isn&apos;t set yet, so there&apos;s no link to put in a QR code. An admin can add it in WhatsApp → <a href="/admin/whatsapp?tab=setup">Setup</a>.
+          The {place()}&apos;s WhatsApp number isn&apos;t set yet, so there&apos;s no link to put in a QR code. An admin can add it in WhatsApp → <a href="/admin/whatsapp?tab=setup">Account setup</a>.
         </div>
       ) : (
         <div className="qr-wrap">
