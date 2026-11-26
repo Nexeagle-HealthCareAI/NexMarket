@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  Activity, ArrowLeft, CalendarDays, CheckCircle2, ClipboardList, MapPin, Megaphone, Pencil, Plus, QrCode, Search, Stethoscope, UserPlus, Users, CreditCard,
+  Activity, ArrowLeft, CalendarDays, CheckCircle2, ClipboardList, MapPin, Megaphone, Pencil, Plus, QrCode, Search, Stethoscope, UserPlus, Users, CreditCard, Trash2,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Pager } from '@/components/crm/Pager';
 import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 import { QrPosterModal } from '@/components/crm/QrPoster';
-import { Empty, ErrorBox, friendlyError, Pill, rupees, Skeleton } from '@/components/crm/ui';
+import { Empty, ErrorBox, friendlyError, Modal, Pill, rupees, Skeleton } from '@/components/crm/ui';
+import { useAccess } from '@/lib/crm/access';
 import { CampForm } from './CampForm';
 import { PatientForm } from './PatientForm';
 import { BookedVia, CHANNELS } from './BookedVia';
@@ -164,6 +165,19 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
   const [form, setForm] = useState<{ mode: 'book' | 'register' | 'screen'; p?: CampPatient } | null>(null);
   const [giveCard, setGiveCard] = useState<CampPatient | null>(null);
   const [openCard, setOpenCard] = useState<string | null>(null);
+  // Admins can delete a person from the camp (test bookings, duplicates, wrong entries), after a confirmation.
+  const isAdmin = !!useAccess().access?.isAdmin;
+  const [removing, setRemoving] = useState<CampPatient | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const remove = async () => {
+    if (!removing) return;
+    setRemoveBusy(true);
+    try {
+      await crm.del(`/api/v1/camps/patients/${removing.id}`);
+      toast(`Deleted ${removing.name} (token ${removing.token}) from the camp`);
+      setRemoving(null); await load(); onChanged();
+    } catch (e) { toast(friendlyError(e)); } finally { setRemoveBusy(false); }
+  };
   const [depts, setDepts] = useState<string[]>([]);
   useEffect(() => { const t = setTimeout(() => setQd(q.trim()), 300); return () => clearTimeout(t); }, [q]);
   useEffect(() => { crm.get<{ name: string }[]>('/api/v1/departments').then((x) => setDepts(x.map((y) => y.name))).catch(() => undefined); }, []);
@@ -282,6 +296,11 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
                           <button type="button" className="nt-link is-muted" title="Marked by mistake: back to waiting" onClick={() => void mark(p, 'booked')}>Undo</button>
                         )}
                       </>}
+                      {isAdmin && (
+                        <button type="button" className="cp-del" onClick={() => setRemoving(p)} aria-label={`Delete ${p.name} from the camp`} title="Delete from the camp (admin)">
+                          <Trash2 size={15} aria-hidden />
+                        </button>
+                      )}
                     </div></td>
                   </tr>
                 );
@@ -291,6 +310,19 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
         </div>
       )}
       {data && <Pager page={page} pages={Math.max(1, Math.ceil(data.total / size))} total={data.total} size={size} onPage={setPage} onSize={(n) => { setSize(n); setPage(1); }} noun="people" />}
+      {removing && (
+        <Modal title="Delete from the camp?" onClose={() => !removeBusy && setRemoving(null)}
+          actions={<>
+            <button type="button" className="crm-btn is-secondary" onClick={() => setRemoving(null)} disabled={removeBusy}>Keep</button>
+            <button type="button" className="crm-btn is-danger" onClick={() => void remove()} disabled={removeBusy}><Trash2 size={15} aria-hidden /> {removeBusy ? 'Deleting…' : 'Delete'}</button>
+          </>}>
+          <p style={{ margin: 0 }}>
+            <strong>{removing.name}</strong> (token {removing.token}{removing.village ? `, ${removing.village}` : ''}) and everything recorded for them at this camp — complaint, readings, check-up — will be deleted. This can&apos;t be undone.
+          </p>
+          {removing.healthCard && <p className="crm-sub" style={{ margin: '10px 0 0' }}>Their health card {removing.healthCard.number} stays; it just won&apos;t point to this booking any more.</p>}
+          <p className="crm-sub" style={{ margin: '10px 0 0' }}>The activity log keeps who deleted it.</p>
+        </Modal>
+      )}
       {giveCard && <IssueCard prefill={{ holderName: giveCard.name, phone: giveCard.phone, age: giveCard.age, sex: giveCard.sex, village: giveCard.village, campPatientId: giveCard.id, campId: camp.camp.id, campTitle: camp.camp.title, source: 'camp' }}
         onClose={() => setGiveCard(null)} onIssued={(c) => { setGiveCard(null); toast(`Card ${c.number} given to ${c.holderName}.`); void load(); }} />}
       {openCard && <CardView id={openCard} editable={canEdit} onClose={() => setOpenCard(null)} onChanged={() => void load()} toast={toast} />}

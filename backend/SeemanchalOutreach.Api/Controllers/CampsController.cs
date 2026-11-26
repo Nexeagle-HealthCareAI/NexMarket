@@ -468,6 +468,26 @@ namespace SeemanchalOutreach.Api.Controllers
             return Ok(new { id = p.Id, token = p.Token, existed = false });
         }
 
+        /// <summary>
+        /// Remove a person from a camp's list for good (a test booking, a duplicate, a wrong entry). Admins only. A health
+        /// card given at the camp stays (it is the hospital's card) but no longer points to this booking. The camp's
+        /// disease numbers are worked out again. The activity log keeps who deleted it.
+        /// </summary>
+        [HttpDelete("patients/{pid:guid}")]
+        public async Task<IActionResult> DeletePatient(Guid pid, CancellationToken ct)
+        {
+            if (!User.IsAdmin()) return StatusCode(403, new { message = "Only an admin can delete people from a camp." });
+            var p = await _db.CampPatients.FirstOrDefaultAsync(x => x.Id == pid, ct);
+            if (p == null) return NotFound(new { message = "This person is no longer in the camp's list." });
+            var cards = await _db.HealthCards.Where(c => c.CampPatientId == pid).ToListAsync(ct);
+            foreach (var c in cards) c.CampPatientId = null;
+            _db.CampPatients.Remove(p);
+            await _db.SaveChangesAsync(ct);
+            await DiseaseRegister.SyncCampAsync(_db, p.CampId, ct);
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { deleted = true, token = p.Token, name = p.Name });
+        }
+
         [HttpPatch("patients/{pid:guid}")]
         public async Task<IActionResult> UpdatePatient(Guid pid, [FromBody] CampPatientDto dto, CancellationToken ct)
         {
