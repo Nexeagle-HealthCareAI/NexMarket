@@ -1849,4 +1849,27 @@ namespace SeemanchalOutreach.Domain.Entities
         public string? Kinds { get; set; }                        // hospital, clinic, lab, pharmacy, dialysis… comma separated
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
+
+    /// <summary>
+    /// A link or QR code for one place the hospital advertises (Instagram bio, a hoarding, a pamphlet, a newspaper ad…).
+    /// Its WhatsApp link types "Ref: CODE" in the message, and its website link carries utm_campaign=CODE, so every lead it
+    /// brings is credited to it.
+    /// </summary>
+    public class TrackedLink
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        /// <summary>Short and unique, e.g. IG-BIO, HRD-KASBA (letters, digits, dashes).</summary>
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        /// <summary>instagram | facebook | youtube | hoarding | print | pamphlet | poster | radio | website | other</summary>
+        public string Channel { get; set; } = "other";
+        public Guid? HoardingId { get; set; }
+        /// <summary>What this place cost in rupees (optional), for cost per lead and per patient.</summary>
+        public int? Cost { get; set; }
+        public string? Note { get; set; }
+        public bool IsActive { get; set; } = true;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
 }

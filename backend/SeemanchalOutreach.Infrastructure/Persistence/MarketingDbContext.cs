@@ -113,6 +113,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<SocialConversation> SocialConversations => Set<SocialConversation>();
         public DbSet<SocialMessage> SocialMessages => Set<SocialMessage>();
         public DbSet<AdLead> AdLeads => Set<AdLead>();
+        public DbSet<TrackedLink> TrackedLinks => Set<TrackedLink>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -631,6 +632,13 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.HasIndex(e => e.CampaignId);
                 entity.HasIndex(e => e.ReceivedAt);
                 entity.HasIndex(e => e.LeadId);
+            });
+
+            modelBuilder.Entity<TrackedLink>(entity =>
+            {
+                entity.ToTable("tracked_links");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Code).IsUnique();
             });
             modelBuilder.Entity<WaConversation>(entity =>
             {

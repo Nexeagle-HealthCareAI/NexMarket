@@ -80,6 +80,10 @@ namespace SeemanchalOutreach.Api.Controllers
             var fromGoogleAd = !string.IsNullOrEmpty(V("gclid")) || (utmSource == "google" && utmMedium is "cpc" or "ppc" or "paid");
             var source = fromGoogleAd ? "google_ads" : "web";
             var sourceRef = campaign ?? (fromGoogleAd ? null : page);
+            // A tracked link's website address carries its code as utm_campaign: credit the lead to it.
+            var linkCode = campaign?.Trim().ToUpperInvariant();
+            var link = linkCode == null || fromGoogleAd ? null : await _db.TrackedLinks.AsNoTracking().FirstOrDefaultAsync(x => x.Code == linkCode, ct);
+            if (link != null) { source = "link"; sourceRef = LeadInbox.LinkRef(link); campaign = link.Name; }
             var now = DateTime.UtcNow;
             var how = LeadInbox.SourceLabel(source) + (campaign != null ? $" · {campaign}" : "") + (utmSource != null && !fromGoogleAd ? $" ({utmSource})" : "");
 

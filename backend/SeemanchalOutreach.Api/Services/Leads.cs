@@ -22,7 +22,7 @@ namespace SeemanchalOutreach.Api.Services
         public static readonly string[] Statuses = { "new", "contacted", "appointment", "arrived", "admitted", "lost" };
         public static readonly string[] Open = { "new", "contacted", "appointment" };
         public static readonly string[] Sources = { "whatsapp", "partner_qr", "partner", "ad", "camp", "missed_call", "walk_in", "desk", "agent", "web",
-            "fb_form", "ig_form", "facebook", "instagram", "google_listing", "google_ads" };
+            "fb_form", "ig_form", "facebook", "instagram", "google_listing", "google_ads", "link" };
 
         public static string StatusLabel(string s) => s switch
         {
@@ -53,6 +53,7 @@ namespace SeemanchalOutreach.Api.Services
             "instagram" => "Instagram message",
             "google_listing" => "Google search / Maps",
             "google_ads" => "Google ad",
+            "link" => "Tracked link",
             _ => s,
         };
 
@@ -73,10 +74,17 @@ namespace SeemanchalOutreach.Api.Services
 
         // ─── Codes on QR posters and links ───
         private const string CodeChars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O, 1/I/L
-        private static readonly Regex RefRx = new(@"\b(?:ref|referral|code|कोड)\s*[:#\-]?\s*([A-Za-z0-9]{5,10})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RefRx = new(@"\b(?:ref|referral|code|कोड)\s*[:#\-]?\s*([A-Za-z0-9][A-Za-z0-9\-]{2,15})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex CampRx = new(@"\bcamp\s*[:#\-]\s*([^\n\r]{2,60})", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public static string NewCode() => "G" + new string(Enumerable.Range(0, 5).Select(_ => CodeChars[RandomNumberGenerator.GetInt32(CodeChars.Length)]).ToArray());
+
+        /// <summary>How a tracked link shows on its leads: "IG-BIO · Instagram bio" (the code first, so the report can group by it).</summary>
+        public static string LinkRef(TrackedLink l) => $"{l.Code} · {l.Name}";
+
+        /// <summary>The code of a tracked link from a lead's source detail, or null.</summary>
+        public static string? LinkCodeOf(string? sourceRef) =>
+            string.IsNullOrWhiteSpace(sourceRef) ? null : sourceRef.Split(" · ", 2)[0].Trim().ToUpperInvariant();
 
         public static (string? Ref, string? Camp) ParseTags(string? text)
         {
@@ -197,6 +205,8 @@ namespace SeemanchalOutreach.Api.Services
             var (code, camp) = ParseTags(m.Text);
             OutreachContact? partner = null;
             if (code != null) partner = await db.Contacts.AsNoTracking().FirstOrDefaultAsync(c => c.ReferralCode == code && !c.IsMerged, ct);
+            // Not a partner's code: a tracked link (Instagram bio, a hoarding's QR, a pamphlet…).
+            var link = code != null && partner == null ? await db.TrackedLinks.AsNoTracking().FirstOrDefaultAsync(x => x.Code == code, ct) : null;
             // The sender may be a partner themselves (an ASHA worker or RMP doctor writing about a patient).
             var last10 = Last10(phone);
             var senderPartner = partner == null
@@ -205,7 +215,7 @@ namespace SeemanchalOutreach.Api.Services
             if (senderPartner != null) conv.PartnerClientId ??= senderPartner.ClientId;
 
             // A partner just chatting (no patient code, no camp) stays a conversation unless the rules say otherwise.
-            var makeLead = lead != null || partner != null || camp != null || m.AdRef != null || senderPartner == null || rules.PartnerMessagesAreLeads;
+            var makeLead = lead != null || partner != null || link != null || camp != null || m.AdRef != null || senderPartner == null || rules.PartnerMessagesAreLeads;
             bool isNew = false, reopened = false;
             if (makeLead)
             {
@@ -216,8 +226,8 @@ namespace SeemanchalOutreach.Api.Services
                     {
                         Phone = phone,
                         Name = !string.IsNullOrWhiteSpace(m.ProfileName) ? m.ProfileName!.Trim() : senderPartner?.Name ?? ("+" + phone),
-                        Source = partner != null ? "partner_qr" : m.AdRef != null ? "ad" : camp != null ? "camp" : senderPartner != null ? "partner" : "whatsapp",
-                        SourceRef = partner != null ? code : m.AdRef ?? camp,
+                        Source = partner != null ? "partner_qr" : link != null ? "link" : m.AdRef != null ? "ad" : camp != null ? "camp" : senderPartner != null ? "partner" : "whatsapp",
+                        SourceRef = partner != null ? code : link != null ? LinkRef(link) : m.AdRef ?? camp,
                         PartnerClientId = partner?.ClientId ?? senderPartner?.ClientId,
                         Note = Shorten(m.Text, 500),
                         CreatedAt = now,
@@ -226,7 +236,8 @@ namespace SeemanchalOutreach.Api.Services
                     db.LeadActivities.Add(new LeadActivity
                     {
                         LeadId = lead.Id, Kind = "created", CreatedAt = now,
-                        Text = partner != null ? $"Messaged on WhatsApp using {partner.Name}'s code {code}" : $"Messaged on WhatsApp ({SourceLabel(lead.Source)}{(lead.SourceRef != null ? ": " + lead.SourceRef : "")})",
+                        Text = partner != null ? $"Messaged on WhatsApp using {partner.Name}'s code {code}"
+                            : link != null ? $"Messaged on WhatsApp from the tracked link “{link.Name}” ({link.Code})" : $"Messaged on WhatsApp ({SourceLabel(lead.Source)}{(lead.SourceRef != null ? ": " + lead.SourceRef : "")})",
                     });
                 }
                 else
@@ -247,6 +258,13 @@ namespace SeemanchalOutreach.Api.Services
                         lead.Source = "partner_qr";
                         lead.SourceRef = code;
                         db.LeadActivities.Add(new LeadActivity { LeadId = lead.Id, Kind = "source", Text = $"Credited to {partner.Name} (code {code})", CreatedAt = now });
+                    }
+                    if (link != null && lead.Source == "whatsapp")
+                    {
+                        // Someone who had written before with nothing to go on: now we know where they saw us.
+                        lead.Source = "link";
+                        lead.SourceRef = LinkRef(link);
+                        db.LeadActivities.Add(new LeadActivity { LeadId = lead.Id, Kind = "source", Text = $"Came from the tracked link “{link.Name}” ({link.Code})", CreatedAt = now });
                     }
                     if (lead.Name.StartsWith("+") && !string.IsNullOrWhiteSpace(m.ProfileName)) lead.Name = m.ProfileName!.Trim();
                 }

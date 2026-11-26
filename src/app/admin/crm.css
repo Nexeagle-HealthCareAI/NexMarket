@@ -4709,3 +4709,30 @@ strong.is-ok { color: var(--ok-ink); }
 .wa-vita-note span { flex: 1; }
 .wa-vita-note svg { flex: none; margin-top: 2px; }
 .wa-vita-note button { border: 0; background: none; color: inherit; cursor: pointer; display: flex; padding: 0; opacity: .7; }
+
+/* Lead sources */
+.ls-page { display: flex; flex-direction: column; gap: 18px; }
+.ls-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.ls-kpi { display: flex; flex-direction: column; gap: 4px; }
+.ls-kpi span { font-size: 13px; color: var(--text-2); font-weight: 600; }
+.ls-kpi strong { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ls-kpi small { font-size: 12.5px; color: var(--text-3); line-height: 1.4; }
+.ls-kpi.is-warn { border-color: #f1c58f; background: var(--warn-soft, #fff6ea); }
+.ls-weeks { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; height: 180px; align-items: end; margin-top: 12px; }
+.ls-week { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; min-width: 0; }
+.ls-week-n { font-size: 11.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ls-week-bar { width: 100%; max-width: 34px; background: #9ccaf2; border-radius: 4px 4px 0 0; display: flex; align-items: flex-end; min-height: 2px; overflow: hidden; }
+.ls-week-came { width: 100%; background: var(--accent); display: block; }
+.ls-week-l { font-size: 10.5px; color: var(--text-3); white-space: nowrap; }
+.ls-legend { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--text-2); margin: 10px 0 0; }
+.ls-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.ls-dot.is-all { background: #9ccaf2; } .ls-dot.is-came { background: var(--accent); margin-left: 10px; }
+.ls-bar { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+.ls-bar span { height: 8px; border-radius: 0 4px 4px 0; background: var(--accent); min-width: 2px; max-width: 160px; flex: none; }
+.ls-bar em { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ls-code { font-size: 12px; background: #eef2f7; padding: 1px 6px; border-radius: 5px; font-weight: 700; color: var(--text); }
+.ls-paused { font-size: 11px; font-weight: 700; color: var(--text-3); background: #eef0f4; border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
+.crm-table tr.is-muted .crm-cell-main { color: var(--text-3); }
+.ls-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ls-foot { font-size: 12.5px; line-height: 1.5; padding: 0 22px 16px; margin: 0; }
+.ls-form { display: flex; flex-direction: column; gap: 14px; }

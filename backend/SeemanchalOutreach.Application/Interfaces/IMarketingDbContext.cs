@@ -110,6 +110,7 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<SocialConversation> SocialConversations { get; }
         DbSet<SocialMessage> SocialMessages { get; }
         DbSet<AdLead> AdLeads { get; }
+        DbSet<TrackedLink> TrackedLinks { get; }
 
         ChangeTracker ChangeTracker { get; }
 
