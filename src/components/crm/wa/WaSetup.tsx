@@ -8,6 +8,7 @@ import {
 import { crm } from '@/lib/sync/api-client';
 import { useAccess, Place, place } from '@/lib/crm/access';
 import { ErrorBox, friendlyError, Pill, Skeleton, useToast } from '@/components/crm/ui';
+import { WaProfile } from './WaProfile';
 
 type Source = 'crm' | 'server' | 'none';
 interface SecretInfo { set: boolean; hint?: string | null; source: Source; unreadable: boolean }
@@ -269,6 +270,9 @@ export function WaSetup({ onSaved }: { onSaved?: () => void }) {
           {form.autoReply && <span className="wa-bubble is-out">{form.autoReply}</span>}
         </div>
       </section>
+
+      {/* What patients see on the hospital's WhatsApp profile */}
+      <WaProfile connected={data.connected} onToast={showToast} />
 
       {/* 5. Test */}
       <TestSend connected={data.connected} templates={approved} onToast={showToast} />

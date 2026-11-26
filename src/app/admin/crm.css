@@ -4575,3 +4575,30 @@ strong.is-ok { color: var(--ok-ink); }
 /* Admin: delete a person from a camp */
 .cp-del { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; border: 0; background: transparent; color: var(--text-3); cursor: pointer; }
 .cp-del:hover, .cp-del:focus-visible { background: var(--bad-soft); color: var(--bad, #b42318); }
+
+/* WhatsApp business profile (Setup) */
+.wp-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+.wp-edit { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.wp-photo-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.wp-photo-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.wp-avatar { width: 96px; height: 96px; border-radius: 50%; background: #dfe5e7; color: #fff; font-size: 40px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; background-color: #8696a0; }
+.wp-avatar.is-sm { width: 64px; height: 64px; font-size: 26px; }
+.wp-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; background: #fff; }
+.wp-appid { margin-top: 8px; max-width: 360px; }
+.wp-name { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 15px; }
+.wp-state { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+.wp-state.is-ok { background: #dcfce7; color: #166534; }
+.wp-state.is-wait { background: #fef3c7; color: #92400e; }
+.wp-state.is-bad { background: #fee2e2; color: #991b1b; }
+.wa-hint a { display: inline-flex; gap: 3px; align-items: center; font-weight: 600; }
+.wp-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.wp-phone { position: sticky; top: 16px; border: 1px solid var(--border, #e5e7eb); border-radius: 22px; padding: 22px 16px 16px; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.wp-phone-name { font-size: 17px; margin-top: 8px; color: #111b21; }
+.wp-phone-num { font-size: 13.5px; color: #54656f; }
+.wp-phone-about { font-size: 13px; color: #54656f; margin-top: 2px; }
+.wp-phone-list { margin-top: 12px; width: 100%; background: #fff; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 9px; text-align: left; font-size: 13px; color: #111b21; }
+.wp-phone-list p { margin: 0; white-space: pre-wrap; line-height: 1.45; }
+.wp-phone-list span { display: flex; gap: 8px; align-items: flex-start; word-break: break-word; }
+.wp-phone-list span svg { flex-shrink: 0; margin-top: 2px; color: #54656f; }
+.wp-phone-list .is-link { color: #027eb5; }
+@media (max-width: 900px) { .wp-wrap { grid-template-columns: 1fr; } .wp-phone { position: static; } }
