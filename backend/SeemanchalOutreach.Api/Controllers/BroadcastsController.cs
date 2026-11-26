@@ -130,6 +130,7 @@ namespace SeemanchalOutreach.Api.Controllers
         [NonAction]
         public static string? Check(string kind, Dictionary<string, string> p)
         {
+            if (p.TryGetValue("campId", out var camp) && camp.Length > 0 && !Guid.TryParse(camp, out _)) return "Unknown health camp.";
             if (kind == BroadcastComposer.AnyTemplate)
             {
                 if (!TemplateName.IsMatch(p.GetValueOrDefault("template") ?? "")) return "Pick a template.";
@@ -191,6 +192,8 @@ namespace SeemanchalOutreach.Api.Controllers
             var (people, _) = await BroadcastPeople.ResolveAsync(_db, dto.Audience, ct);
             int count = people.Count;
             if (count == 0) return BadRequest("Nobody matches this audience.");
+            if (dto.Params.TryGetValue("campId", out var cid) && Guid.TryParse(cid, out var campGuid)
+                && !await _db.HealthCamps.AnyAsync(c => c.Id == campGuid && c.Status != "cancelled", ct)) return BadRequest("That health camp wasn't found.");
             if (dto.ScheduledAt is DateTime when && when.ToUniversalTime() > DateTime.UtcNow.AddDays(28) && dto.Params.ContainsKey("headerMediaId"))
                 return BadRequest("WhatsApp keeps an attachment for 30 days, so schedule this within 4 weeks.");
 
@@ -467,7 +470,11 @@ namespace SeemanchalOutreach.Api.Controllers
                 WaMessageId = m.TryGetProperty("id", out var mid) ? mid.GetString() : null, AdRef = adRef,
             }, ct);
 
-            if (res.Lead != null && !isStop && !string.IsNullOrWhiteSpace(text)) _wroteIn.Add(res.Lead.Id);
+            // A reply to a broadcast linked to a health camp ("book", the booking button) books them and sends the token.
+            var campBooking = isStop ? null : await CampReplies.TryBookAsync(_db, _outbox, r, from, type, text, profileName, res.Lead?.Id, ct);
+            if (campBooking != null)
+                await _live.PublishAsync(new LiveEvent { Kind = "lead", Text = campBooking == "booked" ? $"{profileName ?? from} booked a camp place from a WhatsApp reply" : $"{profileName ?? from} asked to book a camp ({campBooking})" });
+            if (res.Lead != null && !isStop && campBooking == null && !string.IsNullOrWhiteSpace(text)) _wroteIn.Add(res.Lead.Id);
             if (type == "audio" && m.TryGetProperty("audio", out var au) && au.TryGetProperty("id", out var auId) && auId.GetString() is { Length: > 0 } mediaId
                 && m.TryGetProperty("id", out var wamid) && wamid.GetString() is { Length: > 0 } wid)
                 _voice.Add(new VoiceNotes.Note(wid, mediaId, res.Lead?.Id));

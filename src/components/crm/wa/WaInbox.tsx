@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowLeft, Ban, Check, CheckCheck, CheckCircle2, Clock, FileText, Inbox, Lock, MessageSquarePlus, Phone, PhoneCall, RotateCcw, Search, Send, UserPlus, Users,
+  ArrowLeft, Ban, Check, CheckCheck, CheckCircle2, Clock, FileText, Inbox, Lock, MessageSquarePlus, Phone, PhoneCall, RotateCcw, Search, Send, Sparkles, UserPlus, Users, X,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { useLiveEvents, useNow } from '@/lib/crm/live';
@@ -144,6 +144,7 @@ function Conversation({ phone, ping, status, onBack, onChanged, toast }: {
   const [busy, setBusy] = useState(false);
   const [people, setPeople] = useState<Person[]>([]);
   const [tplOpen, setTplOpen] = useState(false);
+  const [vita, setVita] = useState<{ busy: boolean; note?: string; tone?: 'ok' | 'warn' | 'bad' } | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const count = useRef(0);
   const clock = useNow(60000);
@@ -173,7 +174,21 @@ function Conversation({ phone, ping, status, onBack, onChanged, toast }: {
     setBusy(true);
     try { await fn(); await load(); onChanged(); if (ok) toast(ok); } catch (e) { toast(friendlyError(e)); } finally { setBusy(false); }
   };
-  const send = () => act(async () => { await crm.post(`/api/v1/whatsapp/conversations/${enc}/text`, { text: text.trim() }); setText(''); });
+  const send = () => act(async () => { await crm.post(`/api/v1/whatsapp/conversations/${enc}/text`, { text: text.trim() }); setText(''); setVita(null); });
+  /** Vita writes a reply into the box; the person reads, edits and sends it. */
+  const askVita = async () => {
+    setVita({ busy: true });
+    try {
+      const r = await crm.post<{ kind: string; reply?: string | null; why?: string | null }>(`/api/v1/whatsapp/conversations/${enc}/suggest`);
+      if (r.reply) {
+        if (text.trim() && !window.confirm('Replace what you have typed with Vita’s draft?')) { setVita(null); return; }
+        setText(r.reply);
+        setVita({ busy: false, tone: r.kind === 'emergency' ? 'bad' : r.kind === 'holding' ? 'warn' : 'ok',
+          note: r.kind === 'reply' ? 'Vita’s draft, from the hospital’s records. Check it, edit if needed, then send.' : r.why ?? undefined });
+        setTimeout(() => document.getElementById('wa-input')?.focus(), 0);
+      } else setVita({ busy: false, tone: 'warn', note: r.why ?? 'Vita has no answer for this one. Please reply yourself.' });
+    } catch (e) { setVita({ busy: false, tone: 'bad', note: friendlyError(e) }); }
+  };
   const patch = (body: Record<string, unknown>, ok: string) => act(() => crm.patch(`/api/v1/whatsapp/conversations/${enc}`, body), ok);
 
   if (error && !d) return <div style={{ padding: 16 }}><ErrorBox message={error} onRetry={load} /></div>;
@@ -243,10 +258,17 @@ function Conversation({ phone, ping, status, onBack, onChanged, toast }: {
           : d.windowOpen ? (
             <>
               <div className="ld-modes"><span className="ld-window"><Clock size={13} aria-hidden /> Reply window closes in {mins(closesIn)}</span>
-                <button type="button" className="nt-link" style={{ marginLeft: 8 }} onClick={() => setTplOpen(true)}><FileText size={13} aria-hidden /> Template</button></div>
+                <button type="button" className="nt-link" style={{ marginLeft: 8 }} onClick={() => setTplOpen(true)}><FileText size={13} aria-hidden /> Template</button>
+                <button type="button" className="wa-vita-btn" disabled={vita?.busy} onClick={() => void askVita()}><Sparkles size={13} aria-hidden /> {vita?.busy ? 'Vita is writing…' : 'Ask Vita for a reply'}</button></div>
+              {vita?.note && (
+                <div className={`wa-vita-note is-${vita.tone ?? 'ok'}`} role="status">
+                  <Sparkles size={14} aria-hidden /><span>{vita.note}</span>
+                  <button type="button" aria-label="Dismiss" onClick={() => setVita(null)}><X size={14} /></button>
+                </div>
+              )}
               <div className="ch-compose-row">
                 <label className="crm-sr" htmlFor="wa-input">Reply</label>
-                <textarea id="wa-input" rows={1} value={text} maxLength={4000} placeholder="Reply on WhatsApp…" onChange={(e) => setText(e.target.value)}
+                <textarea id="wa-input" rows={text.length > 90 || text.includes('\n') ? 4 : 1} value={text} maxLength={4000} placeholder="Reply on WhatsApp…" onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (text.trim()) void send(); } }} />
                 <button type="button" className="ch-send" aria-label="Send" disabled={!text.trim() || busy} onClick={() => void send()}><Send size={18} /></button>
               </div>

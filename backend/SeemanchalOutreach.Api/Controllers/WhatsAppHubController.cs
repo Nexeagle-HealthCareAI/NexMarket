@@ -259,6 +259,56 @@ namespace SeemanchalOutreach.Api.Controllers
             return Ok(new { id = msg.Id });
         }
 
+        private static readonly string[] HumanSources = { "inbox", "lead", "resend" };
+
+        /// <summary>
+        /// Vita writes a reply for this chat; the person reads it, edits it and sends it (nothing is sent here). Vita sees the
+        /// last messages only (names, numbers and addresses are removed before the AI sees them), answers from the
+        /// hospital's records, and says when a person must deal with it instead.
+        /// </summary>
+        [HttpPost("conversations/{phone}/suggest")]
+        public async Task<IActionResult> Suggest(string phone, [FromServices] System.Net.Http.IHttpClientFactory http,
+            [FromServices] Microsoft.Extensions.Options.IOptions<AgentsSettings> agents, CancellationToken ct)
+        {
+            var c = await FindAsync(phone, ct);
+            if (c == null) return NotFound();
+            var cfg = agents.Value;
+            if (OrgScope.Current?.Database != null) return StatusCode(503, new { message = "Vita isn't available for your organisation yet." });
+            if (string.IsNullOrWhiteSpace(cfg.Secret)) return StatusCode(503, new { message = "Vita isn't connected yet (the agents service isn't set up on the server)." });
+            var msgs = await _db.WaMessages.AsNoTracking().Where(m => m.Phone == c.Phone && m.Status != "blocked")
+                .OrderByDescending(m => m.CreatedAt).Take(10).ToListAsync(ct);
+            msgs.Reverse();
+            if (!msgs.Any(m => m.Direction == "in")) return BadRequest(new { message = "They haven't written anything yet." });
+            var body = new
+            {
+                audience = c.PartnerClientId != null && c.LeadId == null ? "partner" : "patient",
+                messages = msgs.Select(m => new
+                {
+                    direction = m.Direction,
+                    by = m.Direction == "in" ? "person" : m.SentBy != null && m.SentBy.StartsWith("ai:") ? "vita" : HumanSources.Contains(m.Source) && m.SentBy != null ? "desk" : "auto",
+                    text = m.Text.Length > 2000 ? m.Text[..2000] : m.Text,
+                }),
+            };
+            try
+            {
+                var client = http.CreateClient("agents");
+                using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Post, cfg.Url.TrimEnd('/') + "/v1/draft")
+                {
+                    Content = System.Net.Http.Json.JsonContent.Create(body),
+                };
+                req.Headers.Add("X-Agents-Secret", cfg.Secret);
+                using var res = await client.SendAsync(req, ct);
+                var text = await res.Content.ReadAsStringAsync(ct);
+                if ((int)res.StatusCode == 409) return Conflict(new { message = "Vita is stopped (Stop all on the Vita agents page)." });
+                if (!res.IsSuccessStatusCode) return StatusCode(502, new { message = "Vita couldn't write a reply just now. Please write it yourself." });
+                return Content(text, "application/json");
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                return StatusCode(503, new { message = "Vita isn't answering right now. Please write the reply yourself." });
+            }
+        }
+
         private string? CheckTemplate(WaTemplateSendDto dto)
         {
             if (!TemplateName.IsMatch(dto.Template ?? "")) return "Pick a template.";

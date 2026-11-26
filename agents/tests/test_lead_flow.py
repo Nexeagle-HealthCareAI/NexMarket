@@ -403,3 +403,60 @@ def test_desk_is_told_once_per_hour_not_per_message(monkeypatch):
             await lr.run("L1")
         assert sum(1 for u in nm.updates if u["alert"]) == 1
     scenario(monkeypatch, nm, m, body=body)
+
+
+# ─── Drafts for the inbox ────────────────────────────────────────────────────
+
+def _msgs(*texts, history=None):
+    return list(history or []) + [{"direction": "in", "by": "person", "text": t} for t in texts]
+
+
+def test_draft_answers_from_records_and_sends_nothing(monkeypatch):
+    nm, m = FakeNexMarket(), FakeModel([D()])
+
+    async def body():
+        r = await lr.draft(_msgs("Aankh ke doctor kab baithte hain?"))
+        assert r["kind"] == "reply" and "Tuesday" in r["reply"], r
+        assert r["department"] == "Eye"
+        assert nm.sent == [] and nm.updates == []
+        assert ("draft", "done") in await feed()
+    scenario(monkeypatch, nm, m, mode="off", body=body)
+
+
+def test_draft_wrong_day_is_not_offered(monkeypatch):
+    nm, m = FakeNexMarket(), FakeModel([D(reply="Dr. Anjali Verma Wednesday ko 10 am baithti hain.")])
+
+    async def body():
+        r = await lr.draft(_msgs("Eye doctor Wednesday ko hain?"))
+        assert r["kind"] == "none" and r["reply"] is None and "Guard" in r["why"], r
+    scenario(monkeypatch, nm, m, body=body)
+
+
+def test_draft_emergency_and_price_need_no_ai(monkeypatch):
+    nm, m = FakeNexMarket(), FakeModel([])
+
+    async def body():
+        e = await lr.draft(_msgs("सीने में बहुत तेज दर्द हो रहा है"))
+        assert e["kind"] == "emergency" and "112" in e["reply"]
+        p = await lr.draft(_msgs("Operation me kitna kharcha lagega?"))
+        assert p["kind"] == "holding" and "फीस" in p["reply"]
+        assert m.calls == []
+    scenario(monkeypatch, nm, m, body=body)
+
+
+def test_draft_appointment_gets_the_fixed_reply(monkeypatch):
+    nm, m = FakeNexMarket(), FakeModel([D(intent="appointment", reply=None, sources=[], callback_time="kal subah")])
+
+    async def body():
+        r = await lr.draft(_msgs("Kal subah appointment chahiye"))
+        assert r["kind"] == "holding" and "kal subah" in r["why"] and "call" in r["reply"].lower()
+    scenario(monkeypatch, nm, m, body=body)
+
+
+def test_draft_when_the_ai_is_down(monkeypatch):
+    nm, m = FakeNexMarket(), FakeModel(down=True)
+
+    async def body():
+        r = await lr.draft(_msgs("Aankh ke doctor kab baithte hain?"))
+        assert r["kind"] == "none" and "reachable" in r["why"]
+    scenario(monkeypatch, nm, m, body=body)

@@ -101,6 +101,8 @@ export function WaBroadcasts() {
   const [media, setMedia] = useState<Media | null>(null);
   const [uploading, setUploading] = useState(false);
   const [readyPreview, setReadyPreview] = useState('');
+  const [linkCamp, setLinkCamp] = useState('');
+  const [todayIso] = useState(() => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10));
 
   // When
   const [when, setWhen] = useState<'now' | 'later'>('later');
@@ -171,13 +173,16 @@ export function WaBroadcasts() {
 
   /** What's sent: a ready message's details, or the template, its blanks and attachment. */
   const sendParams = (): Record<string, string> | null => {
-    if (ready) return params;
+    const camp: Record<string, string> = linkCamp && canLinkCamp ? { campId: linkCamp } : {};
+    if (ready) return { ...params, ...camp };
     if (!tpl) return null;
     const p: Record<string, string> = { template: tpl.name, templateLanguage: tpl.language, body: tpl.body, values: JSON.stringify(values.map((v) => v.trim())) };
     if (media) { p.headerType = media.type; p.headerMediaId = media.mediaId; p.headerFile = media.fileName; }
-    return p;
+    return { ...p, ...camp };
   };
   const sendKind = ready ? kind : 'template';
+  const canLinkCamp = kind === 'camp_invite' || kind === 'template' || kind === 'general_update';
+  const upcoming = (campsL.data ?? []).filter((c) => c.date >= todayIso);
 
   const problem = (): string | null => {
     if (ready) return missing.length ? 'Fill in the highlighted details first.' : null;
@@ -468,6 +473,17 @@ export function WaBroadcasts() {
                 </div>
               )}
             </fieldset>
+
+            {canLinkCamp && (
+              <div className="wb-sub wb-camp-link">
+                <span className="wb-sub-h"><Tent size={15} aria-hidden /> Bookings from replies <span className="wb-hint">optional</span></span>
+                <select className="crm-select" value={linkCamp} onChange={(e) => setLinkCamp(e.target.value)} aria-label="Health camp to book replies into">
+                  <option value="">Not linked to a camp</option>
+                  {upcoming.map((c) => <option key={c.id} value={c.id}>{c.title} · {fmt.date(c.date)}{c.block ? ` · ${c.block}` : ''}</option>)}
+                </select>
+                {linkCamp && <span className="wb-hint">When someone replies “book”, “नाम लिखवाएँ” or taps a booking button, they are booked into this camp and get their token number in the chat straight away. They appear on the camp page as “WhatsApp”.</span>}
+              </div>
+            )}
 
             {/* 3 · When */}
             <fieldset className="wb-step">

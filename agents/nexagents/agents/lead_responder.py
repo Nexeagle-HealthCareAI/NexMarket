@@ -267,7 +267,8 @@ def after_triage(state: State) -> str:
     return "decide"
 
 
-async def decide(state: State) -> State:
+async def _ask_model(messages: list[dict[str, Any]], directory: dict[str, Any], priority: int = 0) -> Decision:
+    """The AI's typed answer to a conversation (names, numbers and addresses removed first), checked by `verify`."""
     facts = (await limits.get_setting("facts")) or {}
     from .base import runtime
 
@@ -275,22 +276,26 @@ async def decide(state: State) -> State:
     now_ist = db.now().astimezone(IST)
     system = SYSTEM.format(
         today=now_ist.strftime("%A %d %B %Y, %I:%M %p IST"),
-        directory=json.dumps(_compact_directory(state["directory"]), ensure_ascii=False, default=str),
+        directory=json.dumps(_compact_directory(directory), ensure_ascii=False, default=str),
         facts=facts.get("text") or "(empty)",
         lessons="\n".join(f"- {x['text']}" for x in lessons) or "- (none yet)",
     )
     convo = []
-    for m in state["ctx"].get("messages", [])[-8:]:
+    for m in messages[-8:]:
         who = {"person": "PERSON", "desk": "HOSPITAL STAFF", "vita": "VITA", "auto": "HOSPITAL (automatic)"}.get(m.get("by"), "HOSPITAL")
         convo.append(f"{who}: {redact(str(m.get('text') or ''))}")
+    d: Decision = await llm.chat(llm.Call(agent_id=AGENT_ID, tier="small", priority=priority, schema=Decision),
+                                 [SystemMessage(system), HumanMessage("Conversation so far, oldest first:\n" + "\n".join(convo))])
+    return verify(d, directory)
+
+
+async def decide(state: State) -> State:
     try:
-        d: Decision = await llm.chat(llm.Call(agent_id=AGENT_ID, tier="small", priority=0, schema=Decision),
-                                     [SystemMessage(system), HumanMessage("Conversation so far, oldest first:\n" + "\n".join(convo))])
+        return {"decision": await _ask_model(state["ctx"].get("messages", []), state["directory"])}
     except (llm.ModelUnavailable, llm.BudgetExceeded) as e:
         log.warning("Lead Responder could not use the AI: %s", e)
         why = "Vita's AI isn't reachable right now" if isinstance(e, llm.ModelUnavailable) else "Vita used up today's AI allowance"
         return {"decision": None, "outcome": "handoff", "detail": {"why": why}}
-    return {"decision": verify(d, state["directory"])}
 
 
 def verify(d: Decision, directory: dict[str, Any]) -> Decision:
@@ -414,15 +419,19 @@ async def handoff(state: State) -> State:
     return {"outcome": "handoff"}
 
 
+def emergency_text(phones: list[str]) -> str:
+    num_hi = f"{phones[0]} या 112" if phones else "112"
+    num_en = f"{phones[0]} or 112" if phones else "112"
+    return (f"यह आपातकाल लग रहा है। कृपया तुरंत अस्पताल के इमरजेंसी विभाग आएं, या {num_hi} पर कॉल करें।\n"
+            f"This sounds like an emergency. Please come to the hospital's emergency department now, or call {num_en}.")
+
+
 async def emergency(state: State) -> State:
     """Fixed message (no AI) and an urgent alert, at once, whatever the hour."""
     lead_id = state["lead_id"]
     facts = (await limits.get_setting("facts")) or {}
     phones = facts.get("phones") or []
-    num_hi = f"{phones[0]} या 112" if phones else "112"
-    num_en = f"{phones[0]} or 112" if phones else "112"
-    text = (f"यह आपातकाल लग रहा है। कृपया तुरंत अस्पताल के इमरजेंसी विभाग आएं, या {num_hi} पर कॉल करें।\n"
-            f"This sounds like an emergency. Please come to the hospital's emergency department now, or call {num_en}.")
+    text = emergency_text(phones)
 
     async def do_send(t: str) -> dict[str, Any]:
         return await nexmarket.lead_reply(lead_id, t, agent_id=AGENT_ID)
@@ -482,6 +491,60 @@ async def run(lead_id: str) -> dict[str, Any]:
         await actions.record(AGENT_ID, "lead_skip", "skipped", f"Didn't answer: {outcome[5:].replace('_', ' ')}", subject=("lead", lead_id))
     return {"outcome": outcome, "error": error, "decision": out["decision"].model_dump() if out.get("decision") else None,
             "triage": out["triage"].model_dump() if out.get("triage") else None}
+
+
+# ─── A draft for a person to send ─────────────────────────────────────────────
+
+# Holding lines Vita may draft when a person has to deal with it: the desk still reads and sends them.
+HOLDING = {
+    "price": "धन्यवाद। फीस और खर्च की सही जानकारी के लिए हमारी टीम आपको कॉल करेगी।",
+    "complaint": "हमें खेद है कि आपको परेशानी हुई। हमारी टीम आपसे जल्द बात करेगी।",
+    "report": "धन्यवाद। आपकी रिपोर्ट के बारे में हमारी टीम आपको जल्द बताएगी।",
+    "media": "धन्यवाद, हमें आपका संदेश मिल गया है। हमारी टीम जल्द जवाब देगी।",
+}
+
+
+async def draft(messages: list[dict[str, Any]], audience: str = "patient") -> dict[str, Any]:
+    """
+    A reply for a person in the WhatsApp inbox to read, edit and send. The same rules as answering on its own:
+    triage first (emergencies get the fixed message; prices, complaints and reports a holding line), then the AI
+    from live records only, `verify`, and the Compliance Guard. Nothing is sent from here.
+    """
+    fresh = new_inbound(messages) or [m for m in messages if m.get("direction") == "in"][-1:]
+    texts = [str(m.get("text") or "") for m in fresh][-5:]
+    if not texts:
+        return {"kind": "none", "reply": None, "why": "There's no message from them to answer."}
+    t = triage(texts)
+    if t.emergency:
+        facts = (await limits.get_setting("facts")) or {}
+        await actions.record(AGENT_ID, "draft", "done", "Drafted the emergency message for the desk", channel="whatsapp")
+        return {"kind": "emergency", "reply": emergency_text(facts.get("phones") or []), "why": "This may be an emergency. Call them now as well."}
+    if t.handoff:
+        key = "media" if t.media_only else "price" if "price" in t.handoff else "complaint" if "complaint" in t.handoff else "report"
+        return {"kind": "holding", "reply": HOLDING[key], "why": f"They {t.handoff}: a person should answer this."}
+    directory = await nexmarket.directory()
+    try:
+        d = await _ask_model(messages, directory, priority=1)
+    except (llm.ModelUnavailable, llm.BudgetExceeded):
+        return {"kind": "none", "reply": None, "why": "Vita's AI isn't reachable right now. Please write the reply yourself."}
+    if d.intent == "appointment":
+        first, ask = APPOINTMENT_ACK.get(d.language, APPOINTMENT_ACK["hi"])
+        return {"kind": "holding", "reply": first + ("" if d.callback_time else ask), "intent": d.intent, "department": d.department,
+                "why": "They want an appointment: book it, then confirm the time." + (f" They said “{d.callback_time}” suits them." if d.callback_time else "")}
+    if not d.reply:
+        return {"kind": "none", "reply": None, "intent": d.intent, "department": d.department, "why": d.needs_person or "The answer isn't in the hospital records."}
+    sources = _sources_for_guard(d.sources, directory)
+    if "facts" in d.sources:
+        sources.append({"type": "facts", "id": "facts", "facts": {}})
+    req = act.GuardRequest(text=d.reply, channel="whatsapp", audience=audience if audience in ("patient", "partner") else "patient",
+                           sources=sources, allow_rewrite=True, from_agent=AGENT_ID)
+    g = await act.guard(req)
+    await act.log_guard(g, req)
+    if g.outcome != "pass":
+        return {"kind": "none", "reply": None, "intent": d.intent, "department": d.department,
+                "why": "Vita's answer didn't pass the Compliance Guard: " + "; ".join(str(i.get("message")) for i in g.issues[:2])}
+    await actions.record(AGENT_ID, "draft", "done", f"Drafted a reply for the desk ({d.intent.replace('_', ' ')})", channel="whatsapp", detail={"text": g.text})
+    return {"kind": "reply", "reply": g.text, "intent": d.intent, "department": d.department, "language": d.language}
 
 
 # ─── Events and the worker ────────────────────────────────────────────────────

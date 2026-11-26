@@ -12,6 +12,8 @@ from typing import Any, Awaitable, Callable
 from . import actions, limits
 from .guard.check import GuardRequest, GuardResult, check as guard_check
 
+__all__ = ["GuardRequest", "GuardResult", "guard", "log_guard", "outgoing"]
+
 
 async def guard(req: GuardRequest) -> GuardResult:
     """The Guard with the current policy and facts pack from the Agents page."""

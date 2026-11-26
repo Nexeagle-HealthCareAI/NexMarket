@@ -349,6 +349,22 @@ async def guard_check(req: GuardRequest) -> dict[str, Any]:
     return result.model_dump()
 
 
+# ─── A reply drafted for a person in the WhatsApp inbox ──────────────────────
+
+class DraftBody(BaseModel):
+    messages: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
+    audience: str = "patient"
+
+
+@app.post("/v1/draft", dependencies=secured)
+async def draft_reply(body: DraftBody) -> dict[str, Any]:
+    """Nothing is sent: a person reads, edits and sends it. Refused while Stop all is on."""
+    if (await limits.stop_all_state()).get("on"):
+        raise HTTPException(409, "Vita is stopped (Stop all).")
+    msgs = [{"direction": str(m.get("direction") or ""), "by": str(m.get("by") or ""), "text": str(m.get("text") or "")[:2000]} for m in body.messages]
+    return await lead_responder.draft(msgs, body.audience)
+
+
 # ─── Checking an agent's work ────────────────────────────────────────────────
 
 class ReviewBody(By):
