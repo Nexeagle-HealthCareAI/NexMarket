@@ -1560,7 +1560,8 @@ button.ld-head-btn { border: 0; cursor: pointer; font: inherit; font-size: 13px;
 @media (prefers-reduced-motion: reduce) { .crm .cc-spin { animation: none; } }
 
 /* ─── Chat: interactive layer ─── */
-.ch-conv { flex-direction: row; position: relative; }
+/* Team chat lays the conversation and its info panel side by side; the WhatsApp, Facebook/Instagram and Leads inboxes stack it. */
+.ch-conv.is-split { flex-direction: row; position: relative; }
 .ch-main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; position: relative; }
 .ch-clear { border: 0; background: transparent; color: var(--text-2); cursor: pointer; display: inline-flex; padding: 4px; border-radius: 999px; }
 .ch-clear:hover { background: rgba(0,0,0,.06); }

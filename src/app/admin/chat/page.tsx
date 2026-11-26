@@ -870,7 +870,7 @@ function Conversation({ thread, office, ping, canTask, callsOn, liveCall, inCall
   const images = msgs.filter(isImage);
 
   return (
-    <div className={`ch-conv${infoOpen ? ' has-info' : ''}`}
+    <div className={`ch-conv is-split${infoOpen ? ' has-info' : ''}`}
       onDragEnter={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); dragDepth.current++; setDragging(true); } }}
       onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }}
       onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDragging(false); }}
