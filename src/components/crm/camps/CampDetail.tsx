@@ -12,17 +12,18 @@ import { QrPosterModal } from '@/components/crm/QrPoster';
 import { Empty, ErrorBox, friendlyError, Pill, rupees, Skeleton } from '@/components/crm/ui';
 import { CampForm } from './CampForm';
 import { PatientForm } from './PatientForm';
+import { BookedVia, CHANNELS } from './BookedVia';
 import { IssueCard } from '@/components/crm/cards/IssueCard';
 import { CardView } from '@/components/crm/cards/CardView';
 import { CampMoney } from './CampMoney';
 import { CampDisease } from './CampDisease';
 import {
-  CAMP_STATUS, campDate, daysTo, PATIENT_STATUS, pct, PHASES, SOURCE_LABEL,
+  CAMP_STATUS, campDate, daysTo, PATIENT_STATUS, pct, PHASES,
   type CampDetail as Detail, type CampOptions, type CampPatient, type ChecklistItem,
 } from './shared';
 import { place } from '@/lib/crm/access';
 
-interface PatientsRes { items: CampPatient[]; total: number; counts: Record<string, number>; referred: number; byAgents?: number }
+interface PatientsRes { items: CampPatient[]; total: number; counts: Record<string, number>; referred: number; byAgents?: number; bySource?: Record<string, number> }
 
 export function CampDetail({ id, options, canEdit, onBack, toast }: { id: string; options: CampOptions | null; canEdit: boolean; onBack: () => void; toast: (m: string) => void }) {
   const [tab, setTab] = usePageTab(['people', 'disease', 'plan'] as const, 'people', 'view');
@@ -147,12 +148,13 @@ function Checklist({ campId, items, canEdit, onSaved, toast }: { campId: string;
   );
 }
 
-const FILTERS = [{ key: '', label: 'Everyone' }, { key: 'booked', label: 'Waiting' }, { key: 'attended', label: 'Arrived / seen' }, { key: 'no_show', label: "Didn't come" }, { key: 'referred', label: `To ${place()}` }, { key: 'agent', label: 'Booked by agents' }] as const;
+const FILTERS = [{ key: '', label: 'Everyone' }, { key: 'booked', label: 'Waiting' }, { key: 'attended', label: 'Arrived / seen' }, { key: 'no_show', label: "Didn't come" }, { key: 'referred', label: `To ${place()}` }] as const;
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
 
 function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; options: CampOptions | null; canEdit: boolean; onChanged: () => void; toast: (m: string) => void }) {
   const [filter, setFilter] = useState('');
+  const [via, setVia] = useState('');
   const [q, setQ] = useState('');
   const [qd, setQd] = useState('');
   const [page, setPage] = useState(1);
@@ -167,10 +169,11 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
   useEffect(() => { crm.get<{ name: string }[]>('/api/v1/departments').then((x) => setDepts(x.map((y) => y.name))).catch(() => undefined); }, []);
   const qs = useMemo(() => {
     const sp = new URLSearchParams({ page: String(page), pageSize: String(size) });
-    if (filter === 'referred') sp.set('referred', 'true'); else if (filter === 'agent') sp.set('source', 'agent'); else if (filter) sp.set('status', filter);
+    if (filter === 'referred') sp.set('referred', 'true'); else if (filter) sp.set('status', filter);
+    if (via) sp.set('source', via);
     if (qd) sp.set('q', qd);
     return sp.toString();
-  }, [filter, qd, page, size]);
+  }, [filter, via, qd, page, size]);
   const load = useCallback(async () => {
     try { setData(await crm.get<PatientsRes>(`/api/v1/camps/${camp.camp.id}/patients?${qs}`)); setError(null); } catch (e) { setError(friendlyError(e)); }
   }, [camp.camp.id, qs]);
@@ -182,7 +185,10 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
   // From the camp day on, walk-ins and check-ups are the main work; before it, bookings are.
   const onDay = daysTo(camp.camp.date) <= 0;
   const villages = useMemo(() => [...new Set((data?.items ?? []).map((p) => p.village).filter((v): v is string => !!v))], [data]);
-  const count = (k: string) => (k === '' ? Object.values(data?.counts ?? {}).reduce((a, b) => a + b, 0) : k === 'referred' ? data?.referred ?? 0 : k === 'agent' ? data?.byAgents ?? 0 : data?.counts[k] ?? 0);
+  const count = (k: string) => (k === '' ? Object.values(data?.counts ?? {}).reduce((a, b) => a + b, 0) : k === 'referred' ? data?.referred ?? 0 : data?.counts[k] ?? 0);
+  const viaCount = (k: string) => (k === '' ? Object.values(data?.bySource ?? {}).reduce((a, b) => a + b, 0) : data?.bySource?.[k] ?? 0);
+  // Channels with nobody yet stay out of the way (the one chosen stays, so it can be cleared).
+  const channels = CHANNELS.filter((c) => viaCount(c.key) > 0 || via === c.key);
   // Arrived / didn't come are marked here or in the field app; the camp day and after.
   const live = onDay && camp.camp.status !== 'cancelled';
 
@@ -198,28 +204,42 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
           </button>
         </div>
       )}
-      {(camp.agents?.length ?? 0) > 0 && (
-        <div className="cp-agents" aria-label="Booked by field agents">
-          <span className="cp-agents-title">Booked by field agents</span>
+      <label className="ch-search" style={{ margin: 0 }}>
+        <Search size={16} aria-hidden /><span className="crm-sr">Search people</span>
+        <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Name, mobile, panchayat or token" />
+      </label>
+      <div className="crm-chips" role="group" aria-label="Where they are">
+        {FILTERS.map((f) => <button key={f.key} type="button" className="crm-chip" aria-pressed={filter === f.key} onClick={() => { setFilter(f.key); setPage(1); }}>{f.label}<span className="ld-chip-n">{count(f.key)}</span></button>)}
+      </div>
+      {/* How people booked: QR code, field agents, WhatsApp, partners, the desk, walk-ins. */}
+      {channels.length > 0 && (
+        <div className="cp-vias" role="group" aria-label="How they booked">
+          <span className="cp-vias-title">Booked by</span>
+          <button type="button" className="crm-chip" aria-pressed={via === ''} onClick={() => { setVia(''); setPage(1); }}>Any way<span className="ld-chip-n">{viaCount('')}</span></button>
+          {channels.map((c) => {
+            const Icon = c.icon;
+            return (
+              <button key={c.key} type="button" className={`crm-chip cp-via-chip is-${c.tone}`} aria-pressed={via === c.key} onClick={() => { setVia(via === c.key ? '' : c.key); setPage(1); }}>
+                <Icon size={14} aria-hidden />{c.label}<span className="ld-chip-n">{viaCount(c.key)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {via === 'agent' && (camp.agents?.length ?? 0) > 0 && (
+        <div className="cp-agents" aria-label="Field agents">
           {camp.agents!.map((a) => (
             <span key={a.agentId} className="cp-agent"><strong>{a.name}</strong> {a.booked} booked{onDay ? ` · ${a.came} came` : ''}</span>
           ))}
         </div>
       )}
-      <label className="ch-search" style={{ margin: 0 }}>
-        <Search size={16} aria-hidden /><span className="crm-sr">Search people</span>
-        <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Name, mobile, panchayat or token" />
-      </label>
-      <div className="crm-chips">
-        {FILTERS.map((f) => <button key={f.key} type="button" className="crm-chip" aria-pressed={filter === f.key} onClick={() => { setFilter(f.key); setPage(1); }}>{f.label}<span className="ld-chip-n">{count(f.key)}</span></button>)}
-      </div>
       {error && <ErrorBox message={error} onRetry={load} />}
       {!data ? <Skeleton h={300} /> : data.items.length === 0 ? (
-        <Empty title={filter || qd ? 'Nobody matches' : 'Nobody booked yet'}><span className="crm-sub">Share the booking QR, or book people in from calls and partner visits.</span></Empty>
+        <Empty title={filter || via || qd ? 'Nobody matches' : 'Nobody booked yet'}><span className="crm-sub">Share the booking QR, or book people in from calls and partner visits.</span></Empty>
       ) : (
         <div className="crm-table-wrap">
           <table className="crm-table cp-table">
-            <thead><tr><th>#</th><th>Person</th><th>Came with</th><th>Readings</th><th>Found</th><th>Status</th><th aria-label="Actions" /></tr></thead>
+            <thead><tr><th>#</th><th>Person</th><th>Booked by</th><th>Came with</th><th>Readings</th><th>Found</th><th>Status</th><th aria-label="Actions" /></tr></thead>
             <tbody>
               {data.items.map((p) => {
                 const ps = PATIENT_STATUS[p.status] ?? PATIENT_STATUS.booked;
@@ -230,13 +250,8 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
                       <strong>{p.name}</strong>
                       {p.healthCard && <button type="button" className="hc-badge" onClick={() => setOpenCard(p.healthCard!.id)} title="Hospital health card">{p.healthCard.number}</button>}
                       <span className="crm-cell-sub wl-sub">{[p.age != null ? `${p.age} y` : null, p.sex === 'F' ? 'F' : p.sex === 'M' ? 'M' : null, p.village, p.phone ? `+${p.phone.slice(0, 2)} ${p.phone.slice(2)}` : null].filter(Boolean).join(' · ')}</span>
-                      <span className="crm-cell-sub wl-sub">
-                        {p.bookedBy ? <>Booked by <strong>{p.bookedBy}</strong> · agent app</> : SOURCE_LABEL[p.source] ?? p.source}{p.partnerName ? ` · via ${p.partnerName}` : ''}{p.slot ? ` · ${p.slot}` : ''}
-                        {p.source === 'agent' && p.phone ? (p.waStatus === 'sent' || p.waStatus === 'delivered' || p.waStatus === 'read'
-                          ? <span className="cp-wa is-ok" title="The token went on WhatsApp by itself"> · token on WhatsApp ✓</span>
-                          : p.waStatus ? <span className="cp-wa is-bad" title={p.waError ?? undefined}> · WhatsApp token not sent</span> : null) : null}
-                      </span>
                     </td>
+                    <td><BookedVia p={p} /></td>
                     <td className="cp-cell-text">{p.complaint ?? <span className="crm-cell-sub">—</span>}</td>
                     <td><div className="cp-cell-vitals">
                       {p.bpSystolic ? <span className={p.flags.includes('hypertension') ? 'is-high' : undefined}>BP {p.bpSystolic}/{p.bpDiastolic ?? '–'}</span> : null}

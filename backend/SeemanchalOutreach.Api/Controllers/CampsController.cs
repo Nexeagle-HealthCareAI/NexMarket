@@ -347,12 +347,18 @@ namespace SeemanchalOutreach.Api.Controllers
                 var digits = new string(s.Where(char.IsDigit).ToArray());
                 all = all.Where(p => p.Name.ToLower().Contains(s) || (p.Village != null && p.Village.ToLower().Contains(s)) || (digits.Length >= 3 && ((p.Phone != null && p.Phone.Contains(digits)) || p.Token.ToString() == digits)));
             }
-            var counts = await all.GroupBy(p => p.Status).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
-            var referredCount = await all.CountAsync(p => p.ReferToHospital, ct);
-            var agentCount = await all.CountAsync(p => p.Source == "agent", ct);
-            var list = all;
-            if (!string.IsNullOrWhiteSpace(status)) list = list.Where(p => p.Status == status);
-            if (referred) list = list.Where(p => p.ReferToHospital);
+            // Two filters that combine: where they are (status) and how they booked (source). Each row of chips counts
+            // within the other's choice.
+            var bySourceSet = all;
+            if (!string.IsNullOrWhiteSpace(source)) bySourceSet = bySourceSet.Where(p => p.Source == source);
+            var byStatusSet = all;
+            if (!string.IsNullOrWhiteSpace(status)) byStatusSet = byStatusSet.Where(p => p.Status == status);
+            if (referred) byStatusSet = byStatusSet.Where(p => p.ReferToHospital);
+            var counts = await bySourceSet.GroupBy(p => p.Status).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
+            var referredCount = await bySourceSet.CountAsync(p => p.ReferToHospital, ct);
+            var sources = await byStatusSet.GroupBy(p => p.Source).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
+            var agentCount = sources.GetValueOrDefault("agent");
+            var list = byStatusSet;
             if (!string.IsNullOrWhiteSpace(source)) list = list.Where(p => p.Source == source);
             var total = await list.CountAsync(ct);
             var rows = await list.OrderBy(p => p.Token).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
@@ -367,7 +373,7 @@ namespace SeemanchalOutreach.Api.Controllers
             return Ok(new
             {
                 items = rows.Select(p => PatientRow(p, partners, leads, cards.TryGetValue(p.Id, out var hc) ? (hc.Id, hc.Number) : null, people)),
-                total, page, pageSize, counts, referred = referredCount, byAgents = agentCount,
+                total, page, pageSize, counts, referred = referredCount, byAgents = agentCount, bySource = sources,
             });
         }
 
@@ -375,6 +381,9 @@ namespace SeemanchalOutreach.Api.Controllers
         {
             // Booked from the field app: by whom, and whether the token went on WhatsApp. Who marked them arrived, and where.
             bookedBy = p.Source == "agent" && p.CreatedBy != null ? people?.GetValueOrDefault(p.CreatedBy) ?? p.CreatedBy : null,
+            // Who put them in the list at the desk (a booking or a walk-in); the QR page and WhatsApp book by themselves.
+            addedBy = p.Source is "prebooked" or "walk_in" or "partner" && p.CreatedBy != null ? people?.GetValueOrDefault(p.CreatedBy) : null,
+            createdAt = p.CreatedAt,
             waStatus = p.WaStatus, waError = p.WaError,
             statusBy = p.StatusBy != null ? people?.GetValueOrDefault(p.StatusBy) ?? p.StatusBy : null, statusVia = p.StatusVia, statusAt = p.StatusAt,
             pulse = p.Pulse, tempF = p.TempF, sugarKind = p.SugarKind, panchayatId = p.PanchayatId,

@@ -4547,3 +4547,26 @@ strong.is-ok { color: var(--ok-ink); }
 .cp-agent { font-size: 13px; padding: 3px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
 .cp-wa.is-ok { color: var(--ok-ink); }
 .cp-wa.is-bad { color: var(--warn-ink); }
+
+/* Camp people: how each person booked (QR code, field agent, WhatsApp, partner, desk, walk-in) */
+.cp-via { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 130px; }
+.cp-via-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.cp-via-who { font-size: 13px; font-weight: 600; color: var(--text); }
+.cp-via-when { font-size: 12px; color: var(--text-3); }
+.cp-via .cp-wa { font-size: 12px; font-weight: 600; }
+.is-qr.cp-via-badge, .cp-via-chip.is-qr svg { color: #6d28d9; }
+.is-qr.cp-via-badge { background: #f1ebfe; }
+.is-agent.cp-via-badge, .cp-via-chip.is-agent svg { color: var(--ok-ink); }
+.is-agent.cp-via-badge { background: var(--ok-soft); }
+.is-wa.cp-via-badge, .cp-via-chip.is-wa svg { color: #12803e; }
+.is-wa.cp-via-badge { background: #e3f7ea; }
+.is-partner.cp-via-badge, .cp-via-chip.is-partner svg { color: var(--warn-ink); }
+.is-partner.cp-via-badge { background: var(--warn-soft); }
+.is-desk.cp-via-badge, .cp-via-chip.is-desk svg { color: var(--accent-ink); }
+.is-desk.cp-via-badge { background: var(--accent-soft); }
+.is-walk.cp-via-badge, .cp-via-chip.is-walk svg { color: #475569; }
+.is-walk.cp-via-badge { background: var(--grey-soft); }
+.cp-vias { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cp-vias-title { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); margin-right: 2px; }
+.cp-via-chip { display: inline-flex; align-items: center; gap: 6px; }
+.cp-via-chip[aria-pressed='true'] svg { color: inherit; }

@@ -29,6 +29,8 @@ export interface CampPatient {
   healthCard?: { id: string; number: string } | null;
   /** Booked from the field app: by whom; the token sent on WhatsApp by itself (sent | failed | blocked). */
   bookedBy?: string | null; waStatus?: string | null; waError?: string | null;
+  /** Staff who booked them at the desk or registered the walk-in; when they were added to the list. */
+  addedBy?: string | null; createdAt?: string | null;
   /** Who marked them arrived / didn't come, from the app or the CRM, and when. */
   statusBy?: string | null; statusVia?: string | null; statusAt?: string | null;
   pulse?: number | null; tempF?: number | null; sugarKind?: string | null;
