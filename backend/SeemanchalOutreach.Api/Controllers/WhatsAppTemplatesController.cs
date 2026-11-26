@@ -270,8 +270,9 @@ namespace SeemanchalOutreach.Api.Controllers
                 (new WaTemplateDto
                 {
                     Name = "nx_camp_token", Category = "UTILITY",
-                    Body = "नमस्ते {{1}}, {{2}} में आपका नाम लिख लिया गया है।\nतारीख और समय: {{3}}\nजगह: {{4}}\nआपका टोकन नंबर: {{5}}\nकृपया पुरानी रिपोर्ट और दवाइयाँ साथ लाएं। - " + h,
-                    Examples = new() { "रीना", "निःशुल्क हड्डी और जोड़ जांच शिविर", "29 नवंबर, सुबह 9 से 2 बजे", "पंचायत भवन, कसबा", "87" },
+                    // A booking confirmation, nothing promotional ("free" made Meta call the first version marketing).
+                    Body = "नमस्ते {{1}}, आपकी बुकिंग पक्की हो गई है।\nशिविर: {{2}}\nतारीख और समय: {{3}}\nजगह: {{4}}\nटोकन नंबर: {{5}}\nशिविर में यह टोकन नंबर बताएं और पुरानी रिपोर्ट व दवाइयाँ साथ लाएं। - " + h,
+                    Examples = new() { "रीना", "हड्डी और जोड़ जांच", "29 नवंबर, सुबह 9 से 2 बजे", "पंचायत भवन, कसबा", "87" },
                 }, "camp_booked"),
                 (new WaTemplateDto
                 {
