@@ -135,7 +135,7 @@ export function CampForm({ camp, options, onClose, onSaved }: {
           {camp && <label className="crm-field cp-span2">After the camp: what worked, what to change<textarea className="crm-textarea" rows={2} value={f.outcome} onChange={set('outcome')} /></label>}
         </div>
       )}
-      {!camp && <p className="crm-sub" style={{ margin: 0, fontSize: 13 }}>The camp gets a booking code for its WhatsApp QR poster, and a marketing checklist.</p>}
+      {!camp && <p className="crm-sub" style={{ margin: 0, fontSize: 13 }}>The camp gets a booking QR poster (people scan it and book on a web page) and a marketing checklist.</p>}
       {error && <div className="crm-error" role="alert">{error}</div>}
     </Modal>
   );

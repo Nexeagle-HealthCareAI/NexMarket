@@ -87,8 +87,8 @@ export function CampDetail({ id, options, canEdit, onBack, toast }: { id: string
       {tab === 'plan' && <Checklist campId={id} items={d.checklist} canEdit={canEdit} onSaved={load} toast={toast} />}
 
       {editing && <CampForm camp={c} options={options} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); toast('Camp saved.'); void load(); }} />}
-      {qr && <QrPosterModal onClose={() => setQr(false)} info={{ title: c.title, sub: `${campDate(c.date)} · ${[c.venue, c.block].filter(Boolean).join(', ')}`, waLink: d.link.waLink, message: d.link.message, displayPhone: d.link.displayPhone, hospital: d.link.hospital }}
-        intro={<p className="crm-sub" style={{ margin: 0 }}>Put this poster up at the PHC, shops and the school. People who scan it are booked into the camp straight away, get their token number on WhatsApp, and show under People.</p>} />}
+      {qr && <QrPosterModal onClose={() => setQr(false)} info={{ title: c.title, sub: `${campDate(c.date)} · ${[c.venue, c.block].filter(Boolean).join(', ')}`, waLink: d.link.waLink, message: d.link.message, webLink: typeof window !== 'undefined' ? `${window.location.origin}/c/${c.code}` : null, displayPhone: d.link.displayPhone, hospital: d.link.hospital }}
+        intro={<p className="crm-sub" style={{ margin: 0 }}>Put this poster up at the PHC, shops and the school. People who scan it open a booking page on their phone, fill a short form and get their token number on the screen. They show under People straight away.</p>} />}
     </div>
   );
 }

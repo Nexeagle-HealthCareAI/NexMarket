@@ -45,7 +45,7 @@ export const CAMP_STATUS: Record<string, { label: string; tone: Tone }> = {
 export const PATIENT_STATUS: Record<string, { label: string; tone: Tone }> = {
   booked: { label: 'Booked', tone: 'accent' }, attended: { label: 'Seen', tone: 'ok' }, no_show: { label: "Didn't come", tone: 'warn' }, cancelled: { label: 'Cancelled', tone: 'neutral' },
 };
-export const SOURCE_LABEL: Record<string, string> = { prebooked: 'Booked by desk', whatsapp: 'WhatsApp', partner: 'Partner', agent: 'Field agent', walk_in: 'Walk-in' };
+export const SOURCE_LABEL: Record<string, string> = { prebooked: 'Booked by desk', whatsapp: 'WhatsApp', partner: 'Partner', agent: 'Field agent', walk_in: 'Walk-in', qr: 'QR form' };
 export const PHASES: { key: ChecklistItem['phase']; label: string; hint: string }[] = [
   { key: 'before', label: '2–3 weeks before', hint: 'Place, doctors, posters' },
   { key: 'week', label: 'The week before', hint: 'Invite, remind, pre-book' },

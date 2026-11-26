@@ -28,6 +28,8 @@ export interface QrPosterInfo {
   sub?: string;
   waLink: string | null;
   message: string;
+  /** A web page instead of WhatsApp (a health camp's booking page): the QR opens this. */
+  webLink?: string | null;
   hospital?: string;
   displayPhone?: string | null;
 }
@@ -37,7 +39,8 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 /** QR code, link and a printable A5 poster for a partner or a camp. */
 export function QrPosterModal({ info, onClose, intro }: { info: QrPosterInfo; onClose: () => void; intro?: React.ReactNode }) {
   const [copied, setCopied] = useState(false);
-  const link = info.waLink;
+  const web = !!info.webLink;
+  const link = info.webLink ?? info.waLink;
   const hospital = info.hospital ?? orgName();
 
   const copy = async () => {
@@ -46,7 +49,7 @@ export function QrPosterModal({ info, onClose, intro }: { info: QrPosterInfo; on
   };
   const share = async () => {
     if (!link) return;
-    const text = `${info.title}: WhatsApp ${hospital} → ${link}`;
+    const text = web ? `${info.title}: book your free check-up → ${link}` : `${info.title}: WhatsApp ${hospital} → ${link}`;
     if (navigator.share) { try { await navigator.share({ title: hospital, text }); } catch { /* cancelled */ } }
     else await copy();
   };
@@ -55,7 +58,7 @@ export function QrPosterModal({ info, onClose, intro }: { info: QrPosterInfo; on
     const url = await QRCode.toDataURL(link, { margin: 2, width: 1024, errorCorrectionLevel: 'M' });
     const a = document.createElement('a');
     a.href = url;
-    a.download = `whatsapp-qr-${info.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`;
+    a.download = `${web ? 'booking' : 'whatsapp'}-qr-${info.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`;
     a.click();
   };
   const print = async () => {
@@ -63,7 +66,7 @@ export function QrPosterModal({ info, onClose, intro }: { info: QrPosterInfo; on
     const svg = await QRCode.toString(link, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
     const w = window.open('', '_blank', 'width=720,height=960');
     if (!w) return;
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(info.title)} – WhatsApp QR</title>
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(info.title)} – ${web ? 'Booking' : 'WhatsApp'} QR</title>
 <style>
 @page { size: A5; margin: 12mm; }
 body { font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans Devanagari', sans-serif; margin: 0; color: #0e1525; }
@@ -78,18 +81,18 @@ body { font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans Devanagari'
 .ph { margin-top: 16px; font-size: 16px; background: #e7f6ef; color: #0b6b4a; display: inline-block; padding: 8px 16px; border-radius: 999px; font-weight: 700; }
 </style></head><body><div class="p">
 <div class="h">${esc(hospital)}</div>
-<div class="hi">स्कैन करें, WhatsApp पर बात करें</div>
-<div class="en">Scan to message us on WhatsApp</div>
+<div class="hi">${web ? 'स्कैन करें, अपनी जगह बुक करें' : 'स्कैन करें, WhatsApp पर बात करें'}</div>
+<div class="en">${web ? 'Scan to book your free check-up' : 'Scan to message us on WhatsApp'}</div>
 <div class="qr">${svg}</div>
 <div class="who">${esc(info.title)}</div>
 ${info.sub ? `<div class="code">${esc(info.sub)}</div>` : ''}
-${info.displayPhone ? `<div class="ph">WhatsApp: +${esc(info.displayPhone)}</div>` : ''}
+${info.displayPhone ? `<div class="ph">${web ? 'सहायता / Help' : 'WhatsApp'}: +${esc(info.displayPhone)}</div>` : ''}
 </div><script>window.onload = () => { window.print(); };</script></body></html>`);
     w.document.close();
   };
 
   return (
-    <Modal title="WhatsApp QR code" onClose={onClose} wide>
+    <Modal title={web ? 'Booking QR code' : 'WhatsApp QR code'} onClose={onClose} wide>
       {intro}
       {!link ? (
         <div className="crm-error" role="alert">
@@ -97,12 +100,21 @@ ${info.displayPhone ? `<div class="ph">WhatsApp: +${esc(info.displayPhone)}</div
         </div>
       ) : (
         <div className="qr-wrap">
-          <QrCode text={link} size={220} label={`QR code that opens WhatsApp with ${hospital}`} />
+          <QrCode text={link} size={220} label={web ? `QR code that opens the booking page for ${info.title}` : `QR code that opens WhatsApp with ${hospital}`} />
           <div className="qr-side">
             <strong className="qr-title">{info.title}</strong>
             {info.sub && <span className="crm-sub">{info.sub}</span>}
-            <span className="qr-msg-label">Their WhatsApp opens with this already typed:</span>
-            <span className="qr-msg">{info.message}</span>
+            {web ? (
+              <>
+                <span className="qr-msg-label">Scanning opens a booking page. They write name, age, gender, village (mobile optional) and get their token number on the screen. Bookings land in this camp&apos;s list as &ldquo;QR form&rdquo;.</span>
+                <span className="qr-msg">{link}</span>
+              </>
+            ) : (
+              <>
+                <span className="qr-msg-label">Their WhatsApp opens with this already typed:</span>
+                <span className="qr-msg">{info.message}</span>
+              </>
+            )}
             <div className="qr-actions">
               <button type="button" className="crm-btn is-sm" onClick={() => void print()}><Printer size={15} aria-hidden /> Print poster</button>
               <button type="button" className="crm-btn is-secondary is-sm" onClick={() => void png()}><Download size={15} aria-hidden /> QR image</button>

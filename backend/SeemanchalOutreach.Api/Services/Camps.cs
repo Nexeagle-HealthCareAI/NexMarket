@@ -20,7 +20,7 @@ namespace SeemanchalOutreach.Api.Services
         public static readonly string[] Types = { "general", "eye", "bone_joint", "women", "diabetes_bp", "child", "dental", "heart", "other" };
         public static readonly string[] Statuses = { "planned", "confirmed", "done", "cancelled" };
         public static readonly string[] PatientStatuses = { "booked", "attended", "no_show", "cancelled" };
-        public static readonly string[] Sources = { "prebooked", "whatsapp", "partner", "agent", "walk_in" };
+        public static readonly string[] Sources = { "prebooked", "whatsapp", "partner", "agent", "walk_in", "qr" };
 
         /// <summary>What people come with (code, English, Hindi).</summary>
         public static readonly (string Code, string En, string Hi)[] Symptoms =

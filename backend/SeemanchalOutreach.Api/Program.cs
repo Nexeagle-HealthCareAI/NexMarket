@@ -232,6 +232,17 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
             }));
     // The public website enquiry form: a person sends one or two; a bot sends hundreds.
+    // The camp's QR booking page: a family books a few people from one phone, and many phones at a camp share one
+    // mobile-network address, so this allows more than the website form.
+    options.AddPolicy("campbook", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 40,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0,
+            }));
     options.AddPolicy("webform", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
