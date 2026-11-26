@@ -2,12 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -20,12 +23,15 @@ namespace SeemanchalOutreach.Api.Controllers
 {
     public class BroadcastRequestDto
     {
+        /// <summary>doctor_availability | schedule_change | camp_invite | general_update | template (any approved template).</summary>
         public string Kind { get; set; } = "general_update";
         public string Language { get; set; } = "hi";
         public Dictionary<string, string> Params { get; set; } = new();
         public BroadcastAudience Audience { get; set; } = new();
         /// <summary>Null = send now.</summary>
         public DateTime? ScheduledAt { get; set; }
+        /// <summary>A name for the list of broadcasts (optional; made from the message otherwise).</summary>
+        public string? Title { get; set; }
     }
 
     public class TestBroadcastDto
@@ -42,69 +48,162 @@ namespace SeemanchalOutreach.Api.Controllers
     [Route("api/v1/broadcasts")]
     public class BroadcastsController : ControllerBase
     {
+        private static readonly Regex TemplateName = new(@"^[a-z0-9_]{1,100}$");
+        private static readonly Regex LangCode = new(@"^[a-z]{2,3}(_[A-Z]{2})?$");
+        private static readonly Regex MediaId = new(@"^\d{5,30}$");
+
         private readonly IMarketingDbContext _db;
         private readonly IWhatsAppSender _sender;
+        private readonly WhatsAppOutbox _outbox;
+        private readonly IHttpClientFactory _http;
 
-        public BroadcastsController(IMarketingDbContext db, IWhatsAppSender sender)
+        public BroadcastsController(IMarketingDbContext db, IWhatsAppSender sender, WhatsAppOutbox outbox, IHttpClientFactory http)
         {
             _db = db;
             _sender = sender;
+            _outbox = outbox;
+            _http = http;
         }
 
         [HttpGet("status")]
         public IActionResult Status() => Ok(new { connected = _sender.IsConfigured });
 
-        /// <summary>How many people match each contact type for the current block/importance filter, and the total.</summary>
+        /// <summary>How many people the chosen groups and places reach, by group and by partner type.</summary>
         [HttpPost("audience")]
         public async Task<IActionResult> Audience([FromBody] BroadcastAudience audience, CancellationToken ct)
         {
-            var baseAudience = new BroadcastAudience { Blocks = audience.Blocks, ImportantOnly = audience.ImportantOnly };
-            var byType = await BroadcastComposer.Audience(_db, baseAudience)
-                .GroupBy(c => c.Role)
-                .Select(g => new { type = g.Key, count = g.Count() })
-                .ToListAsync(ct);
-            int total = await BroadcastComposer.Audience(_db, audience).CountAsync(ct);
-
-            // People left out of the chosen types because of a missing/wrong number or STOP.
-            var excludedQ = _db.Contacts.Where(c => !c.IsMerged && (c.PhoneInvalid || c.WhatsappOptOut || c.Phone == null || c.Phone == ""));
-            if (audience.ContactTypes.Count > 0) excludedQ = excludedQ.Where(c => audience.ContactTypes.Contains(c.Role));
-            if (audience.ImportantOnly) excludedQ = excludedQ.Where(c => c.IsImportant);
-            int excluded = await excludedQ.CountAsync(ct);
-
+            var (_, counts) = await BroadcastPeople.ResolveAsync(_db, audience, ct);
+            var types = await BroadcastPeople.TypeCountsAsync(_db, audience, ct);
             var blocks = await _db.Panchayats.AsNoTracking().Where(p => p.IsActiveForMarketing).Select(p => p.Block).Distinct().OrderBy(b => b).ToListAsync(ct);
-            return Ok(new { total, excluded, byType, blocks });
+            return Ok(new
+            {
+                total = counts.Total, byGroup = counts.ByGroup, byType = types.Select(t => new { type = t.Key, count = t.Value }),
+                campNoConsent = counts.CampNoConsent, optedOut = counts.OptedOut, noPlace = counts.NoPlace, duplicates = counts.Duplicates,
+                excluded = counts.OptedOut, blocks,
+            });
         }
+
+        /// <summary>Every district, block and panchayat, for the place picker.</summary>
+        [HttpGet("places")]
+        public async Task<IActionResult> Places(CancellationToken ct)
+        {
+            var list = await _db.Panchayats.AsNoTracking().OrderBy(p => p.District).ThenBy(p => p.Block).ThenBy(p => p.Name)
+                .Select(p => new { id = p.PanchayatId, name = p.Name, block = p.Block, district = p.District, active = p.IsActiveForMarketing }).ToListAsync(ct);
+            return Ok(list);
+        }
+
+        /// <summary>Health camps, newest first, with how many people with a phone each has (for "people from these camps").</summary>
+        [HttpGet("camps")]
+        public async Task<IActionResult> Camps(CancellationToken ct)
+        {
+            var camps = await _db.HealthCamps.AsNoTracking().Where(c => c.Status != "cancelled").OrderByDescending(c => c.Date).Take(60)
+                .Select(c => new { c.Id, c.Title, c.Date, c.Venue, c.Block }).ToListAsync(ct);
+            var ids = camps.Select(c => c.Id).ToList();
+            var counts = await _db.CampPatients.AsNoTracking().Where(p => ids.Contains(p.CampId) && p.Phone != null && p.Status != "cancelled")
+                .GroupBy(p => p.CampId).Select(g => new { g.Key, n = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.n, ct);
+            return Ok(camps.Select(c => new { id = c.Id, title = c.Title, date = c.Date.ToString("yyyy-MM-dd"), venue = c.Venue, block = c.Block, people = counts.GetValueOrDefault(c.Id) }));
+        }
+
+        /// <summary>A picture, PDF or video for the top of a template message. Uploaded to WhatsApp; gives the media ID to send.</summary>
+        [HttpPost("media")]
+        [RequestSizeLimit(17 * 1024 * 1024)]
+        public async Task<IActionResult> Media([FromForm] IFormFile? file, CancellationToken ct)
+        {
+            var cfg = _outbox.Config;
+            if (!cfg.IsConfigured) return BadRequest(new { message = "WhatsApp isn't connected yet (WhatsApp → Setup)." });
+            if (file == null || file.Length == 0) return BadRequest(new { message = "Choose a file." });
+            if (file.Length > 16L << 20) return BadRequest(new { message = "The file must be under 16 MB." });
+            await using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, ct);
+            var bytes = ms.ToArray();
+            var mime = MetaUpload.Sniff(bytes);
+            var type = mime == null ? null : MetaUpload.HeaderType(mime);
+            if (mime == null || type == null) return BadRequest(new { message = "Use a JPG or PNG picture, a PDF, or an MP4 video." });
+            if (bytes.Length > MetaUpload.MaxBytes(type)) return BadRequest(new { message = type == "image" ? "Pictures must be under 5 MB." : "The file must be under 16 MB." });
+            var name = MetaUpload.SafeName(file.FileName, type == "document" ? "document.pdf" : type == "video" ? "video.mp4" : "picture.jpg");
+            var (id, err) = await MetaUpload.MediaAsync(_http, cfg, bytes, mime, name, ct);
+            if (id == null) return BadRequest(new { message = err });
+            return Ok(new { mediaId = id, type, fileName = name, size = bytes.Length });
+        }
+
+        /// <summary>Checks a broadcast before it's sent or tested; null when it's fine.</summary>
+        [NonAction]
+        public static string? Check(string kind, Dictionary<string, string> p)
+        {
+            if (kind == BroadcastComposer.AnyTemplate)
+            {
+                if (!TemplateName.IsMatch(p.GetValueOrDefault("template") ?? "")) return "Pick a template.";
+                if (!LangCode.IsMatch(p.GetValueOrDefault("templateLanguage") ?? "")) return "The template's language is missing.";
+                if ((p.GetValueOrDefault("body") ?? "").Length > 1100) return "The template text is too long.";
+                var values = BroadcastComposer.TemplateValues(p);
+                var blanks = Regex.Matches(p.GetValueOrDefault("body") ?? "", @"\{\{\s*(\d+)\s*\}\}").Select(m => m.Groups[1].Value).Distinct().Count();
+                if (values.Count != blanks) return "Fill in every blank.";
+                if (values.Any(v => string.IsNullOrWhiteSpace(v))) return "Fill in every blank.";
+                if (values.Any(v => v.Length > 1000)) return "A blank can be up to 1,000 characters.";
+                if (values.Any(v => v.Contains('\n') || v.Contains('\t') || v.Contains("    "))) return "WhatsApp doesn't allow new lines, tabs or more than 4 spaces inside a blank.";
+                var ht = p.GetValueOrDefault("headerType") ?? "";
+                if (ht.Length > 0)
+                {
+                    if (ht is not ("image" or "document" or "video")) return "Unknown attachment.";
+                    if (!MediaId.IsMatch(p.GetValueOrDefault("headerMediaId") ?? "")) return "Upload the picture or PDF for this template.";
+                }
+                return null;
+            }
+            if (!BroadcastComposer.Kinds.Contains(kind)) return "Unknown message type.";
+            return null;
+        }
+
+        private static List<string> ValuesFor(string kind, Dictionary<string, string> p, string name) =>
+            kind == BroadcastComposer.AnyTemplate ? BroadcastComposer.TemplateParams(p, name) : BroadcastComposer.BodyParams(kind, p, name);
+
+        private static string PreviewFor(string kind, string lang, Dictionary<string, string> p, string name) =>
+            kind == BroadcastComposer.AnyTemplate ? BroadcastComposer.TemplatePreview(p, name) : BroadcastComposer.Preview(kind, lang, p, name);
 
         [HttpPost("preview")]
         public IActionResult Preview([FromBody] BroadcastRequestDto dto)
         {
-            return Ok(new { text = BroadcastComposer.Preview(dto.Kind, dto.Language, dto.Params, "") });
+            return Ok(new { text = PreviewFor(dto.Kind, dto.Language, dto.Params, "") });
         }
 
         [HttpPost("test")]
         public async Task<IActionResult> Test([FromBody] TestBroadcastDto dto, CancellationToken ct)
         {
-            if (!BroadcastComposer.Kinds.Contains(dto.Kind)) return BadRequest("Unknown message type.");
-            var res = await _sender.SendTemplateAsync(dto.Phone, dto.Kind, dto.Language, BroadcastComposer.BodyParams(dto.Kind, dto.Params, "Test"), ct);
-            return res.Ok ? Ok(new { sent = true }) : BadRequest(res.Error);
+            var err = Check(dto.Kind, dto.Params);
+            if (err != null) return BadRequest(err);
+            var phone = LeadInbox.NormalizePhone(dto.Phone);
+            if (phone == null) return BadRequest("Enter a 10-digit mobile number.");
+            var lang = dto.Language == "en" ? "en" : "hi";
+            var msg = dto.Kind == BroadcastComposer.AnyTemplate
+                ? await _outbox.SendTemplateAsync(phone, dto.Params["template"], dto.Params["templateLanguage"], ValuesFor(dto.Kind, dto.Params, "Test"),
+                    BroadcastComposer.HeaderOf(dto.Params), PreviewFor(dto.Kind, lang, dto.Params, "Test"), "test", User.AgentIdOf(), null, null, ct)
+                : await _outbox.SendUseAsync(phone, dto.Kind, lang, ValuesFor(dto.Kind, dto.Params, "Test"), PreviewFor(dto.Kind, lang, dto.Params, "Test"), "test", User.AgentIdOf(), null, null, ct);
+            await _db.SaveChangesAsync(ct);
+            return msg.Status == "sent" ? Ok(new { sent = true }) : BadRequest(msg.Error ?? "Not sent.");
         }
 
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] BroadcastRequestDto dto, CancellationToken ct)
         {
-            if (!BroadcastComposer.Kinds.Contains(dto.Kind)) return BadRequest("Unknown message type.");
+            var err = Check(dto.Kind, dto.Params);
+            if (err != null) return BadRequest(err);
+            if (BroadcastPeople.GroupsOf(dto.Audience).Count == 0) return BadRequest("Choose who to send it to.");
             var lang = dto.Language == "en" ? "en" : "hi";
-            int count = await BroadcastComposer.Audience(_db, dto.Audience).CountAsync(ct);
+            var (people, _) = await BroadcastPeople.ResolveAsync(_db, dto.Audience, ct);
+            int count = people.Count;
             if (count == 0) return BadRequest("Nobody matches this audience.");
+            if (dto.ScheduledAt is DateTime when && when.ToUniversalTime() > DateTime.UtcNow.AddDays(28) && dto.Params.ContainsKey("headerMediaId"))
+                return BadRequest("WhatsApp keeps an attachment for 30 days, so schedule this within 4 weeks.");
 
+            var title = (dto.Title ?? "").Trim();
+            if (title.Length > 120) title = title[..120];
             var b = new Broadcast
             {
                 Kind = dto.Kind,
                 Language = lang,
-                Title = BroadcastComposer.TitleFor(dto.Kind, dto.Params),
+                Title = title.Length > 0 ? title : dto.Kind == BroadcastComposer.AnyTemplate ? dto.Params["template"] : BroadcastComposer.TitleFor(dto.Kind, dto.Params),
                 ParamsJson = JsonSerializer.Serialize(dto.Params),
                 AudienceJson = JsonSerializer.Serialize(dto.Audience),
-                PreviewText = BroadcastComposer.Preview(dto.Kind, lang, dto.Params, ""),
+                PreviewText = PreviewFor(dto.Kind, lang, dto.Params, ""),
                 RecipientCount = count,
                 ScheduledAt = dto.ScheduledAt.HasValue ? DateTime.SpecifyKind(dto.ScheduledAt.Value.ToUniversalTime(), DateTimeKind.Utc) : DateTime.UtcNow,
                 Status = "scheduled",
@@ -125,7 +224,21 @@ namespace SeemanchalOutreach.Api.Controllers
             {
                 b.Id, b.Kind, b.Title, b.Language, b.PreviewText, b.RecipientCount, b.ScheduledAt, b.Status, b.Error,
                 b.SentAt, b.SentCount, b.DeliveredCount, b.ReadCount, b.ReplyCount, b.FailedCount, b.CreatedAt,
+                audience = Describe(b.AudienceJson),
             }));
+        }
+
+        /// <summary>"Partners, Health camp people · Purnia, Kasba" for the list.</summary>
+        [NonAction]
+        public static string Describe(string json)
+        {
+            BroadcastAudience? a;
+            try { a = JsonSerializer.Deserialize<BroadcastAudience>(json); } catch (JsonException) { a = null; }
+            if (a == null) return "";
+            var who = string.Join(", ", BroadcastPeople.GroupsOf(a).Select(g => BroadcastPeople.Groups.First(x => x.Code == g).Label));
+            var places = a.Districts.Concat(a.Blocks).ToList();
+            if (a.Panchayats.Count > 0) places.Add(a.Panchayats.Count == 1 ? "1 panchayat" : $"{a.Panchayats.Count} panchayats");
+            return places.Count == 0 ? who + " · everywhere" : who + " · " + string.Join(", ", places.Take(4)) + (places.Count > 4 ? $" +{places.Count - 4}" : "");
         }
 
         [HttpPost("{id:guid}/cancel")]

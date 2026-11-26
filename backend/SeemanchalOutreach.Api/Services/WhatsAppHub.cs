@@ -104,6 +104,15 @@ namespace SeemanchalOutreach.Api.Services
     /// Every WhatsApp message the hospital sends goes through here: it checks the pause switch, the daily limit and
     /// opt-outs, sends, and records the message in the conversation and the message log. Callers save the context.
     /// </summary>
+    /// <summary>What goes at the top of a template message: a picture, PDF or video already uploaded to WhatsApp.</summary>
+    public class WaHeader
+    {
+        /// <summary>image | document | video</summary>
+        public string Type { get; set; } = "image";
+        public string MediaId { get; set; } = "";
+        public string? FileName { get; set; }
+    }
+
     public class WhatsAppOutbox
     {
         private readonly IMarketingDbContext _db;
@@ -197,7 +206,34 @@ namespace SeemanchalOutreach.Api.Services
         }
 
         /// <summary>An approved template by name. <paramref name="preview"/> is what the log and inbox show.</summary>
-        public async Task<WaMessage> SendTemplateAsync(string phone, string template, string language, IReadOnlyList<string> values, string preview,
+        public Task<WaMessage> SendTemplateAsync(string phone, string template, string language, IReadOnlyList<string> values, string preview,
+            string source, string? by, Guid? leadId, Guid? broadcastId, CancellationToken ct)
+            => SendTemplateAsync(phone, template, language, values, null, preview, source, by, leadId, broadcastId, ct);
+
+        /// <summary>
+        /// The JSON Meta takes for a template: the picture, PDF or video at the top (by the media ID uploaded to WhatsApp),
+        /// then the values for {{1}}, {{2}}… in the message.
+        /// </summary>
+        public static object TemplatePayload(string to, string template, string language, IReadOnlyList<string> values, WaHeader? header)
+        {
+            var comps = new List<object>();
+            if (header != null)
+            {
+                object media = header.Type switch
+                {
+                    "document" => new { id = header.MediaId, filename = string.IsNullOrWhiteSpace(header.FileName) ? "document.pdf" : header.FileName },
+                    _ => new { id = header.MediaId },
+                };
+                var p = new Dictionary<string, object> { ["type"] = header.Type, [header.Type] = media };
+                comps.Add(new { type = "header", parameters = new object[] { p } });
+            }
+            if (values.Count > 0)
+                comps.Add(new { type = "body", parameters = values.Select(v => new { type = "text", text = string.IsNullOrWhiteSpace(v) ? "-" : v }).ToArray() });
+            return new { messaging_product = "whatsapp", to, type = "template", template = new { name = template, language = new { code = language }, components = comps } };
+        }
+
+        /// <summary>A template with a picture, PDF or video at the top (or none).</summary>
+        public async Task<WaMessage> SendTemplateAsync(string phone, string template, string language, IReadOnlyList<string> values, WaHeader? header, string preview,
             string source, string? by, Guid? leadId, Guid? broadcastId, CancellationToken ct)
         {
             var msg = new WaMessage
@@ -207,13 +243,32 @@ namespace SeemanchalOutreach.Api.Services
             };
             var blocked = await BlockedAsync(phone, true, ct);
             if (blocked != null) { msg.Status = "blocked"; msg.Error = blocked; }
-            else
+            else if (header == null)
             {
                 var r = await _wa.SendNamedTemplateAsync(phone, template, language, values, ct);
                 msg.Status = r.Ok ? "sent" : "failed";
                 msg.WaMessageId = r.MessageId;
                 msg.Error = r.Error;
                 if (r.Ok) _templatesToday = (_templatesToday ?? 0) + 1;
+            }
+            else
+            {
+                var to = LeadInbox.NormalizePhone(phone);
+                var r = to == null ? (false, null, "Phone number is not a valid Indian mobile number.")
+                    : await _wa.GraphPostAsync($"{Config.PhoneNumberId}/messages", TemplatePayload(to, template, language, values, header), ct);
+                msg.Status = r.Item1 ? "sent" : "failed";
+                msg.Error = r.Item3;
+                if (r.Item1 && r.Item2 != null)
+                {
+                    try
+                    {
+                        using var d = JsonDocument.Parse(r.Item2);
+                        if (d.RootElement.TryGetProperty("messages", out var ms) && ms.ValueKind == JsonValueKind.Array && ms.GetArrayLength() > 0 && ms[0].TryGetProperty("id", out var id))
+                            msg.WaMessageId = id.GetString();
+                    }
+                    catch (JsonException) { }
+                    _templatesToday = (_templatesToday ?? 0) + 1;
+                }
             }
             await RecordAsync(msg, ct);
             return msg;

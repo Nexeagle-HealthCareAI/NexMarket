@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Api.Services;
@@ -29,6 +31,10 @@ namespace SeemanchalOutreach.Api.Controllers
         /// <summary>MARKETING | UTILITY</summary>
         public string Category { get; set; } = "MARKETING";
         public string? Header { get; set; }
+        /// <summary>TEXT (or empty) | IMAGE | DOCUMENT | VIDEO: a picture, PDF or video at the top, chosen when sending.</summary>
+        public string? HeaderFormat { get; set; }
+        /// <summary>For a picture/PDF/video header: the sample Meta reviews, uploaded with POST templates/sample.</summary>
+        public string? HeaderHandle { get; set; }
         public string Body { get; set; } = string.Empty;
         public string? Footer { get; set; }
         public List<WaTemplateButton> Buttons { get; set; } = new();
@@ -157,6 +163,9 @@ namespace SeemanchalOutreach.Api.Controllers
             if (Regex.IsMatch(body, @"^\s*\{\{") || Regex.IsMatch(body, @"\}\}\s*$")) return "WhatsApp won't approve a message that starts or ends with a blank. Add some words before or after it.";
             if (nums.Count > 0 && body.Length / nums.Count < 12) return "Too many blanks for the amount of text. Add more fixed words.";
             if (t.Examples.Count != nums.Count || t.Examples.Any(string.IsNullOrWhiteSpace)) return "Give an example for every blank, so Meta can review it.";
+            if (t.HeaderFormat is not (null or "" or "TEXT" or "IMAGE" or "DOCUMENT" or "VIDEO")) return "Unknown kind of heading.";
+            if (IsMedia(t) && string.IsNullOrWhiteSpace(t.HeaderHandle)) return "Upload a sample picture or PDF for the top, so Meta can review it.";
+            if ((t.HeaderHandle ?? "").Length > 2000) return "The sample upload looks wrong. Upload it again.";
             if ((t.Header ?? "").Length > 60) return "The heading can be up to 60 characters.";
             if (t.Header != null && Var.IsMatch(t.Header)) return "Keep the heading fixed (no blanks).";
             if ((t.Footer ?? "").Length > 60) return "The footer can be up to 60 characters.";
@@ -171,10 +180,42 @@ namespace SeemanchalOutreach.Api.Controllers
             return null;
         }
 
+        private static bool IsMedia(WaTemplateDto t) => t.HeaderFormat is "IMAGE" or "DOCUMENT" or "VIDEO";
+
+        [NonAction]
+        public static List<object> ComponentsOf(WaTemplateDto t) => Components(t);
+
+        /// <summary>
+        /// The sample picture, PDF or video Meta reviews for a template with one at the top. Gives a handle to send with
+        /// the template. (Each message then carries its own picture, chosen when sending.)
+        /// </summary>
+        [HttpPost("sample")]
+        [PageAccess(Pages.WhatsApp)]
+        [RequestSizeLimit(17 * 1024 * 1024)]
+        public async Task<IActionResult> Sample([FromForm] IFormFile? file, [FromForm] string? appId, [FromServices] IHttpClientFactory http, CancellationToken ct)
+        {
+            var cfg = _outbox.Config;
+            if (!cfg.IsConfigured) return BadRequest(new { message = "WhatsApp isn't connected yet (WhatsApp → Setup)." });
+            if (file == null || file.Length == 0) return BadRequest(new { message = "Choose a file." });
+            if (file.Length > 16L << 20) return BadRequest(new { message = "The file must be under 16 MB." });
+            await using var ms = new System.IO.MemoryStream();
+            await file.CopyToAsync(ms, ct);
+            var bytes = ms.ToArray();
+            var mime = MetaUpload.Sniff(bytes);
+            var type = mime == null ? null : MetaUpload.HeaderType(mime);
+            if (mime == null || type == null) return BadRequest(new { message = "Use a JPG or PNG picture, a PDF, or an MP4 video." });
+            if (bytes.Length > MetaUpload.MaxBytes(type)) return BadRequest(new { message = "Pictures must be under 5 MB." });
+            var name = MetaUpload.SafeName(file.FileName, "sample");
+            var (handle, err, needApp) = await MetaUpload.HandleAsync(http, _wa, _settings, cfg, bytes, mime, name, appId, User.AgentIdOf(), ct);
+            if (handle == null) return BadRequest(new { message = err, needAppId = needApp });
+            return Ok(new { handle, format = type == "image" ? "IMAGE" : type == "document" ? "DOCUMENT" : "VIDEO", fileName = name });
+        }
+
         private static List<object> Components(WaTemplateDto t)
         {
             var list = new List<object>();
-            if (!string.IsNullOrWhiteSpace(t.Header)) list.Add(new { type = "HEADER", format = "TEXT", text = t.Header.Trim() });
+            if (IsMedia(t)) list.Add(new { type = "HEADER", format = t.HeaderFormat, example = new { header_handle = new[] { t.HeaderHandle!.Trim() } } });
+            else if (!string.IsNullOrWhiteSpace(t.Header)) list.Add(new { type = "HEADER", format = "TEXT", text = t.Header.Trim() });
             var body = t.Body.Trim();
             list.Add(t.Examples.Count > 0
                 ? new { type = "BODY", text = body, example = new { body_text = new[] { t.Examples.Select(e => e.Trim()).ToArray() } } }
@@ -267,6 +308,13 @@ namespace SeemanchalOutreach.Api.Controllers
                     Body = "नमस्ते {{1}}, {{2}} का फ़ॉर्म भरने के लिए धन्यवाद। हमारी टीम जल्द ही आपको कॉल करेगी। डॉक्टर से मिलने का समय तय करने के लिए इसी संदेश का जवाब दें।",
                     Examples = new() { "रीना", h },
                 }, "form_welcome"),
+                (new WaTemplateDto
+                {
+                    // Wishes on festivals and days, a health tip, a thank-you: any warm message, written when sending.
+                    Name = "nx_wishes", Category = "MARKETING", Footer = stop,
+                    Body = "प्रिय {{1}},\n{{2}}\nआप और आपका परिवार सदा स्वस्थ रहें, यही हमारी कामना है। - " + h,
+                    Examples = new() { "रीना जी", "दीपावली की हार्दिक शुभकामनाएँ! 🪔" },
+                }, null),
                 (new WaTemplateDto
                 {
                     Name = "nx_camp_token", Category = "UTILITY",

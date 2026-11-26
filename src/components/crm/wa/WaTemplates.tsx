@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Clock, Package, Pencil, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { CheckCircle2, Clock, FileText, Film, ImagePlus, Package, Pencil, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Modal, Pill, Skeleton, type Tone } from '@/components/crm/ui';
 import { TemplateBubble, type WaButton, type WaTemplate } from './shared';
@@ -17,6 +17,9 @@ const USE_LABEL: Record<string, string> = {
   lead_followup: 'Lead follow-up', doctor_availability: 'Broadcast: doctor available', schedule_change: 'Broadcast: schedule change',
   camp_invite: 'Broadcast: camp invite', general_update: 'Broadcast: general update', form_welcome: 'Form lead: instant thank-you', camp_booked: 'Camp: token for an agent booking',
 };
+
+const MEDIA_LABEL: Record<string, string> = { IMAGE: 'picture', DOCUMENT: 'PDF', VIDEO: 'video' };
+type HeaderKind = 'TEXT' | 'IMAGE' | 'DOCUMENT' | 'VIDEO';
 
 /** Message templates: what's approved, what's waiting, and writing new ones, all sent to Meta from here. */
 export function WaTemplates({ canManage, toast }: { canManage: boolean; toast: (m: string) => void }) {
@@ -50,7 +53,7 @@ export function WaTemplates({ canManage, toast }: { canManage: boolean; toast: (
       {error && <ErrorBox message={error} onRetry={load} />}
       {!list && !error ? <Skeleton h={320} /> : list && shown.length === 0 ? (
         <Empty title={list.length ? 'No templates match' : 'No templates yet'}>
-          <span className="crm-sub">Start with the NexEagle set: seven ready-written Hindi templates for follow-ups, broadcasts and appointments, with your {place()}&apos;s name filled in.</span>
+          <span className="crm-sub">Start with the NexEagle set: ready-written Hindi templates for follow-ups, broadcasts, wishes and appointments, with your {place()}&apos;s name filled in.</span>
         </Empty>
       ) : (
         <div className="wt-grid">
@@ -62,7 +65,7 @@ export function WaTemplates({ canManage, toast }: { canManage: boolean; toast: (
                   <strong className="wt-name">{t.name}</strong>
                   <Pill tone={st.tone} dot>{st.label}</Pill>
                 </div>
-                <span className="crm-sub wt-meta">{t.language} · {t.category.toLowerCase()} · {t.params} {t.params === 1 ? 'blank' : 'blanks'}</span>
+                <span className="crm-sub wt-meta">{t.language} · {t.category.toLowerCase()} · {t.params} {t.params === 1 ? 'blank' : 'blanks'}{MEDIA_LABEL[t.headerFormat ?? ''] ? ` · ${MEDIA_LABEL[t.headerFormat ?? '']} on top` : ''}</span>
                 <TemplateBubble t={t} values={t.examples.length ? t.examples : undefined} />
                 {t.reason && <span className="wl-err">Meta&apos;s reason: {t.reason.toLowerCase().replace(/_/g, ' ')}</span>}
                 <div className="wt-card-foot">
@@ -87,6 +90,33 @@ function Editor({ t, onClose, onSaved }: { t: WaTemplate | null; onClose: () => 
   const [language, setLanguage] = useState(t?.language ?? 'hi');
   const [category, setCategory] = useState(t?.category ?? 'MARKETING');
   const [header, setHeader] = useState(t?.header ?? '');
+  const [headerKind, setHeaderKind] = useState<HeaderKind>((t?.headerFormat as HeaderKind) || 'TEXT');
+  const [sample, setSample] = useState<{ handle: string; fileName: string; url: string | null } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [needApp, setNeedApp] = useState(false);
+  const [appId, setAppId] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+  useEffect(() => () => { if (sample?.url) URL.revokeObjectURL(sample.url); }, [sample]);
+  const media = headerKind !== 'TEXT';
+  const upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setUploading(true); setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', f, f.name);
+      if (appId.trim()) fd.append('appId', appId.trim());
+      const r = await crm.upload<{ handle: string; format: HeaderKind; fileName: string }>('/api/v1/whatsapp/templates/sample', fd);
+      if (r.format !== headerKind) { setError(`That's a ${MEDIA_LABEL[r.format]}; this template is set to a ${MEDIA_LABEL[headerKind]}.`); return; }
+      setSample({ handle: r.handle, fileName: r.fileName, url: r.format === 'IMAGE' ? URL.createObjectURL(f) : null });
+      setNeedApp(false);
+    } catch (x) {
+      const m = friendlyError(x);
+      if (/app id/i.test(m)) setNeedApp(true);
+      setError(m);
+    } finally { setUploading(false); }
+  };
   const [body, setBody] = useState(t?.body ?? '');
   const [footer, setFooter] = useState(t?.footer ?? '');
   const [buttons, setButtons] = useState<WaButton[]>(t?.buttons ?? []);
@@ -99,7 +129,10 @@ function Editor({ t, onClose, onSaved }: { t: WaTemplate | null; onClose: () => 
   const save = async () => {
     setBusy(true);
     setError(null);
-    const dto = { name: name.trim(), language, category, header: header.trim() || null, body, footer: footer.trim() || null, buttons, examples: ex };
+    const dto = {
+      name: name.trim(), language, category, header: media ? null : header.trim() || null, headerFormat: media ? headerKind : null, headerHandle: media ? sample?.handle ?? null : null,
+      body, footer: footer.trim() || null, buttons, examples: ex,
+    };
     try {
       if (t?.id) await crm.post(`/api/v1/whatsapp/templates/${t.id}`, dto); else await crm.post('/api/v1/whatsapp/templates', dto);
       onSaved(t ? 'Changes sent to Meta for review.' : 'Template sent to Meta for review.');
@@ -109,7 +142,7 @@ function Editor({ t, onClose, onSaved }: { t: WaTemplate | null; onClose: () => 
     <Modal title={t ? `Edit ${t.name}` : 'New template'} onClose={onClose} wide
       actions={<>
         <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
-        <button type="button" className="crm-btn" disabled={busy || !body.trim() || (!t && !name.trim())} onClick={() => void save()}>{busy ? 'Sending…' : 'Send to Meta for approval'}</button>
+        <button type="button" className="crm-btn" disabled={busy || uploading || !body.trim() || (!t && !name.trim()) || (media && !sample)} onClick={() => void save()}>{busy ? 'Sending…' : 'Send to Meta for approval'}</button>
       </>}>
       <div className="wt-editor">
         <div className="wt-editor-form">
@@ -130,9 +163,35 @@ function Editor({ t, onClose, onSaved }: { t: WaTemplate | null; onClose: () => 
             </div>
             <span className="crm-sub" style={{ fontWeight: 400, fontSize: 12 }}>Utility: about something the person asked for (appointment, report). Marketing: offers, camps, news. Meta may change the type when reviewing.</span>
           </div>
-          <label className="crm-field">Heading (optional)
-            <input className="crm-input" value={header} onChange={(e) => setHeader(e.target.value)} maxLength={60} placeholder={`e.g. the ${place()}'s name`} />
-          </label>
+          <div className="crm-field">On top
+            <div className="crm-chips">
+              {(['TEXT', 'IMAGE', 'DOCUMENT', 'VIDEO'] as HeaderKind[]).map((k) => (
+                <button key={k} type="button" className="crm-chip" aria-pressed={headerKind === k} onClick={() => { setHeaderKind(k); setSample(null); }}>
+                  {k === 'TEXT' ? 'Heading text' : k === 'IMAGE' ? <><ImagePlus size={14} aria-hidden /> Picture</> : k === 'DOCUMENT' ? <><FileText size={14} aria-hidden /> PDF</> : <><Film size={14} aria-hidden /> Video</>}
+                </button>
+              ))}
+            </div>
+            {media && <span className="crm-sub" style={{ fontWeight: 400, fontSize: 12 }}>You pick the actual {MEDIA_LABEL[headerKind]} each time you send a broadcast. Upload one sample now for Meta to review{t ? ' (needed again when editing)' : ''}.</span>}
+          </div>
+          {!media ? (
+            <label className="crm-field">Heading (optional)
+              <input className="crm-input" value={header} onChange={(e) => setHeader(e.target.value)} maxLength={60} placeholder={`e.g. the ${place()}'s name`} />
+            </label>
+          ) : (
+            <div className="crm-field">
+              <input ref={fileRef} type="file" hidden onChange={(e) => void upload(e)} accept={headerKind === 'IMAGE' ? 'image/jpeg,image/png' : headerKind === 'DOCUMENT' ? 'application/pdf' : 'video/mp4'} />
+              <button type="button" className="wb-drop" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                {headerKind === 'IMAGE' ? <ImagePlus size={22} aria-hidden /> : headerKind === 'DOCUMENT' ? <FileText size={22} aria-hidden /> : <Film size={22} aria-hidden />}
+                <strong>{uploading ? 'Uploading…' : sample ? `Sample: ${sample.fileName} (change)` : `Upload a sample ${MEDIA_LABEL[headerKind]}`}</strong>
+                <span>{headerKind === 'IMAGE' ? 'JPG or PNG, under 5 MB' : 'Under 16 MB'}</span>
+              </button>
+              {needApp && (
+                <label className="crm-field" style={{ marginTop: 8 }}>Meta App ID
+                  <input className="crm-input" value={appId} onChange={(e) => setAppId(e.target.value.replace(/\D/g, ''))} inputMode="numeric" placeholder="Meta app → App settings → Basic → App ID" />
+                </label>
+              )}
+            </div>
+          )}
           <label className="crm-field">
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>Message <button type="button" className="nt-link" onClick={addBlank}>+ Add a blank {`{{${blanks + 1}}}`}</button></span>
             <textarea className="crm-textarea" rows={6} value={body} onChange={(e) => setBody(e.target.value)} maxLength={1024}
@@ -166,7 +225,13 @@ function Editor({ t, onClose, onSaved }: { t: WaTemplate | null; onClose: () => 
         </div>
         <div className="wt-editor-preview">
           <span className="crm-sub">How it looks</span>
-          <div className="wt-phone"><TemplateBubble t={{ header: header || null, body: body || 'Your message…', footer: footer || null, buttons }} values={ex.some((v) => v.trim()) ? ex : undefined} /></div>
+          <div className="wt-phone">
+            {media && (sample?.url
+              // eslint-disable-next-line @next/next/no-img-element -- the sample just picked
+              ? <img className="wb-msg-img" src={sample.url} alt="" style={{ marginBottom: 4 }} />
+              : <span className="wb-msg-media" style={{ marginBottom: 4 }}>{MEDIA_LABEL[headerKind]}</span>)}
+            <TemplateBubble t={{ header: media ? null : header || null, body: body || 'Your message…', footer: footer || null, buttons }} values={ex.some((v) => v.trim()) ? ex : undefined} />
+          </div>
         </div>
       </div>
       {error && <div className="crm-error" role="alert">{error}</div>}

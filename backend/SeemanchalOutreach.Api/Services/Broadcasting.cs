@@ -15,9 +15,18 @@ namespace SeemanchalOutreach.Api.Services
 {
     public class BroadcastAudience
     {
-        public List<string> ContactTypes { get; set; } = new();   // contact Role values, e.g. rmp_doctor, asha_worker
-        public List<string> Blocks { get; set; } = new();         // block names; empty = all
+        /// <summary>partners | camp | referred | cards | enquiries. Empty = partners (broadcasts from before groups).</summary>
+        public List<string> Groups { get; set; } = new();
+        public List<string> ContactTypes { get; set; } = new();   // partner types (contact Role), e.g. rmp_doctor, asha_worker; empty = all
         public bool ImportantOnly { get; set; }
+        /// <summary>Places; a person in any of them is included. All empty = everywhere.</summary>
+        public List<string> Districts { get; set; } = new();
+        public List<string> Blocks { get; set; } = new();
+        public List<string> Panchayats { get; set; } = new();     // panchayat IDs
+        /// <summary>Health camp people: only these camps (empty = all), only those who came, and those who didn't tick consent.</summary>
+        public List<Guid> CampIds { get; set; } = new();
+        public bool CampArrivedOnly { get; set; }
+        public bool IncludeNoConsent { get; set; }
     }
 
     /// <summary>
@@ -31,6 +40,42 @@ namespace SeemanchalOutreach.Api.Services
     public static class BroadcastComposer
     {
         public static readonly string[] Kinds = { "doctor_availability", "schedule_change", "camp_invite", "general_update" };
+
+        /// <summary>
+        /// "template": any approved template, chosen when sending. Its params: template, templateLanguage, body (the text,
+        /// for previews), values (JSON list; "{name}" = the person's first name), and headerType / headerMediaId / headerFile
+        /// for a picture, PDF or video at the top.
+        /// </summary>
+        public const string AnyTemplate = "template";
+        public const string NameToken = "{name}";
+
+        public static List<string> TemplateValues(Dictionary<string, string> p)
+        {
+            try { return JsonSerializer.Deserialize<List<string>>(Get(p, "values")) ?? new(); }
+            catch (JsonException) { return new(); }
+        }
+
+        public static WaHeader? HeaderOf(Dictionary<string, string> p)
+        {
+            var t = Get(p, "headerType"); var id = Get(p, "headerMediaId");
+            return t is "image" or "document" or "video" && id.Length > 0 ? new WaHeader { Type = t, MediaId = id, FileName = Get(p, "headerFile") } : null;
+        }
+
+        /// <summary>The template's values for one person: "{name}" becomes their first name.</summary>
+        public static List<string> TemplateParams(Dictionary<string, string> p, string recipientName) =>
+            TemplateValues(p).Select(v => v.Replace(NameToken, BroadcastPeople.FirstName(recipientName))).ToList();
+
+        public static string TemplatePreview(Dictionary<string, string> p, string recipientName)
+        {
+            var values = string.IsNullOrEmpty(recipientName) ? TemplateValues(p).Select(v => v.Replace(NameToken, "[Name]")).ToList() : TemplateParams(p, recipientName);
+            var text = System.Text.RegularExpressions.Regex.Replace(Get(p, "body"), @"\{\{\s*(\d+)\s*\}\}", m =>
+            {
+                var i = int.Parse(m.Groups[1].Value) - 1;
+                return i >= 0 && i < values.Count ? values[i] : m.Value;
+            });
+            var head = Get(p, "headerType") switch { "image" => "🖼 ", "document" => "📄 ", "video" => "🎬 ", _ => "" };
+            return head + text;
+        }
 
         private static string Get(Dictionary<string, string> p, string key) => p.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v) ? v.Trim() : "";
 
@@ -167,23 +212,26 @@ namespace SeemanchalOutreach.Api.Services
 
                 var audience = JsonSerializer.Deserialize<BroadcastAudience>(b.AudienceJson) ?? new BroadcastAudience();
                 var parameters = BroadcastComposer.ParseParams(b.ParamsJson);
-                var contacts = await BroadcastComposer.Audience(db, audience)
-                    .Select(c => new { c.ClientId, c.Name, c.Phone })
-                    .ToListAsync(ct);
+                var (contacts, _) = await BroadcastPeople.ResolveAsync(db, audience, ct);
+                var anyTemplate = b.Kind == BroadcastComposer.AnyTemplate;
+                var header = anyTemplate ? BroadcastComposer.HeaderOf(parameters) : null;
 
                 int sent = 0, failed = 0;
                 foreach (var c in contacts)
                 {
                     if (ct.IsCancellationRequested) break;
-                    var phone = SeemanchalOutreach.Infrastructure.Services.WhatsAppCloudSender.NormalizeIndianPhone(c.Phone) ?? c.Phone!;
+                    var phone = c.Phone;
                     // Through the outbox: respects the pause switch, the daily limit and opt-outs, and shows in the message log.
-                    var res = await outbox.SendUseAsync(phone, b.Kind, b.Language, BroadcastComposer.BodyParams(b.Kind, parameters, c.Name),
-                        BroadcastComposer.Preview(b.Kind, b.Language, parameters, c.Name), "broadcast", b.CreatedBy, null, b.Id, ct);
+                    var res = anyTemplate
+                        ? await outbox.SendTemplateAsync(phone, parameters.GetValueOrDefault("template") ?? "", parameters.GetValueOrDefault("templateLanguage") ?? "hi",
+                            BroadcastComposer.TemplateParams(parameters, c.Name), header, BroadcastComposer.TemplatePreview(parameters, c.Name), "broadcast", b.CreatedBy, null, b.Id, ct)
+                        : await outbox.SendUseAsync(phone, b.Kind, b.Language, BroadcastComposer.BodyParams(b.Kind, parameters, c.Name),
+                            BroadcastComposer.Preview(b.Kind, b.Language, parameters, c.Name), "broadcast", b.CreatedBy, null, b.Id, ct);
                     var ok = res.Status == "sent";
                     db.BroadcastRecipients.Add(new BroadcastRecipient
                     {
                         BroadcastId = b.Id,
-                        ContactClientId = c.ClientId,
+                        ContactClientId = c.Key.StartsWith("p:") ? c.Key[2..] : c.Key,
                         Name = c.Name,
                         Phone = phone,
                         Status = ok ? "sent" : "failed",

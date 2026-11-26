@@ -4602,3 +4602,99 @@ strong.is-ok { color: var(--ok-ink); }
 .wp-phone-list span svg { flex-shrink: 0; margin-top: 2px; color: #54656f; }
 .wp-phone-list .is-link { color: #027eb5; }
 @media (max-width: 900px) { .wp-wrap { grid-template-columns: 1fr; } .wp-phone { position: static; } }
+
+/* WhatsApp broadcasts: compose */
+.wb-compose { display: flex; flex-direction: column; gap: 24px; }
+.wb-step { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.wb-step + .wb-step { border-top: 1px solid var(--line); padding-top: 20px; }
+.wb-step > legend { float: left; width: 100%; padding: 0 0 2px; }
+.wb-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.wb-card { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 13px 14px; border-radius: 14px; cursor: pointer; border: 1px solid var(--border); background: #fff; color: var(--text); font: inherit; transition: border-color .15s, background .15s, box-shadow .15s; }
+.wb-card:hover { border-color: #9ccaf2; }
+.wb-card[aria-pressed="true"] { border: 2px solid var(--accent); padding: 12px 13px; background: var(--accent-tint); box-shadow: 0 1px 0 rgba(10,78,148,.06); }
+.wb-card-top { display: flex; justify-content: space-between; align-items: center; color: var(--accent-ink); margin-bottom: 2px; }
+.wb-card strong { font-size: 14px; }
+.wb-card > span:not(.wb-card-top) { font-size: 12px; color: var(--text-2); line-height: 1.4; }
+.wb-card em { font-style: normal; font-size: 12.5px; font-weight: 700; color: var(--text-3); margin-top: 4px; }
+.wb-card[aria-pressed="true"] em { color: var(--accent-ink); }
+.wb-tick { color: var(--accent); }
+.wb-sub { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: #f7f9fc; border: 1px solid var(--line); }
+.wb-sub-h { font-size: 13px; font-weight: 700; color: var(--text); display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.wb-hint { font-weight: 400; color: var(--text-3); font-size: 12.5px; }
+.wb-n { font-weight: 500; color: var(--text-2); }
+.wb-check { display: flex; align-items: center; gap: 9px; font-size: 13.5px; cursor: pointer; }
+.wb-check input { width: 17px; height: 17px; accent-color: var(--accent); }
+.wb-total { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 14px; background: var(--accent-soft); flex-wrap: wrap; }
+.wb-total-n { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 28px; font-weight: 800; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+.wb-total-t { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.wb-total-t span { font-size: 12.5px; color: var(--text-2); }
+.wb-tpls { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; max-height: 420px; overflow: auto; padding: 2px; }
+.wb-tpl { display: flex; flex-direction: column; gap: 8px; text-align: left; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: #fff; cursor: pointer; font: inherit; color: var(--text); }
+.wb-tpl[aria-pressed="true"] { border: 2px solid var(--accent); padding: 11px; background: var(--accent-tint); }
+.wb-tpl-head { display: flex; flex-direction: column; gap: 2px; }
+.wb-tpl-head strong { font-size: 13px; word-break: break-all; }
+.wb-tpl-head span { font-size: 11.5px; color: var(--text-3); }
+.wb-tpl-media { height: 54px; border-radius: 8px; background: #e7ecf2; color: #6b7a8c; display: flex; align-items: center; justify-content: center; }
+.wb-tpl-body { font-size: 12.5px; line-height: 1.45; color: var(--text-2); white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; font-family: 'Noto Sans Devanagari', Inter, sans-serif; }
+.wb-blank-h { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; font-weight: 600; }
+.wb-blank-h small { font-weight: 400; color: var(--text-3); font-size: 12px; }
+.wb-name { margin-left: auto; display: inline-flex; gap: 5px; align-items: center; font: inherit; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: #fff; color: var(--text-2); cursor: pointer; }
+.wb-name.is-on { background: var(--accent-soft); border-color: #9ccaf2; color: var(--accent-ink); }
+.wb-name-shown { display: flex; gap: 10px; align-items: baseline; min-height: 44px; padding: 10px 14px; border-radius: 12px; background: #fff; border: 1px dashed #9ccaf2; font-size: 14px; color: var(--accent-ink); font-weight: 600; }
+.wb-name-shown small { color: var(--text-3); font-weight: 400; }
+.wb-ideas { margin-top: 4px; }
+.wb-ideas .crm-chip { font-family: 'Noto Sans Devanagari', Inter, sans-serif; font-weight: 500; }
+.wb-media { display: flex; }
+.wb-drop { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 20px; border-radius: 14px; border: 2px dashed #9ccaf2; background: #fff; color: var(--accent-ink); cursor: pointer; font: inherit; }
+.wb-drop:hover { background: var(--accent-tint); }
+.wb-drop span { font-size: 12.5px; color: var(--text-2); }
+.wb-media-has { flex: 1; display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 14px; background: #fff; border: 1px solid var(--border); }
+.wb-media-has img { width: 96px; height: 54px; object-fit: cover; border-radius: 8px; }
+.wb-media-has > span { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.wb-media-has strong { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-media-has small { font-size: 12px; color: var(--text-3); }
+.wb-doc { width: 54px; height: 54px; border-radius: 8px; background: #fdecec; color: #c0392b; display: flex; align-items: center; justify-content: center; }
+.wb-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.wb-side { display: flex; flex-direction: column; gap: 14px; }
+.wb-phone-card { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 16px; }
+.wb-phone { border-radius: 18px; overflow: hidden; border: 1px solid var(--border); }
+.wb-phone-bar { background: #075e54; color: #fff; padding: 11px 14px; display: flex; align-items: center; gap: 10px; }
+.wb-phone-bar > span:last-child { display: flex; flex-direction: column; font-size: 14px; }
+.wb-phone-bar small { font-size: 11px; color: #c5e3df; }
+.wb-phone-dp { width: 34px; height: 34px; border-radius: 999px; background: #fff; color: #075e54; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.wb-phone-chat { background: #efeae2; padding: 16px 12px 18px; min-height: 220px; }
+.wb-msg { max-width: 94%; background: #fff; border-radius: 4px 12px 12px 12px; padding: 4px; box-shadow: 0 1px 1px rgba(0,0,0,.08); display: flex; flex-direction: column; font-family: 'Noto Sans Devanagari', Inter, sans-serif; }
+.wb-msg-img { width: 100%; aspect-ratio: 1.91 / 1; object-fit: cover; border-radius: 8px; display: block; }
+.wb-msg-media { display: flex; align-items: center; justify-content: center; gap: 8px; aspect-ratio: 1.91 / 1; border-radius: 8px; background: #dfe5ea; color: #66788a; font-size: 12.5px; font-weight: 600; text-align: center; padding: 8px; word-break: break-all; }
+.wb-msg-media.is-doc { aspect-ratio: auto; justify-content: flex-start; background: #f3f5f7; }
+.wb-msg-head { padding: 6px 8px 0; font-size: 14px; }
+.wb-msg-body { padding: 6px 8px 0; font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.wb-msg-foot { padding: 4px 8px 0; font-size: 12px; color: #8696a0; }
+.wb-msg-time { align-self: flex-end; font-size: 11px; color: #8696a0; padding: 2px 8px 4px; }
+.wb-msg-btns { display: flex; flex-direction: column; border-top: 1px solid #eef0f2; margin: 0 -4px -4px; }
+.wb-msg-btns span { text-align: center; color: #0a84c6; font-weight: 600; padding: 9px; border-top: 1px solid #eef0f2; font-size: 13.5px; font-family: Inter, sans-serif; }
+.wb-msg-btns span:first-child { border-top: 0; }
+.wb-side-note { font-size: 12px; line-height: 1.5; margin: 0; }
+@media (max-width: 900px) { .wb-phone-card { position: static; } }
+
+/* Place picker (districts, blocks, panchayats) */
+.plp { display: flex; flex-direction: column; gap: 10px; position: relative; }
+.plp-search { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--border); background: #fff; color: var(--text-3); }
+.plp-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.plp-search input { flex: 1; border: 0; outline: 0; font: inherit; font-size: 14px; background: transparent; color: var(--text); min-width: 0; }
+.plp-search button { border: 0; background: none; color: var(--text-3); cursor: pointer; display: flex; }
+.plp-hits { list-style: none; margin: -4px 0 0; padding: 4px; border: 1px solid var(--border); border-radius: 12px; background: #fff; box-shadow: 0 8px 24px rgba(16,24,40,.1); max-height: 280px; overflow: auto; }
+.plp-hits button { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 0; background: none; border-radius: 8px; cursor: pointer; font: inherit; font-size: 13.5px; text-align: left; color: var(--text); }
+.plp-hits button:hover { background: var(--accent-tint); }
+.plp-hits button svg { color: var(--text-3); flex: none; }
+.plp-hits span { color: var(--text-3); font-size: 12.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plp-hits em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--ok); }
+.plp-empty { font-size: 13px; color: var(--text-3); }
+.plp-row { display: flex; flex-direction: column; gap: 6px; }
+.plp-label { font-size: 12px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.plp-picked { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-top: 2px; }
+.plp-all { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--text-2); }
+.plp-tag { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 11px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; }
+.plp-tag small { font-weight: 400; opacity: .8; font-size: 11px; }
+.plp-tag button { border: 0; background: rgba(255,255,255,.2); color: #fff; width: 22px; height: 22px; border-radius: 999px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.plp-clear { border: 0; background: none; color: var(--accent-ink); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 4px 6px; }

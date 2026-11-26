@@ -37,7 +37,7 @@ namespace SeemanchalOutreach.Api.Controllers
     [Authorize(Roles = "Admin,admin")]
     public class WhatsAppProfileController : ControllerBase
     {
-        public const string AppIdKey = WhatsAppConfig.Prefix + "appId";
+        public const string AppIdKey = MetaUpload.AppIdKey;
         private const string Fields = "about,address,description,email,profile_picture_url,websites,vertical";
         private const long MaxPhoto = 5 * 1024 * 1024;
         private static readonly Regex Digits = new(@"^\d{5,25}$");
@@ -171,81 +171,17 @@ namespace SeemanchalOutreach.Api.Controllers
             await using var ms = new MemoryStream();
             await file.CopyToAsync(ms, ct);
             var bytes = ms.ToArray();
-            var type = bytes.Length > 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 ? "image/jpeg"
-                : bytes.Length > 8 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 ? "image/png" : null;
-            if (type == null) return BadRequest(new { message = "Use a JPG or PNG picture." });
+            var type = MetaUpload.Sniff(bytes);
+            if (type is not ("image/jpeg" or "image/png")) return BadRequest(new { message = "Use a JPG or PNG picture." });
 
-            // The Meta app the upload goes through: typed in, saved before, or asked of Meta from the token.
-            var client = _http.CreateClient("meta");
-            var app = (appId ?? "").Trim();
-            if (app.Length > 0 && !Digits.IsMatch(app)) return BadRequest(new { message = "The App ID is digits only (Meta app → App settings → Basic)." });
-            if (app.Length == 0) app = _settings.Get(AppIdKey) ?? "";
-            if (app.Length == 0)
-            {
-                var me = await _wa.GraphGetAsync("app?fields=id", null, null, ct);
-                if (me.Ok) { using var d = JsonDocument.Parse(me.Json!); app = Str(d.RootElement, "id") ?? ""; }
-            }
-            if (app.Length == 0)
-            {
-                var meta = MetaConfig.Load(_settings).AppId;
-                if (!string.IsNullOrWhiteSpace(meta)) app = meta.Trim();
-            }
-            if (app.Length == 0) return BadRequest(new { message = "Enter the Meta App ID (Meta app → App settings → Basic) and try again.", needAppId = true });
+            var (handle, upErr, needApp) = await MetaUpload.HandleAsync(_http, _wa, _settings, cfg, bytes, type, type == "image/png" ? "profile.png" : "profile.jpg", appId, User.AgentIdOf(), ct);
+            if (handle == null) return BadRequest(new { message = upErr, needAppId = needApp });
 
-            var baseUrl = $"https://graph.facebook.com/{cfg.ApiVersion}";
-            string? handle;
-            try
-            {
-                // 1. Start an upload session.
-                using var start = new HttpRequestMessage(HttpMethod.Post,
-                    $"{baseUrl}/{app}/uploads?file_name=profile{(type == "image/png" ? ".png" : ".jpg")}&file_length={bytes.Length}&file_type={Uri.EscapeDataString(type)}");
-                start.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.AccessToken);
-                using var sr = await client.SendAsync(start, ct);
-                var sj = await sr.Content.ReadAsStringAsync(ct);
-                if (!sr.IsSuccessStatusCode) return BadRequest(new { message = MetaError(sj, "Meta didn't accept the upload"), needAppId = true });
-                string? session;
-                using (var sd = JsonDocument.Parse(sj)) session = Str(sd.RootElement, "id");
-                if (string.IsNullOrEmpty(session) || !session.StartsWith("upload:")) return BadRequest(new { message = "Meta didn't start the upload." });
-
-                // 2. Send the picture; Meta gives back a handle.
-                using var up = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/{session}");
-                up.Headers.TryAddWithoutValidation("Authorization", "OAuth " + cfg.AccessToken);
-                up.Headers.TryAddWithoutValidation("file_offset", "0");
-                up.Content = new ByteArrayContent(bytes);
-                up.Content.Headers.ContentType = new MediaTypeHeaderValue(type);
-                using var ur = await client.SendAsync(up, ct);
-                var uj = await ur.Content.ReadAsStringAsync(ct);
-                if (!ur.IsSuccessStatusCode) return BadRequest(new { message = MetaError(uj, "The picture didn't upload") });
-                using (var ud = JsonDocument.Parse(uj)) handle = Str(ud.RootElement, "h");
-                if (string.IsNullOrEmpty(handle)) return BadRequest(new { message = "Meta didn't return the picture." });
-            }
-            catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException)
-            {
-                return BadRequest(new { message = "Couldn't reach Meta. Try again." });
-            }
-
-            // 3. Put it on the profile.
+            // Then put it on the profile.
             var r = await _wa.GraphPostAsync($"{cfg.PhoneNumberId}/whatsapp_business_profile",
                 new Dictionary<string, object> { ["messaging_product"] = "whatsapp", ["profile_picture_handle"] = handle! }, ct);
             if (!r.Ok) return BadRequest(new { message = r.Error });
-            if (_settings.Get(AppIdKey) != app)
-                await _settings.SetAsync(new Dictionary<string, string?> { [AppIdKey] = app }, WhatsAppConfig.SecretKeys.ToList(), User.AgentIdOf(), ct);
             return Ok(new { ok = true });
-        }
-
-        private static string MetaError(string json, string fallback)
-        {
-            try
-            {
-                using var d = JsonDocument.Parse(json);
-                if (d.RootElement.TryGetProperty("error", out var e))
-                {
-                    var m = Str(e, "error_user_msg") ?? Str(e, "message");
-                    if (!string.IsNullOrWhiteSpace(m)) return $"{fallback}: {m}";
-                }
-            }
-            catch (JsonException) { }
-            return fallback + ".";
         }
     }
 }
