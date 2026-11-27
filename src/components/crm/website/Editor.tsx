@@ -263,7 +263,7 @@ export function Editor({ id, data, embedded, onBack, onOpen, onChanged, say }: {
               {r.status === 'publishing' && <p className="crm-sub" style={{ margin: 0 }}>Being published now. Progress shows on the Website page.</p>}
             </div>
             <div className="ws-actions">
-              {type !== 'site' && type !== 'redirect' && <button type="button" className="crm-btn is-secondary is-sm" disabled={!!busy} onClick={() => void openPreview()}><Eye size={15} aria-hidden /> {busy === 'preview' ? 'Opening…' : 'Preview on the website'}</button>}
+              {type !== 'redirect' && <button type="button" className="crm-btn is-secondary is-sm" disabled={!!busy} onClick={() => void openPreview()}><Eye size={15} aria-hidden /> {busy === 'preview' ? 'Opening…' : 'Preview on the website'}</button>}
               <button type="button" className="crm-btn is-secondary is-sm" disabled={!!busy} onClick={() => void runChecks()}><ShieldCheck size={15} aria-hidden /> {busy === 'checks' ? 'Checking links…' : 'Check before publishing'}</button>
               {me.publish && type !== 'site' && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setPlanning(true)}><CalendarClock size={15} aria-hidden /> {r.publishAt || r.unpublishAt ? 'Change the schedule' : 'Schedule'}</button>}
               {(type === 'doctor' || type === 'camp') && r.linked && me.write && !locked && <button type="button" className="crm-btn is-secondary is-sm" disabled={!!busy} onClick={() => void refresh()}><RefreshCw size={15} aria-hidden /> {busy === 'refresh' ? 'Copying…' : 'Update from the CRM record'}</button>}

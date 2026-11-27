@@ -119,7 +119,8 @@ namespace SeemanchalOutreach.Api.Controllers
             if (c == null) return NotFound(new { message = "That isn't here any more." });
             var cfg = SiteConfig.Load(_app);
             if (cfg.SiteUrl == null) return No("Add the website address in Setup first.");
-            if (c.Type is "site" or "redirect") return No("This has no page of its own to preview.");
+            if (c.Type == "redirect") return No("A redirect has no page of its own to preview.");
+            // Hospital details: the website's /preview page puts them in its header, footer and contact page.
             var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
             var org = OrgScope.Current?.Key ?? "";
             var api = (Request.Host.Host is "localhost" or "127.0.0.1" ? Request.Scheme : "https") + "://" + Request.Host;
