@@ -53,6 +53,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/admin/calls', label: 'Daily calls', page: 'calls', icon: PhoneCall, phone: true },
       { href: '/admin/partners', label: 'Partners', page: 'partners', icon: Users, match: ['/admin/pipeline', '/admin/duplicates'] },
       { href: '/admin/referrals', label: 'Referrals', page: 'referrals', icon: Columns3, match: ['/admin/hospital-crm', '/admin/desk'], phone: true },
+      { href: '/admin/surveys', label: 'Surveys', page: 'analytics', icon: ListChecks },
     ],
   },
   {
@@ -89,7 +90,6 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/admin/payments', label: 'Payments', page: 'payments', icon: Wallet },
       { href: '/admin/spend', label: 'Marketing spend', page: 'payments', icon: IndianRupee },
       { href: '/admin/reports', label: 'Analytics', page: 'analytics', icon: BarChart3 },
-      { href: '/admin/surveys', label: 'Surveys', page: 'analytics', icon: ListChecks },
     ],
   },
   {
