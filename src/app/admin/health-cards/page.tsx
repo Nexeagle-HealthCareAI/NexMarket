@@ -8,12 +8,17 @@ import { PageTabs, usePageTab } from '@/components/crm/PageTabs';
 import { Pager } from '@/components/crm/Pager';
 import { Empty, ErrorBox, friendlyError, Modal, PageHead, Pill, rupees, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { CardView } from '@/components/crm/cards/CardView';
+import { FEATURES } from '@/lib/crm/features';
 import { IssueCard } from '@/components/crm/cards/IssueCard';
 import { benefits, covers, dateText, SOURCE, STATUS, validity, type Card, type CardStatus, type Plan } from '@/components/crm/cards/shared';
 
 const TABS = ['cards', 'results', 'types'] as const;
 
 export default function HealthCardsPageWrap() {
+  if (!FEATURES.healthCards) return (
+    <main className="crm-page"><PageHead title="Health cards" />
+      <Empty title="Health cards are switched off for now">Cards already given are kept. Ask the NexMarket team to switch them back on.</Empty></main>
+  );
   return <Suspense fallback={<main className="crm-page"><Skeleton h={480} /></main>}><HealthCardsPage /></Suspense>;
 }
 

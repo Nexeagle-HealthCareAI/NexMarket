@@ -15,6 +15,7 @@ import { CampForm } from './CampForm';
 import { PatientForm } from './PatientForm';
 import { BookedVia, CHANNELS } from './BookedVia';
 import { IssueCard } from '@/components/crm/cards/IssueCard';
+import { FEATURES } from '@/lib/crm/features';
 import { CardView } from '@/components/crm/cards/CardView';
 import { CampMoney } from './CampMoney';
 import { CampDisease } from './CampDisease';
@@ -262,7 +263,7 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
                     <td><span className="rt-num">{p.token}</span></td>
                     <td>
                       <strong>{p.name}</strong>
-                      {p.healthCard && <button type="button" className="hc-badge" onClick={() => setOpenCard(p.healthCard!.id)} title="Hospital health card">{p.healthCard.number}</button>}
+                      {FEATURES.healthCards && p.healthCard && <button type="button" className="hc-badge" onClick={() => setOpenCard(p.healthCard!.id)} title="Hospital health card">{p.healthCard.number}</button>}
                       <span className="crm-cell-sub wl-sub">{[p.age != null ? `${p.age} y` : null, p.sex === 'F' ? 'F' : p.sex === 'M' ? 'M' : null, p.village, p.phone ? `+${p.phone.slice(0, 2)} ${p.phone.slice(2)}` : null].filter(Boolean).join(' · ')}</span>
                     </td>
                     <td><BookedVia p={p} /></td>
@@ -290,7 +291,7 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
                       {canEdit && <>
                         <button type="button" className={`crm-btn is-sm${p.status === 'attended' ? ' is-secondary' : ''}`} onClick={() => setForm({ mode: 'screen', p })}><Stethoscope size={14} aria-hidden /> {p.status === 'attended' ? 'Check-up' : 'Check up'}</button>
                         {p.status === 'booked' && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => void mark(p, 'attended')}><CheckCircle2 size={14} aria-hidden /> Arrived</button>}
-                        {p.status === 'attended' && !p.healthCard && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setGiveCard(p)}><CreditCard size={14} aria-hidden /> Health card</button>}
+                        {FEATURES.healthCards && p.status === 'attended' && !p.healthCard && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setGiveCard(p)}><CreditCard size={14} aria-hidden /> Health card</button>}
                         {p.status === 'booked' && (live || camp.camp.status === 'done') && <button type="button" className="nt-link is-muted" onClick={() => void mark(p, 'no_show')}>Didn&apos;t come</button>}
                         {(p.status === 'no_show' || (p.status === 'attended' && !p.conditions.length && !p.advice && !p.healthCard)) && live && (
                           <button type="button" className="nt-link is-muted" title="Marked by mistake: back to waiting" onClick={() => void mark(p, 'booked')}>Undo</button>
@@ -319,7 +320,7 @@ function People({ camp, options, canEdit, onChanged, toast }: { camp: Detail; op
           <p style={{ margin: 0 }}>
             <strong>{removing.name}</strong> (token {removing.token}{removing.village ? `, ${removing.village}` : ''}) and everything recorded for them at this camp — complaint, readings, check-up — will be deleted. This can&apos;t be undone.
           </p>
-          {removing.healthCard && <p className="crm-sub" style={{ margin: '10px 0 0' }}>Their health card {removing.healthCard.number} stays; it just won&apos;t point to this booking any more.</p>}
+          {FEATURES.healthCards && removing.healthCard && <p className="crm-sub" style={{ margin: '10px 0 0' }}>Their health card {removing.healthCard.number} stays; it just won&apos;t point to this booking any more.</p>}
           <p className="crm-sub" style={{ margin: '10px 0 0' }}>The activity log keeps who deleted it.</p>
         </Modal>
       )}

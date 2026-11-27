@@ -18,6 +18,7 @@ import {
   CreditCard, Waypoints,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
+import { FEATURES } from '@/lib/crm/features';
 import { useLiveEvents } from '@/lib/crm/live';
 import { usePresenceBeat } from '@/lib/crm/presence';
 import { useAgentStore } from '@/store/agent-store';
@@ -59,7 +60,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/partners', label: 'Partners', page: 'partners', icon: Users, match: ['/admin/pipeline', '/admin/duplicates'] },
       { href: '/admin/camps', label: 'Health camps', page: 'camps', icon: Tent },
-      { href: '/admin/health-cards', label: 'Health cards', page: 'camps', icon: CreditCard },
+      ...(FEATURES.healthCards ? [{ href: '/admin/health-cards', label: 'Health cards', page: 'camps' as const, icon: CreditCard }] : []),
       { href: '/admin/whatsapp', label: 'WhatsApp', page: 'wa', icon: MessageCircle, match: ['/admin/broadcasts', '/admin/whatsapp-setup'] },
       { href: '/admin/social', label: 'Facebook & Instagram', page: 'social', icon: AtSign },
       { href: '/admin/google', label: 'Google', page: 'social', icon: Search },

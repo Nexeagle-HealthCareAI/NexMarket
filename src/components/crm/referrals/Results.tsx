@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { FEATURES } from '@/lib/crm/features';
 import { CreditCard, Download, Tent, UserRound, Users } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { Empty, ErrorBox, friendlyError, Pill, rupees, Skeleton, useLoader } from '@/components/crm/ui';
@@ -90,7 +91,7 @@ export function ResultsTab({ onOpen, toast }: { onOpen: (clientId: string) => vo
       ) : <>
         <Funnel t={d.total} />
 
-        {d.withCard && d.withCard.referred > 0 && (
+        {FEATURES.healthCards && d.withCard && d.withCard.referred > 0 && (
           <p className="hc-ref-note"><CreditCard size={15} aria-hidden /> <strong>{d.withCard.referred}</strong> had the hospital health card: {d.withCard.came} came, {d.withCard.admitted} admitted, {rupees(d.withCard.billed)} billed.</p>
         )}
 

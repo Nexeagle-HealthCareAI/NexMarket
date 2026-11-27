@@ -10,6 +10,7 @@ import { CONTACT_TYPES, Empty, ErrorBox, fmt, friendlyError, Pill, Skeleton, use
 import { Pager, usePaged } from '@/components/crm/Pager';
 import type { WaTemplate } from './shared';
 import { PlacePicker, type Place, type Places } from './PlacePicker';
+import { FEATURES } from '@/lib/crm/features';
 
 interface Doctor { id: string; name: string; department?: string | null; opdDays?: string | null; opdTimings?: string | null }
 interface AudienceInfo {
@@ -27,7 +28,7 @@ const GROUPS = [
   { key: 'partners', name: 'Partners', sub: 'RMPs, ASHAs, chemists, mukhiyas…', icon: HeartHandshake },
   { key: 'camp', name: 'Health camp people', sub: 'Booked at a camp, by agents or QR', icon: Tent },
   { key: 'referred', name: 'Referred patients', sub: 'Patients partners sent to you', icon: UserPlus },
-  { key: 'cards', name: 'Health card holders', sub: 'Everyone with a card', icon: CreditCard },
+  ...(FEATURES.healthCards ? [{ key: 'cards', name: 'Health card holders', sub: 'Everyone with a card', icon: CreditCard }] : []),
   { key: 'enquiries', name: 'Enquiries', sub: 'Wrote on WhatsApp, forms, website', icon: MessageCircle },
 ] as const;
 
