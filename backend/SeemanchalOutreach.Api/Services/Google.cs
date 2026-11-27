@@ -28,6 +28,7 @@ namespace SeemanchalOutreach.Api.Services
             ("ga4Property", false), ("ga4Name", false), ("gscSite", false), ("gbpAccount", false), ("gbpLocation", false), ("gbpName", false),
             ("ytChannel", false), ("ytName", false), ("adsDeveloperToken", true), ("adsCustomer", false), ("adsLoginCustomer", false),
             ("adsName", false), ("adsCurrency", false), ("adsVersion", false), ("syncedAt", false), ("syncResult", false),
+            ("convArrived", false), ("convAdmitted", false), ("convSentAt", false), ("convResult", false),
         };
         public static ICollection<string> SecretKeys => Fields.Where(f => f.Secret).Select(f => Prefix + f.Key).ToList();
 
@@ -43,6 +44,7 @@ namespace SeemanchalOutreach.Api.Services
             ("https://www.googleapis.com/auth/yt-analytics.readonly", "YouTube: views and watch time"),
             ("https://www.googleapis.com/auth/youtube.readonly", "YouTube: which channel"),
             ("https://www.googleapis.com/auth/adwords", "Google Ads: spend, clicks, calls and conversions (read only in NexMarket)"),
+            ("https://www.googleapis.com/auth/datamanager", "Google Ads: tell Google which ad clicks became patients (only the click ID and the time)"),
         };
 
         public string? ClientId { get; set; }
@@ -73,6 +75,11 @@ namespace SeemanchalOutreach.Api.Services
         public string? AdsName { get; set; }
         public string? AdsCurrency { get; set; }
         public string AdsVersion { get; set; } = "v25";
+        /// <summary>Google Ads conversion action IDs (type "Import → other data sources / CRM") for Arrived and Admitted.</summary>
+        public string? ConvArrived { get; set; }
+        public string? ConvAdmitted { get; set; }
+        public string? ConvSentAt { get; set; }
+        public string? ConvResult { get; set; }
         public string? SyncedAt { get; set; }
         public string? SyncResult { get; set; }
 
@@ -91,6 +98,7 @@ namespace SeemanchalOutreach.Api.Services
                 GbpAccount = g("gbpAccount"), GbpLocation = g("gbpLocation"), GbpName = g("gbpName"), YtChannel = g("ytChannel"), YtName = g("ytName"),
                 AdsDeveloperToken = g("adsDeveloperToken"), AdsCustomer = g("adsCustomer"), AdsLoginCustomer = g("adsLoginCustomer"),
                 AdsName = g("adsName"), AdsCurrency = g("adsCurrency"), AdsVersion = g("adsVersion") ?? "v25",
+                ConvArrived = g("convArrived"), ConvAdmitted = g("convAdmitted"), ConvSentAt = g("convSentAt"), ConvResult = g("convResult"),
                 SyncedAt = g("syncedAt"), SyncResult = g("syncResult"),
             };
         }
@@ -358,6 +366,13 @@ namespace SeemanchalOutreach.Api.Services
             if (cfg.Ga4Property != null) { var from = await FromFor("ga4"); results.Add(await RunAsync("ga4", cfg.Ga4Property, () => Ga4Async(cfg, from, to, ct), ct)); }
             if (cfg.YtChannel != null) { var from = await FromFor("youtube"); results.Add(await RunAsync("youtube", cfg.YtChannel, () => YoutubeAsync(cfg, from, to, ct), ct)); }
             if (cfg.AdsCustomer != null) { var from = await FromFor("google_ads"); results.Add(await RunAsync("google_ads", cfg.AdsCustomer, () => AdsAsync(cfg, from, to, ct), ct)); }
+
+            if (cfg.AdsCustomer != null && (cfg.ConvArrived != null || cfg.ConvAdmitted != null))
+            {
+                // Patients who came from a Google ad, back to Google Ads.
+                var conv = await new GoogleConversions(_db, _settings, _api).SendAsync(false, by, ct);
+                results.Add(new SourceResult("google_conv", "Patients sent to Google Ads", conv.Ok, conv.Sent, conv.Error));
+            }
 
             var at = DateTime.UtcNow;
             await GoogleConfig.SaveAsync(_settings, new()

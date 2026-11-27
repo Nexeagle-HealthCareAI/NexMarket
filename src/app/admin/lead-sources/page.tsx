@@ -12,6 +12,7 @@ interface Report {
   days: number; total: Row; unknown: number; unknownShare: number;
   bySource: Row[]; byLink: Row[]; campaigns: Row[]; byPartner: Row[];
   weeks: { week: string; total: number; came: number }[];
+  googleAds?: { spend: number; currency: string; leads: number; came: number; admitted: number; perLead?: number | null; perPatient?: number | null; sendsToAds: boolean } | null;
 }
 interface LinkItem {
   id: string; code: string; name: string; channel: string; hoardingId?: string | null; hoarding?: string | null; cost?: number | null; note?: string | null;
@@ -60,6 +61,22 @@ export default function LeadSourcesPage() {
           <div className={`crm-card ls-kpi${r.unknownShare >= 30 ? ' is-warn' : ''}`}><span>Source unknown</span><strong>{r.unknownShare}%</strong>
             <small>{r.unknown} wrote on WhatsApp with no code. Tracked links shrink this.</small></div>
         </div>
+      )}
+
+      {r?.googleAds && (r.googleAds.spend > 0 || r.googleAds.leads > 0) && (
+        <section className="crm-card ls-gads">
+          <h2 className="crm-h2">Google Ads</h2>
+          <p className="ls-gads-line">
+            <span><strong>{r.googleAds.currency === 'INR' ? rupees(r.googleAds.spend) : `${r.googleAds.spend.toLocaleString('en-IN')} ${r.googleAds.currency}`}</strong> spent</span>
+            <span><strong>{r.googleAds.leads}</strong> leads{r.googleAds.perLead != null && <> · {rupees(r.googleAds.perLead)} each</>}</span>
+            <span><strong>{r.googleAds.came}</strong> came to the hospital{r.googleAds.perPatient != null ? <> · <strong>{rupees(r.googleAds.perPatient)}</strong> per patient</> : null}</span>
+            <span><strong>{r.googleAds.admitted}</strong> admitted</span>
+          </p>
+          <p className="crm-sub" style={{ margin: 0 }}>
+            Spend is what Google Ads charged in this period; leads are enquiries from a Google ad click.
+            {r.googleAds.sendsToAds ? ' Arrivals are sent back to Google Ads every morning, so Google learns which ads bring patients.' : ' Turn on “Tell Google Ads which clicks became patients” in Google → Setup so Google can learn which ads bring patients.'}
+          </p>
+        </section>
       )}
 
       {r && r.weeks.some((w) => w.total) && (

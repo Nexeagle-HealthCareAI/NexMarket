@@ -39,7 +39,7 @@ namespace SeemanchalOutreach.Api.Controllers
     {
         public static readonly (string Code, string Label, string Prefix)[] Channels =
         {
-            ("instagram", "Instagram", "IG"), ("facebook", "Facebook", "FB"), ("youtube", "YouTube", "YT"), ("hoarding", "Hoarding", "HRD"),
+            ("instagram", "Instagram", "IG"), ("facebook", "Facebook", "FB"), ("youtube", "YouTube", "YT"), ("google", "Google (Business Profile, ads)", "GGL"), ("hoarding", "Hoarding", "HRD"),
             ("print", "Newspaper / magazine", "NEWS"), ("pamphlet", "Pamphlet / leaflet", "PMP"), ("poster", "Poster / auto / wall", "PST"),
             ("radio", "Radio / announcement", "RAD"), ("website", "Website / other site", "WEB"), ("other", "Other", "LNK"),
         };
@@ -245,12 +245,31 @@ namespace SeemanchalOutreach.Api.Controllers
                 };
             }).ToList();
 
+            // Google Ads: what was spent in the period (fetched from Google every morning) against the leads its clicks brought.
+            object? googleAds = null;
+            var adsCfg = GoogleConfig.Load(_settings);
+            if (!string.IsNullOrWhiteSpace(adsCfg.AdsCustomer))
+            {
+                var fromDay = DateOnly.FromDateTime(days == 0 ? new DateTime(2000, 1, 1) : since.AddHours(5.5));
+                var spend = (await _db.ChannelMetrics.AsNoTracking()
+                    .Where(m => m.Source == "google_ads" && m.Account == adsCfg.AdsCustomer && m.Dimension == "" && m.Metric == "cost" && m.Date >= fromDay)
+                    .Select(m => m.Value).ToListAsync(ct)).Sum();
+                var g = Count("google_ads", "Google Ads", leads.Where(l => l.Source == "google_ads"));
+                googleAds = new
+                {
+                    spend = Math.Round(spend), currency = adsCfg.AdsCurrency ?? "INR", g.Leads, g.Came, g.Admitted,
+                    perLead = g.Leads > 0 ? Math.Round(spend / g.Leads) : (decimal?)null,
+                    perPatient = g.Came > 0 ? Math.Round(spend / g.Came) : (decimal?)null,
+                    sendsToAds = !string.IsNullOrWhiteSpace(adsCfg.ConvArrived),
+                };
+            }
+
             var unknown = leads.Count(l => l.Source == "whatsapp");
             return Ok(new
             {
                 days, total = Count("all", "All leads", leads),
                 unknown, unknownShare = leads.Count == 0 ? 0 : Math.Round(100.0 * unknown / leads.Count),
-                bySource, byLink, campaigns, byPartner, weeks, topSources = top.Select(s => new { key = s, label = LeadInbox.SourceLabel(s) }),
+                bySource, byLink, campaigns, byPartner, weeks, googleAds, topSources = top.Select(s => new { key = s, label = LeadInbox.SourceLabel(s) }),
             });
         }
 

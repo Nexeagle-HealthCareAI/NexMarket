@@ -2751,6 +2751,15 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("AdsAdmittedSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("AdsArrivedSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AdsUploadError")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("ClosedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2764,6 +2773,12 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("FirstResponseAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Gclid")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("GclidAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("LandingPage")

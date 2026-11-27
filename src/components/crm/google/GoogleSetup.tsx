@@ -6,6 +6,7 @@ import { crm } from '@/lib/sync/api-client';
 import { ErrorBox, friendlyError, Skeleton } from '@/components/crm/ui';
 import { when, type SourceRun } from './shared';
 import { place } from '@/lib/crm/access';
+import { GoogleConversionsStep } from './GoogleConversionsStep';
 
 interface Picked { id: string; name?: string | null; account?: string | null; login?: string | null; currency?: string | null }
 interface Data {
@@ -233,6 +234,8 @@ export function GoogleSetup({ onSaved, toast }: { onSaved: () => void; toast: (m
         </button>
         {data.syncedAt && <span className="crm-sub">Last fetched {when(data.syncedAt)}.</span>}
       </section>
+
+      <GoogleConversionsStep connected={data.connected} adsPicked={!!data.picked.ads} toast={toast} onReconnect={() => void connect()} />
     </div>
   );
 }

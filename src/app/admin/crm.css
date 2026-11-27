@@ -4736,3 +4736,8 @@ strong.is-ok { color: var(--ok-ink); }
 .ls-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .ls-foot { font-size: 12.5px; line-height: 1.5; padding: 0 22px 16px; margin: 0; }
 .ls-form { display: flex; flex-direction: column; gap: 14px; }
+
+/* Lead sources: Google Ads spend against patients */
+.ls-gads { display: flex; flex-direction: column; gap: 8px; }
+.ls-gads-line { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; font-size: 0.95rem; }
+.ls-gads-line strong { font-variant-numeric: tabular-nums; }

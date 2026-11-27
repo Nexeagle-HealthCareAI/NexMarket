@@ -85,6 +85,8 @@ namespace SeemanchalOutreach.Api.Controllers
             var link = linkCode == null || fromGoogleAd ? null : await _db.TrackedLinks.AsNoTracking().FirstOrDefaultAsync(x => x.Code == linkCode, ct);
             if (link != null) { source = "link"; sourceRef = LeadInbox.LinkRef(link); campaign = link.Name; }
             var now = DateTime.UtcNow;
+            // Google's click ID: kept so "came to the hospital" can be sent back to Google Ads (Google → Setup).
+            var gclid = GoogleConversions.CleanClickId(V("gclid"));
             var how = LeadInbox.SourceLabel(source) + (campaign != null ? $" · {campaign}" : "") + (utmSource != null && !fromGoogleAd ? $" ({utmSource})" : "");
 
             var existing = await _db.Leads.FirstOrDefaultAsync(l => l.Phone == phone, ct);
@@ -98,6 +100,8 @@ namespace SeemanchalOutreach.Api.Controllers
                     existing.ClosedAt = null;
                 }
                 existing.Department ??= dept;
+                // A newer ad click counts: Google credits the latest click before the visit.
+                if (gclid != null && existing.AdsArrivedSentAt == null) { existing.Gclid = gclid; existing.GclidAt = now; }
                 existing.LastActivityAt = now;
                 existing.Unread += 1;
                 await _db.SaveChangesAsync(ct);
@@ -109,6 +113,7 @@ namespace SeemanchalOutreach.Api.Controllers
             {
                 Name = name, Phone = phone, Source = source, SourceRef = sourceRef, Department = dept, Note = message,
                 LandingPage = page == null ? null : SiteInsights.PathOf(page),
+                Gclid = gclid, GclidAt = gclid != null ? now : null,
                 CreatedBy = "website", CreatedAt = now, LastActivityAt = now, Status = "new", Unread = 1,
             };
             _db.Leads.Add(lead);

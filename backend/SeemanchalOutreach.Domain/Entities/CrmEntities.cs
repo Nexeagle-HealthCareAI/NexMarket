@@ -601,6 +601,16 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
         public DateTime? LastInboundAt { get; set; }               // WhatsApp free replies are allowed for 24h after this
         public DateTime? ClosedAt { get; set; }
+
+        // ── Google Ads: which ad click this lead came from, and what has been sent back to Google ──
+        /// <summary>Google's click ID (gclid) from the website address the person landed on, when they came from a Google ad.</summary>
+        public string? Gclid { get; set; }
+        public DateTime? GclidAt { get; set; }
+        /// <summary>When "came to the hospital" (Arrived) and "Admitted" were sent to Google Ads as conversions.</summary>
+        public DateTime? AdsArrivedSentAt { get; set; }
+        public DateTime? AdsAdmittedSentAt { get; set; }
+        /// <summary>Why Google refused this lead's conversion, if it did (shown on Google → Setup).</summary>
+        public string? AdsUploadError { get; set; }
     }
 
     /// <summary>What happened to a lead: status and owner changes, notes, calls. WhatsApp messages are in <see cref="WaMessage"/>.</summary>

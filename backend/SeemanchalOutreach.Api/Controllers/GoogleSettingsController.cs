@@ -298,6 +298,37 @@ namespace SeemanchalOutreach.Api.Controllers
             return Get();
         }
 
+        // ── Patients back to Google Ads ────────────────────────────────────────
+
+        public class GoogleConversionsDto
+        {
+            public string? Arrived { get; set; }
+            public string? Admitted { get; set; }
+        }
+
+        /// <summary>The conversion action IDs, and how many patients are waiting, sent and refused.</summary>
+        [HttpGet("conversions")]
+        public async Task<IActionResult> Conversions([FromServices] GoogleConversions conv, CancellationToken ct) => Ok(await conv.StatusAsync(ct));
+
+        [HttpPut("conversions")]
+        public async Task<IActionResult> SaveConversions([FromBody] GoogleConversionsDto dto, [FromServices] GoogleConversions conv, CancellationToken ct)
+        {
+            static string? id(string? v) => string.IsNullOrWhiteSpace(v) ? null : GoogleConversions.AccountId(v);
+            var arrived = id(dto.Arrived); var admitted = id(dto.Admitted);
+            if ((arrived != null && !Regex.IsMatch(arrived, @"^\d{3,20}$")) || (admitted != null && !Regex.IsMatch(admitted, @"^\d{3,20}$")))
+                return BadRequest(new { message = "A conversion action ID is a number. In Google Ads: Goals → Conversions → the action → its address ends in ctId=…" });
+            if (arrived != null && arrived == admitted) return BadRequest(new { message = "Use two different conversion actions: one for “came to the hospital”, one for “admitted”." });
+            await SaveAsync(new() { ["convArrived"] = arrived, ["convAdmitted"] = admitted }, ct);
+            return Ok(await conv.StatusAsync(ct));
+        }
+
+        /// <summary>Asks Google to check what would be sent, without recording anything in Google Ads.</summary>
+        [HttpPost("conversions/check")]
+        public async Task<IActionResult> CheckConversions([FromServices] GoogleConversions conv, CancellationToken ct) => Ok(await conv.SendAsync(true, User.AgentIdOf(), ct));
+
+        [HttpPost("conversions/send")]
+        public async Task<IActionResult> SendConversions([FromServices] GoogleConversions conv, CancellationToken ct) => Ok(await conv.SendAsync(false, User.AgentIdOf(), ct));
+
         private static string FormatCid(string id) => id.Length == 10 ? $"{id[..3]}-{id[3..6]}-{id[6..]}" : id;
 
         private sealed class GoogleFail : Exception { public GoogleFail(string m) : base(m) { } }

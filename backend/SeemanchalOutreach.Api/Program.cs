@@ -53,6 +53,7 @@ builder.Services.AddScoped<SeemanchalOutreach.Api.Services.SocialPostsService>()
 builder.Services.AddHttpClient("google", c => c.Timeout = TimeSpan.FromSeconds(60));
 builder.Services.AddSingleton<SeemanchalOutreach.Api.Services.GoogleApi>();
 builder.Services.AddScoped<SeemanchalOutreach.Api.Services.GoogleSyncService>();
+builder.Services.AddScoped<SeemanchalOutreach.Api.Services.GoogleConversions>();
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.GoogleSyncScheduler>();
 // Reminders for leads nobody has contacted, and lead stages reported back to Meta.
 builder.Services.AddHostedService<SeemanchalOutreach.Api.Services.LeadSignals>();
