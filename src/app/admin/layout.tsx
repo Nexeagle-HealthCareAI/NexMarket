@@ -50,15 +50,15 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/admin/dashboard', label: 'Command centre', page: 'dashboard', icon: LayoutDashboard, phone: true },
       { href: '/admin/work', label: 'Team board', page: 'work', icon: KanbanSquare },
       { href: '/admin/ai-agents', label: 'Vita marketing agents', page: 'ai', icon: VitaIcon },
-      { href: '/admin/leads', label: 'Leads inbox', page: 'leads', icon: UserPlus, phone: true },
       { href: '/admin/calls', label: 'Daily calls', page: 'calls', icon: PhoneCall, phone: true },
+      { href: '/admin/partners', label: 'Partners', page: 'partners', icon: Users, match: ['/admin/pipeline', '/admin/duplicates'] },
       { href: '/admin/referrals', label: 'Referrals', page: 'referrals', icon: Columns3, match: ['/admin/hospital-crm', '/admin/desk'], phone: true },
     ],
   },
   {
     group: 'Network',
     items: [
-      { href: '/admin/partners', label: 'Partners', page: 'partners', icon: Users, match: ['/admin/pipeline', '/admin/duplicates'] },
+      { href: '/admin/leads', label: 'Leads inbox', page: 'leads', icon: UserPlus, phone: true },
       { href: '/admin/camps', label: 'Health camps', page: 'camps', icon: Tent },
       ...(FEATURES.healthCards ? [{ href: '/admin/health-cards', label: 'Health cards', page: 'camps' as const, icon: CreditCard }] : []),
       { href: '/admin/whatsapp', label: 'WhatsApp', page: 'wa', icon: MessageCircle, match: ['/admin/broadcasts', '/admin/whatsapp-setup'] },
