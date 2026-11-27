@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowLeft, Ban, Check, CheckCheck, CheckCircle2, Clock, FileText, Inbox, Lock, MessageSquarePlus, Phone, PhoneCall, RotateCcw, Search, Send, Sparkles, UserPlus, Users, X,
+  ArrowLeft, Ban, Check, Download, Play, CheckCheck, CheckCircle2, Clock, FileText, Inbox, Lock, MessageSquarePlus, Phone, PhoneCall, RotateCcw, Search, Send, Sparkles, UserPlus, Users, X,
 } from 'lucide-react';
 import { crm } from '@/lib/sync/api-client';
 import { useLiveEvents, useNow } from '@/lib/crm/live';
@@ -18,7 +18,7 @@ interface Conv {
   leadId?: string | null; leadStatus?: string | null; partnerClientId?: string | null; partnerName?: string | null;
 }
 interface ListRes { items: Conv[]; total: number; counts: { open: number; unread: number; mine: number; unassigned: number; done: number } }
-interface Msg { id: string; at: string; direction: string; type: string; text: string; status: string; error?: string | null; source: string; template?: string | null; byName?: string | null; broadcast?: string | null }
+interface Msg { id: string; at: string; direction: string; type: string; text: string; status: string; error?: string | null; source: string; template?: string | null; byName?: string | null; broadcast?: string | null; media?: { mime?: string | null; file?: string | null } | null }
 interface Detail {
   conversation: { phone: string; name: string; status: string; unread: number; optOut: boolean; assignedTo?: string | null; assignedName?: string | null; lastInboundAt?: string | null; createdAt: string };
   windowOpen: boolean; windowClosesAt?: string | null;
@@ -298,8 +298,9 @@ function Bubble({ m }: { m: Msg }) {
     <div className={`ch-msg${out ? ' is-mine' : ''}${failed ? ' is-failed' : ''}${m.source === 'broadcast' ? ' is-broadcast' : ''}`}>
       <div className="ch-bubble">
         {out && <span className="ch-sender">{m.source === 'broadcast' ? `Broadcast${m.broadcast ? `: ${m.broadcast}` : ''}` : m.byName ?? sourceLabel(m.source)}{m.template ? ` · ${m.template}` : ''}</span>}
-        {!out && m.type !== 'text' && m.type !== 'button' && <span className="ld-media"><FileText size={13} aria-hidden /> They sent {m.type === 'image' ? 'a photo' : m.type === 'audio' ? 'a voice message' : m.type === 'document' ? 'a document' : m.type === 'location' ? 'a location' : 'something'}.</span>}
-        <span className="ch-text">{m.text}</span>
+        {!out && m.media && <WaMedia m={m} />}
+        {!out && !m.media && m.type !== 'text' && m.type !== 'button' && <span className="ld-media"><FileText size={13} aria-hidden /> They sent {m.type === 'image' ? 'a photo' : m.type === 'audio' ? 'a voice message' : m.type === 'document' ? 'a document' : m.type === 'location' ? 'a location' : 'something'}.{m.type === 'image' || m.type === 'audio' || m.type === 'document' ? ' It came before photos could be opened here: see it on the phone.' : ''}</span>}
+        {!(m.media && PLACEHOLDERS.test(m.text)) && <span className="ch-text">{m.text}</span>}
         <span className="ch-meta">
           {istTime.format(new Date(m.at))}
           {out && (failed ? <span className="ch-fail" title={m.error ?? undefined}>{m.status === 'blocked' ? 'Not sent' : 'Not delivered'}{m.error ? `: ${m.error}` : ''}</span>
@@ -308,5 +309,65 @@ function Bubble({ m }: { m: Msg }) {
         </span>
       </div>
     </div>
+  );
+}
+
+/** What the inbox saved when a photo or file came without a caption: hidden once the photo itself is shown. */
+const PLACEHOLDERS = /^(📷 Photo|🎥 Video|🎤 Voice message|Sticker|📄 .*)$/u;
+
+/**
+ * A photo, video, voice note or document someone sent. Photos load straight away; the rest load when tapped, so the
+ * inbox doesn't pull every file from WhatsApp. The file comes through NexMarket from Meta and isn't stored.
+ */
+function WaMedia({ m }: { m: Msg }) {
+  const mime = (m.media?.mime ?? '').split(';')[0].trim();
+  const kind = m.type === 'image' || mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : m.type === 'audio' || mime.startsWith('audio/') ? 'audio' : 'file';
+  const [url, setUrl] = useState<string | null>(null);
+  const [state, setState] = useState<'idle' | 'loading' | 'error'>(kind === 'image' ? 'loading' : 'idle');
+  const [err, setErr] = useState<string | null>(null);
+  const made = useRef<string | null>(null);
+  useEffect(() => () => { if (made.current) URL.revokeObjectURL(made.current); }, []);
+
+  const load = useCallback(async (): Promise<string | null> => {
+    if (made.current) return made.current;
+    setState('loading');
+    try {
+      const b = await crm.blob(`/api/v1/whatsapp/messages/${m.id}/media`);
+      const u = URL.createObjectURL(b);
+      made.current = u; setUrl(u); setState('idle');
+      return u;
+    } catch (e) {
+      const text = e instanceof Error && /→ 410/.test(e.message) ? 'WhatsApp no longer has this file (kept about 30 days). See it on the phone.'
+        : e instanceof Error && /→ 413/.test(e.message) ? 'Too big to open here. See it on the phone.' : 'Couldn’t open it. Try again, or see it on the phone.';
+      setErr(text); setState('error');
+      return null;
+    }
+  }, [m.id]);
+  useEffect(() => { if (kind !== 'image') return; const t = setTimeout(() => void load(), 0); return () => clearTimeout(t); }, [kind, load]);
+
+  const openFile = async () => {
+    const u = await load();
+    if (!u) return;
+    const a = document.createElement('a');
+    a.href = u; a.target = '_blank'; a.rel = 'noopener';
+    if (mime !== 'application/pdf') a.download = m.media?.file || 'whatsapp-file';
+    a.click();
+  };
+
+  if (state === 'error') return <span className="ld-media wa-media-err"><FileText size={13} aria-hidden /> {err}</span>;
+  if (kind === 'image') {
+    return url
+      ? <a className="wa-media-img" href={url} target="_blank" rel="noopener noreferrer" title="Open full size">
+        {/* eslint-disable-next-line @next/next/no-img-element -- a private blob, not a page image */}
+        <img src={url} alt={m.text && !PLACEHOLDERS.test(m.text) ? m.text : 'Photo they sent'} /></a>
+      : <span className="wa-media-img is-loading" aria-label="Loading the photo" />;
+  }
+  if (url && kind === 'video') return <video className="wa-media-video" src={url} controls preload="metadata" />;
+  if (url && kind === 'audio') return <audio className="wa-media-audio" src={url} controls />;
+  return (
+    <button type="button" className="crm-btn is-secondary is-sm wa-media-btn" disabled={state === 'loading'} onClick={() => void (kind === 'file' ? openFile() : load())}>
+      {kind === 'video' ? <Play size={14} aria-hidden /> : kind === 'audio' ? <Play size={14} aria-hidden /> : <Download size={14} aria-hidden />}
+      {state === 'loading' ? 'Opening…' : kind === 'video' ? 'Play video' : kind === 'audio' ? 'Play voice message' : `Open ${m.media?.file || 'document'}`}
+    </button>
   );
 }

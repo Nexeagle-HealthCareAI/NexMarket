@@ -4741,3 +4741,13 @@ strong.is-ok { color: var(--ok-ink); }
 .ls-gads { display: flex; flex-direction: column; gap: 8px; }
 .ls-gads-line { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; font-size: 0.95rem; }
 .ls-gads-line strong { font-variant-numeric: tabular-nums; }
+
+/* WhatsApp inbox: photos and files people sent */
+.wa-media-img { display: block; margin: 2px 0 6px; border-radius: 10px; overflow: hidden; max-width: min(280px, 100%); background: var(--crm-surface-2, #eef1f5); }
+.wa-media-img img { display: block; width: 100%; height: auto; max-height: 340px; object-fit: cover; }
+.wa-media-img.is-loading { width: 220px; height: 160px; animation: wa-media-pulse 1.2s ease-in-out infinite; }
+@keyframes wa-media-pulse { 50% { opacity: 0.55; } }
+.wa-media-video { display: block; max-width: min(300px, 100%); max-height: 340px; border-radius: 10px; margin: 2px 0 6px; }
+.wa-media-audio { display: block; max-width: 100%; margin: 2px 0 6px; }
+.wa-media-btn { margin: 2px 0 6px; align-self: flex-start; }
+@media (prefers-reduced-motion: reduce) { .wa-media-img.is-loading { animation: none; } }

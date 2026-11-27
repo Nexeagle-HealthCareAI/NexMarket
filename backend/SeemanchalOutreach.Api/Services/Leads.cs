@@ -148,6 +148,27 @@ namespace SeemanchalOutreach.Api.Services
             public string? WaMessageId { get; set; }
             /// <summary>Set when they tapped a Click-to-WhatsApp ad.</summary>
             public string? AdRef { get; set; }
+            /// <summary>A photo, video, voice note or document: Meta's media id, kept so the inbox can show it (Meta keeps it 30 days).</summary>
+            public string? MediaId { get; set; }
+            public string? MediaMime { get; set; }
+            public string? MediaFile { get; set; }
+        }
+
+        /// <summary>What is kept on an incoming message about its photo or file (in ParamsJson; incoming messages have no template values).</summary>
+        public static string? MediaJson(Inbound m) => string.IsNullOrWhiteSpace(m.MediaId) ? null
+            : System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string?> { ["mediaId"] = m.MediaId, ["mime"] = m.MediaMime, ["file"] = m.MediaFile });
+
+        /// <summary>The media id kept on an incoming message, or null.</summary>
+        public static (string Id, string? Mime, string? File)? MediaOf(WaMessage m)
+        {
+            if (m.Direction != "in" || string.IsNullOrEmpty(m.ParamsJson) || !m.ParamsJson.Contains("mediaId")) return null;
+            try
+            {
+                var d = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string?>>(m.ParamsJson);
+                var id = d?.GetValueOrDefault("mediaId");
+                return string.IsNullOrWhiteSpace(id) ? null : (id!, d!.GetValueOrDefault("mime"), d.GetValueOrDefault("file"));
+            }
+            catch (System.Text.Json.JsonException) { return null; }
         }
 
         public class IngestResult
@@ -185,7 +206,7 @@ namespace SeemanchalOutreach.Api.Services
             conv.Status = "open";
 
             var lead = db.Leads.Local.FirstOrDefault(l => l.Phone == phone) ?? await db.Leads.FirstOrDefaultAsync(l => l.Phone == phone, ct);
-            var msg = new WaMessage { Phone = phone, Direction = "in", Type = m.Type, Text = m.Text, WaMessageId = m.WaMessageId, Status = "received", Source = "in", CreatedAt = now };
+            var msg = new WaMessage { Phone = phone, Direction = "in", Type = m.Type, Text = m.Text, WaMessageId = m.WaMessageId, Status = "received", Source = "in", CreatedAt = now, ParamsJson = MediaJson(m) };
             db.WaMessages.Add(msg);
 
             if (isStop)

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -8,6 +10,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using SeemanchalOutreach.Api.Security;
 using SeemanchalOutreach.Api.Services;
 using SeemanchalOutreach.Application.Interfaces;
@@ -202,8 +205,62 @@ namespace SeemanchalOutreach.Api.Controllers
                     id = m.Id, at = m.CreatedAt, direction = m.Direction, type = m.Type, text = m.Text, status = m.Status, error = m.Error,
                     source = m.Source, template = m.TemplateName, byName = m.SentBy != null ? names.GetValueOrDefault(m.SentBy) : null,
                     broadcast = m.BroadcastId != null ? broadcasts.GetValueOrDefault(m.BroadcastId.Value) : null,
+                    media = LeadInbox.MediaOf(m) is { } md ? new { mime = md.Mime, file = md.File } : null,
                 }),
             });
+        }
+
+        /// <summary>
+        /// The photo, video, voice note or document someone sent, fetched from Meta when the desk opens it. Nothing is
+        /// stored on our side; Meta keeps media for 30 days, after which it can only be seen on the phone.
+        /// </summary>
+        [HttpGet("messages/{id:guid}/media")]
+        public async Task<IActionResult> Media(Guid id, [FromServices] IHttpClientFactory http, [FromServices] IConfiguration config, CancellationToken ct)
+        {
+            var m = await _db.WaMessages.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (m == null) return NotFound();
+            if (LeadInbox.MediaOf(m) is not { } media) return NotFound(new { message = "This message has no photo or file we can open. Messages from before 27 Nov can only be seen on the phone." });
+            var cfg = LeadInbox.Wa(_settings, config);
+            if (!cfg.IsConfigured) return StatusCode(503, new { message = "WhatsApp isn't connected." });
+            var client = http.CreateClient("meta");
+
+            using var infoReq = new HttpRequestMessage(HttpMethod.Get, $"https://graph.facebook.com/{cfg.ApiVersion}/{Uri.EscapeDataString(media.Id)}");
+            infoReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.AccessToken);
+            using var infoRes = await client.SendAsync(infoReq, ct);
+            if (!infoRes.IsSuccessStatusCode)
+                return StatusCode(410, new { message = "WhatsApp no longer has this file (Meta keeps them about 30 days). It is still on the phone that received it." });
+            using var info = JsonDocument.Parse(await infoRes.Content.ReadAsStringAsync(ct));
+            var url = info.RootElement.TryGetProperty("url", out var u) ? u.GetString() : null;
+            var mime = (info.RootElement.TryGetProperty("mime_type", out var mt) ? mt.GetString() : null) ?? media.Mime ?? "application/octet-stream";
+            var size = info.RootElement.TryGetProperty("file_size", out var fs) && fs.TryGetInt64(out var n) ? n : 0;
+            if (string.IsNullOrEmpty(url) || !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return StatusCode(502, new { message = "WhatsApp didn't give the file." });
+            if (size > MaxMediaBytes) return StatusCode(413, new { message = "This file is too big to open here. See it on the phone." });
+
+            using var fileReq = new HttpRequestMessage(HttpMethod.Get, url);
+            fileReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cfg.AccessToken);
+            using var fileRes = await client.SendAsync(fileReq, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!fileRes.IsSuccessStatusCode) return StatusCode(502, new { message = "WhatsApp didn't give the file." });
+            if (fileRes.Content.Headers.ContentLength > MaxMediaBytes) return StatusCode(413, new { message = "This file is too big to open here. See it on the phone." });
+            var bytes = await fileRes.Content.ReadAsByteArrayAsync(ct);
+            if (bytes.Length > MaxMediaBytes) return StatusCode(413, new { message = "This file is too big to open here. See it on the phone." });
+
+            // Only what a browser can show safely is shown inline; anything else downloads.
+            var type = mime.Split(';')[0].Trim().ToLowerInvariant();
+            var inline = type is "image/jpeg" or "image/png" or "image/webp" or "video/mp4" or "video/3gpp" or "audio/ogg" or "audio/mpeg" or "audio/mp4" or "audio/aac" or "audio/amr" or "application/pdf";
+            Response.Headers["Cache-Control"] = "private, max-age=3600";
+            Response.Headers["X-Content-Type-Options"] = "nosniff";
+            if (inline) return File(bytes, type);
+            var name = SafeFileName(media.File) ?? "whatsapp-file";
+            return File(bytes, "application/octet-stream", name);
+        }
+
+        private const long MaxMediaBytes = 25 * 1024 * 1024;
+
+        private static string? SafeFileName(string? f)
+        {
+            if (string.IsNullOrWhiteSpace(f)) return null;
+            var s = Regex.Replace(System.IO.Path.GetFileName(f.Trim()), @"[^\w.\- ]", "_");
+            return s.Length == 0 ? null : s.Length > 100 ? s[..100] : s;
         }
 
         [HttpPost("conversations/{phone}/read")]

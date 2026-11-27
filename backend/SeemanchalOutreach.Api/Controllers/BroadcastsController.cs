@@ -468,6 +468,7 @@ namespace SeemanchalOutreach.Api.Controllers
             {
                 From = from, ProfileName = profileName, Type = type, Text = text,
                 WaMessageId = m.TryGetProperty("id", out var mid) ? mid.GetString() : null, AdRef = adRef,
+                MediaId = MediaPart(m, "id"), MediaMime = MediaPart(m, "mime_type"), MediaFile = MediaPart(m, "filename"),
             }, ct);
 
             // A reply to a broadcast linked to a health camp ("book", the booking button) books them and sends the token.
@@ -485,6 +486,17 @@ namespace SeemanchalOutreach.Api.Controllers
                 Text = isStop ? $"{who} unsubscribed from WhatsApp updates" : $"WhatsApp from {who}: {Shorten(text)}",
                 RefId = res.Lead?.Id.ToString() ?? contacts.FirstOrDefault()?.ClientId,
             });
+        }
+
+        /// <summary>A field of the message's photo, video, voice note, document or sticker ("id", "mime_type", "filename").</summary>
+        public static string? MediaPart(JsonElement m, string field)
+        {
+            var type = m.TryGetProperty("type", out var tp) ? tp.GetString() : null;
+            if (type is not ("image" or "video" or "audio" or "document" or "sticker") || !m.TryGetProperty(type, out var media) || media.ValueKind != JsonValueKind.Object) return null;
+            var v = media.TryGetProperty(field, out var f) && f.ValueKind == JsonValueKind.String ? f.GetString() : null;
+            if (v == null) return null;
+            v = v.Trim();
+            return field == "id" ? (Regex.IsMatch(v, @"^\d{5,40}$") ? v : null) : v.Length > 200 ? v[..200] : v;
         }
 
         private static string Shorten(string? s) => string.IsNullOrEmpty(s) ? "(media)" : s.Length > 80 ? s.Substring(0, 80) + "…" : s;
