@@ -63,7 +63,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/admin/whatsapp', label: 'WhatsApp', page: 'wa', icon: MessageCircle, match: ['/admin/broadcasts', '/admin/whatsapp-setup'] },
       { href: '/admin/social', label: 'Facebook & Instagram', page: 'social', icon: AtSign },
       { href: '/admin/google', label: 'Google', page: 'social', icon: Search },
-      { href: '/admin/website', label: 'Website', page: 'website', icon: Globe },
+      { href: '/admin/website', label: 'Manage website', page: 'website', icon: Globe },
     ],
   },
   {

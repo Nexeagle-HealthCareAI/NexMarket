@@ -38,8 +38,8 @@ export default function WebsitePage() {
     return () => clearInterval(t);
   }, [running, load]);
 
-  if (error && !data) return <main className="crm-page"><PageHead title="Website" /><ErrorBox message={error} onRetry={() => void load()} /></main>;
-  if (!data) return <main className="crm-page"><PageHead title="Website" /><Skeleton h={480} /></main>;
+  if (error && !data) return <main className="crm-page"><PageHead title="Manage website" /><ErrorBox message={error} onRetry={() => void load()} /></main>;
+  if (!data) return <main className="crm-page"><PageHead title="Manage website" /><Skeleton h={480} /></main>;
 
   const { me, setup } = data;
   const active = data.items.filter((i) => !i.archived);
@@ -60,7 +60,7 @@ export default function WebsitePage() {
 
   return (
     <main className="crm-page">
-      <PageHead title="Website" sub={<>Write and publish what is on {setup.siteUrl ? <a href={setup.siteUrl} target="_blank" rel="noreferrer">{setup.siteUrl.replace('https://', '')}</a> : 'the website'}: articles, questions, doctors, health camps, notices, patient stories, service pages and the hospital&apos;s details. A change goes live only after the website&apos;s own checks pass. Nothing is ever deleted.</>}>
+      <PageHead title="Manage website" sub={<>Write and publish what is on {setup.siteUrl ? <a href={setup.siteUrl} target="_blank" rel="noreferrer">{setup.siteUrl.replace('https://', '')}</a> : 'the website'}: articles, questions, doctors, health camps, notices, patient stories, service pages and the hospital&apos;s details. A change goes live only after the website&apos;s own checks pass. Nothing is ever deleted.</>}>
         {me.write && data.aiOn && <button type="button" className="crm-btn is-secondary" onClick={() => setAiForm(true)}><Sparkles size={16} aria-hidden /> Draft with AI</button>}
         {me.write && <button type="button" className="crm-btn is-secondary" onClick={() => setDraft({ type: 'faq' })}><Plus size={16} aria-hidden /> New question</button>}
         {me.write && <button type="button" className="crm-btn" onClick={() => setDraft({ type: 'article' })}><Plus size={16} aria-hidden /> New article</button>}
