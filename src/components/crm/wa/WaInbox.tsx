@@ -313,13 +313,13 @@ function Bubble({ m }: { m: Msg }) {
 }
 
 /** What the inbox saved when a photo or file came without a caption: hidden once the photo itself is shown. */
-const PLACEHOLDERS = /^(📷 Photo|🎥 Video|🎤 Voice message|Sticker|📄 .*)$/u;
+export const PLACEHOLDERS = /^(📷 Photo|🎥 Video|🎤 Voice message|Sticker|📄 .*)$/u;
 
 /**
  * A photo, video, voice note or document someone sent. Photos load straight away; the rest load when tapped, so the
  * inbox doesn't pull every file from WhatsApp. The file comes through NexMarket from Meta and isn't stored.
  */
-function WaMedia({ m }: { m: Msg }) {
+export function WaMedia({ m }: { m: Pick<Msg, 'id' | 'type' | 'text' | 'media'> }) {
   const mime = (m.media?.mime ?? '').split(';')[0].trim();
   const kind = m.type === 'image' || mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : m.type === 'audio' || mime.startsWith('audio/') ? 'audio' : 'file';
   const [url, setUrl] = useState<string | null>(null);

@@ -180,6 +180,7 @@ namespace SeemanchalOutreach.Api.Controllers
             {
                 Id = m.Id, At = m.CreatedAt, Type = "message", Kind = m.Direction, MsgType = m.Type, Text = m.Text, Status = m.Status, Error = m.Error,
                 By = m.SentBy, ByName = m.SentBy != null && names.TryGetValue(m.SentBy, out var n2) ? n2 : null,
+                Media = LeadInbox.MediaOf(m) is { } md ? new TimelineMedia { Mime = md.Mime, File = md.File } : null,
             })).OrderBy(x => x.At).ToList();
 
             return Ok(new
@@ -207,6 +208,14 @@ namespace SeemanchalOutreach.Api.Controllers
             public string? Error { get; set; }
             public string? By { get; set; }
             public string? ByName { get; set; }
+            /// <summary>A photo or file they sent that the inbox can open (GET api/v1/whatsapp/messages/{id}/media).</summary>
+            public TimelineMedia? Media { get; set; }
+        }
+
+        public class TimelineMedia
+        {
+            public string? Mime { get; set; }
+            public string? File { get; set; }
         }
 
         /// <summary>Someone called the desk, walked in, or a field agent passed on a name. One lead per phone number.</summary>

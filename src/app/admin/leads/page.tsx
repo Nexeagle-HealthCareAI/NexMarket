@@ -14,6 +14,7 @@ import { useAgentStore } from '@/store/agent-store';
 import { Pager } from '@/components/crm/Pager';
 import { QrPosterModal, type QrPosterInfo } from '@/components/crm/QrPoster';
 import { Empty, ErrorBox, friendlyError, initials, Modal, PageHead, Pill, Skeleton, useToast, type Tone } from '@/components/crm/ui';
+import { PLACEHOLDERS, WaMedia } from '@/components/crm/wa/WaInbox';
 
 // ─── Types ───
 interface Lead {
@@ -34,7 +35,7 @@ interface Summary {
   today: number; month: number; booked: number; arrived: number; admitted: number; medianReplyMinutes: number | null;
   bySource: { source: string; label: string; n: number; arrived: number }[];
 }
-interface TimelineItem { id: string; at: string; type: 'activity' | 'message'; kind: string; msgType?: string | null; text: string; status?: string | null; error?: string | null; by?: string | null; byName?: string | null }
+interface TimelineItem { id: string; at: string; type: 'activity' | 'message'; kind: string; msgType?: string | null; text: string; status?: string | null; error?: string | null; by?: string | null; byName?: string | null; media?: { mime?: string | null; file?: string | null } | null }
 interface Detail {
   lead: Lead;
   partner?: { clientId: string; name: string; role: string; phone?: string | null; referralCode?: string | null } | null;
@@ -508,10 +509,11 @@ function WaBubble({ m }: { m: TimelineItem }) {
     <div className={`ch-msg${mine ? ' is-mine' : ''}${m.status === 'failed' ? ' is-failed' : ''}`}>
       <div className="ch-bubble">
         {mine && <span className="ch-sender">{m.byName ?? 'Auto-reply'}{m.msgType === 'template' ? ' · template' : ''}</span>}
-        {m.msgType && m.msgType !== 'text' && m.msgType !== 'template' && m.msgType !== 'button' && !mine && (
+        {!mine && m.media && <WaMedia m={{ id: m.id, type: m.msgType ?? '', text: m.text, media: m.media }} />}
+        {!m.media && m.msgType && m.msgType !== 'text' && m.msgType !== 'template' && m.msgType !== 'button' && !mine && (
           <span className="ld-media"><FileText size={13} aria-hidden /> They sent {m.msgType === 'image' ? 'a photo' : m.msgType === 'audio' ? 'a voice message' : m.msgType === 'document' ? 'a document' : m.msgType === 'location' ? 'a location' : 'something'}. Open WhatsApp on the desk phone to see it.</span>
         )}
-        <span className="ch-text">{m.text}</span>
+        {!(m.media && PLACEHOLDERS.test(m.text)) && <span className="ch-text">{m.text}</span>}
         <span className="ch-meta">
           {timeFmt.format(new Date(m.at))}
           {mine && (m.status === 'failed' ? <span className="ch-fail" title={m.error ?? undefined}>Not delivered{m.error ? `: ${m.error}` : ''}</span>
