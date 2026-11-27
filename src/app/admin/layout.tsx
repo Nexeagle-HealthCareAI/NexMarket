@@ -54,6 +54,8 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/admin/partners', label: 'Partners', page: 'partners', icon: Users, match: ['/admin/pipeline', '/admin/duplicates'] },
       { href: '/admin/referrals', label: 'Referrals', page: 'referrals', icon: Columns3, match: ['/admin/hospital-crm', '/admin/desk'], phone: true },
       { href: '/admin/surveys', label: 'Surveys', page: 'analytics', icon: ListChecks },
+      { href: '/admin/camps', label: 'Health camps', page: 'camps', icon: Tent },
+      ...(FEATURES.healthCards ? [{ href: '/admin/health-cards', label: 'Health cards', page: 'camps' as const, icon: CreditCard }] : []),
     ],
   },
   {
@@ -61,8 +63,6 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/leads', label: 'Leads inbox', page: 'leads', icon: UserPlus, phone: true },
       { href: '/admin/lead-sources', label: 'Lead sources', page: 'leads', icon: Waypoints },
-      { href: '/admin/camps', label: 'Health camps', page: 'camps', icon: Tent },
-      ...(FEATURES.healthCards ? [{ href: '/admin/health-cards', label: 'Health cards', page: 'camps' as const, icon: CreditCard }] : []),
       { href: '/admin/whatsapp', label: 'WhatsApp', page: 'wa', icon: MessageCircle, match: ['/admin/broadcasts', '/admin/whatsapp-setup'] },
       { href: '/admin/social', label: 'Facebook & Instagram', page: 'social', icon: AtSign },
       { href: '/admin/google', label: 'Google', page: 'social', icon: Search },
