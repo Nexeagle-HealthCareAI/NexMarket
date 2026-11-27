@@ -479,9 +479,26 @@ namespace SeemanchalOutreach.Api.Services
             var id = JsonNode.Parse(await inst.Content.ReadAsStringAsync(ct))?["id"]?.ToString();
             using var tok = await RawAsync(jwt, HttpMethod.Post, $"/app/installations/{id}/access_tokens", null, ct);
             if (!tok.IsSuccessStatusCode) throw new GitHubException((int)tok.StatusCode, Plain((int)tok.StatusCode, null, c));
-            var token = JsonNode.Parse(await tok.Content.ReadAsStringAsync(ct))?["token"]?.ToString() ?? throw new GitHubException(502, "GitHub gave no token.");
+            var node = JsonNode.Parse(await tok.Content.ReadAsStringAsync(ct));
+            var token = node?["token"]?.ToString() ?? throw new GitHubException(502, "GitHub gave no token.");
             _cache.Set(key, token, TimeSpan.FromMinutes(45));
+            // What the installation was actually granted (the app's settings, as accepted on the organisation).
+            if (node?["permissions"] is JsonObject granted) _cache.Set(key + ":perms", granted.ToJsonString(), TimeSpan.FromMinutes(45));
             return token;
+        }
+
+        /// <summary>
+        /// For the connection test: a fresh key from GitHub (so permissions accepted a moment ago count), and what the app
+        /// was granted on this repository, e.g. contents: write. Null when a token is used instead of an app.
+        /// </summary>
+        public async Task<JsonObject?> AppPermissionsAsync(SiteConfig c, CancellationToken ct)
+        {
+            if (!string.IsNullOrWhiteSpace(c.Token) || string.IsNullOrWhiteSpace(c.AppId) || string.IsNullOrWhiteSpace(c.PrivateKey)) return null;
+            var key = $"gh-token:{c.AppId}:{c.Repo}:{c.PrivateKey!.Length}";
+            _cache.Remove(key);
+            _cache.Remove(key + ":perms");
+            await TokenAsync(c, ct);
+            return _cache.TryGetValue(key + ":perms", out string? json) && json != null ? JsonNode.Parse(json) as JsonObject : null;
         }
 
         /// <summary>One call under /repos/{owner}/{name}. Null when <paramref name="missingOk"/> and GitHub says 404.</summary>

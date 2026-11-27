@@ -481,10 +481,23 @@ namespace SeemanchalOutreach.Api.Controllers
             if (!cfg.Connected) return Ok(new { ok = false, checks = new[] { new { what = "Connection", ok = false, detail = "Fill in the repository and the GitHub key first, and save." } } });
             try
             {
+                var granted = await gh.AppPermissionsAsync(cfg, ct);
                 var repo = await gh.GetAsync(cfg, "", ct);
                 Add("Reach the repository", true, $"{repo?["full_name"]} ({(repo?["private"]?.GetValue<bool>() == true ? "private" : "public")})");
-                var canPush = repo?["permissions"]?["push"]?.GetValue<bool>();
-                if (canPush == false) Add("Write to the repository", false, "The key can read but not write. The app needs Contents and Pull requests set to \"Read and write\".");
+                if (granted != null)
+                {
+                    // An app: what GitHub actually granted it on this repository.
+                    string level(string k) => granted[k]?.ToString() ?? "none";
+                    var missing = new List<string>();
+                    if (level("contents") != "write") missing.Add($"Contents is “{level("contents")}”, needs “Read and write”");
+                    if (level("pull_requests") != "write") missing.Add($"Pull requests is “{level("pull_requests")}”, needs “Read and write”");
+                    if (level("checks") == "none") missing.Add("Checks needs “Read-only”");
+                    if (level("actions") == "none") missing.Add("Actions needs “Read-only”");
+                    Add("Write to the repository", missing.Count == 0, missing.Count == 0 ? "Contents and pull requests: read and write. Checks and actions: read."
+                        : string.Join("; ", missing) + ". Change it in the app's Permissions & events, then accept the new permissions on the organisation (Settings → GitHub Apps → Configure).");
+                }
+                else if (repo?["permissions"]?["push"]?.GetValue<bool>() == false)
+                    Add("Write to the repository", false, "The token can read but not write. Give it Contents and Pull requests: Read and write.");
                 var branch = await gh.GetAsync(cfg, $"/git/ref/heads/{cfg.Branch}", ct, missingOk: true);
                 Add($"Find the branch \"{cfg.Branch}\"", branch != null, branch != null ? "Found." : "That branch isn't in the repository.");
                 foreach (var name in new[] { "site.json", "faqs.json", "blog.json" })
