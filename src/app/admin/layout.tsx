@@ -59,6 +59,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Network',
     items: [
       { href: '/admin/leads', label: 'Leads inbox', page: 'leads', icon: UserPlus, phone: true },
+      { href: '/admin/lead-sources', label: 'Lead sources', page: 'leads', icon: Waypoints },
       { href: '/admin/camps', label: 'Health camps', page: 'camps', icon: Tent },
       ...(FEATURES.healthCards ? [{ href: '/admin/health-cards', label: 'Health cards', page: 'camps' as const, icon: CreditCard }] : []),
       { href: '/admin/whatsapp', label: 'WhatsApp', page: 'wa', icon: MessageCircle, match: ['/admin/broadcasts', '/admin/whatsapp-setup'] },
@@ -87,7 +88,6 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/payments', label: 'Payments', page: 'payments', icon: Wallet },
       { href: '/admin/spend', label: 'Marketing spend', page: 'payments', icon: IndianRupee },
-      { href: '/admin/lead-sources', label: 'Lead sources', page: 'leads', icon: Waypoints },
       { href: '/admin/reports', label: 'Analytics', page: 'analytics', icon: BarChart3 },
       { href: '/admin/surveys', label: 'Surveys', page: 'analytics', icon: ListChecks },
     ],
