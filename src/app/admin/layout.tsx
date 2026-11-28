@@ -15,7 +15,7 @@ import {
   PanelLeftClose, PanelLeftOpen, Activity, Grid2x2Check, CalendarCheck, History, MessagesSquare, ChevronRight, UserPlus, Tent,
   AtSign, Search, Route, Signpost, KanbanSquare, Download, IndianRupee, Globe,
   ChevronDown,
-  CreditCard, Waypoints,
+  CreditCard, Waypoints, Tags,
 } from 'lucide-react';
 import { crm, logout as apiLogout, setSessionExpiredHandler } from '@/lib/sync/api-client';
 import { FEATURES } from '@/lib/crm/features';
@@ -63,6 +63,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/leads', label: 'Leads inbox', page: 'leads', icon: UserPlus, phone: true },
       { href: '/admin/lead-sources', label: 'Lead sources', page: 'leads', icon: Waypoints },
+      { href: '/admin/keywords', label: 'Keywords', page: 'social', icon: Tags },
       { href: '/admin/whatsapp', label: 'WhatsApp', page: 'wa', icon: MessageCircle, match: ['/admin/broadcasts', '/admin/whatsapp-setup'] },
       { href: '/admin/social', label: 'Facebook & Instagram', page: 'social', icon: AtSign },
       { href: '/admin/google', label: 'Google', page: 'social', icon: Search },

@@ -111,6 +111,10 @@ namespace SeemanchalOutreach.Application.Interfaces
         DbSet<SocialMessage> SocialMessages { get; }
         DbSet<AdLead> AdLeads { get; }
         DbSet<TrackedLink> TrackedLinks { get; }
+        DbSet<KwTopic> KwTopics { get; }
+        DbSet<KwKeyword> KwKeywords { get; }
+        DbSet<KwAreaVolume> KwAreaVolumes { get; }
+        DbSet<KwAction> KwActions { get; }
 
         ChangeTracker ChangeTracker { get; }
 

@@ -114,6 +114,10 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<SocialMessage> SocialMessages => Set<SocialMessage>();
         public DbSet<AdLead> AdLeads => Set<AdLead>();
         public DbSet<TrackedLink> TrackedLinks => Set<TrackedLink>();
+        public DbSet<KwTopic> KwTopics => Set<KwTopic>();
+        public DbSet<KwKeyword> KwKeywords => Set<KwKeyword>();
+        public DbSet<KwAreaVolume> KwAreaVolumes => Set<KwAreaVolume>();
+        public DbSet<KwAction> KwActions => Set<KwAction>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -639,6 +643,33 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("tracked_links");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.Code).IsUnique();
+            });
+            modelBuilder.Entity<KwTopic>(entity =>
+            {
+                entity.ToTable("kw_topics");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Name).IsUnique();
+                entity.HasIndex(e => e.Score);
+            });
+            modelBuilder.Entity<KwKeyword>(entity =>
+            {
+                entity.ToTable("kw_keywords");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Text).IsUnique();
+                entity.HasIndex(e => e.TopicId);
+            });
+            modelBuilder.Entity<KwAreaVolume>(entity =>
+            {
+                entity.ToTable("kw_area_volumes");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => new { e.KeywordId, e.District }).IsUnique();
+            });
+            modelBuilder.Entity<KwAction>(entity =>
+            {
+                entity.ToTable("kw_actions");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.TopicId);
+                entity.HasIndex(e => e.LinkCode);
             });
             modelBuilder.Entity<WaConversation>(entity =>
             {

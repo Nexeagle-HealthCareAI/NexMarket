@@ -1882,4 +1882,110 @@ namespace SeemanchalOutreach.Domain.Entities
         public string CreatedBy { get; set; } = string.Empty;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
+
+    /// <summary>
+    /// A keyword topic: searches answered by one page or service ("kidney stone treatment"), with how many people search
+    /// for it, how valuable it is to the hospital and how much of it the hospital is missing. See KeywordService.
+    /// </summary>
+    public class KwTopic
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string Name { get; set; } = string.Empty;
+        public string? Department { get; set; }
+        /// <summary>visit | compare | learn | brand</summary>
+        public string Intent { get; set; } = "visit";
+        /// <summary>new | planned | active | dismissed</summary>
+        public string Status { get; set; } = "new";
+        public string? OwnerId { get; set; }
+        /// <summary>Words that put a keyword in this topic, one per line (any script): "kidney stone", "pathri", "पथरी".</summary>
+        public string MatchTerms { get; set; } = string.Empty;
+        /// <summary>0–100: demand × value × gap.</summary>
+        public int Score { get; set; }
+        /// <summary>Searches a month across its keywords.</summary>
+        public int Demand { get; set; }
+        public int ValuePct { get; set; }
+        public int GapPct { get; set; }
+        public double? BestPosition { get; set; }
+        /// <summary>Months searches peak, e.g. "4,5,6".</summary>
+        public string? PeakMonths { get; set; }
+        public string? Note { get; set; }
+        /// <summary>Made by a person (not from the starter list).</summary>
+        public bool IsCustom { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? ScoredAt { get; set; }
+    }
+
+    /// <summary>One search phrase, merged from every source that saw it.</summary>
+    public class KwKeyword
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        /// <summary>Lower case, single spaces.</summary>
+        public string Text { get; set; } = string.Empty;
+        /// <summary>hi | hinglish | en | bn</summary>
+        public string Lang { get; set; } = "en";
+        public string Intent { get; set; } = "learn";
+        public Guid? TopicId { get; set; }
+        /// <summary>District it names, if any.</summary>
+        public string? District { get; set; }
+        /// <summary>Comma list: gsc, gbp, ads, planner, chats, seed.</summary>
+        public string Sources { get; set; } = string.Empty;
+        /// <summary>Average searches a month (Keyword Planner).</summary>
+        public int? Volume { get; set; }
+        /// <summary>Last 12 months' searches, oldest first: [{"m":"2026-01","v":880},…]</summary>
+        public string? VolumeJson { get; set; }
+        public int? Competition { get; set; }
+        public long? BidLowMicros { get; set; }
+        public long? BidHighMicros { get; set; }
+        /// <summary>Search Console, last 90 days.</summary>
+        public int Impressions { get; set; }
+        public int Clicks { get; set; }
+        public double? Position { get; set; }
+        /// <summary>Business Profile views, last 3 months.</summary>
+        public int GbpViews { get; set; }
+        /// <summary>Google Ads search terms, last 90 days.</summary>
+        public int AdClicks { get; set; }
+        public long AdCostMicros { get; set; }
+        /// <summary>Incoming WhatsApp messages using it, last 90 days.</summary>
+        public int ChatCount { get; set; }
+        public bool IsSeed { get; set; }
+        public bool Hidden { get; set; }
+        public DateTime? VolumeAt { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>Searches a month for a keyword in one district (Keyword Planner, per district).</summary>
+    public class KwAreaVolume
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid KeywordId { get; set; }
+        public string District { get; set; } = string.Empty;
+        public int Volume { get; set; }
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>Something done for a topic: a website page, a Business Profile post, an ad group, a camp, a broadcast.</summary>
+    public class KwAction
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid TopicId { get; set; }
+        /// <summary>page | post | ad | camp | broadcast</summary>
+        public string Kind { get; set; } = "page";
+        public string Title { get; set; } = string.Empty;
+        /// <summary>idea | brief | writing | review | live | done</summary>
+        public string Stage { get; set; } = "idea";
+        public string? OwnerId { get; set; }
+        public DateOnly? DueOn { get; set; }
+        /// <summary>A tracked link code whose leads count for this action.</summary>
+        public string? LinkCode { get; set; }
+        public string? Url { get; set; }
+        public string? Brief { get; set; }
+        /// <summary>Rupees spent, for cost per patient.</summary>
+        public int? Spend { get; set; }
+        public string CreatedBy { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? LiveAt { get; set; }
+    }
 }

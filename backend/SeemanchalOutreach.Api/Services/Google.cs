@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
@@ -374,6 +374,19 @@ namespace SeemanchalOutreach.Api.Services
                 results.Add(new SourceResult("google_conv", "Patients sent to Google Ads", conv.Ok, conv.Sent, conv.Error));
             }
 
+            // Keywords: merge what Google just gave with WhatsApp phrases, and score the topics (Keyword Planner weekly).
+            try
+            {
+                var kw = new KeywordService(_db, _settings, _api);
+                var planner = cfg.AdsCustomer != null && kw.PlannerDue();
+                var k = await kw.RunAsync(planner, by, ct);
+                results.Add(new SourceResult("keywords", "Keywords", k.Ok, k.Keywords, k.Error));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                results.Add(new SourceResult("keywords", "Keywords", false, 0, "Keywords couldn't be updated: " + ex.Message));
+            }
+
             var at = DateTime.UtcNow;
             await GoogleConfig.SaveAsync(_settings, new()
             {
@@ -738,6 +751,34 @@ namespace SeemanchalOutreach.Api.Services
                                 points.Add(new Point(day, "campaign:" + id, name, metric, value));
                                 points.Add(new Point(day, "", null, metric, value));
                             }
+                        }
+                    token = GoogleApi.Str(root, "nextPageToken");
+                }
+                if (token == null) break;
+            }
+
+            // What people typed before an ad showed (for Keywords). A bonus: a failure here doesn't fail the Ads fetch.
+            var terms = "SELECT search_term_view.search_term, segments.date, metrics.clicks, metrics.impressions, metrics.cost_micros "
+                + $"FROM search_term_view WHERE segments.date BETWEEN '{D(from)}' AND '{D(to)}' AND metrics.impressions > 0";
+            token = null;
+            for (int page = 0; page < 20; page++)
+            {
+                var r = await _api.PostAsync(cfg, $"https://googleads.googleapis.com/{cfg.AdsVersion}/customers/{cfg.AdsCustomer}/googleAds:search",
+                    token == null ? new { query = terms } : new { query = terms, pageToken = token }, ct, AdsHeaders(cfg));
+                if (!r.Ok || r.Doc == null) break;
+                using (r.Doc)
+                {
+                    var root = r.Doc.RootElement;
+                    if (root.TryGetProperty("results", out var results))
+                        foreach (var x in results.EnumerateArray())
+                        {
+                            if (!x.TryGetProperty("segments", out var seg) || !DateOnly.TryParse(GoogleApi.Str(seg, "date"), CultureInfo.InvariantCulture, out var day)) continue;
+                            if (!x.TryGetProperty("searchTermView", out var stv) || GoogleApi.Str(stv, "searchTerm") is not string term || term.Length < 2) continue;
+                            var m = x.GetProperty("metrics");
+                            var dim = "term:" + term.Trim().ToLowerInvariant();
+                            points.Add(new Point(day, dim, null, "clicks", GoogleApi.Num(m, "clicks")));
+                            points.Add(new Point(day, dim, null, "impressions", GoogleApi.Num(m, "impressions")));
+                            points.Add(new Point(day, dim, null, "cost", GoogleApi.Num(m, "costMicros") / 1_000_000m));
                         }
                     token = GoogleApi.Str(root, "nextPageToken");
                 }
