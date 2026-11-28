@@ -13,6 +13,10 @@ Optional:
 - `CRM_EVENTS_URL`: your CRM's click counter, `https://<crm-api>/api/v1/public/web-event?org=<your org>`. When set, the site counts call, WhatsApp and booking clicks per page (no names, numbers or addresses) so the CRM can show which pages bring patients.
 - `PREVIEW_API`: your CRM's API address, for preview links (default `https://nexmarket-api.nexeagle.com`).
 
+Every generated page remembers `utm_source`, `utm_medium`, `utm_campaign` and `gclid` in that browser tab's session storage. A later tagged link updates the matching values. The enquiry form code from CRM → Google reads those values on the contact page, so an enquiry still gets the ad or campaign credit after the visitor browses elsewhere. This storage is separate from optional click counting.
+
+The CRM's 30-minute `/preview` link also previews hospital details in the website layout: the header, contact page and footer show the draft values without changing published pages.
+
 ## Publish
 
 Any static host works (Netlify, Cloudflare Pages, GitHub Pages, or nginx). An example GitHub Actions workflow is in `deploy-example.yml`:

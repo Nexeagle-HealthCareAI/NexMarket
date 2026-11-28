@@ -40,6 +40,19 @@ function formHtml(api: string) {
 </script>`;
 }
 
+function visitAttributionHtml() {
+  return `<script>
+(function () {
+  var keep = ['utm_source', 'utm_medium', 'utm_campaign', 'gclid'];
+  var q = new URLSearchParams(location.search);
+  keep.forEach(function (k) {
+    var v = q.get(k);
+    if (v) try { sessionStorage.setItem(k, v.slice(0, 200)); } catch (e) {}
+  });
+})();
+</script>`;
+}
+
 /**
  * How Google numbers get matched to real patients when the ads are run by hand in Google Ads: one setting in Google Ads,
  * tagged links for everything else, and the website form that drops enquiries straight into the Leads inbox.
@@ -49,6 +62,7 @@ export function GoogleTracking({ toast }: { toast: (m: string) => void }) {
   const [src, setSrc] = useState('facebook');
   const [name, setName] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [showVisitScript, setShowVisitScript] = useState(false);
   const link = useMemo(() => {
     const u = url.trim();
     if (!u || !slug(name)) return '';
@@ -96,7 +110,15 @@ export function GoogleTracking({ toast }: { toast: (m: string) => void }) {
 
       <div className="gg-track-step">
         <strong>3. The website&apos;s enquiry form</strong>
-        <span className="crm-sub">Give this to whoever runs the website. Enquiries then arrive in the Leads inbox by themselves (as <strong>Website</strong>, or <strong>Google ad</strong> when the visitor came from an ad), with the campaign filled in and a notification to the desk. Change the departments and the thank-you page; keep the field names.</span>
+        <span className="crm-sub">Give the form code to whoever runs the website. On the NexMarket starter site, campaign tags are saved across every page automatically. On another site, add the visit script to every page and the form code to the contact page. Enquiries then arrive in the Leads inbox as <strong>Website</strong> or <strong>Google ad</strong>, with campaign credit and a notification to the desk.</span>
+        <button type="button" className="wa-link" style={{ alignSelf: 'flex-start' }} aria-expanded={showVisitScript} onClick={() => setShowVisitScript((v) => !v)}>{showVisitScript ? 'Hide the visit script' : 'Show the visit script for other websites'}</button>
+        {showVisitScript && (
+          <>
+            <p className="crm-sub" style={{ margin: 0 }}>Add this once to every page, preferably just before <code>&lt;/body&gt;</code>. It remembers the visitor&apos;s source in this browser tab until the enquiry form is submitted.</p>
+            <pre className="gg-code">{visitAttributionHtml()}</pre>
+            <button type="button" className="crm-btn is-secondary is-sm" style={{ alignSelf: 'flex-start' }} onClick={() => void copy(visitAttributionHtml(), 'Visit attribution script')}><Copy size={13} aria-hidden /> Copy visit script</button>
+          </>
+        )}
         <button type="button" className="wa-link" style={{ alignSelf: 'flex-start' }} aria-expanded={showForm} onClick={() => setShowForm((v) => !v)}>{showForm ? 'Hide the form code' : 'Show the form code'}</button>
         {showForm && (
           <>

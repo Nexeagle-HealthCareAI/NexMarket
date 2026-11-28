@@ -129,29 +129,78 @@ if (locations.length) {
 ${(l.services || []).length ? `<h2>Care people from ${esc(l.town)} often come for</h2><ul>${l.services.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
 ${(l.faqs || []).length ? `<h2>Questions</h2>${l.faqs.map((f) => `<details><summary>${esc(f.question)}</summary><p>${esc(f.answer)}</p></details>`).join('')}` : ''}`);
 }
+const campaignTracking = `var keys=['utm_source','utm_medium','utm_campaign','gclid'];try{var q=new URLSearchParams(location.search);keys.forEach(function(k){var v=q.get(k);if(v)sessionStorage.setItem(k,v.slice(0,200))})}catch(e){}`;
 for (const r of redirects) {
   if (routes.some((x) => x.route === r.from)) fail('redirects.json', `"${r.from}" is a page on this site, so it can't be redirected.`);
   const dir = path.join(out, r.from); fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><link rel="canonical" href="${esc(SITE_URL + r.to)}"><meta http-equiv="refresh" content="0; url=${esc(r.to)}"><title>Moved</title><p>This page has moved: <a href="${esc(r.to)}">${esc(r.to)}</a></p>`);
+  fs.writeFileSync(path.join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><link rel="canonical" href="${esc(SITE_URL + r.to)}"><script>(function(){${campaignTracking}})();</script><meta http-equiv="refresh" content="0; url=${esc(r.to)}"><title>Moved</title><p>This page has moved: <a href="${esc(r.to)}">${esc(r.to)}</a></p>`);
 }
 page('/404', `Page not found | ${NAME}`, 'This page could not be found.', `<h1>Page not found</h1><p><a href="/">Go to the home page</a></p>`, { noindex: true });
 page('/preview', `Preview | ${NAME}`, 'A preview of a page that is not published yet.', `<div id="preview"><p>Loading the preview…</p></div>
 <script>
-(function(){var p=new URLSearchParams(location.hash.slice(1)),t=p.get('t')||'',o=p.get('o')||'',api=${JSON.stringify(process.env.PREVIEW_API || 'https://nexmarket-api.nexeagle.com')};
-var el=document.getElementById('preview');function e(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-if(!/^[A-Za-z0-9_-]{20,80}$/.test(t)){el.innerHTML='<p>This preview link is not complete.</p>';return}
-fetch(api+'/api/v1/website-preview/'+t+(o?'?org='+encodeURIComponent(o):'')).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(x){var d=x.data,h='<p class="tag">Preview, not published</p>';
-if(x.type==='article'){h+='<h1>'+e(d.title)+'</h1><p class="lead">'+e(d.excerpt)+'</p>'+(d.sections||[]).map(function(s){return '<h2>'+e(s.heading)+'</h2>'+(s.paragraphs||[]).map(function(q){return '<p>'+e(q)+'</p>'}).join('')+((s.points||[]).length?'<ul>'+s.points.map(function(q){return '<li>'+e(q)+'</li>'}).join('')+'</ul>':'')}).join('')}
-else if(x.type==='location'){h+='<h1>For patients from '+e(d.town)+'</h1><p>'+e(d.intro)+'</p><h2>How to reach us</h2><p>'+e(d.howToReach)+'</p>'}
-else{h+='<h1>'+e(x.title)+'</h1><pre>'+e(JSON.stringify(d,null,2))+'</pre>'}el.innerHTML=h}).catch(function(){el.innerHTML='<p>This preview has expired. Open a new one from the CRM.</p>'})})();
+(function () {
+  var params = new URLSearchParams(location.hash.slice(1));
+  var token = params.get('t') || '';
+  var org = params.get('o') || '';
+  var api = ${JSON.stringify(process.env.PREVIEW_API || 'https://nexmarket-api.nexeagle.com')};
+  var el = document.getElementById('preview');
+  function e(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function line(label, value) { return value ? '<p><strong>' + label + ':</strong> ' + e(value) + '</p>' : ''; }
+  if (!/^[A-Za-z0-9_-]{20,80}$/.test(token)) { el.innerHTML = '<p>This preview link is not complete. Open it again from the CRM.</p>'; return; }
+  fetch(api + '/api/v1/website-preview/' + token + (org ? '?org=' + encodeURIComponent(org) : ''))
+    .then(function (r) { if (!r.ok) throw new Error('expired'); return r.json(); })
+    .then(function (x) {
+      var d = x.data;
+      var h = '<p class="tag">Preview, not published</p>';
+      if (x.type === 'article') {
+        h += '<h1>' + e(d.title) + '</h1><p class="lead">' + e(d.excerpt) + '</p>' + (d.sections || []).map(function (s) {
+          return '<h2>' + e(s.heading) + '</h2>' + (s.paragraphs || []).map(function (q) { return '<p>' + e(q) + '</p>'; }).join('')
+            + ((s.points || []).length ? '<ul>' + s.points.map(function (q) { return '<li>' + e(q) + '</li>'; }).join('') + '</ul>' : '');
+        }).join('');
+      } else if (x.type === 'location') {
+        h += '<h1>For patients from ' + e(d.town) + '</h1><p>' + e(d.intro) + '</p><h2>How to reach us</h2><p>' + e(d.howToReach) + '</p>';
+      } else if (x.type === 'site') {
+        var name = d.name || ${JSON.stringify(NAME)};
+        var phoneDigits = String(d.phone || '').replace(/\D/g, '');
+        var whatsappDigits = String(d.whatsappNumber || '').replace(/\D/g, '');
+        document.title = 'Preview | ' + name;
+        var brand = document.querySelector('.brand');
+        if (brand) brand.textContent = name;
+        var top = document.querySelector('.top-in');
+        var call = top && top.querySelector('.call');
+        if (phoneDigits && top) {
+          if (!call) { call = document.createElement('a'); call.className = 'call'; call.setAttribute('data-track', 'call'); top.appendChild(call); }
+          call.href = 'tel:+91' + phoneDigits;
+          call.textContent = 'Call ' + (d.phone || '');
+        } else if (call) call.remove();
+        var footer = document.querySelector('.foot .wrap');
+        if (footer) footer.innerHTML = '<p><strong>' + e(name) + '</strong></p>' + line('Address', d.address)
+          + line('Consultation timings', d.consultationTimings)
+          + (locations.length ? '<p><a href="/areas">Areas we serve</a> · ' : '<p>')
+          + '<a href="/privacy-policy">Privacy policy</a></p>'
+          + (d.medicalDisclaimer ? '<p class="small">' + e(d.medicalDisclaimer) + '</p>' : '');
+        h += '<h1>Contact</h1><p class="lead">' + e(name) + '</p>' + line('About the hospital', d.description)
+          + (phoneDigits ? '<p><strong>Phone:</strong> <a href="tel:+91' + e(phoneDigits) + '">' + e(d.phone) + '</a></p>' : '')
+          + (whatsappDigits ? '<p><strong>WhatsApp:</strong> <a href="https://wa.me/91' + e(whatsappDigits) + '" data-track="whatsapp">' + e(d.whatsappNumber) + '</a></p>' : '')
+          + (d.email ? '<p><strong>Email:</strong> <a href="mailto:' + e(d.email) + '">' + e(d.email) + '</a></p>' : '')
+          + line('Website', d.website) + line('Address', d.address)
+          + line('Consultation timings', d.consultationTimings) + line('Emergency information', d.emergencyInfo);
+      } else {
+        h += '<h1>' + e(x.title) + '</h1><pre>' + e(JSON.stringify(d, null, 2)) + '</pre>';
+      }
+      el.innerHTML = h;
+    })
+    .catch(function () { el.innerHTML = '<p>This preview has expired. Open a new one from the CRM.</p>'; });
+})();
 </script>`, { noindex: true });
 
-// Count call, WhatsApp and booking clicks per page (no names, numbers or addresses), when the CRM address is set.
-if (process.env.CRM_EVENTS_URL) {
-  const js = `document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('[data-track]');if(!a||!navigator.sendBeacon)return;navigator.sendBeacon(${JSON.stringify(process.env.CRM_EVENTS_URL)},new Blob([JSON.stringify({kind:a.getAttribute('data-track'),page:location.pathname})],{type:'text/plain'}))});`;
-  fs.writeFileSync(path.join(out, 'track.js'), js);
-  for (const r of routes) { const f = r.route === '/404' ? path.join(out, '404.html') : path.join(out, r.route, 'index.html'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace('</body>', '<script src="/track.js" defer></script>\n</body>')); }
-}
+// Keep campaign tags from the landing page for the enquiry form, even after the visitor changes pages.
+const eventTracking = process.env.CRM_EVENTS_URL
+  ? `document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('[data-track]');if(!a||!navigator.sendBeacon)return;navigator.sendBeacon(${JSON.stringify(process.env.CRM_EVENTS_URL)},new Blob([JSON.stringify({kind:a.getAttribute('data-track'),page:location.pathname})],{type:'text/plain'}))});`
+  : '';
+const js = `(function(){${campaignTracking}${eventTracking}})();`;
+fs.writeFileSync(path.join(out, 'track.js'), js);
+for (const r of routes) { const f = r.route === '/404' ? path.join(out, '404.html') : path.join(out, r.route, 'index.html'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace('</body>', '<script src="/track.js" defer></script>\n</body>')); }
 
 const indexed = routes.filter((r) => !r.noindex && r.route !== '/404');
 fs.writeFileSync(path.join(out, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${indexed.map((r) => `  <url><loc>${esc(SITE_URL + r.route)}</loc></url>`).join('\n')}\n</urlset>\n`);
