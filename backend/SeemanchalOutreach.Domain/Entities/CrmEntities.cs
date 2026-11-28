@@ -1881,6 +1881,45 @@ namespace SeemanchalOutreach.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public string CreatedBy { get; set; } = string.Empty;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        // ─── As content: a reel, post, story, ad, template, page or poster ───
+        /// <summary>place (a bio, a hoarding, a newspaper) | reel | post | story | ad | template | page | poster | video</summary>
+        public string Kind { get; set; } = "place";
+        /// <summary>The Keywords topic it is about.</summary>
+        public Guid? TopicId { get; set; }
+        public string? OwnerId { get; set; }
+        public DateOnly? PublishedOn { get; set; }
+        /// <summary>Instagram media ID or Facebook post ID, when it is a post or reel.</summary>
+        public string? MediaId { get; set; }
+        /// <summary>Meta ad ID when it runs as an ad: Click-to-WhatsApp, Instagram and Facebook ad messages and lead forms carry it.</summary>
+        public string? AdId { get; set; }
+        /// <summary>The WhatsApp broadcast it went out in.</summary>
+        public Guid? BroadcastId { get; set; }
+        /// <summary>The website page it is ("/blog/pathri-ka-ilaj"); enquiries from that page count for it.</summary>
+        public string? PagePath { get; set; }
+    }
+
+    /// <summary>
+    /// One time a lead reached the hospital from somewhere known: a tracked link or code, an ad, a broadcast reply, a page, a
+    /// partner, a camp, or what the desk was told. The first one is marked; later ones are kept too.
+    /// </summary>
+    public class LeadTouch
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid LeadId { get; set; }
+        public DateTime At { get; set; } = DateTime.UtcNow;
+        /// <summary>whatsapp | instagram | facebook | web | form | call | walk_in | camp | partner</summary>
+        public string Channel { get; set; } = "whatsapp";
+        /// <summary>code | ad | broadcast | story | comment | page | partner | camp | desk | topic</summary>
+        public string Kind { get; set; } = "code";
+        public Guid? LinkId { get; set; }
+        public Guid? BroadcastId { get; set; }
+        public string? AdId { get; set; }
+        /// <summary>The code, page or ad headline as it arrived.</summary>
+        public string? Ref { get; set; }
+        /// <summary>More about it: the ad's click ID, its link, the story…</summary>
+        public string? Detail { get; set; }
+        public bool IsFirst { get; set; }
     }
 
     /// <summary>

@@ -41,6 +41,7 @@ interface Detail {
   partner?: { clientId: string; name: string; role: string; phone?: string | null; referralCode?: string | null } | null;
   referral?: { clientId: string; status: string } | null;
   timeline: TimelineItem[];
+  touches?: { at: string; channel: string; kind: string; first: boolean; content?: string | null; contentKind?: string | null; code?: string | null; broadcast?: string | null; ref?: string | null }[];
   windowOpen: boolean; windowClosesAt?: string | null; whatsappConfigured: boolean; templateReady: boolean;
 }
 interface Person { agentId: string; name: string; role: string; photoUrl?: string | null; open: number }
@@ -437,6 +438,16 @@ function LeadPane({ id, ping, editable, onBack, onChanged, toast }: {
             {l.firstResponseAt ? <strong>{mins((new Date(l.firstResponseAt).getTime() - new Date(l.createdAt).getTime()) / 60000)}</strong> : <span className="ld-wait is-late">Not yet</span>}
           </div>
         </div>
+        {d.touches && d.touches.length > 0 && (
+          <div className="ld-touches" aria-label="Where they came from">
+            <span className="ld-touches-h">Came from</span>
+            {d.touches.map((t, i) => (
+              <span key={i} className={`ld-touch${t.first ? ' is-first' : ''}`} title={`${new Date(t.at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}${t.ref ? ` · ${t.ref}` : ''}`}>
+                {t.first && <strong>First: </strong>}{touchLabel(t)}
+              </span>
+            ))}
+          </div>
+        )}
         {d.referral && <span className="crm-sub ld-ref-note"><Check size={13} aria-hidden /> On the Referral desk as {d.partner?.name ?? 'the partner'}&apos;s patient · <Link href="/admin/referrals?tab=desk">Open desk</Link></span>}
         {l.status === 'lost' && l.lostReason && <span className="crm-sub">Reason: {l.lostReason}</span>}
       </div>
@@ -699,4 +710,11 @@ function CampQr({ onClose }: { onClose: () => void }) {
       {error && <div className="crm-error" role="alert">{error}</div>}
     </Modal>
   );
+}
+
+const TOUCH_KIND: Record<string, string> = { code: 'Code', ad: 'Ad', broadcast: 'Broadcast reply', story: 'Story', comment: 'Comment', page: 'Website page', partner: 'Partner', camp: 'Camp', desk: 'Told the desk', topic: 'Topic' };
+const TOUCH_CHANNEL: Record<string, string> = { whatsapp: 'WhatsApp', instagram: 'Instagram', facebook: 'Facebook', web: 'Website', form: 'Form', call: 'Call', walk_in: 'Walk-in', camp: 'Camp', partner: 'Partner' };
+function touchLabel(t: { channel: string; kind: string; content?: string | null; code?: string | null; broadcast?: string | null; ref?: string | null }) {
+  const what = t.content ? `${t.content}${t.code ? ` (${t.code})` : ''}` : t.broadcast ?? t.ref ?? '';
+  return `${TOUCH_CHANNEL[t.channel] ?? t.channel} · ${TOUCH_KIND[t.kind] ?? t.kind}${what ? `: ${what}` : ''}`;
 }

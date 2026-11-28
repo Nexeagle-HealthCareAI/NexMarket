@@ -115,7 +115,7 @@ namespace SeemanchalOutreach.Api.Controllers
         private static string? PathOf(string? url)
         {
             if (string.IsNullOrWhiteSpace(url)) return null;
-            return Uri.TryCreate(url, UriKind.Absolute, out var u) ? u.AbsolutePath.TrimEnd('/') : url.Trim().TrimEnd('/');
+            return Attribution.PathOf(url);
         }
 
         /// <summary>The next step a topic needs, from where the hospital stands on it.</summary>

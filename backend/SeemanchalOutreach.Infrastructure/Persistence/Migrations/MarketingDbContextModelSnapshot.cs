@@ -3122,6 +3122,57 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.ToTable("lead_activities", "marketing");
                 });
 
+            modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.LeadTouch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AdId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("BroadcastId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Detail")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsFirst")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("LeadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("LinkId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Ref")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeadId");
+
+                    b.HasIndex("LinkId");
+
+                    b.HasIndex("BroadcastId");
+
+                    b.HasIndex("At");
+
+                    b.ToTable("lead_touches", "marketing");
+                });
+
             modelBuilder.Entity("SeemanchalOutreach.Domain.Entities.LeaveRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5556,10 +5607,39 @@ namespace SeemanchalOutreach.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("TopicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OwnerId")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("PublishedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("MediaId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AdId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("BroadcastId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PagePath")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Code")
                         .IsUnique();
+
+                    b.HasIndex("AdId");
+
+                    b.HasIndex("MediaId");
 
                     b.ToTable("tracked_links", "marketing");
                 });

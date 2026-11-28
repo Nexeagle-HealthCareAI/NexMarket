@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -87,6 +87,15 @@ namespace SeemanchalOutreach.Api.Controllers
             var now = DateTime.UtcNow;
             // Google's click ID: kept so "came to the hospital" can be sent back to Google Ads (Google → Setup).
             var gclid = GoogleConversions.CleanClickId(V("gclid"));
+            // The page itself may be content in the library (a blog for a topic): credit it too.
+            var pageContent = await Attribution.ByPageAsync(_db, page, ct);
+            async Task TouchAsync(Guid leadId)
+            {
+                if (link != null) await Attribution.TouchAsync(_db, leadId, "web", "code", ct, link: link, detail: utmSource);
+                if (fromGoogleAd) await Attribution.TouchAsync(_db, leadId, "web", "ad", ct, @ref: campaign ?? "Google ad", detail: gclid != null ? "gclid" : null);
+                if (pageContent != null && pageContent.Id != link?.Id) await Attribution.TouchAsync(_db, leadId, "web", "page", ct, link: pageContent, @ref: Attribution.PathOf(page));
+                else if (link == null && !fromGoogleAd && page != null) await Attribution.TouchAsync(_db, leadId, "web", "page", ct, @ref: Attribution.PathOf(page));
+            }
             var how = LeadInbox.SourceLabel(source) + (campaign != null ? $" · {campaign}" : "") + (utmSource != null && !fromGoogleAd ? $" ({utmSource})" : "");
 
             var existing = await _db.Leads.FirstOrDefaultAsync(l => l.Phone == phone, ct);
@@ -104,6 +113,7 @@ namespace SeemanchalOutreach.Api.Controllers
                 if (gclid != null && existing.AdsArrivedSentAt == null) { existing.Gclid = gclid; existing.GclidAt = now; }
                 existing.LastActivityAt = now;
                 existing.Unread += 1;
+                await TouchAsync(existing.Id);
                 await _db.SaveChangesAsync(ct);
                 await _live.PublishAsync(new LiveEvent { Kind = "lead", Text = $"{existing.Name} enquired again on the website", RefId = existing.Id.ToString() });
                 return Reply(true, "We have your details. Our team will call you soon.");
@@ -118,6 +128,7 @@ namespace SeemanchalOutreach.Api.Controllers
             };
             _db.Leads.Add(lead);
             _db.LeadActivities.Add(new LeadActivity { LeadId = lead.Id, Kind = "created", CreatedAt = now, Text = $"Website form ({how})" + (page != null ? $" on {page}" : "") });
+            await TouchAsync(lead.Id);
             await _db.SaveChangesAsync(ct);
             _notifier.Notify(new NotifyJob
             {

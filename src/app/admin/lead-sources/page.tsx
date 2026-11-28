@@ -6,6 +6,7 @@ import { crm } from '@/lib/sync/api-client';
 import { canEdit, useAccess } from '@/lib/crm/access';
 import { Empty, ErrorBox, friendlyError, Modal, PageHead, rupees, Skeleton, useLoader, useToast } from '@/components/crm/ui';
 import { QrPosterModal, type QrPosterInfo } from '@/components/crm/QrPoster';
+import { ContentReport } from '@/components/crm/leadsources/ContentReport';
 
 interface Row { key: string; label: string; leads: number; contacted: number; appointment: number; came: number; admitted: number; lost: number; cost?: number | null }
 interface Report {
@@ -16,8 +17,22 @@ interface Report {
 }
 interface LinkItem {
   id: string; code: string; name: string; channel: string; hoardingId?: string | null; hoarding?: string | null; cost?: number | null; note?: string | null;
-  isActive: boolean; createdAt: string; leads: number; came: number; links: { whatsapp: string | null; message: string; website: string | null };
+  isActive: boolean; createdAt: string; leads: number; came: number;
+  kind: string; topicId?: string | null; topic?: string | null; ownerId?: string | null; publishedOn?: string | null;
+  mediaId?: string | null; adId?: string | null; broadcastId?: string | null; pagePath?: string | null;
+  links: { whatsapp: string | null; message: string; website: string | null; instagram?: string | null; messenger?: string | null; caption: string };
 }
+const KINDS: { key: string; label: string }[] = [
+  { key: 'reel', label: 'Reel' }, { key: 'post', label: 'Post' }, { key: 'story', label: 'Story' }, { key: 'video', label: 'Video' },
+  { key: 'ad', label: 'Ad' }, { key: 'template', label: 'WhatsApp template / broadcast' }, { key: 'page', label: 'Website page or blog' },
+  { key: 'poster', label: 'Poster or pamphlet' }, { key: 'place', label: 'A place (bio, hoarding, newspaper…)' },
+];
+const KIND_SHORT: Record<string, string> = { reel: 'Reel', post: 'Post', story: 'Story', video: 'Video', ad: 'Ad', template: 'Template', page: 'Page', poster: 'Poster', place: 'Place' };
+const KIND_FILTERS: { key: string; label: string; kinds: string[] }[] = [
+  { key: 'all', label: 'All', kinds: [] }, { key: 'social', label: 'Reels, posts, stories', kinds: ['reel', 'post', 'story', 'video'] },
+  { key: 'ad', label: 'Ads', kinds: ['ad'] }, { key: 'wa', label: 'WhatsApp', kinds: ['template'] }, { key: 'page', label: 'Website', kinds: ['page'] },
+  { key: 'place', label: 'Places and print', kinds: ['place', 'poster'] },
+];
 interface LinksRes { connected: boolean; siteUrl?: string | null; channels: { code: string; label: string }[]; items: LinkItem[] }
 interface Hoarding { id: string; place: string; block?: string | null; rent?: number | null; status: string }
 
@@ -35,6 +50,7 @@ export default function LeadSourcesPage() {
   const links = useLoader(() => crm.get<LinksRes>('/api/v1/lead-sources/links'));
   const [editing, setEditing] = useState<LinkItem | 'new' | null>(null);
   const [qr, setQr] = useState<QrPosterInfo | null>(null);
+  const [kindFilter, setKindFilter] = useState('all');
 
   const r = report.data;
   const copy = async (text: string, what: string) => {
@@ -105,10 +121,13 @@ export default function LeadSourcesPage() {
       <section className="crm-card is-flush">
         <div className="crm-card-head">
           <div>
-            <h2 className="crm-h2">Tracked links and QR codes</h2>
-            <p className="crm-sub" style={{ margin: '4px 0 0' }}>One per place: Instagram bio, Facebook page button, each hoarding, pamphlet, newspaper ad. The message carries its code, so the lead is credited here.</p>
+            <h2 className="crm-h2">Content and tracked links</h2>
+            <p className="crm-sub" style={{ margin: '4px 0 0' }}>Add every reel, post, story, ad, template, page and poster before it goes out, and every place you advertise. Each gets a code; its WhatsApp, Instagram, Messenger and website links carry it, so the lead is credited here.</p>
           </div>
-          {editable && <button type="button" className="crm-btn" onClick={() => setEditing('new')}><Plus size={16} aria-hidden /> New tracked link</button>}
+          {editable && <button type="button" className="crm-btn" onClick={() => setEditing('new')}><Plus size={16} aria-hidden /> Add content or a link</button>}
+        </div>
+        <div className="crm-chips ls-kinds" role="group" aria-label="Show">
+          {KIND_FILTERS.map((f) => <button key={f.key} type="button" className="crm-chip" aria-pressed={kindFilter === f.key} onClick={() => setKindFilter(f.key)}>{f.label}</button>)}
         </div>
         {links.error && <div style={{ padding: '0 22px 16px' }}><ErrorBox message={links.error} onRetry={links.reload} /></div>}
         {!links.data ? <div style={{ padding: '0 22px 16px' }}><Skeleton h={120} /></div> : links.data.items.length === 0 ? (
@@ -116,15 +135,15 @@ export default function LeadSourcesPage() {
         ) : (
           <div className="crm-table-wrap">
             <table className="crm-table" style={{ minWidth: 820 }}>
-              <thead><tr><th>Place</th><th className="num">Leads</th><th className="num">Came</th><th className="num">Cost per lead</th><th className="num">Cost per patient</th><th>Use it</th></tr></thead>
+              <thead><tr><th>Content or place</th><th className="num">Leads</th><th className="num">Came</th><th className="num">Cost per lead</th><th className="num">Cost per patient</th><th>Use it</th></tr></thead>
               <tbody>
-                {links.data.items.map((l) => {
+                {links.data.items.filter((l) => kindFilter === 'all' || KIND_FILTERS.find((f) => f.key === kindFilter)?.kinds.includes(l.kind)).map((l) => {
                   const ch = links.data!.channels.find((c) => c.code === l.channel)?.label ?? l.channel;
                   return (
                     <tr key={l.id} className={l.isActive ? '' : 'is-muted'}>
                       <td>
                         <div className="crm-cell-main">{l.name} {!l.isActive && <span className="ls-paused">paused</span>}</div>
-                        <div className="crm-cell-sub"><code className="ls-code">{l.code}</code> · {ch}{l.hoarding ? ` · ${l.hoarding}` : ''}{l.cost ? ` · ${rupees(l.cost)}` : ''}</div>
+                        <div className="crm-cell-sub"><span className={`ls-kind is-${l.kind}`}>{KIND_SHORT[l.kind] ?? l.kind}</span> <code className="ls-code">{l.code}</code> · {ch}{l.topic ? ` · ${l.topic}` : ''}{l.hoarding ? ` · ${l.hoarding}` : ''}{l.cost ? ` · ${rupees(l.cost)}` : ''}{l.adId ? ' · linked to an ad' : ''}</div>
                       </td>
                       <td className="num">{l.leads}</td>
                       <td className="num">{l.came}</td>
@@ -136,7 +155,10 @@ export default function LeadSourcesPage() {
                             <button type="button" className="crm-btn is-secondary is-sm" onClick={() => void copy(l.links.whatsapp!, 'WhatsApp link')} title={l.links.whatsapp}><Copy size={14} aria-hidden /> WhatsApp link</button>
                             <button type="button" className="crm-btn is-secondary is-sm" onClick={() => setQr({ title: l.name, sub: `Code ${l.code}`, waLink: l.links.whatsapp, message: l.links.message })}><QrCode size={14} aria-hidden /> QR poster</button>
                           </> : <span className="crm-sub">Add the WhatsApp number in WhatsApp → Account setup</span>}
+                          {l.links.instagram && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => void copy(l.links.instagram!, 'Instagram DM link')} title={l.links.instagram}><Copy size={14} aria-hidden /> Instagram DM link</button>}
+                          {l.links.messenger && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => void copy(l.links.messenger!, 'Messenger link')} title={l.links.messenger}><Copy size={14} aria-hidden /> Messenger link</button>}
                           {l.links.website && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => void copy(l.links.website!, 'Website link')} title={l.links.website}><Globe size={14} aria-hidden /> Website link</button>}
+                          {l.kind !== 'place' && <button type="button" className="crm-btn is-secondary is-sm" onClick={() => void copy(l.links.caption, 'Caption line')} title={l.links.caption}><Copy size={14} aria-hidden /> Caption line</button>}
                           {editable && <button type="button" className="crm-btn is-ghost is-sm" aria-label={`Edit ${l.name}`} onClick={() => setEditing(l)}><Pencil size={14} /></button>}
                           {editable && <button type="button" className="crm-btn is-ghost is-sm" aria-label={l.isActive ? `Pause ${l.name}` : `Restart ${l.name}`} onClick={() => void toggle(l)}>{l.isActive ? <Pause size={14} /> : <Play size={14} />}</button>}
                         </span>
@@ -149,10 +171,12 @@ export default function LeadSourcesPage() {
           </div>
         )}
         <p className="crm-sub ls-foot">
-          <Link2 size={13} aria-hidden /> WhatsApp link: put it in your Instagram bio or as the Facebook page button. QR poster: print it on hoardings, pamphlets and posters.
-          Website link: for places that should open the website; its form credits the lead here. Someone who deletes the typed code before sending shows as “source unknown”.
+          <Link2 size={13} aria-hidden /> Caption line: end the reel or post caption with it (Hindi and English, with the code). WhatsApp link: for bios, stories and buttons. Instagram DM and Messenger links open a chat that tells NexMarket the code.
+          QR poster: for print. Website link: opens the site with the code. An ad: add its Meta ad ID, and Click-to-WhatsApp messages and lead forms from it are credited here. Someone who deletes the typed code shows as “source unknown”.
         </p>
       </section>
+
+      <ContentReport days={days} />
 
       {r && r.campaigns.length > 0 && <Funnel title="Ads, forms and website campaigns" rows={r.campaigns} kindCol />}
       {r && r.byPartner.length > 0 && <Funnel title="Partners who brought leads" rows={r.byPartner} kindCol />}
@@ -203,6 +227,16 @@ function LinkEditor({ link, channels, onClose, onSaved }: { link: LinkItem | nul
   const [hoardingId, setHoardingId] = useState(link?.hoardingId ?? '');
   const [cost, setCost] = useState(link?.cost ? String(link.cost) : '');
   const [note, setNote] = useState(link?.note ?? '');
+  const [kind, setKind] = useState(link?.kind ?? 'reel');
+  const [topicId, setTopicId] = useState(link?.topicId ?? '');
+  const [publishedOn, setPublishedOn] = useState(link?.publishedOn ?? '');
+  const [mediaId, setMediaId] = useState(link?.mediaId ?? '');
+  const [adId, setAdId] = useState(link?.adId ?? '');
+  const [broadcastId, setBroadcastId] = useState(link?.broadcastId ?? '');
+  const [pagePath, setPagePath] = useState(link?.pagePath ?? '');
+  const topics = useLoader(() => crm.get<{ topics: { id: string; name: string }[] }>('/api/v1/keywords/opportunities?all=true').then((x) => x.topics).catch(() => [] as { id: string; name: string }[]));
+  const broadcasts = useLoader(() => (kind === 'template' ? crm.get<{ id: string; title: string; sentAt?: string | null }[]>('/api/v1/broadcasts').catch(() => []) : Promise.resolve([])), [kind]);
+  const social = ['reel', 'post', 'story', 'video'].includes(kind);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hoardings = useLoader(() => (channel === 'hoarding' ? crm.get<Hoarding[]>('/api/v1/lead-sources/hoardings') : Promise.resolve([] as Hoarding[])), [channel]);
@@ -219,21 +253,32 @@ function LinkEditor({ link, channels, onClose, onSaved }: { link: LinkItem | nul
   };
   const save = async () => {
     setBusy(true); setError(null);
-    const body = { name, channel, hoardingId: channel === 'hoarding' && hoardingId ? hoardingId : '00000000-0000-0000-0000-000000000000', cost: cost ? Number(cost) : 0, note, ...(link ? {} : { code: code || null }) };
+    const body = {
+      name, channel, hoardingId: channel === 'hoarding' && hoardingId ? hoardingId : '00000000-0000-0000-0000-000000000000', cost: cost ? Number(cost) : 0, note,
+      kind, ...(topicId ? { topicId } : { clearTopic: true }), publishedOn: publishedOn || null,
+      mediaId: social ? mediaId : '', adId: social || kind === 'ad' ? adId : '', pagePath: kind === 'page' ? pagePath : '',
+      ...(kind === 'template' && broadcastId ? { broadcastId } : { clearBroadcast: true }),
+      ...(link ? {} : { code: code || null }),
+    };
     try {
       if (link) await crm.put(`/api/v1/lead-sources/links/${link.id}`, body);
       else await crm.post('/api/v1/lead-sources/links', body);
-      onSaved(link ? 'Saved.' : 'Tracked link made. Copy its link or print its QR poster.');
+      onSaved(link ? 'Saved.' : 'Added. Copy its caption line or links before you publish.');
     } catch (e) { setError(friendlyError(e)); setBusy(false); }
   };
 
   return (
-    <Modal title={link ? `Edit ${link.name}` : 'New tracked link'} onClose={onClose}
+    <Modal title={link ? `Edit ${link.name}` : 'Add content or a link'} onClose={onClose}
       actions={<>
         <button type="button" className="crm-btn is-secondary" onClick={onClose}>Cancel</button>
-        <button type="button" className="crm-btn" disabled={busy || name.trim().length < 2} onClick={() => void save()}>{busy ? 'Saving…' : link ? 'Save' : 'Make the link'}</button>
+        <button type="button" className="crm-btn" disabled={busy || name.trim().length < 2} onClick={() => void save()}>{busy ? 'Saving…' : link ? 'Save' : 'Add'}</button>
       </>}>
       <div className="ls-form">
+        <label className="crm-field">What is it?
+          <select className="crm-select" value={kind} onChange={(e) => setKind(e.target.value)}>
+            {KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+          </select>
+        </label>
         <label className="crm-field">Where is it?
           <select className="crm-select" value={channel} onChange={(e) => setChannel(e.target.value)}>
             {channels.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
@@ -251,9 +296,44 @@ function LinkEditor({ link, channels, onClose, onSaved }: { link: LinkItem | nul
           <input className="crm-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="e.g. Instagram bio" />
           {ideas.length > 0 && !name && <span className="crm-chips">{ideas.map((i) => <button key={i} type="button" className="crm-chip is-soft" onClick={() => setName(i)}>{i}</button>)}</span>}
         </label>
+        <div className="ls-form-row">
+          <label className="crm-field">Topic (optional)
+            <select className="crm-select" value={topicId} onChange={(e) => setTopicId(e.target.value)}>
+              <option value="">None</option>
+              {topics.data?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+          {kind !== 'place' && <label className="crm-field">Goes out on<input className="crm-input" type="date" value={publishedOn} onChange={(e) => setPublishedOn(e.target.value)} /></label>}
+        </div>
+        {social && (
+          <label className="crm-field">Instagram or Facebook post ID (optional)
+            <input className="crm-input" value={mediaId} onChange={(e) => setMediaId(e.target.value.replace(/[^\d_]/g, ''))} inputMode="numeric" placeholder="Add after it is published" />
+          </label>
+        )}
+        {(social || kind === 'ad') && (
+          <label className="crm-field">Meta ad ID, if it runs as an ad
+            <input className="crm-input" value={adId} onChange={(e) => setAdId(e.target.value.replace(/\D/g, ''))} inputMode="numeric" placeholder="Ads Manager → the ad → ID" />
+            <span className="crm-sub" style={{ fontWeight: 400, fontSize: 12 }}>Click-to-WhatsApp messages and lead forms from this ad are then credited here, even without the code.</span>
+          </label>
+        )}
+        {kind === 'template' && (
+          <label className="crm-field">Broadcast (optional)
+            <select className="crm-select" value={broadcastId} onChange={(e) => setBroadcastId(e.target.value)}>
+              <option value="">Not sent yet</option>
+              {broadcasts.data?.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}
+            </select>
+            <span className="crm-sub" style={{ fontWeight: 400, fontSize: 12 }}>Replies within 7 days of it count here.</span>
+          </label>
+        )}
+        {kind === 'page' && (
+          <label className="crm-field">Page address
+            <input className="crm-input" value={pagePath} onChange={(e) => setPagePath(e.target.value)} placeholder="/blog/pathri-ka-ilaj" />
+            <span className="crm-sub" style={{ fontWeight: 400, fontSize: 12 }}>Enquiries sent from this page count here.</span>
+          </label>
+        )}
         {!link && (
           <label className="crm-field">Code (optional)
-            <input className="crm-input" value={code} onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))} maxLength={16} placeholder="Made for you, e.g. IG-BIO" />
+            <input className="crm-input" value={code} onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))} maxLength={16} placeholder="Made for you, e.g. RL-STONE-01 or IG-BIO" />
             <span className="crm-sub" style={{ fontWeight: 400, fontSize: 12 }}>Shown in the message as “Ref: CODE”. It can&apos;t be changed later, because printed QR codes carry it.</span>
           </label>
         )}

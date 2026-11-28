@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -183,12 +183,29 @@ namespace SeemanchalOutreach.Api.Controllers
                 Media = LeadInbox.MediaOf(m) is { } md ? new TimelineMedia { Mime = md.Mime, File = md.File } : null,
             })).OrderBy(x => x.At).ToList();
 
+            // Where they came from, first touch first (see Attribution).
+            var touchRows = await _db.LeadTouches.AsNoTracking().Where(t => t.LeadId == id).OrderBy(t => t.At).Take(30).ToListAsync(ct);
+            var touchLinkIds = touchRows.Where(t => t.LinkId != null).Select(t => t.LinkId!.Value).Distinct().ToList();
+            var touchLinks = await _db.TrackedLinks.AsNoTracking().Where(x => touchLinkIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new { x.Name, x.Kind, x.Code }, ct);
+            var touchBcIds = touchRows.Where(t => t.BroadcastId != null).Select(t => t.BroadcastId!.Value).Distinct().ToList();
+            var touchBcs = await _db.Broadcasts.AsNoTracking().Where(b => touchBcIds.Contains(b.Id)).ToDictionaryAsync(b => b.Id, b => b.Title, ct);
+            var touches = touchRows.Select(t => new
+            {
+                at = t.At, channel = t.Channel, kind = t.Kind, first = t.IsFirst,
+                content = t.LinkId != null && touchLinks.TryGetValue(t.LinkId.Value, out var c) ? c.Name : null,
+                contentKind = t.LinkId != null && touchLinks.TryGetValue(t.LinkId.Value, out var c2) ? c2.Kind : null,
+                code = t.LinkId != null && touchLinks.TryGetValue(t.LinkId.Value, out var c3) ? c3.Code : null,
+                broadcast = t.BroadcastId != null ? touchBcs.GetValueOrDefault(t.BroadcastId.Value) : null,
+                @ref = t.Ref,
+            });
+
             return Ok(new
             {
                 lead = Row(l, names, partners),
                 partner,
                 referral,
                 timeline,
+                touches,
                 windowOpen = LeadInbox.WindowOpen(l),
                 windowClosesAt = l.LastInboundAt?.AddHours(24),
                 whatsappConfigured = _wa.IsConfigured,

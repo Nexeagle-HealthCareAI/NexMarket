@@ -114,6 +114,7 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
         public DbSet<SocialMessage> SocialMessages => Set<SocialMessage>();
         public DbSet<AdLead> AdLeads => Set<AdLead>();
         public DbSet<TrackedLink> TrackedLinks => Set<TrackedLink>();
+        public DbSet<LeadTouch> LeadTouches => Set<LeadTouch>();
         public DbSet<KwTopic> KwTopics => Set<KwTopic>();
         public DbSet<KwKeyword> KwKeywords => Set<KwKeyword>();
         public DbSet<KwAreaVolume> KwAreaVolumes => Set<KwAreaVolume>();
@@ -643,6 +644,17 @@ namespace SeemanchalOutreach.Infrastructure.Persistence
                 entity.ToTable("tracked_links");
                 entity.HasKey(e => e.Id);
                 entity.HasIndex(e => e.Code).IsUnique();
+                entity.HasIndex(e => e.AdId);
+                entity.HasIndex(e => e.MediaId);
+            });
+            modelBuilder.Entity<LeadTouch>(entity =>
+            {
+                entity.ToTable("lead_touches");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.LeadId);
+                entity.HasIndex(e => e.LinkId);
+                entity.HasIndex(e => e.BroadcastId);
+                entity.HasIndex(e => e.At);
             });
             modelBuilder.Entity<KwTopic>(entity =>
             {

@@ -20,7 +20,7 @@ interface AudienceInfo {
 interface CampRow { id: string; title: string; date: string; venue?: string | null; block?: string | null; people: number }
 interface BroadcastRow {
   id: string; kind: string; title: string; language: string; previewText: string; recipientCount: number; scheduledAt?: string | null; status: string; error?: string | null;
-  sentAt?: string | null; sentCount: number; deliveredCount: number; readCount: number; replyCount: number; failedCount: number; createdAt: string; audience?: string;
+  sentAt?: string | null; sentCount: number; deliveredCount: number; readCount: number; replyCount: number; failedCount: number; createdAt: string; audience?: string; leads?: number; came?: number;
 }
 interface Media { mediaId: string; type: 'image' | 'document' | 'video'; fileName: string; url: string | null }
 
@@ -546,8 +546,8 @@ export function WaBroadcasts() {
         {history.error && <div style={{ padding: '0 22px' }}><ErrorBox message={history.error} onRetry={history.reload} /></div>}
         {!history.data ? <div style={{ padding: '0 22px 16px' }}><Skeleton h={120} /></div> : history.data.length === 0 ? <Empty title="No broadcasts yet" /> : (
           <><div className="crm-table-wrap">
-            <table className="crm-table" style={{ minWidth: 760 }}>
-              <thead><tr><th>Message</th><th className="num">Sent to</th><th className="num">Delivered</th><th className="num">Read</th><th className="num">Replies</th><th>Status</th></tr></thead>
+            <table className="crm-table" style={{ minWidth: 840 }}>
+              <thead><tr><th>Message</th><th className="num">Sent to</th><th className="num">Delivered</th><th className="num">Read</th><th className="num">Replies</th><th className="num" title="Replies within 7 days that became leads, and how many came to the hospital">Leads · came</th><th>Status</th></tr></thead>
               <tbody>
                 {histPg.rows.map((b) => (
                   <tr key={b.id}>
@@ -559,6 +559,7 @@ export function WaBroadcasts() {
                     <td className="num">{b.status === 'sent' ? b.deliveredCount : '–'}</td>
                     <td className="num">{b.status === 'sent' ? b.readCount : '–'}</td>
                     <td className="num">{b.status === 'sent' ? b.replyCount : '–'}</td>
+                    <td className="num">{b.status === 'sent' ? `${b.leads ?? 0} · ${b.came ?? 0}` : '–'}</td>
                     <td>
                       <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                         <Pill tone={b.status === 'sent' ? 'ok' : b.status === 'scheduled' ? 'accent' : b.status === 'failed' ? 'bad' : b.status === 'sending' ? 'info' : 'neutral'}>

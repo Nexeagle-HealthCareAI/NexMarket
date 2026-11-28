@@ -4853,3 +4853,23 @@ strong.is-ok { color: var(--ok-ink); }
   .kw-area-list li { grid-template-columns: 90px 1fr 56px; }
   .kw-card-head, .kw-filters.is-row, .kw-chips { padding-left: 14px; padding-right: 14px; }
 }
+
+/* Lead sources: content library and report */
+.ls-kinds { padding: 0 22px 12px; }
+.ls-kind { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--grey-soft); color: var(--text); margin-right: 2px; }
+.ls-kind.is-reel, .ls-kind.is-video, .ls-kind.is-story { background: #fbe9f2; color: #8c1d55; }
+.ls-kind.is-post { background: #e8eefc; color: #2b3f8f; }
+.ls-kind.is-ad { background: var(--warn-soft); color: var(--warn-ink); }
+.ls-kind.is-template, .ls-kind.is-broadcast { background: var(--ok-soft); color: var(--ok-ink); }
+.ls-kind.is-page { background: #ede9fb; color: #4c2a9e; }
+.ls-form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.ls-blind { display: flex; flex-direction: column; gap: 10px; padding: 0 22px 18px; }
+.ls-blind-row { display: grid; grid-template-columns: 170px 1fr 120px; gap: 12px; align-items: center; font-size: 14px; }
+.ls-blind-bar { height: 10px; border-radius: 5px; background: var(--ok-soft); overflow: hidden; display: block; }
+.ls-blind-bar > span { display: block; height: 100%; background: var(--warn); border-radius: 5px; }
+.ls-blind-row strong { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+@media (max-width: 640px) { .ls-blind-row { grid-template-columns: 110px 1fr 90px; } .ls-kinds, .ls-blind { padding-left: 14px; padding-right: 14px; } }
+.ld-touches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; font-size: 12.5px; }
+.ld-touches-h { color: var(--text-2); font-weight: 600; margin-right: 2px; }
+.ld-touch { padding: 3px 9px; border-radius: 10px; background: var(--grey-soft); color: var(--text); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ld-touch.is-first { background: var(--accent-tint); color: var(--accent-ink); }

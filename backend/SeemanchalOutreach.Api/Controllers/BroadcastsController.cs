@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -223,11 +223,21 @@ namespace SeemanchalOutreach.Api.Controllers
         public async Task<IActionResult> List(CancellationToken ct)
         {
             var list = await _db.Broadcasts.AsNoTracking().OrderByDescending(b => b.CreatedAt).Take(50).ToListAsync(ct);
-            return Ok(list.Select(b => new
+            // Leads each broadcast brought (replies within 7 days, see Attribution) and how many of them came.
+            var ids = list.Select(b => b.Id).ToList();
+            var touches = await _db.LeadTouches.AsNoTracking().Where(t => t.BroadcastId != null && ids.Contains(t.BroadcastId.Value)).Select(t => new { t.BroadcastId, t.LeadId }).ToListAsync(ct);
+            var leadIds = touches.Select(t => t.LeadId).Distinct().ToList();
+            var status = await _db.Leads.AsNoTracking().Where(l => leadIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.Status, ct);
+            return Ok(list.Select(b =>
             {
-                b.Id, b.Kind, b.Title, b.Language, b.PreviewText, b.RecipientCount, b.ScheduledAt, b.Status, b.Error,
-                b.SentAt, b.SentCount, b.DeliveredCount, b.ReadCount, b.ReplyCount, b.FailedCount, b.CreatedAt,
-                audience = Describe(b.AudienceJson),
+                var mine = touches.Where(t => t.BroadcastId == b.Id).Select(t => t.LeadId).Distinct().ToList();
+                return new
+                {
+                    b.Id, b.Kind, b.Title, b.Language, b.PreviewText, b.RecipientCount, b.ScheduledAt, b.Status, b.Error,
+                    b.SentAt, b.SentCount, b.DeliveredCount, b.ReadCount, b.ReplyCount, b.FailedCount, b.CreatedAt,
+                    audience = Describe(b.AudienceJson),
+                    leads = mine.Count, came = mine.Count(i => status.GetValueOrDefault(i) is "arrived" or "admitted"),
+                };
             }));
         }
 
@@ -468,8 +478,27 @@ namespace SeemanchalOutreach.Api.Controllers
             {
                 From = from, ProfileName = profileName, Type = type, Text = text,
                 WaMessageId = m.TryGetProperty("id", out var mid) ? mid.GetString() : null, AdRef = adRef,
+                AdId = ReferralPart(m, "source_id"), AdUrl = ReferralPart(m, "source_url"), AdClickId = ReferralPart(m, "ctwa_clid"),
                 MediaId = MediaPart(m, "id"), MediaMime = MediaPart(m, "mime_type"), MediaFile = MediaPart(m, "filename"),
             }, ct);
+
+            // A reply within 7 days of a broadcast credits the broadcast. A lead that came with nothing else to go on
+            // ("whatsapp") takes it as its source.
+            if (res.Lead != null && !isStop && r != null && r.SentAt >= DateTime.UtcNow.AddDays(-7))
+            {
+                var bc = await _db.Broadcasts.AsNoTracking().Where(x => x.Id == r.BroadcastId).Select(x => new { x.Id, x.Title }).FirstOrDefaultAsync(ct);
+                if (bc != null)
+                {
+                    var content = await _db.TrackedLinks.AsNoTracking().FirstOrDefaultAsync(l => l.BroadcastId == bc.Id, ct);
+                    await Attribution.TouchAsync(_db, res.Lead.Id, "whatsapp", "broadcast", ct, link: content, broadcastId: bc.Id, @ref: content?.Code ?? bc.Title);
+                    if (res.Lead.Source == "whatsapp")
+                    {
+                        res.Lead.Source = "broadcast";
+                        res.Lead.SourceRef = content != null ? LeadInbox.LinkRef(content) : bc.Title;
+                        _db.LeadActivities.Add(new LeadActivity { LeadId = res.Lead.Id, Kind = "source", Text = $"Replied to the broadcast “{bc.Title}”" });
+                    }
+                }
+            }
 
             // A reply to a broadcast linked to a health camp ("book", the booking button) books them and sends the token.
             var campBooking = isStop ? null : await CampReplies.TryBookAsync(_db, _outbox, r, from, type, text, profileName, res.Lead?.Id, ct);
@@ -486,6 +515,16 @@ namespace SeemanchalOutreach.Api.Controllers
                 Text = isStop ? $"{who} unsubscribed from WhatsApp updates" : $"WhatsApp from {who}: {Shorten(text)}",
                 RefId = res.Lead?.Id.ToString() ?? contacts.FirstOrDefault()?.ClientId,
             });
+        }
+
+        /// <summary>A field of a Click-to-WhatsApp ad's referral: source_id (the ad ID), source_url, ctwa_clid, source_type.</summary>
+        public static string? ReferralPart(JsonElement m, string field)
+        {
+            if (!m.TryGetProperty("referral", out var rf) || rf.ValueKind != JsonValueKind.Object || !rf.TryGetProperty(field, out var v) || v.ValueKind != JsonValueKind.String) return null;
+            var s = v.GetString()?.Trim();
+            if (string.IsNullOrEmpty(s)) return null;
+            if (field == "source_id") return Regex.IsMatch(s, @"^\d{3,40}$") ? s : null;
+            return s.Length > 500 ? s[..500] : s;
         }
 
         /// <summary>A field of the message's photo, video, voice note, document or sticker ("id", "mime_type", "filename").</summary>

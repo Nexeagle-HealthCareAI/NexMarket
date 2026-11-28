@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -41,6 +41,7 @@ namespace SeemanchalOutreach.Api.Services
             "partner_qr" => "Partner QR code",
             "partner" => "Partner",
             "ad" => "Facebook / Instagram ad",
+            "broadcast" => "WhatsApp broadcast",
             "camp" => "Health camp",
             "missed_call" => "Missed call",
             "walk_in" => "Walk-in",
@@ -149,6 +150,10 @@ namespace SeemanchalOutreach.Api.Services
             /// <summary>Set when they tapped a Click-to-WhatsApp ad.</summary>
             public string? AdRef { get; set; }
             /// <summary>A photo, video, voice note or document: Meta's media id, kept so the inbox can show it (Meta keeps it 30 days).</summary>
+            /// <summary>Click-to-WhatsApp ad: Meta's ad ID, the ad's link and the click ID (ctwa_clid), from the message's referral.</summary>
+            public string? AdId { get; set; }
+            public string? AdUrl { get; set; }
+            public string? AdClickId { get; set; }
             public string? MediaId { get; set; }
             public string? MediaMime { get; set; }
             public string? MediaFile { get; set; }
@@ -176,6 +181,7 @@ namespace SeemanchalOutreach.Api.Services
             public Lead? Lead { get; set; }
             public WaConversation? Conversation { get; set; }
             public bool Stop { get; set; }
+            public bool IsNew { get; set; }
         }
 
         /// <summary>
@@ -228,6 +234,8 @@ namespace SeemanchalOutreach.Api.Services
             if (code != null) partner = await db.Contacts.AsNoTracking().FirstOrDefaultAsync(c => c.ReferralCode == code && !c.IsMerged, ct);
             // Not a partner's code: a tracked link (Instagram bio, a hoarding's QR, a pamphlet…).
             var link = code != null && partner == null ? await db.TrackedLinks.AsNoTracking().FirstOrDefaultAsync(x => x.Code == code, ct) : null;
+            // A Click-to-WhatsApp ad that is in the content library: credit that content.
+            var adContent = m.AdId != null ? await Attribution.ByAdAsync(db, m.AdId, ct) : null;
             // The sender may be a partner themselves (an ASHA worker or RMP doctor writing about a patient).
             var last10 = Last10(phone);
             var senderPartner = partner == null
@@ -248,7 +256,7 @@ namespace SeemanchalOutreach.Api.Services
                         Phone = phone,
                         Name = !string.IsNullOrWhiteSpace(m.ProfileName) ? m.ProfileName!.Trim() : senderPartner?.Name ?? ("+" + phone),
                         Source = partner != null ? "partner_qr" : link != null ? "link" : m.AdRef != null ? "ad" : camp != null ? "camp" : senderPartner != null ? "partner" : "whatsapp",
-                        SourceRef = partner != null ? code : link != null ? LinkRef(link) : m.AdRef ?? camp,
+                        SourceRef = partner != null ? code : link != null ? LinkRef(link) : adContent != null && m.AdRef != null ? LinkRef(adContent) : m.AdRef ?? camp,
                         PartnerClientId = partner?.ClientId ?? senderPartner?.ClientId,
                         Note = Shorten(m.Text, 500),
                         CreatedAt = now,
@@ -314,6 +322,18 @@ namespace SeemanchalOutreach.Api.Services
                 conv.AssignedTo ??= lead.OwnerId;
             }
             result.Lead = lead;
+            result.IsNew = isNew;
+
+            // Where this message came from, kept as a touch on the lead (see Attribution).
+            if (lead != null)
+            {
+                if (partner != null) await Attribution.TouchAsync(db, lead.Id, "whatsapp", "partner", ct, @ref: code, detail: partner.Name);
+                if (link != null) await Attribution.TouchAsync(db, lead.Id, "whatsapp", "code", ct, link: link);
+                if (m.AdRef != null || m.AdId != null)
+                    await Attribution.TouchAsync(db, lead.Id, "whatsapp", "ad", ct, link: adContent, adId: m.AdId, @ref: m.AdRef,
+                        detail: string.Join(" ", new[] { m.AdClickId != null ? "ctwa_clid=" + m.AdClickId : null, m.AdUrl }.Where(x => x != null)));
+                if (camp != null) await Attribution.TouchAsync(db, lead.Id, "camp", "camp", ct, @ref: camp);
+            }
 
             // "Camp: KSB12" from a camp's QR poster: book them into that camp and confirm.
             string? reply = null, source = null;

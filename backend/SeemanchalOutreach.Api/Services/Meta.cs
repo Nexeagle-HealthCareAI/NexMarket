@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
@@ -319,6 +319,10 @@ namespace SeemanchalOutreach.Api.Services
                     _db.LeadActivities.Add(new LeadActivity { LeadId = lead.Id, Kind = "note", CreatedAt = now, Text = $"Filled the {where} form again{(from != null ? $" ({from})" : "")}" + (extra.Count > 0 ? "\n" + string.Join("\n", extra) : "") });
                 }
                 ad.LeadId = lead.Id;
+                // Credit the form to its ad's content (Lead sources → content), or just to the ad.
+                var content = await Attribution.ByAdAsync(_db, ad.AdId, ct);
+                await Attribution.TouchAsync(_db, lead.Id, ad.Platform == "ig" ? "instagram" : "facebook", "ad", ct, link: content, adId: ad.AdId,
+                    @ref: ad.AdName ?? ad.CampaignName ?? ad.FormName, detail: "form " + (ad.FormName ?? ad.FormId));
             }
             await _db.SaveChangesAsync(ct);
 
